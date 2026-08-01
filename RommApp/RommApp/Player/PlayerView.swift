@@ -156,6 +156,19 @@ struct PlayerWebView: UIViewRepresentable {
             }
             return origSend.apply(this, arguments);
           };
+
+          // RomM's app shell wraps every route, the player included, in its
+          // site navigation: a fixed header with the logo and account chip,
+          // and a bottom nav on small screens (v2 AppLayout.vue). On the
+          // website fullscreen covers them; in this webview there is no
+          // fullscreen, so they float over the game. This webview only ever
+          // shows the player, so hide the shell chrome outright and release
+          // the top padding the layout reserves for the header.
+          const style = document.createElement("style");
+          style.textContent =
+            ".r-v2-nav-bar, .r-v2-bottom-nav { display: none !important } " +
+            "#r-v2-main { padding-top: 0 !important }";
+          document.documentElement.appendChild(style);
         })();
         """
     }
