@@ -18,6 +18,8 @@ struct PlayerView: View {
     @State private var context: (url: URL, token: String)?
     @State private var failed = false
     @State private var overlayVisible = true
+    @State private var gameStarted = false
+    @StateObject private var input = PlayerInputBridge()
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -31,7 +33,9 @@ struct PlayerView: View {
                 PlayerWebView(
                     url: context.url,
                     token: context.token,
-                    overlayVisible: $overlayVisible
+                    overlayVisible: $overlayVisible,
+                    gameStarted: $gameStarted,
+                    input: input
                 )
             } else if failed {
                 VStack(spacing: 12) {
@@ -41,6 +45,19 @@ struct PlayerView: View {
                         .buttonStyle(.bordered)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+
+            // The native pad replaces EmulatorJS's web touch controls, which
+            // the injection hides. It appears once the game actually starts,
+            // so RomM's pre play page stays fully tappable.
+            if gameStarted, let layout = ControlLayout.forPlatform(slug: rom.platformSlug) {
+                VStack {
+                    Spacer()
+                    TouchControlPad(layout: layout) { id, down in
+                        input.send(id: id, down: down)
+                    }
+                    .frame(height: 330)
+                }
             }
 
             // Fades in step with EmulatorJS's menu toggle so nothing sits
@@ -85,10 +102,27 @@ struct PlayerView: View {
     }
 }
 
+/// Hands native control presses to the emulator inside the webview.
+///
+/// EmulatorJS exposes gameManager.simulateInput(player, id, value), the same
+/// call its own touch and gamepad paths use, settling scope doc open item 2:
+/// there is a real input method, and synthetic KeyboardEvents are not needed.
+final class PlayerInputBridge: ObservableObject {
+    weak var webView: WKWebView?
+
+    func send(id: Int, down: Bool) {
+        let js = "window.EJS_emulator && EJS_emulator.gameManager"
+            + " && EJS_emulator.gameManager.simulateInput(0, \(id), \(down ? 1 : 0));"
+        webView?.evaluateJavaScript(js)
+    }
+}
+
 struct PlayerWebView: UIViewRepresentable {
     let url: URL
     let token: String
     @Binding var overlayVisible: Bool
+    @Binding var gameStarted: Bool
+    let input: PlayerInputBridge
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -101,8 +135,18 @@ struct PlayerWebView: UIViewRepresentable {
             _ controller: WKUserContentController,
             didReceive message: WKScriptMessage
         ) {
-            guard message.name == "overlay", let visible = message.body as? Bool else { return }
-            parent.overlayVisible = visible
+            switch message.name {
+            case "overlay":
+                if let visible = message.body as? Bool {
+                    parent.overlayVisible = visible
+                }
+            case "gameState":
+                if message.body as? String == "started" {
+                    parent.gameStarted = true
+                }
+            default:
+                break
+            }
         }
     }
 
@@ -124,8 +168,10 @@ struct PlayerWebView: UIViewRepresentable {
         )
         config.userContentController.addUserScript(script)
         config.userContentController.add(context.coordinator, name: "overlay")
+        config.userContentController.add(context.coordinator, name: "gameState")
 
         let webView = WKWebView(frame: .zero, configuration: config)
+        input.webView = webView
         webView.isOpaque = false
         webView.backgroundColor = .black
         webView.scrollView.backgroundColor = .black
@@ -197,14 +243,39 @@ struct PlayerWebView: UIViewRepresentable {
           // .ejs_virtualGamepad_open is EmulatorJS's floating menu toggle,
           // the three bar button. It gets the same fade treatment as the
           // native close button, driven by the idle logic below.
+          // .ejs_virtualGamepad_parent holds EmulatorJS's web touch pads,
+          // replaced wholesale by the native overlay. The menu toggle is a
+          // sibling attached to the game element, so it survives.
           const style = document.createElement("style");
           style.textContent =
             ".r-v2-nav-bar, .r-v2-bottom-nav { display: none !important } " +
             "#r-v2-main { padding-top: 0 !important } " +
+            ".ejs_virtualGamepad_parent { display: none !important } " +
             ".ejs_virtualGamepad_open { transition: opacity 0.35s !important } " +
             "html.romm-overlay-idle .ejs_virtualGamepad_open " +
             "{ opacity: 0 !important; pointer-events: none !important }";
           document.documentElement.appendChild(style);
+
+          // EmulatorJS reveals its menu toggle exactly when the game starts
+          // (it flips the element's display on its own start event), which is
+          // the cleanest signal the page offers. Watch for that and tell the
+          // native side, so the control pad appears with the game and never
+          // over RomM's pre play screen.
+          const startObserver = new MutationObserver(() => {
+            const toggle = document.querySelector(".ejs_virtualGamepad_open");
+            if (toggle && toggle.style.display !== "none") {
+              try {
+                window.webkit.messageHandlers.gameState.postMessage("started");
+              } catch (e) {}
+              startObserver.disconnect();
+            }
+          });
+          startObserver.observe(document.documentElement, {
+            subtree: true,
+            childList: true,
+            attributes: true,
+            attributeFilter: ["style"],
+          });
 
           // Overlay idle logic. The close button and the EmulatorJS menu
           // toggle show briefly, then fade so nothing sits over the game.

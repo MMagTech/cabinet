@@ -71,7 +71,9 @@ struct PlatformGamesView: View {
                 spacing: 12
             ) {
                 ForEach(roms) { rom in
-                    NavigationLink(value: rom) {
+                    NavigationLink {
+                        RomDetailView(rom: rom)
+                    } label: {
                         VStack(spacing: 6) {
                             CoverImage(path: rom.pathCoverSmall, title: rom.displayName)
                                 .aspectRatio(3.0 / 4.0, contentMode: .fit)
@@ -96,7 +98,9 @@ struct PlatformGamesView: View {
     private var list: some View {
         List {
             ForEach(roms) { rom in
-                NavigationLink(value: rom) {
+                NavigationLink {
+                    RomDetailView(rom: rom)
+                } label: {
                     Text(rom.displayName)
                         .lineLimit(1)
                 }

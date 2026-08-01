@@ -45,7 +45,9 @@ struct LibraryScreen: View {
                 Button("Try again") { Task { await loadPlatforms() } }
             } else {
                 ForEach(platforms) { platform in
-                    NavigationLink(value: platform) {
+                    NavigationLink {
+                        PlatformGamesView(platform: platform)
+                    } label: {
                         HStack {
                             Text(platform.name ?? platform.slug)
                             Spacer()
@@ -87,7 +89,9 @@ struct LibraryScreen: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(searchResults) { rom in
-                    NavigationLink(value: rom) {
+                    NavigationLink {
+                        RomDetailView(rom: rom)
+                    } label: {
                         HStack(spacing: 12) {
                             CoverImage(path: rom.pathCoverSmall, title: rom.displayName)
                                 .frame(width: 40, height: 53)

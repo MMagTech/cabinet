@@ -51,12 +51,6 @@ struct HomeView: View {
                     }
                 }
             }
-            .navigationDestination(for: Platform.self) { platform in
-                PlatformGamesView(platform: platform)
-            }
-            .navigationDestination(for: Rom.self) { rom in
-                RomDetailView(rom: rom)
-            }
             .task { await load() }
             .refreshable { await load() }
             .fullScreenCover(item: $resuming) { rom in
@@ -126,7 +120,9 @@ struct HomeView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     ForEach(roms) { rom in
-                        NavigationLink(value: rom) {
+                        NavigationLink {
+                            RomDetailView(rom: rom)
+                        } label: {
                             VStack(alignment: .leading, spacing: 6) {
                                 CoverImage(path: rom.pathCoverSmall, title: rom.displayName)
                                     .frame(width: 100, height: 133)
