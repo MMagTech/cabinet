@@ -121,9 +121,13 @@ Required or it breaks in ways that look like app bugs:
 - `preferredScreenEdgesDeferringSystemGestures`
 - Disable bounce scrolling, pull to refresh, double-tap zoom, long-press callout
 
-**Orientation is a property of the game, not the device.** Vertical TATE arcade
-games get portrait with controls below. Everything else gets landscape with
-controls flanking the canvas in the letterbox space.
+**Orientation follows the device, not the game.** Revised 2026-08-01 after
+building it: forcing rotation fights the system rotation lock and the user's
+grip, so the app responds to how the phone is held instead of dictating it.
+Portrait gets the canvas above a control strip. Landscape gets the canvas
+centred with controls flanking it in the gutters. Vertical TATE games shine
+in portrait and pay a canvas-size cost in landscape, and that trade belongs
+to the person holding the phone.
 
 **Canvas scaling:** largest integer multiple that fits. Never stretch to fill.
 

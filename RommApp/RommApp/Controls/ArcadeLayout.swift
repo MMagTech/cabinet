@@ -60,7 +60,90 @@ enum ArcadeLayout {
             fourWay: nil
         ))
 
-        return ControlLayout(system: "arcade:\(profile.profile)", items: items)
+        return ControlLayout(
+            system: "arcade:\(profile.profile)",
+            items: items,
+            landscapeItems: landscapeItems(for: profile)
+        )
+    }
+
+    /// The landscape arrangement: canvas centred, controls flanking it in
+    /// the gutters. Frames are normalised against the full screen.
+    private static func landscapeItems(for profile: ArcadeProfile) -> [ControlLayout.Item] {
+        var items: [ControlLayout.Item] = []
+
+        items.append(ControlLayout.Item(
+            kind: .dpad,
+            label: nil,
+            input: nil,
+            inputs: [4, 5, 6, 7],
+            frame: ControlLayout.Rect(x: 0.03, y: 0.42, w: 0.19, h: 0.42),
+            extended: ControlLayout.Rect(x: 0.00, y: 0.32, w: 0.24, h: 0.58),
+            fourWay: profile.isFourWay
+        ))
+
+        let count = max(0, min(profile.buttons, 6))
+        let singleRowIds = [0, 8, 1, 9]
+        let doubleRowIds = [1, 9, 10, 0, 8, 11]
+
+        func button(id: Int, label: String, x: Double, y: Double) -> ControlLayout.Item {
+            ControlLayout.Item(
+                kind: .button,
+                label: label,
+                input: id,
+                inputs: nil,
+                frame: ControlLayout.Rect(x: x, y: y, w: 0.07, h: 0.16),
+                extended: ControlLayout.Rect(x: x - 0.02, y: y - 0.05, w: 0.11, h: 0.26),
+                fourWay: nil
+            )
+        }
+
+        if count <= 4 {
+            // The right thumb's sweep, rotated for landscape: rising from
+            // low inside toward the upper corner.
+            let positions: [(Double, Double)] = [
+                (0.78, 0.64), (0.85, 0.46), (0.90, 0.26), (0.90, 0.68),
+            ]
+            for index in 0..<count {
+                let (x, y) = positions[index]
+                items.append(button(
+                    id: singleRowIds[index], label: "\(index + 1)", x: x, y: y
+                ))
+            }
+        } else {
+            let columns: [Double] = [0.77, 0.845, 0.92]
+            for index in 0..<count {
+                let row = index / 3
+                let column = index % 3
+                items.append(button(
+                    id: doubleRowIds[index],
+                    label: "\(index + 1)",
+                    x: columns[column],
+                    y: row == 0 ? 0.40 : 0.62
+                ))
+            }
+        }
+
+        items.append(ControlLayout.Item(
+            kind: .button,
+            label: "Coin",
+            input: 2,
+            inputs: nil,
+            frame: ControlLayout.Rect(x: 0.025, y: 0.06, w: 0.065, h: 0.15),
+            extended: ControlLayout.Rect(x: 0.00, y: 0.02, w: 0.10, h: 0.24),
+            fourWay: nil
+        ))
+        items.append(ControlLayout.Item(
+            kind: .pill,
+            label: "Start",
+            input: 3,
+            inputs: nil,
+            frame: ControlLayout.Rect(x: 0.87, y: 0.07, w: 0.10, h: 0.09),
+            extended: ControlLayout.Rect(x: 0.84, y: 0.03, w: 0.15, h: 0.16),
+            fourWay: nil
+        ))
+
+        return items
     }
 
     /// Action buttons in the right thumb's arc. The arc curls with the

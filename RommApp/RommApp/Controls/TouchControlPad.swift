@@ -17,22 +17,27 @@ import UIKit
 ///   up-left is a stream of input changes, never a release and a new press.
 /// - Haptics fire on every input change.
 struct TouchControlPad: UIViewRepresentable {
-    let layout: ControlLayout
+    let items: [ControlLayout.Item]
     /// Called with a RetroArch input id and whether it is now down.
     let send: (Int, Bool) -> Void
 
     func makeUIView(context: Context) -> ControlPadView {
-        let view = ControlPadView(layout: layout, send: send)
+        let view = ControlPadView(items: items, send: send)
         view.backgroundColor = .clear
         view.isMultipleTouchEnabled = true
         return view
     }
 
-    func updateUIView(_ view: ControlPadView, context: Context) {}
+    func updateUIView(_ view: ControlPadView, context: Context) {
+        view.items = items
+    }
 }
 
 final class ControlPadView: UIView {
-    private let layout: ControlLayout
+    var items: [ControlLayout.Item] {
+        didSet { setNeedsDisplay() }
+    }
+
     private let send: (Int, Bool) -> Void
     private let haptic = UIImpactFeedbackGenerator(style: .light)
 
@@ -41,8 +46,8 @@ final class ControlPadView: UIView {
     /// What each live touch is contributing. A d-pad touch owns several.
     private var touchInputs: [UITouch: Set<Int>] = [:]
 
-    init(layout: ControlLayout, send: @escaping (Int, Bool) -> Void) {
-        self.layout = layout
+    init(items: [ControlLayout.Item], send: @escaping (Int, Bool) -> Void) {
+        self.items = items
         self.send = send
         super.init(frame: .zero)
         contentMode = .redraw
@@ -50,6 +55,14 @@ final class ControlPadView: UIView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
+
+    /// Touches land here only inside a control's extended frame. Everything
+    /// else passes through to the webview underneath, which matters in
+    /// landscape where this view overlays the whole screen: taps on the game
+    /// canvas still wake the overlay and reach EmulatorJS's menu button.
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        items.contains { $0.extended.resolved(in: bounds.size).contains(point) }
+    }
 
     // MARK: Touch handling
 
@@ -82,7 +95,7 @@ final class ControlPadView: UIView {
     private func inputs(at point: CGPoint) -> Set<Int> {
         var held: Set<Int> = []
 
-        for item in layout.items {
+        for item in items {
             let extended = item.extended.resolved(in: bounds.size)
             guard extended.contains(point) else { continue }
 
@@ -141,7 +154,7 @@ final class ControlPadView: UIView {
     // MARK: Drawing
 
     override func draw(_ rect: CGRect) {
-        for item in layout.items {
+        for item in items {
             let frame = item.frame.resolved(in: bounds.size)
             switch item.kind {
             case .dpad:

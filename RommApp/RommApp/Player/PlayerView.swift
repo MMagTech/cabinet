@@ -22,6 +22,12 @@ struct PlayerView: View {
     @StateObject private var input = PlayerInputBridge()
 
     var body: some View {
+        GeometryReader { geometry in
+            content(isLandscape: geometry.size.width > geometry.size.height)
+        }
+    }
+
+    private func content(isLandscape: Bool) -> some View {
         ZStack(alignment: .topLeading) {
             Color.black.ignoresSafeArea()
 
@@ -44,7 +50,11 @@ struct PlayerView: View {
                     gameStarted: $gameStarted,
                     input: input
                 )
-                .padding(.bottom, gameStarted && controlLayout != nil ? controlStripHeight : 0)
+                .padding(
+                    .bottom,
+                    gameStarted && !isLandscape && controlLayout != nil
+                        ? controlStripHeight : 0
+                )
             } else if failed {
                 VStack(spacing: 12) {
                     Text("Could not start the player.")
@@ -58,13 +68,25 @@ struct PlayerView: View {
             // The native pad replaces EmulatorJS's web touch controls, which
             // the injection hides. It appears once the game actually starts,
             // so RomM's pre play page stays fully tappable.
+            //
+            // Portrait: a strip below the canvas. Landscape: the pad spans
+            // the whole screen with controls in the gutters flanking the
+            // centred canvas, and passes touches through everywhere else.
+            // Orientation follows the device; the person holding the phone
+            // decides, never the app.
             if gameStarted, let layout = controlLayout {
-                VStack {
-                    Spacer()
-                    TouchControlPad(layout: layout) { id, down in
+                if isLandscape {
+                    TouchControlPad(items: layout.items(landscape: true)) { id, down in
                         input.send(id: id, down: down)
                     }
-                    .frame(height: controlStripHeight)
+                } else {
+                    VStack {
+                        Spacer()
+                        TouchControlPad(items: layout.items(landscape: false)) { id, down in
+                            input.send(id: id, down: down)
+                        }
+                        .frame(height: controlStripHeight)
+                    }
                 }
             }
 
@@ -292,19 +314,29 @@ struct PlayerWebView: UIViewRepresentable {
 
           // EmulatorJS reveals its menu toggle exactly when the game starts
           // (it flips the element's display on its own start event), which is
-          // the cleanest signal the page offers. Watch for that and tell the
-          // native side, so the control pad appears with the game and never
-          // over RomM's pre play screen.
-          const startObserver = new MutationObserver(() => {
+          // the cleanest signal the page offers. Watch it both ways and keep
+          // the native side in sync, so the control pad appears with the game
+          // and disappears when the game does. This script reruns on every
+          // page load, so a reload, a rotation that reloads, or a failed
+          // boot resets the native side to "no game" instead of stranding
+          // ghost controls over RomM's config screen.
+          const postGameState = (state) => {
+            try {
+              window.webkit.messageHandlers.gameState.postMessage(state);
+            } catch (e) {}
+          };
+          postGameState("stopped");
+
+          let gameOn = false;
+          const gameObserver = new MutationObserver(() => {
             const toggle = document.querySelector(".ejs_virtualGamepad_open");
-            if (toggle && toggle.style.display !== "none") {
-              try {
-                window.webkit.messageHandlers.gameState.postMessage("started");
-              } catch (e) {}
-              startObserver.disconnect();
+            const on = !!toggle && toggle.style.display !== "none";
+            if (on !== gameOn) {
+              gameOn = on;
+              postGameState(on ? "started" : "stopped");
             }
           });
-          startObserver.observe(document.documentElement, {
+          gameObserver.observe(document.documentElement, {
             subtree: true,
             childList: true,
             attributes: true,

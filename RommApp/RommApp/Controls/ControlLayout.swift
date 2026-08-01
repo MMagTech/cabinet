@@ -11,7 +11,16 @@ import Foundation
 /// the single highest impact detail in how touch controls feel.
 struct ControlLayout: Decodable {
     let system: String
+    /// Portrait items, normalised against the bottom control strip.
     let items: [Item]
+    /// Landscape items, normalised against the full screen, placed in the
+    /// gutters flanking the centred canvas. Optional: a layout without them
+    /// falls back to portrait items, which will look wrong but still work.
+    let landscapeItems: [Item]?
+
+    func items(landscape: Bool) -> [Item] {
+        landscape ? (landscapeItems ?? items) : items
+    }
 
     struct Item: Decodable {
         enum Kind: String, Decodable {
