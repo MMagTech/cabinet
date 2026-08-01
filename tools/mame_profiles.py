@@ -127,6 +127,16 @@ def read_input(machine):
     }
 
 
+def read_vertical(machine):
+    """True when the first screen is rotated 90 or 270 degrees: a TATE
+    cabinet, whose game is taller than wide. Orientation is a property of
+    the game, not the device, so the client needs to know."""
+    display = machine.find("display")
+    if display is None:
+        return False
+    return display.get("rotate") in ("90", "270")
+
+
 def parse(path, include_devices=False):
     """Stream the listxml and collect raw input data per machine."""
     raw = {}
@@ -151,6 +161,7 @@ def parse(path, include_devices=False):
 
         raw[name] = {
             "input": read_input(element),
+            "vertical": read_vertical(element),
             "parent": element.get("cloneof"),
             "description": (element.findtext("description") or "").strip(),
         }
@@ -230,6 +241,7 @@ def resolve(raw, order, genres=None):
             "players": data["players"],
             "coins": data["coins"],
             "control": data["control"],
+            "vertical": entry["vertical"],
             "parent": entry["parent"],
             "source": source,
         }

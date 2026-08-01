@@ -30,6 +30,13 @@ struct PlayerView: View {
                 // indicator, but the page itself stays inside the safe area.
                 // Rendered full bleed, the top of the game canvas sits under
                 // the island and gets clipped on every notched device.
+                //
+                // Once the game starts, the webview yields its bottom to the
+                // native controls so the canvas sits above them, never behind.
+                // Free for horizontal games, essential for vertical ones: a
+                // TATE canvas like DoDonPachi is taller than wide and would
+                // otherwise extend under the pad. EmulatorJS refits the canvas
+                // to the shrunken viewport on its own.
                 PlayerWebView(
                     url: context.url,
                     token: context.token,
@@ -37,6 +44,7 @@ struct PlayerView: View {
                     gameStarted: $gameStarted,
                     input: input
                 )
+                .padding(.bottom, gameStarted && controlLayout != nil ? controlStripHeight : 0)
             } else if failed {
                 VStack(spacing: 12) {
                     Text("Could not start the player.")
@@ -56,7 +64,7 @@ struct PlayerView: View {
                     TouchControlPad(layout: layout) { id, down in
                         input.send(id: id, down: down)
                     }
-                    .frame(height: 330)
+                    .frame(height: controlStripHeight)
                 }
             }
 
@@ -104,6 +112,17 @@ struct PlayerView: View {
             return ArcadeLayout.build(for: profile)
         }
         return ControlLayout.forPlatform(slug: rom.platformSlug)
+    }
+
+    /// Vertical games trade some control height for canvas: their picture is
+    /// taller than wide and every point matters, while their genres, mostly
+    /// shooters, need fewer and simpler inputs.
+    private var controlStripHeight: CGFloat {
+        if rom.isArcade,
+           ArcadeProfileStore.shared.resolve(shortname: rom.fsNameNoExt).vertical {
+            return 280
+        }
+        return 330
     }
 
     /// `.playback` or the phone's ringer switch silences the game.

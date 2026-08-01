@@ -13,10 +13,15 @@ struct ArcadeProfile {
     let ways: String
     let coins: Int
     let parent: String?
+    /// A TATE cabinet: the monitor was mounted rotated, so the game is
+    /// taller than wide. Vertical games keep portrait with controls below
+    /// the canvas; orientation is a property of the game, not the device.
+    let vertical: Bool
 
     /// The scope doc's generic default: six button, eight way.
     static let fallback = ArcadeProfile(
-        profile: "six_button", buttons: 6, ways: "8", coins: 1, parent: nil
+        profile: "six_button", buttons: 6, ways: "8", coins: 1, parent: nil,
+        vertical: false
     )
 
     var isFourWay: Bool { ways == "4" }
@@ -65,6 +70,7 @@ final class ArcadeProfileStore {
         let ways = row.count > 2 ? (row[2] as? String ?? "") : ""
         let coins = row.count > 3 ? (row[3] as? Int ?? 0) : 0
         let parent = row.count > 4 ? (row[4] as? String) : nil
+        let vertical = row.count > 5 ? (row[5] as? Int ?? 0) == 1 : false
 
         // A machine whose input data lives on its parent still resolves,
         // because the generation step already inherited it. But a "special"
@@ -75,7 +81,7 @@ final class ArcadeProfileStore {
 
         return ArcadeProfile(
             profile: profile, buttons: buttons, ways: ways,
-            coins: coins, parent: parent
+            coins: coins, parent: parent, vertical: vertical
         )
     }
 }
