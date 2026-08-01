@@ -16,10 +16,42 @@ struct ControllerRemapView: View {
         List {
             if !controllers.isConnected {
                 Section {
-                    Label("No controller connected", systemImage: "gamecontroller")
-                        .foregroundStyle(.secondary)
+                    if let unsupported = controllers.unsupportedController {
+                        Label(
+                            "\(unsupported) is paired but not usable",
+                            systemImage: "exclamationmark.triangle.fill"
+                        )
+                        .foregroundStyle(.orange)
+                    } else {
+                        Label("No controller connected", systemImage: "gamecontroller")
+                            .foregroundStyle(.secondary)
+                    }
                 } footer: {
-                    Text("Connect a controller to change its buttons. Settings are remembered per controller.")
+                    if controllers.unsupportedController != nil {
+                        Text("iOS sees this controller but it does not present itself as a standard gamepad, so no app can read its buttons. Some controllers need a mode switch, often held at power on, to behave as one.")
+                    } else {
+                        Text("Connect a controller to change its buttons. Settings are remembered per controller.")
+                    }
+                }
+            }
+
+            // The instruction leads, because pressing a controller button
+            // before choosing an input is the obvious first thing to try and
+            // does nothing, which reads as broken.
+            if controllers.isConnected {
+                Section {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "hand.tap.fill")
+                            .foregroundStyle(.tint)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Tap an input below first")
+                                .font(.subheadline.weight(.semibold))
+                            Text("Then press the controller button you want for it. Pressing a button on its own does nothing here.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 2)
                 }
             }
 
@@ -30,7 +62,7 @@ struct ControllerRemapView: View {
             } header: {
                 Text("Game inputs")
             } footer: {
-                Text("Tap an input, then press the button you want for it. Coin and Start matter most: without Coin an arcade game cannot start.")
+                Text("Coin and Start matter most: without Coin an arcade game cannot start.")
             }
 
             if controllers.isConnected {

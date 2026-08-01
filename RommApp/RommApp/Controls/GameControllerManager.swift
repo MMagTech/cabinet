@@ -22,6 +22,9 @@ final class GameControllerManager: ObservableObject {
     /// Every button this controller reports, by element name, so a remap
     /// screen can show what actually exists rather than what was assumed.
     @Published private(set) var availableButtons: [String] = []
+    /// Set when a controller is paired but does not present a standard
+    /// gamepad, which no app can drive and no remapping can rescue.
+    @Published private(set) var unsupportedController: String?
 
     /// Sends a RetroPad input id and its state to the emulator.
     var send: ((Int, Bool) -> Void)?
@@ -76,7 +79,15 @@ final class GameControllerManager: ObservableObject {
     // MARK: Wiring
 
     private func attach(_ controller: GCController) {
-        guard let gamepad = controller.extendedGamepad else { return }
+        guard let gamepad = controller.extendedGamepad else {
+            // Paired and visible to iOS, but not as a standard gamepad. Say
+            // so rather than appearing to see nothing at all, because the
+            // two look identical from the outside and have different fixes.
+            unsupportedController = controller.vendorName ?? "This controller"
+            isConnected = false
+            return
+        }
+        unsupportedController = nil
 
         pad = gamepad
         isConnected = true
