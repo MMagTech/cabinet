@@ -71,16 +71,19 @@ struct PlatformGamesView: View {
                 spacing: 12
             ) {
                 ForEach(roms) { rom in
-                    VStack(spacing: 6) {
-                        CoverImage(path: rom.pathCoverSmall, title: rom.displayName)
-                            .aspectRatio(3.0 / 4.0, contentMode: .fit)
-                            .clipShape(.rect(cornerRadius: 10))
+                    NavigationLink(value: rom) {
+                        VStack(spacing: 6) {
+                            CoverImage(path: rom.pathCoverSmall, title: rom.displayName)
+                                .aspectRatio(3.0 / 4.0, contentMode: .fit)
+                                .clipShape(.rect(cornerRadius: 10))
 
-                        Text(rom.displayName)
-                            .font(.caption)
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            Text(rom.displayName)
+                                .font(.caption)
+                                .lineLimit(1)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
+                    .buttonStyle(.plain)
                     .onAppear { Task { await loadMoreIfNeeded(current: rom) } }
                 }
             }
@@ -93,9 +96,11 @@ struct PlatformGamesView: View {
     private var list: some View {
         List {
             ForEach(roms) { rom in
-                Text(rom.displayName)
-                    .lineLimit(1)
-                    .onAppear { Task { await loadMoreIfNeeded(current: rom) } }
+                NavigationLink(value: rom) {
+                    Text(rom.displayName)
+                        .lineLimit(1)
+                }
+                .onAppear { Task { await loadMoreIfNeeded(current: rom) } }
             }
 
             footer

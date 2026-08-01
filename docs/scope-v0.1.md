@@ -63,14 +63,26 @@ token pasting, no cookie scraping.
 
 **Scopes to request** (fixed at pair time, adding one later means re-pairing):
 
+- `me.read`
 - `roms.read`
+- `roms.user.read`
+- `roms.user.write`
 - `platforms.read`
 - `firmware.read`
 - `assets.read`
 - `assets.write`
+- `collections.read`
 
-All five confirmed present against RomM 5.1.0. Note the spec lives at
-`/openapi.json`, not `/api/openapi.json`, which 404s.
+All confirmed against RomM 5.1.0, its source, and its developer docs. The
+original five were not enough for the player. me.read: the frontend asks
+`/api/users/me` before rendering anything. roms.user.write: last played and
+play session ingestion. collections.read: the frontend treats any 403 from
+any endpoint as a dead session and bounces to its login screen, and its boot
+always fetches collections, so every scope the SPA startup path touches must
+be granted or the webview player gets ejected after loading. The rule of
+thumb, straight from RomM's docs: 401 means bad credential, 403 means valid
+credential missing a scope. Note the spec lives at `/openapi.json`, not
+`/api/openapi.json`, which 404s.
 
 ---
 

@@ -164,4 +164,18 @@ final class Session: ObservableObject {
         guard let client else { throw RommError.transport("No server selected.") }
         return try await client.coverData(path: path)
     }
+
+    // MARK: Player
+
+    /// Everything the player webview needs: where to go and how to prove who
+    /// we are. The token is injected into the page's requests because RomM's
+    /// backend accepts bearer authentication on every endpoint, while its web
+    /// player normally rides on a session cookie this app does not have.
+    func playerContext(for rom: Rom) async -> (url: URL, token: String)? {
+        guard let serverURL, let host = serverURL.host,
+              let token = Keychain.token(forHost: host),
+              let url = URL(string: serverURL.absoluteString + "/rom/\(rom.id)/ejs")
+        else { return nil }
+        return (url, token)
+    }
 }

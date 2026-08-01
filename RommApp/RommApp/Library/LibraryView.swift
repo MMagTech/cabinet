@@ -64,6 +64,9 @@ struct LibraryView: View {
         .navigationDestination(for: Platform.self) { platform in
             PlatformGamesView(platform: platform)
         }
+        .navigationDestination(for: Rom.self) { rom in
+            RomDetailView(rom: rom)
+        }
         .refreshable { await loadPlatforms() }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -103,16 +106,18 @@ struct LibraryView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(searchResults) { rom in
-                    HStack(spacing: 12) {
-                        CoverImage(path: rom.pathCoverSmall, title: rom.displayName)
-                            .frame(width: 40, height: 53)
-                            .clipShape(.rect(cornerRadius: 6))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(rom.displayName)
-                                .lineLimit(1)
-                            Text(rom.platformSlug)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                    NavigationLink(value: rom) {
+                        HStack(spacing: 12) {
+                            CoverImage(path: rom.pathCoverSmall, title: rom.displayName)
+                                .frame(width: 40, height: 53)
+                                .clipShape(.rect(cornerRadius: 6))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(rom.displayName)
+                                    .lineLimit(1)
+                                Text(rom.platformSlug)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }

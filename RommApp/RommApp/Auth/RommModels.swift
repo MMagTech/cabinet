@@ -67,12 +67,29 @@ struct Platform: Decodable, Identifiable, Hashable {
 
 /// Scopes are fixed at pair time. Adding one later means the person has to pair
 /// again, so this list is deliberately in one place and should change rarely.
+///
+/// The webview player raises the bar beyond plain library browsing: RomM's
+/// frontend asks `/api/users/me` (me.read) before it renders anything, marks
+/// the game as last played through user rom props (roms.user.write), and
+/// ingests play sessions the same way. Verified against protected_route
+/// declarations in RomM's backend/endpoints.
+///
+/// collections.read is not for a collections feature. RomM's web frontend
+/// treats any 403 from any endpoint as a dead session and bounces to its
+/// login screen (frontend/src/services/api/index.ts), and its boot sequence
+/// always fetches collections. Without the scope, the player loads and is
+/// immediately kicked out. Any scope the SPA's startup path touches must be
+/// granted, or the webview cannot host it.
 enum RommScopes {
     static let required = [
+        "me.read",
         "roms.read",
+        "roms.user.read",
+        "roms.user.write",
         "platforms.read",
         "firmware.read",
         "assets.read",
         "assets.write",
+        "collections.read",
     ]
 }

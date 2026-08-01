@@ -9,6 +9,8 @@ struct Rom: Decodable, Identifiable, Hashable {
     let fsNameNoTags: String
     let platformId: Int
     let platformSlug: String
+    let platformDisplayName: String?
+    let summary: String?
     let pathCoverSmall: String?
     let pathCoverLarge: String?
     let fsSizeBytes: Int64
@@ -19,10 +21,11 @@ struct Rom: Decodable, Identifiable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name
+        case id, name, summary
         case fsNameNoTags = "fs_name_no_tags"
         case platformId = "platform_id"
         case platformSlug = "platform_slug"
+        case platformDisplayName = "platform_display_name"
         case pathCoverSmall = "path_cover_small"
         case pathCoverLarge = "path_cover_large"
         case fsSizeBytes = "fs_size_bytes"
