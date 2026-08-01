@@ -17,6 +17,7 @@ struct PlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var context: (url: URL, token: String)?
     @State private var failed = false
+    @State private var overlayVisible = true
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -27,7 +28,11 @@ struct PlayerView: View {
                 // indicator, but the page itself stays inside the safe area.
                 // Rendered full bleed, the top of the game canvas sits under
                 // the island and gets clipped on every notched device.
-                PlayerWebView(url: context.url, token: context.token)
+                PlayerWebView(
+                    url: context.url,
+                    token: context.token,
+                    overlayVisible: $overlayVisible
+                )
             } else if failed {
                 VStack(spacing: 12) {
                     Text("Could not start the player.")
@@ -38,6 +43,9 @@ struct PlayerView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
+            // Fades in step with EmulatorJS's menu toggle so nothing sits
+            // over the game during play. A tap on the game canvas brings
+            // both back, mirroring the injected idle logic.
             Button {
                 dismiss()
             } label: {
@@ -49,6 +57,9 @@ struct PlayerView: View {
             }
             .padding(.top, 8)
             .padding(.leading, 8)
+            .opacity(overlayVisible ? 1 : 0)
+            .allowsHitTesting(overlayVisible)
+            .animation(.easeInOut(duration: 0.35), value: overlayVisible)
         }
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
@@ -77,6 +88,23 @@ struct PlayerView: View {
 struct PlayerWebView: UIViewRepresentable {
     let url: URL
     let token: String
+    @Binding var overlayVisible: Bool
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject, WKScriptMessageHandler {
+        private let parent: PlayerWebView
+
+        init(_ parent: PlayerWebView) { self.parent = parent }
+
+        func userContentController(
+            _ controller: WKUserContentController,
+            didReceive message: WKScriptMessage
+        ) {
+            guard message.name == "overlay", let visible = message.body as? Bool else { return }
+            parent.overlayVisible = visible
+        }
+    }
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -95,6 +123,7 @@ struct PlayerWebView: UIViewRepresentable {
             forMainFrameOnly: false
         )
         config.userContentController.addUserScript(script)
+        config.userContentController.add(context.coordinator, name: "overlay")
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.isOpaque = false
@@ -164,11 +193,44 @@ struct PlayerWebView: UIViewRepresentable {
           // fullscreen, so they float over the game. This webview only ever
           // shows the player, so hide the shell chrome outright and release
           // the top padding the layout reserves for the header.
+          //
+          // .ejs_virtualGamepad_open is EmulatorJS's floating menu toggle,
+          // the three bar button. It gets the same fade treatment as the
+          // native close button, driven by the idle logic below.
           const style = document.createElement("style");
           style.textContent =
             ".r-v2-nav-bar, .r-v2-bottom-nav { display: none !important } " +
-            "#r-v2-main { padding-top: 0 !important }";
+            "#r-v2-main { padding-top: 0 !important } " +
+            ".ejs_virtualGamepad_open { transition: opacity 0.35s !important } " +
+            "html.romm-overlay-idle .ejs_virtualGamepad_open " +
+            "{ opacity: 0 !important; pointer-events: none !important }";
           document.documentElement.appendChild(style);
+
+          // Overlay idle logic. The close button and the EmulatorJS menu
+          // toggle show briefly, then fade so nothing sits over the game.
+          // Only touches on the UPPER part of the screen wake them: during
+          // play both thumbs live on the virtual controls at the bottom, and
+          // waking on every d-pad press would keep the buttons up forever.
+          // Tapping the game canvas is the deliberate "show me the controls"
+          // gesture. The native side mirrors the same visibility for its
+          // close button through the overlay message handler.
+          let idleTimer = null;
+          const setIdle = (idle) => {
+            document.documentElement.classList.toggle("romm-overlay-idle", idle);
+            try {
+              window.webkit.messageHandlers.overlay.postMessage(!idle);
+            } catch (e) {}
+          };
+          const wake = () => {
+            setIdle(false);
+            clearTimeout(idleTimer);
+            idleTimer = setTimeout(() => setIdle(true), 3000);
+          };
+          window.addEventListener("touchstart", (event) => {
+            const touch = event.touches && event.touches[0];
+            if (touch && touch.clientY < window.innerHeight * 0.55) wake();
+          }, { passive: true, capture: true });
+          wake();
         })();
         """
     }
