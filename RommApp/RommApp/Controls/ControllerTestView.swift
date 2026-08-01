@@ -12,7 +12,7 @@ import SwiftUI
 /// building. iOS hands apps semantic buttons rather than raw indices, so a
 /// certified pad should light the right rows without any remapping at all.
 struct ControllerTestView: View {
-    @StateObject private var controllers = GameControllerManager()
+    @ObservedObject private var controllers = GameControllerManager.shared
 
     var body: some View {
         List {
@@ -63,6 +63,5 @@ struct ControllerTestView: View {
         .navigationTitle("Test controller")
         .navigationBarTitleDisplayMode(.inline)
         .task { controllers.start() }
-        .onDisappear { controllers.stop() }
     }
 }

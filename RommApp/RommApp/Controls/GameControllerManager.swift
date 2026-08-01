@@ -13,6 +13,12 @@ import SwiftUI
 /// reports can be pointed at whatever input the player needs.
 @MainActor
 final class GameControllerManager: ObservableObject {
+    /// One manager for the whole app. Button handlers live on the controller
+    /// itself, so two managers would overwrite each other's handlers and
+    /// whichever screen attached last would silently steal every press.
+    static let shared = GameControllerManager()
+
+    private var started = false
     /// A controller is attached and driving the game.
     @Published private(set) var isConnected = false
     /// The attached controller's name, for showing which pad is in charge.
@@ -46,6 +52,9 @@ final class GameControllerManager: ObservableObject {
     var storageKey: String { controllerName ?? "unknown" }
 
     func start() {
+        guard !started else { return }
+        started = true
+
         observers.append(NotificationCenter.default.addObserver(
             forName: .GCControllerDidConnect, object: nil, queue: .main
         ) { [weak self] note in
@@ -104,12 +113,41 @@ final class GameControllerManager: ObservableObject {
             Task { @MainActor in self?.stick(x: x, y: y) }
         }
 
-        // Every button the controller actually reports, bound by name.
-        var names: [String] = []
-        for (name, element) in gamepad.elements {
-            guard let button = element as? GCControllerButtonInput else { continue }
-            names.append(name)
+        // Bind the standard buttons by their canonical names. The elements
+        // dictionary cannot be used for this: it keys every button under
+        // several aliases at once, so iterating it installs handlers under
+        // whichever alias happens to come last and no name ever matches the
+        // binding table again.
+        var candidates: [(String, GCControllerButtonInput)] = [
+            (GCInputButtonA, gamepad.buttonA),
+            (GCInputButtonB, gamepad.buttonB),
+            (GCInputButtonX, gamepad.buttonX),
+            (GCInputButtonY, gamepad.buttonY),
+            (GCInputLeftShoulder, gamepad.leftShoulder),
+            (GCInputRightShoulder, gamepad.rightShoulder),
+            (GCInputLeftTrigger, gamepad.leftTrigger),
+            (GCInputRightTrigger, gamepad.rightTrigger),
+            (GCInputButtonMenu, gamepad.buttonMenu),
+        ]
+        // These are optional on the profile: a compact pad may have none of
+        // them, which is exactly why remapping exists.
+        if let options = gamepad.buttonOptions {
+            candidates.append((GCInputButtonOptions, options))
+        }
+        if let home = gamepad.buttonHome {
+            candidates.append((GCInputButtonHome, home))
+        }
+        if let l3 = gamepad.leftThumbstickButton {
+            candidates.append((GCInputLeftThumbstickButton, l3))
+        }
+        if let r3 = gamepad.rightThumbstickButton {
+            candidates.append((GCInputRightThumbstickButton, r3))
+        }
 
+        for (name, button) in candidates {
+            // Triggers report analog values and need a threshold; everything
+            // else is a clean pressed change. Reading isAnalog rather than
+            // assuming, since some pads report pressure on face buttons.
             if button.isAnalog {
                 button.valueChangedHandler = { [weak self] _, value, _ in
                     Task { @MainActor in self?.analog(name, value: value) }
@@ -120,7 +158,7 @@ final class GameControllerManager: ObservableObject {
                 }
             }
         }
-        availableButtons = names.sorted()
+        availableButtons = candidates.map(\.0)
     }
 
     /// A physical button changed. In capture mode it names itself for the

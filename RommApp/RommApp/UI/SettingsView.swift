@@ -10,7 +10,7 @@ struct SettingsView: View {
     @State private var confirmingUnpair = false
     @State private var confirmingForget = false
     @AppStorage("com.mmagtech.RommApp.controlOpacity") private var controlOpacity = 0.7
-    @StateObject private var controllers = GameControllerManager()
+    @ObservedObject private var controllers = GameControllerManager.shared
 
     var body: some View {
         List {
@@ -83,7 +83,6 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .task { controllers.start() }
-        .onDisappear { controllers.stop() }
         .confirmationDialog(
             "Unpair this device?",
             isPresented: $confirmingUnpair,

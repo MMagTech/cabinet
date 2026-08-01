@@ -8,7 +8,7 @@ import SwiftUI
 /// cannot be played at all. Rather than guess at a preset per controller
 /// family, this asks: press the button you want for this.
 struct ControllerRemapView: View {
-    @StateObject private var controllers = GameControllerManager()
+    @ObservedObject private var controllers = GameControllerManager.shared
     @State private var capturing: Int?
     @State private var confirmingReset = false
 
@@ -97,10 +97,7 @@ struct ControllerRemapView: View {
         .navigationTitle("Buttons")
         .navigationBarTitleDisplayMode(.inline)
         .task { controllers.start() }
-        .onDisappear {
-            controllers.captureHandler = nil
-            controllers.stop()
-        }
+        .onDisappear { controllers.captureHandler = nil }
         .overlay {
             if let capturing {
                 capturePrompt(for: capturing)

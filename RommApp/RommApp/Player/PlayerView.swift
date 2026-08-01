@@ -20,7 +20,7 @@ struct PlayerView: View {
     @State private var overlayVisible = true
     @State private var gameStarted = false
     @StateObject private var input = PlayerInputBridge()
-    @StateObject private var controllers = GameControllerManager()
+    @ObservedObject private var controllers = GameControllerManager.shared
     /// The scope doc's bet: the opacity slider matters more than any theme.
     @AppStorage("com.mmagtech.RommApp.controlOpacity") private var controlOpacity = 0.7
 
@@ -138,7 +138,11 @@ struct PlayerView: View {
         }
         .onDisappear {
             UIApplication.shared.isIdleTimerDisabled = false
-            controllers.stop()
+            // Detach this screen's callbacks without stopping the shared
+            // manager, which Settings and the test screens also use.
+            controllers.send = nil
+            controllers.onMenu = nil
+            controllers.onDisconnect = nil
         }
     }
 
