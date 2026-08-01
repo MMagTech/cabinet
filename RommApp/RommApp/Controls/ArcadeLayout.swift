@@ -40,13 +40,14 @@ enum ArcadeLayout {
         // top band of the strip, out of both thumb arcs where mid-game hands
         // never stray. Coin stays big and obvious: primary in presence, not
         // in position.
+        // A breath of margin above both, so Coin never rides the canvas edge.
         items.append(ControlLayout.Item(
             kind: .button,
             label: "Coin",
             input: 2,
             inputs: nil,
-            frame: ControlLayout.Rect(x: 0.05, y: 0.00, w: 0.14, h: 0.17),
-            extended: ControlLayout.Rect(x: 0.01, y: 0.00, w: 0.22, h: 0.24),
+            frame: ControlLayout.Rect(x: 0.05, y: 0.07, w: 0.14, h: 0.17),
+            extended: ControlLayout.Rect(x: 0.01, y: 0.03, w: 0.22, h: 0.26),
             fourWay: nil
         ))
         items.append(ControlLayout.Item(
@@ -54,8 +55,8 @@ enum ArcadeLayout {
             label: "Start",
             input: 3,
             inputs: nil,
-            frame: ControlLayout.Rect(x: 0.40, y: 0.04, w: 0.20, h: 0.10),
-            extended: ControlLayout.Rect(x: 0.36, y: 0.00, w: 0.28, h: 0.18),
+            frame: ControlLayout.Rect(x: 0.40, y: 0.10, w: 0.20, h: 0.10),
+            extended: ControlLayout.Rect(x: 0.36, y: 0.05, w: 0.28, h: 0.20),
             fourWay: nil
         ))
 
