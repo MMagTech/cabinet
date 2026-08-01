@@ -38,7 +38,15 @@ The app never emulates natively. EmulatorJS runs in the webview every time.
 
 **Why webview:** WKWebView's WebContent process carries the dynamic-code-signing
 entitlement, so WASM cores get JIT. Native cores in the app process do not and
-run interpreted. **verify** against current iOS before building on this.
+run interpreted.
+
+**Verified** on 2026-08-01, iPhone Air (iPhone18,4) on iOS 26.6, Release build.
+An identical integer loop run three ways in one app: WASM in a `WKWebView`
+reached 405 to 422 million iterations per second against 433 to 508 for the
+same loop in native Swift, a ratio of 0.83 to 0.95 across four runs, with
+checksums matching. Interpreted execution would be roughly an order of
+magnitude below native, so WASM is being jitted and this decision holds.
+Reproduce with `spikes/JITProbe`.
 
 ---
 
@@ -47,8 +55,9 @@ run interpreted. **verify** against current iOS before building on this.
 RomM has a purpose-built third-party client flow. Use it. No password entry, no
 token pasting, no cookie scraping.
 
-1. `POST /api/auth/device/init` with `client`, `platform`, `client_version`,
-   `requested_scopes`. Returns a device code and a short user code.
+1. `POST /api/auth/device/init`. Required: `client_device_identifier`, `name`,
+   `client`, `requested_scopes`. Optional: `platform`, `client_version`, both
+   capped at 50 characters. Returns a device code and a short user code.
 2. Show the user code. Approve in the RomM web UI.
 3. Poll `POST /api/auth/device/token` until issued.
 
@@ -60,7 +69,8 @@ token pasting, no cookie scraping.
 - `assets.read`
 - `assets.write`
 
-Confirm exact scope identifiers against `/api/docs`.
+All five confirmed present against RomM 5.1.0. Note the spec lives at
+`/openapi.json`, not `/api/openapi.json`, which 404s.
 
 ---
 
@@ -268,10 +278,13 @@ Shortcuts and Spotlight. iPad layouts. controls.dat labels. Explicit downloads.
 
 ## Open items
 
-1. Current iOS JIT behaviour in WKWebView. **verify**
+1. ~~Current iOS JIT behaviour in WKWebView.~~ Resolved 2026-08-01, see
+   Architecture. WASM runs jitted at roughly 0.85x native Swift on iOS 26.6.
 2. Whether `window.EJS_emulator.gameManager` exposes an input method, or whether
    synthetic `KeyboardEvent` is the input path. **verify**
-3. Exact scope identifier strings from `/api/docs`.
+3. ~~Exact scope identifier strings from `/api/docs`.~~ Resolved 2026-08-01.
+   All five exist verbatim in RomM 5.1.0. See Auth for the corrected
+   `device/init` field list, which was missing two required fields.
 4. Whether the pause menu button lives in the control strip, two-finger tap, or
    both.
 5. Gamepad API suppression method inside the webview.

@@ -24,6 +24,7 @@ Carthage/Build/
 
 # Secrets and local config
 .env
+.claude/settings.local.json
 *.p12
 *.mobileprovision
 Secrets.plist
