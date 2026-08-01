@@ -1,0 +1,36 @@
+# Xcode
+DerivedData/
+build/
+*.xcuserstate
+*.xcuserdatad/
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Packages/
+Package.resolved
+
+# CocoaPods and Carthage, if they ever appear
+Pods/
+Carthage/Build/
+
+# Secrets and local config
+.env
+*.p12
+*.mobileprovision
+Secrets.plist
+
+# Generated data
+tools/*.xml
+tools/profiles.json
+
+# macOS
+.DS_Store
