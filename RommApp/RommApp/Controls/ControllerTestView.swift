@@ -34,12 +34,17 @@ struct ControllerTestView: View {
             Section {
                 ForEach(GameControllerManager.Pad.names, id: \.id) { entry in
                     let active = controllers.pressedInputs.contains(entry.id)
-                    HStack {
+                    HStack(spacing: 10) {
                         Image(systemName: active ? "circle.fill" : "circle")
                             .foregroundStyle(active ? AnyShapeStyle(.green) : AnyShapeStyle(.tertiary))
                             .font(.caption)
-                        Text(entry.label)
-                            .foregroundStyle(active ? .primary : .secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(entry.label)
+                                .foregroundStyle(active ? .primary : .secondary)
+                            Text(entry.from)
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
                         Spacer()
                         if active {
                             Text("pressed")

@@ -40,15 +40,25 @@ final class GameControllerManager: ObservableObject {
         static let a = 8, x = 9, l = 10, r = 11
         static let l2 = 12, r2 = 13
 
-        /// What each id does in game, for the test screen. Names describe the
-        /// emulator's input, not any particular pad's printing.
-        static let names: [(id: Int, label: String)] = [
-            (up, "Up"), (down, "Down"), (left, "Left"), (right, "Right"),
-            (b, "B, arcade button 4"), (a, "A, arcade button 5"),
-            (y, "Y, arcade button 1"), (x, "X, arcade button 2"),
-            (l, "L, arcade button 3"), (r, "R, arcade button 6"),
-            (l2, "L2 trigger"), (r2, "R2 trigger"),
-            (select, "Select, arcade Coin"), (start, "Start"),
+        /// What each id does in game and which physical button should produce
+        /// it, for the test screen. Buttons are named by position because
+        /// that is what iOS reports, with the Xbox and PlayStation printing
+        /// alongside so the screen answers "which button is Coin" on its own.
+        static let names: [(id: Int, label: String, from: String)] = [
+            (up, "Up", "D-pad or left stick"),
+            (down, "Down", "D-pad or left stick"),
+            (left, "Left", "D-pad or left stick"),
+            (right, "Right", "D-pad or left stick"),
+            (y, "Arcade button 1", "Left face button, X or Square"),
+            (x, "Arcade button 2", "Top face button, Y or Triangle"),
+            (l, "Arcade button 3", "Left shoulder, LB or L1"),
+            (b, "Arcade button 4", "Bottom face button, A or Cross"),
+            (a, "Arcade button 5", "Right face button, B or Circle"),
+            (r, "Arcade button 6", "Right shoulder, RB or R1"),
+            (l2, "L2", "Left trigger, LT or L2"),
+            (r2, "R2", "Right trigger, RT or R2"),
+            (select, "Select, arcade Coin", "View, Create or Share"),
+            (start, "Start", "Menu or Options"),
         ]
     }
 
@@ -124,15 +134,23 @@ final class GameControllerManager: ObservableObject {
             Task { @MainActor in self?.trigger(Pad.r2, value: value) }
         }
 
+        // Start belongs on buttonMenu: that is the button physically labelled
+        // Start or Options on every pad, and arcade play hits it constantly
+        // for credits. It cannot live on buttonHome, which iOS reserves on
+        // most controllers and exposes as nil, and which would have left
+        // Start unreachable on an Xbox pad.
+        pad.buttonMenu.pressedChangedHandler = handler(Pad.start)
+        // Select, and Coin in arcade profiles, on the smaller companion
+        // button: View on Xbox, Create or Share on PlayStation.
         pad.buttonOptions?.pressedChangedHandler = handler(Pad.select)
-        pad.buttonMenu.pressedChangedHandler = { [weak self] _, _, pressed in
+        // The overlay, holding this screen's close button and EmulatorJS's
+        // menu, comes up on the home button where the system allows it.
+        // Tapping the game canvas always works regardless, so no controller
+        // is ever the only way back out.
+        pad.buttonHome?.pressedChangedHandler = { [weak self] _, _, pressed in
             guard pressed else { return }
             Task { @MainActor in self?.onMenu?() }
         }
-        // Start lives on the right shoulder cluster of arcade sticks and on
-        // buttonMenu of gamepads, so honour both: the menu button opens the
-        // pause menu, and the home button, when present, sends Start.
-        pad.buttonHome?.pressedChangedHandler = handler(Pad.start)
     }
 
     private func handler(_ id: Int) -> GCControllerButtonValueChangedHandler {
