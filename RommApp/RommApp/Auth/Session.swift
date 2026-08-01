@@ -148,6 +148,11 @@ final class Session: ObservableObject {
         return try await client.platforms()
     }
 
+    func recentlyPlayed() async throws -> [Rom] {
+        guard let client else { throw RommError.transport("No server selected.") }
+        return try await client.recentlyPlayed()
+    }
+
     func roms(
         platformId: Int? = nil,
         searchTerm: String? = nil,

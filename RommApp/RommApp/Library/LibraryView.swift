@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// The library root: platforms to browse into, and search across everything.
+/// The library: platforms to browse into, and search across everything.
 ///
+/// Pushed from Home, which owns the navigation stack and the destinations.
 /// Search is server side and debounced, so typing does not fire a request per
 /// keystroke and results match what the RomM web UI would find.
-struct LibraryView: View {
+struct LibraryScreen: View {
     @EnvironmentObject private var session: Session
 
     @State private var platforms: [Platform] = []
@@ -16,67 +17,47 @@ struct LibraryView: View {
     @State private var searching = false
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if !searchText.isEmpty {
-                    searchList
-                } else {
-                    platformList
-                }
+        Group {
+            if !searchText.isEmpty {
+                searchList
+            } else {
+                platformList
             }
-            .navigationTitle("Library")
-            .searchable(text: $searchText, prompt: "Search all games")
-            .task(id: searchText) { await runSearch() }
-            .task { await loadPlatforms() }
         }
+        .navigationTitle("Library")
+        .searchable(text: $searchText, prompt: "Search all games")
+        .task(id: searchText) { await runSearch() }
+        .task { await loadPlatforms() }
     }
 
     // MARK: Platforms
 
     private var platformList: some View {
         List {
-            Section {
-                if loading {
-                    HStack(spacing: 10) {
-                        ProgressView()
-                        Text("Loading your library")
-                            .foregroundStyle(.secondary)
-                    }
-                } else if let error {
-                    Text(error).foregroundStyle(.red)
-                    Button("Try again") { Task { await loadPlatforms() } }
-                } else {
-                    ForEach(platforms) { platform in
-                        NavigationLink(value: platform) {
-                            HStack {
-                                Text(platform.name ?? platform.slug)
-                                Spacer()
-                                Text("\(platform.romCount)")
-                                    .foregroundStyle(.secondary)
-                                    .font(.callout.monospacedDigit())
-                            }
+            if loading {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("Loading your library")
+                        .foregroundStyle(.secondary)
+                }
+            } else if let error {
+                Text(error).foregroundStyle(.red)
+                Button("Try again") { Task { await loadPlatforms() } }
+            } else {
+                ForEach(platforms) { platform in
+                    NavigationLink(value: platform) {
+                        HStack {
+                            Text(platform.name ?? platform.slug)
+                            Spacer()
+                            Text("\(platform.romCount)")
+                                .foregroundStyle(.secondary)
+                                .font(.callout.monospacedDigit())
                         }
                     }
                 }
             }
-
-        }
-        .navigationDestination(for: Platform.self) { platform in
-            PlatformGamesView(platform: platform)
-        }
-        .navigationDestination(for: Rom.self) { rom in
-            RomDetailView(rom: rom)
         }
         .refreshable { await loadPlatforms() }
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                NavigationLink {
-                    SettingsView()
-                } label: {
-                    Image(systemName: "gearshape")
-                }
-            }
-        }
     }
 
     private func loadPlatforms() async {

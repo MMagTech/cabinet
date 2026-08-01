@@ -10,7 +10,7 @@ struct RootView: View {
         case .needsPairing:
             PairingView()
         case .ready:
-            LibraryView()
+            HomeView()
         }
     }
 }
