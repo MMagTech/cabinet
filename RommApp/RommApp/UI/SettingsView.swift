@@ -9,9 +9,27 @@ struct SettingsView: View {
     @EnvironmentObject private var session: Session
     @State private var confirmingUnpair = false
     @State private var confirmingForget = false
+    @AppStorage("com.mmagtech.RommApp.controlOpacity") private var controlOpacity = 0.7
 
     var body: some View {
         List {
+            Section {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Touch control visibility")
+                        Spacer()
+                        Text("\(Int(controlOpacity * 100))%")
+                            .foregroundStyle(.secondary)
+                            .font(.callout.monospacedDigit())
+                    }
+                    Slider(value: $controlOpacity, in: 0.25...1.0, step: 0.05)
+                }
+            } header: {
+                Text("Controls")
+            } footer: {
+                Text("How strongly the on screen controls show over the game. They respond to touch at any visibility.")
+            }
+
             Section {
                 LabeledContent("Server", value: session.serverURL?.host ?? "unknown")
                 if let version = session.serverVersion {

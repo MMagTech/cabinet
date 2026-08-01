@@ -20,6 +20,8 @@ struct PlayerView: View {
     @State private var overlayVisible = true
     @State private var gameStarted = false
     @StateObject private var input = PlayerInputBridge()
+    /// The scope doc's bet: the opacity slider matters more than any theme.
+    @AppStorage("com.mmagtech.RommApp.controlOpacity") private var controlOpacity = 0.7
 
     var body: some View {
         GeometryReader { geometry in
@@ -79,6 +81,7 @@ struct PlayerView: View {
                     TouchControlPad(items: layout.items(landscape: true)) { id, down in
                         input.send(id: id, down: down)
                     }
+                    .opacity(controlOpacity)
                 } else {
                     VStack {
                         Spacer()
@@ -87,6 +90,7 @@ struct PlayerView: View {
                         }
                         .frame(height: controlStripHeight)
                     }
+                    .opacity(controlOpacity)
                 }
             }
 
