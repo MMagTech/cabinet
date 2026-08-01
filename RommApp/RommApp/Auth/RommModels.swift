@@ -53,7 +53,7 @@ struct DeviceAuthToken: Decodable {
     }
 }
 
-struct Platform: Decodable, Identifiable {
+struct Platform: Decodable, Identifiable, Hashable {
     let id: Int
     let name: String?
     let slug: String

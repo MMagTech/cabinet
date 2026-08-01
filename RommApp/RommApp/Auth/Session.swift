@@ -141,10 +141,27 @@ final class Session: ObservableObject {
         stage = .needsServer
     }
 
-    // MARK: A first real call, to prove the token works
+    // MARK: Library calls
 
     func platforms() async throws -> [Platform] {
         guard let client else { throw RommError.transport("No server selected.") }
         return try await client.platforms()
+    }
+
+    func roms(
+        platformId: Int? = nil,
+        searchTerm: String? = nil,
+        limit: Int = 60,
+        offset: Int = 0
+    ) async throws -> RomPage {
+        guard let client else { throw RommError.transport("No server selected.") }
+        return try await client.roms(
+            platformId: platformId, searchTerm: searchTerm, limit: limit, offset: offset
+        )
+    }
+
+    func coverData(path: String) async throws -> Data {
+        guard let client else { throw RommError.transport("No server selected.") }
+        return try await client.coverData(path: path)
     }
 }

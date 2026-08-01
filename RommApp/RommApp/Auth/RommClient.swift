@@ -95,6 +95,74 @@ actor RommClient {
         try await send(request(path: "/api/platforms"), decoding: [Platform].self)
     }
 
+    /// One page of games, optionally narrowed to a platform or a search term.
+    /// Search runs on the server, matching the scope doc.
+    func roms(
+        platformId: Int? = nil,
+        searchTerm: String? = nil,
+        limit: Int = 60,
+        offset: Int = 0
+    ) async throws -> RomPage {
+        var query = [
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "offset", value: String(offset)),
+            URLQueryItem(name: "order_by", value: "name"),
+            URLQueryItem(name: "order_dir", value: "asc"),
+        ]
+        if let platformId {
+            query.append(URLQueryItem(name: "platform_ids", value: String(platformId)))
+        }
+        if let searchTerm, !searchTerm.isEmpty {
+            query.append(URLQueryItem(name: "search_term", value: searchTerm))
+        }
+
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("/api/roms"),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = query
+        guard let url = components?.url else {
+            throw RommError.transport("Could not build the request address.")
+        }
+
+        var req = URLRequest(url: url)
+        if let accessToken {
+            req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+        return try await send(req, decoding: RomPage.self)
+    }
+
+    /// Raw bytes of a cover image.
+    ///
+    /// `path_cover_small` arrives as a complete server relative URL, prefix,
+    /// query string and all, for example
+    /// `/assets/romm/resources/roms/2/50/cover/small.png?ts=2025-03-11 06:50:19`.
+    /// Resolve it against the base URL verbatim. Do not prepend anything: the
+    /// prefix is already in it. The timestamp query holds a literal space, so
+    /// the string needs percent encoding before it parses as a URL at all.
+    /// The request carries the token so this works whether or not the
+    /// instance protects its assets.
+    func coverData(path: String) async throws -> Data {
+        let encoded = path.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? path
+        guard let url = URL(string: encoded, relativeTo: baseURL) else {
+            throw RommError.transport("The server sent a cover address the app could not read.")
+        }
+        var req = URLRequest(url: url)
+        if let accessToken {
+            req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+
+        let (data, response) = try await session.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            #if DEBUG
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            print("COVER_MISS status=\(status) url=\(url.absoluteString)")
+            #endif
+            throw RommError.notFound
+        }
+        return data
+    }
+
     // MARK: Plumbing
 
     private func request(path: String, method: String = "GET") -> URLRequest {
