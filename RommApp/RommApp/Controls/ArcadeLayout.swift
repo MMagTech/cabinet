@@ -21,28 +21,32 @@ enum ArcadeLayout {
     static func build(for profile: ArcadeProfile) -> ControlLayout {
         var items: [ControlLayout.Item] = []
 
-        // The stick. Four way games actively suppress diagonals, which
+        // The stick, low in the left thumb's arc, pivoting from the bottom
+        // corner grip. Four way games actively suppress diagonals, which
         // matters for the Pac-Man and Donkey Kong family.
         items.append(ControlLayout.Item(
             kind: .dpad,
             label: nil,
             input: nil,
             inputs: [4, 5, 6, 7],
-            frame: ControlLayout.Rect(x: 0.04, y: 0.16, w: 0.40, h: 0.50),
-            extended: ControlLayout.Rect(x: 0.00, y: 0.08, w: 0.48, h: 0.66),
+            frame: ControlLayout.Rect(x: 0.07, y: 0.38, w: 0.40, h: 0.52),
+            extended: ControlLayout.Rect(x: 0.02, y: 0.30, w: 0.50, h: 0.68),
             fourWay: profile.isFourWay
         ))
 
         items.append(contentsOf: actionButtons(count: max(0, min(profile.buttons, 6))))
 
-        // Coin, primary, and Start beside it.
+        // Coin and Start are pressed a few times a session, so they take the
+        // top band of the strip, out of both thumb arcs where mid-game hands
+        // never stray. Coin stays big and obvious: primary in presence, not
+        // in position.
         items.append(ControlLayout.Item(
             kind: .button,
             label: "Coin",
             input: 2,
             inputs: nil,
-            frame: ControlLayout.Rect(x: 0.06, y: 0.78, w: 0.15, h: 0.19),
-            extended: ControlLayout.Rect(x: 0.02, y: 0.74, w: 0.22, h: 0.26),
+            frame: ControlLayout.Rect(x: 0.05, y: 0.00, w: 0.14, h: 0.17),
+            extended: ControlLayout.Rect(x: 0.01, y: 0.00, w: 0.22, h: 0.24),
             fourWay: nil
         ))
         items.append(ControlLayout.Item(
@@ -50,16 +54,19 @@ enum ArcadeLayout {
             label: "Start",
             input: 3,
             inputs: nil,
-            frame: ControlLayout.Rect(x: 0.30, y: 0.84, w: 0.20, h: 0.10),
-            extended: ControlLayout.Rect(x: 0.26, y: 0.79, w: 0.27, h: 0.19),
+            frame: ControlLayout.Rect(x: 0.40, y: 0.04, w: 0.20, h: 0.10),
+            extended: ControlLayout.Rect(x: 0.36, y: 0.00, w: 0.28, h: 0.18),
             fourWay: nil
         ))
 
         return ControlLayout(system: "arcade:\(profile.profile)", items: items)
     }
 
-    /// Action buttons on the right side. One row for up to three, two rows
-    /// of three above each other for more, matching cabinet muscle memory.
+    /// Action buttons in the right thumb's arc. The arc curls with the
+    /// thumb's natural sweep, from low inside toward the corner, so moving
+    /// between buttons is a rotation of the thumb, never a new grip. Two
+    /// rows of three keep cabinet muscle memory for six button games,
+    /// dropped low enough that the top row is a stretch, not a reach.
     private static func actionButtons(count: Int) -> [ControlLayout.Item] {
         guard count > 0 else { return [] }
 
@@ -74,16 +81,17 @@ enum ArcadeLayout {
                 label: label,
                 input: id,
                 inputs: nil,
-                frame: ControlLayout.Rect(x: x, y: y, w: 0.14, h: 0.19),
-                extended: ControlLayout.Rect(x: x - 0.035, y: y - 0.05, w: 0.21, h: 0.29),
+                frame: ControlLayout.Rect(x: x, y: y, w: 0.15, h: 0.20),
+                extended: ControlLayout.Rect(x: x - 0.04, y: y - 0.06, w: 0.23, h: 0.32),
                 fourWay: nil
             )
         }
 
         if count <= 4 {
-            // A rising arc from lower left to upper right, thumb shaped.
+            // The sweep: button one sits at the thumb's rest, later buttons
+            // follow the arc up and outward. A fourth tucks below the arc.
             let positions: [(Double, Double)] = [
-                (0.52, 0.38), (0.66, 0.24), (0.80, 0.12), (0.84, 0.40),
+                (0.54, 0.58), (0.70, 0.44), (0.82, 0.28), (0.80, 0.62),
             ]
             for index in 0..<count {
                 let (x, y) = positions[index]
@@ -92,8 +100,8 @@ enum ArcadeLayout {
                 ))
             }
         } else {
-            // Two rows of three.
-            let columns: [Double] = [0.52, 0.68, 0.84]
+            // Two rows of three, low in the strip.
+            let columns: [Double] = [0.50, 0.66, 0.82]
             for index in 0..<count {
                 let row = index / 3
                 let column = index % 3
@@ -101,7 +109,7 @@ enum ArcadeLayout {
                     id: doubleRowIds[index],
                     label: "\(index + 1)",
                     x: columns[column],
-                    y: row == 0 ? 0.12 : 0.40
+                    y: row == 0 ? 0.36 : 0.62
                 ))
             }
         }

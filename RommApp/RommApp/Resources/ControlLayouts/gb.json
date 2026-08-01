@@ -1,39 +1,40 @@
 {
   "system": "gb",
+  "_ergonomics": "Thumbs pivot from the bottom corners. Frequent controls sit low inside each thumb arc; the d-pad center and button cluster land where thumbs naturally rest, and rare controls (Select, Start) take the dead zone between them.",
   "items": [
     {
       "kind": "dpad",
       "inputs": [4, 5, 6, 7],
-      "frame": { "x": 0.04, "y": 0.12, "w": 0.40, "h": 0.50 },
-      "extended": { "x": 0.00, "y": 0.04, "w": 0.48, "h": 0.66 }
+      "frame": { "x": 0.07, "y": 0.34, "w": 0.40, "h": 0.52 },
+      "extended": { "x": 0.02, "y": 0.26, "w": 0.50, "h": 0.68 }
     },
     {
       "kind": "button",
       "label": "A",
       "input": 8,
-      "frame": { "x": 0.79, "y": 0.16, "w": 0.17, "h": 0.22 },
-      "extended": { "x": 0.74, "y": 0.10, "w": 0.26, "h": 0.34 }
+      "frame": { "x": 0.76, "y": 0.38, "w": 0.18, "h": 0.24 },
+      "extended": { "x": 0.71, "y": 0.32, "w": 0.28, "h": 0.36 }
     },
     {
       "kind": "button",
       "label": "B",
       "input": 0,
-      "frame": { "x": 0.57, "y": 0.32, "w": 0.17, "h": 0.22 },
-      "extended": { "x": 0.52, "y": 0.26, "w": 0.24, "h": 0.34 }
+      "frame": { "x": 0.55, "y": 0.54, "w": 0.18, "h": 0.24 },
+      "extended": { "x": 0.50, "y": 0.48, "w": 0.26, "h": 0.36 }
     },
     {
       "kind": "pill",
       "label": "Select",
       "input": 2,
-      "frame": { "x": 0.27, "y": 0.82, "w": 0.20, "h": 0.10 },
-      "extended": { "x": 0.23, "y": 0.77, "w": 0.27, "h": 0.19 }
+      "frame": { "x": 0.28, "y": 0.03, "w": 0.19, "h": 0.10 },
+      "extended": { "x": 0.24, "y": 0.00, "w": 0.26, "h": 0.17 }
     },
     {
       "kind": "pill",
       "label": "Start",
       "input": 3,
-      "frame": { "x": 0.53, "y": 0.82, "w": 0.20, "h": 0.10 },
-      "extended": { "x": 0.50, "y": 0.77, "w": 0.27, "h": 0.19 }
+      "frame": { "x": 0.53, "y": 0.03, "w": 0.19, "h": 0.10 },
+      "extended": { "x": 0.50, "y": 0.00, "w": 0.26, "h": 0.17 }
     }
   ]
 }
