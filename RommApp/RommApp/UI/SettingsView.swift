@@ -10,9 +10,29 @@ struct SettingsView: View {
     @State private var confirmingUnpair = false
     @State private var confirmingForget = false
     @AppStorage("com.mmagtech.RommApp.controlOpacity") private var controlOpacity = 0.7
+    @StateObject private var controllers = GameControllerManager()
 
     var body: some View {
         List {
+            Section {
+                LabeledContent("Controller") {
+                    if controllers.isConnected {
+                        Label(
+                            controllers.controllerName ?? "Connected",
+                            systemImage: "gamecontroller.fill"
+                        )
+                        .foregroundStyle(.green)
+                    } else {
+                        Text("None connected")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Text("Physical controller")
+            } footer: {
+                Text("Pair a controller in the Settings app under General, then Game Controller. On screen controls hide while one is connected.")
+            }
+
             Section {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
@@ -52,6 +72,8 @@ struct SettingsView: View {
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .task { controllers.start() }
+        .onDisappear { controllers.stop() }
         .confirmationDialog(
             "Unpair this device?",
             isPresented: $confirmingUnpair,

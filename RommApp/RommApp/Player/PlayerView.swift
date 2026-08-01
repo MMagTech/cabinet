@@ -20,6 +20,7 @@ struct PlayerView: View {
     @State private var overlayVisible = true
     @State private var gameStarted = false
     @StateObject private var input = PlayerInputBridge()
+    @StateObject private var controllers = GameControllerManager()
     /// The scope doc's bet: the opacity slider matters more than any theme.
     @AppStorage("com.mmagtech.RommApp.controlOpacity") private var controlOpacity = 0.7
 
@@ -54,8 +55,7 @@ struct PlayerView: View {
                 )
                 .padding(
                     .bottom,
-                    gameStarted && !isLandscape && controlLayout != nil
-                        ? controlStripHeight : 0
+                    showsTouchControls && !isLandscape ? controlStripHeight : 0
                 )
             } else if failed {
                 VStack(spacing: 12) {
@@ -69,14 +69,15 @@ struct PlayerView: View {
 
             // The native pad replaces EmulatorJS's web touch controls, which
             // the injection hides. It appears once the game actually starts,
-            // so RomM's pre play page stays fully tappable.
+            // so RomM's pre play page stays fully tappable, and steps aside
+            // entirely while a physical controller is driving.
             //
             // Portrait: a strip below the canvas. Landscape: the pad spans
             // the whole screen with controls in the gutters flanking the
             // centred canvas, and passes touches through everywhere else.
             // Orientation follows the device; the person holding the phone
             // decides, never the app.
-            if gameStarted, let layout = controlLayout {
+            if showsTouchControls, let layout = controlLayout {
                 if isLandscape {
                     TouchControlPad(items: layout.items(landscape: true)) { id, down in
                         input.send(id: id, down: down)
@@ -118,6 +119,17 @@ struct PlayerView: View {
         .task {
             configureAudioSession()
             UIApplication.shared.isIdleTimerDisabled = true
+
+            controllers.send = { id, down in input.send(id: id, down: down) }
+            // The pad's menu button reveals the overlay, which is where
+            // EmulatorJS's own menu and this screen's close button live.
+            controllers.onMenu = { overlayVisible = true }
+            // Nobody is holding anything after a disconnect, so stop the
+            // game rather than letting it run on unattended. The touch
+            // controls reappear on their own.
+            controllers.onDisconnect = { input.pauseGame() }
+            controllers.start()
+
             if let context = await session.playerContext(for: rom) {
                 self.context = context
             } else {
@@ -126,6 +138,7 @@ struct PlayerView: View {
         }
         .onDisappear {
             UIApplication.shared.isIdleTimerDisabled = false
+            controllers.stop()
         }
     }
 
@@ -138,6 +151,13 @@ struct PlayerView: View {
             return ArcadeLayout.build(for: profile)
         }
         return ControlLayout.forPlatform(slug: rom.platformSlug)
+    }
+
+    /// Touch controls show only while a game is running and no physical
+    /// controller has taken over. When a pad is connected the strip is not
+    /// merely hidden, the space goes back to the game.
+    private var showsTouchControls: Bool {
+        gameStarted && !controllers.isConnected && controlLayout != nil
     }
 
     /// Vertical games trade some control height for canvas: their picture is
@@ -170,6 +190,13 @@ final class PlayerInputBridge: ObservableObject {
         let js = "window.EJS_emulator && EJS_emulator.gameManager"
             + " && EJS_emulator.gameManager.simulateInput(0, \(id), \(down ? 1 : 0));"
         webView?.evaluateJavaScript(js)
+    }
+
+    /// Pauses the running game, used when a controller disconnects mid play.
+    func pauseGame() {
+        webView?.evaluateJavaScript(
+            "window.EJS_emulator && !EJS_emulator.paused && EJS_emulator.pause();"
+        )
     }
 }
 
@@ -291,6 +318,25 @@ struct PlayerWebView: UIViewRepresentable {
             }
             return origSend.apply(this, arguments);
           };
+
+          // Physical controllers are captured natively with GameController,
+          // so the web side must not see them too or every press registers
+          // twice. EmulatorJS polls navigator.getGamepads in a loop, so
+          // emptying that one function is the whole suppression, and the
+          // connection events go quiet alongside it for anything that
+          // listens rather than polls. Settles scope doc open item 5.
+          try {
+            Object.defineProperty(navigator, "getGamepads", {
+              value: () => [], configurable: true,
+            });
+            if (navigator.webkitGetGamepads) {
+              Object.defineProperty(navigator, "webkitGetGamepads", {
+                value: () => [], configurable: true,
+              });
+            }
+          } catch (e) {}
+          window.addEventListener("gamepadconnected", (e) => e.stopImmediatePropagation(), true);
+          window.addEventListener("gamepaddisconnected", (e) => e.stopImmediatePropagation(), true);
 
           // RomM's app shell wraps every route, the player included, in its
           // site navigation: a fixed header with the logo and account chip,
