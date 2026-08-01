@@ -27,6 +27,9 @@ struct ControlLayout: Decodable {
         let inputs: [Int]?
         let frame: Rect
         let extended: Rect
+        /// D-pad only. Four way sticks actively suppress diagonals: Pac-Man
+        /// and Donkey Kong misbehave when fed two directions at once.
+        let fourWay: Bool?
     }
 
     struct Rect: Decodable {

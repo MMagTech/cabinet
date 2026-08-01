@@ -50,7 +50,7 @@ struct PlayerView: View {
             // The native pad replaces EmulatorJS's web touch controls, which
             // the injection hides. It appears once the game actually starts,
             // so RomM's pre play page stays fully tappable.
-            if gameStarted, let layout = ControlLayout.forPlatform(slug: rom.platformSlug) {
+            if gameStarted, let layout = controlLayout {
                 VStack {
                     Spacer()
                     TouchControlPad(layout: layout) { id, down in
@@ -93,6 +93,17 @@ struct PlayerView: View {
         .onDisappear {
             UIApplication.shared.isIdleTimerDisabled = false
         }
+    }
+
+    /// Console layouts are bundled files keyed by platform. Arcade layouts
+    /// are per game: the romset shortname resolves through the bundled MAME
+    /// profile map and the layout is built from what the cabinet had.
+    private var controlLayout: ControlLayout? {
+        if rom.isArcade {
+            let profile = ArcadeProfileStore.shared.resolve(shortname: rom.fsNameNoExt)
+            return ArcadeLayout.build(for: profile)
+        }
+        return ControlLayout.forPlatform(slug: rom.platformSlug)
     }
 
     /// `.playback` or the phone's ringer switch silences the game.
@@ -176,8 +187,10 @@ struct PlayerWebView: UIViewRepresentable {
         webView.backgroundColor = .black
         webView.scrollView.backgroundColor = .black
 
-        // A game canvas, not a document. No scrolling, no bounce, no zoom.
-        webView.scrollView.isScrollEnabled = false
+        // No bounce, no zoom. Scrolling stays on for RomM's pre play page,
+        // whose core and firmware pickers sit below the fold, and switches
+        // off in updateUIView once the game starts and the page becomes a
+        // canvas.
         webView.scrollView.bounces = false
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.scrollView.pinchGestureRecognizer?.isEnabled = false
@@ -188,7 +201,9 @@ struct PlayerWebView: UIViewRepresentable {
         return webView
     }
 
-    func updateUIView(_ webView: WKWebView, context: Context) {}
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        webView.scrollView.isScrollEnabled = !gameStarted
+    }
 
     static func authInjection(token: String) -> String {
         """

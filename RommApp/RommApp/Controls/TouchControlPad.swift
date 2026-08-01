@@ -89,16 +89,32 @@ final class ControlPadView: UIView {
             switch item.kind {
             case .dpad:
                 guard let ids = item.inputs, ids.count == 4 else { break }
-                // Four overlapping bands inside the extended frame. A point in
-                // a corner sits in two bands, which is exactly the diagonal.
                 let unit = CGPoint(
                     x: (point.x - extended.minX) / extended.width,
                     y: (point.y - extended.minY) / extended.height
                 )
-                if unit.y < 0.40 { held.insert(ids[0]) }   // up
-                if unit.y > 0.60 { held.insert(ids[1]) }   // down
-                if unit.x < 0.40 { held.insert(ids[2]) }   // left
-                if unit.x > 0.60 { held.insert(ids[3]) }   // right
+
+                if item.fourWay == true {
+                    // Four way sticks report one direction only, whichever
+                    // axis the thumb is furthest along. Pac-Man corners
+                    // depend on never seeing a diagonal.
+                    let dx = unit.x - 0.5
+                    let dy = unit.y - 0.5
+                    guard abs(dx) > 0.10 || abs(dy) > 0.10 else { break }
+                    if abs(dx) > abs(dy) {
+                        held.insert(dx < 0 ? ids[2] : ids[3])
+                    } else {
+                        held.insert(dy < 0 ? ids[0] : ids[1])
+                    }
+                } else {
+                    // Four overlapping bands inside the extended frame. A
+                    // point in a corner sits in two bands, which is exactly
+                    // the diagonal.
+                    if unit.y < 0.40 { held.insert(ids[0]) }   // up
+                    if unit.y > 0.60 { held.insert(ids[1]) }   // down
+                    if unit.x < 0.40 { held.insert(ids[2]) }   // left
+                    if unit.x > 0.60 { held.insert(ids[3]) }   // right
+                }
             case .button, .pill:
                 if let id = item.input { held.insert(id) }
             }

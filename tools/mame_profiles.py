@@ -88,7 +88,12 @@ def classify(buttons, ways, players, control):
 
 
 def read_input(machine):
-    """Pull the input element's attributes off a machine element."""
+    """Pull the input element's attributes off a machine element.
+
+    Older MAME put the button count on the input element itself. Modern
+    listxml moved it onto each control element, so take the maximum across
+    controls and keep the input attribute as a fallback for old dumps.
+    """
     node = machine.find("input")
     if node is None:
         return None
@@ -109,8 +114,12 @@ def read_input(machine):
             control_type = controls[0].get("type", "")
             ways = controls[0].get("ways", "")
 
+    buttons = int(node.get("buttons", 0) or 0)
+    for candidate in controls:
+        buttons = max(buttons, int(candidate.get("buttons", 0) or 0))
+
     return {
-        "buttons": int(node.get("buttons", 0) or 0),
+        "buttons": buttons,
         "players": int(node.get("players", 0) or 0),
         "coins": int(node.get("coins", 0) or 0),
         "ways": ways,

@@ -7,6 +7,9 @@ struct Rom: Decodable, Identifiable, Hashable {
     let id: Int
     let name: String?
     let fsNameNoTags: String
+    /// For arcade this is the romset shortname, the join key into the
+    /// bundled MAME control profile map.
+    let fsNameNoExt: String
     let platformId: Int
     let platformSlug: String
     let platformDisplayName: String?
@@ -23,12 +26,19 @@ struct Rom: Decodable, Identifiable, Hashable {
     enum CodingKeys: String, CodingKey {
         case id, name, summary
         case fsNameNoTags = "fs_name_no_tags"
+        case fsNameNoExt = "fs_name_no_ext"
         case platformId = "platform_id"
         case platformSlug = "platform_slug"
         case platformDisplayName = "platform_display_name"
         case pathCoverSmall = "path_cover_small"
         case pathCoverLarge = "path_cover_large"
         case fsSizeBytes = "fs_size_bytes"
+    }
+
+    /// RomM's ARCADE_SYSTEMS: platforms whose games run on MAME or FBNeo
+    /// cores and resolve controls per game through the profile map.
+    var isArcade: Bool {
+        ["arcade", "neogeoaes", "neogeomvs", "neo-geo-cd"].contains(platformSlug)
     }
 }
 
