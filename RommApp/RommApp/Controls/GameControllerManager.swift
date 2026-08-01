@@ -17,6 +17,8 @@ final class GameControllerManager: ObservableObject {
     @Published private(set) var isConnected = false
     /// The attached controller's name, for showing which pad is in charge.
     @Published private(set) var controllerName: String?
+    /// Inputs currently held, so a test screen can show what the app sees.
+    @Published private(set) var pressedInputs: Set<Int> = []
 
     /// Sends a RetroPad input id and its state to the emulator.
     var send: ((Int, Bool) -> Void)?
@@ -32,11 +34,28 @@ final class GameControllerManager: ObservableObject {
 
     // RetroPad ids. Confirmed against the EmulatorJS 4.2.3 bundle and the
     // standard libretro joypad ordering.
-    private enum Pad {
+    enum Pad {
         static let b = 0, y = 1, select = 2, start = 3
         static let up = 4, down = 5, left = 6, right = 7
         static let a = 8, x = 9, l = 10, r = 11
         static let l2 = 12, r2 = 13
+
+        /// What each id does in game, for the test screen. Names describe the
+        /// emulator's input, not any particular pad's printing.
+        static let names: [(id: Int, label: String)] = [
+            (up, "Up"), (down, "Down"), (left, "Left"), (right, "Right"),
+            (b, "B, arcade button 4"), (a, "A, arcade button 5"),
+            (y, "Y, arcade button 1"), (x, "X, arcade button 2"),
+            (l, "L, arcade button 3"), (r, "R, arcade button 6"),
+            (l2, "L2 trigger"), (r2, "R2 trigger"),
+            (select, "Select, arcade Coin"), (start, "Start"),
+        ]
+    }
+
+    /// Routes an input to the game and to anything watching for diagnostics.
+    private func emit(_ id: Int, _ down: Bool) {
+        if down { pressedInputs.insert(id) } else { pressedInputs.remove(id) }
+        send?(id, down)
     }
 
     func start() {
@@ -118,7 +137,7 @@ final class GameControllerManager: ObservableObject {
 
     private func handler(_ id: Int) -> GCControllerButtonValueChangedHandler {
         { [weak self] _, _, pressed in
-            Task { @MainActor in self?.send?(id, pressed) }
+            Task { @MainActor in self?.emit(id, pressed) }
         }
     }
 
@@ -126,10 +145,10 @@ final class GameControllerManager: ObservableObject {
     /// thumb does not creep.
     private func stick(x: Float, y: Float) {
         let threshold: Float = 0.5
-        send?(Pad.left, x < -threshold)
-        send?(Pad.right, x > threshold)
-        send?(Pad.down, y < -threshold)
-        send?(Pad.up, y > threshold)
+        emit(Pad.left, x < -threshold)
+        emit(Pad.right, x > threshold)
+        emit(Pad.down, y < -threshold)
+        emit(Pad.up, y > threshold)
     }
 
     /// Presses past 0.35 and releases below 0.25, so the band between them
@@ -139,7 +158,7 @@ final class GameControllerManager: ObservableObject {
         let isDown = wasDown ? value > 0.25 : value > 0.35
         guard isDown != wasDown else { return }
         triggerDown[id] = isDown
-        send?(id, isDown)
+        emit(id, isDown)
     }
 
     private func handleDisconnect() {
@@ -157,7 +176,7 @@ final class GameControllerManager: ObservableObject {
             Pad.b, Pad.y, Pad.select, Pad.start, Pad.up, Pad.down, Pad.left,
             Pad.right, Pad.a, Pad.x, Pad.l, Pad.r, Pad.l2, Pad.r2,
         ] {
-            send?(id, false)
+            emit(id, false)
         }
         triggerDown.removeAll()
     }

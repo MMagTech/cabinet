@@ -27,6 +27,11 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                NavigationLink {
+                    ControllerTestView()
+                } label: {
+                    Label("Test controller", systemImage: "checklist")
+                }
             } header: {
                 Text("Physical controller")
             } footer: {
