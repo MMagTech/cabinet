@@ -1,0 +1,153 @@
+import SwiftUI
+
+/// Point any button on any controller at any emulator input.
+///
+/// This exists because controllers genuinely differ in what they expose. A
+/// full size pad reports Menu and Options where Start and Coin belong, but a
+/// compact pad may report neither, and an arcade game with no Coin button
+/// cannot be played at all. Rather than guess at a preset per controller
+/// family, this asks: press the button you want for this.
+struct ControllerRemapView: View {
+    @StateObject private var controllers = GameControllerManager()
+    @State private var capturing: Int?
+    @State private var confirmingReset = false
+
+    var body: some View {
+        List {
+            if !controllers.isConnected {
+                Section {
+                    Label("No controller connected", systemImage: "gamecontroller")
+                        .foregroundStyle(.secondary)
+                } footer: {
+                    Text("Connect a controller to change its buttons. Settings are remembered per controller.")
+                }
+            }
+
+            Section {
+                ForEach(RetroPad.bindable, id: \.id) { input in
+                    row(for: input)
+                }
+            } header: {
+                Text("Game inputs")
+            } footer: {
+                Text("Tap an input, then press the button you want for it. Coin and Start matter most: without Coin an arcade game cannot start.")
+            }
+
+            if controllers.isConnected {
+                Section {
+                    ForEach(controllers.availableButtons, id: \.self) { name in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(GameControllerManager.friendlyName(name))
+                            if let id = controllers.bindings(for: name) {
+                                Text("→ \(RetroPad.label(for: id))")
+                                    .font(.caption)
+                                    .foregroundStyle(.green)
+                            } else {
+                                Text("not assigned")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Buttons this controller reports")
+                } footer: {
+                    Text("If a button you expect is missing here, this controller does not report it to iOS and no app can use it.")
+                }
+
+                Section {
+                    Button("Reset to defaults", role: .destructive) {
+                        confirmingReset = true
+                    }
+                }
+            }
+        }
+        .navigationTitle("Buttons")
+        .navigationBarTitleDisplayMode(.inline)
+        .task { controllers.start() }
+        .onDisappear {
+            controllers.captureHandler = nil
+            controllers.stop()
+        }
+        .overlay {
+            if let capturing {
+                capturePrompt(for: capturing)
+            }
+        }
+        .confirmationDialog(
+            "Reset button assignments?",
+            isPresented: $confirmingReset,
+            titleVisibility: .visible
+        ) {
+            Button("Reset", role: .destructive) { controllers.resetBindings() }
+        }
+    }
+
+    private func row(for input: (id: Int, label: String, detail: String)) -> some View {
+        Button {
+            beginCapture(for: input.id)
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(input.label)
+                        .foregroundStyle(.primary)
+                    Text(input.detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if let bound = controllers.boundButton(for: input.id) {
+                    Text(GameControllerManager.friendlyName(bound))
+                        .font(.caption)
+                        .multilineTextAlignment(.trailing)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: 130)
+                } else {
+                    Text("Not set")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.orange)
+                }
+            }
+        }
+        .disabled(!controllers.isConnected)
+    }
+
+    private func capturePrompt(for id: Int) -> some View {
+        ZStack {
+            Color.black.opacity(0.6).ignoresSafeArea()
+            VStack(spacing: 14) {
+                Text("Press a button")
+                    .font(.title3.bold())
+                Text("for \(RetroPad.label(for: id))")
+                    .foregroundStyle(.secondary)
+                ProgressView()
+                    .padding(.vertical, 4)
+                HStack(spacing: 12) {
+                    Button("Cancel") { endCapture() }
+                        .buttonStyle(.bordered)
+                    Button("Leave unset", role: .destructive) {
+                        controllers.clearBinding(for: id)
+                        endCapture()
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+            .padding(28)
+            .background(.regularMaterial, in: .rect(cornerRadius: 18))
+            .padding(40)
+        }
+    }
+
+    private func beginCapture(for id: Int) {
+        capturing = id
+        controllers.captureHandler = { name in
+            controllers.bind(button: name, to: id)
+            endCapture()
+        }
+    }
+
+    private func endCapture() {
+        controllers.captureHandler = nil
+        capturing = nil
+    }
+}

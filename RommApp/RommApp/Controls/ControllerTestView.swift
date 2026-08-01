@@ -32,7 +32,7 @@ struct ControllerTestView: View {
             }
 
             Section {
-                ForEach(GameControllerManager.Pad.names, id: \.id) { entry in
+                ForEach(RetroPad.diagnostics, id: \.id) { entry in
                     let active = controllers.pressedInputs.contains(entry.id)
                     HStack(spacing: 10) {
                         Image(systemName: active ? "circle.fill" : "circle")

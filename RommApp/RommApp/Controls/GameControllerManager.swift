@@ -6,11 +6,11 @@ import SwiftUI
 /// the webview's Gamepad API, per the scope doc. The web side is suppressed
 /// separately in the player injection, or every press would register twice.
 ///
-/// Buttons map positionally onto RetroPad ids, which is what the cores expect
-/// and what makes the arcade six button fold fall out for free: on any modern
-/// pad the left and top face buttons plus the left bumper become punches, and
-/// the bottom and right face buttons plus the right bumper become kicks,
-/// exactly the CPS row order the touch layout draws.
+/// Buttons are bound through ControllerBindings rather than hardcoded, because
+/// controllers genuinely differ: a full size pad has Menu and Options where
+/// Start and Coin belong, while a compact pad may expose neither, which would
+/// leave an arcade game with no way to insert a credit. Whatever a controller
+/// reports can be pointed at whatever input the player needs.
 @MainActor
 final class GameControllerManager: ObservableObject {
     /// A controller is attached and driving the game.
@@ -19,54 +19,28 @@ final class GameControllerManager: ObservableObject {
     @Published private(set) var controllerName: String?
     /// Inputs currently held, so a test screen can show what the app sees.
     @Published private(set) var pressedInputs: Set<Int> = []
+    /// Every button this controller reports, by element name, so a remap
+    /// screen can show what actually exists rather than what was assumed.
+    @Published private(set) var availableButtons: [String] = []
 
     /// Sends a RetroPad input id and its state to the emulator.
     var send: ((Int, Bool) -> Void)?
-    /// Called when the pad's menu button is pressed.
+    /// Called when the pad's overlay button is pressed.
     var onMenu: (() -> Void)?
     /// Called when a controller disconnects mid game, so play can pause
     /// rather than continuing untouched while nobody is holding anything.
     var onDisconnect: (() -> Void)?
 
+    /// While set, presses are reported here instead of driving the game, so
+    /// the remap screen can learn which physical button someone pressed.
+    var captureHandler: ((String) -> Void)?
+
     private var observers: [NSObjectProtocol] = []
-    /// Trigger states, kept so hysteresis has something to compare against.
-    private var triggerDown: [Int: Bool] = [:]
+    private var triggerDown: [String: Bool] = [:]
+    private weak var pad: GCExtendedGamepad?
+    private var bindings: [String: Int] = ControllerBindings.defaults
 
-    // RetroPad ids. Confirmed against the EmulatorJS 4.2.3 bundle and the
-    // standard libretro joypad ordering.
-    enum Pad {
-        static let b = 0, y = 1, select = 2, start = 3
-        static let up = 4, down = 5, left = 6, right = 7
-        static let a = 8, x = 9, l = 10, r = 11
-        static let l2 = 12, r2 = 13
-
-        /// What each id does in game and which physical button should produce
-        /// it, for the test screen. Buttons are named by position because
-        /// that is what iOS reports, with the Xbox and PlayStation printing
-        /// alongside so the screen answers "which button is Coin" on its own.
-        static let names: [(id: Int, label: String, from: String)] = [
-            (up, "Up", "D-pad or left stick"),
-            (down, "Down", "D-pad or left stick"),
-            (left, "Left", "D-pad or left stick"),
-            (right, "Right", "D-pad or left stick"),
-            (y, "Arcade button 1", "Left face button, X or Square"),
-            (x, "Arcade button 2", "Top face button, Y or Triangle"),
-            (l, "Arcade button 3", "Left shoulder, LB or L1"),
-            (b, "Arcade button 4", "Bottom face button, A or Cross"),
-            (a, "Arcade button 5", "Right face button, B or Circle"),
-            (r, "Arcade button 6", "Right shoulder, RB or R1"),
-            (l2, "L2", "Left trigger, LT or L2"),
-            (r2, "R2", "Right trigger, RT or R2"),
-            (select, "Select, arcade Coin", "View, Create or Share"),
-            (start, "Start", "Menu or Options"),
-        ]
-    }
-
-    /// Routes an input to the game and to anything watching for diagnostics.
-    private func emit(_ id: Int, _ down: Bool) {
-        if down { pressedInputs.insert(id) } else { pressedInputs.remove(id) }
-        send?(id, down)
-    }
+    var storageKey: String { controllerName ?? "unknown" }
 
     func start() {
         observers.append(NotificationCenter.default.addObserver(
@@ -82,7 +56,6 @@ final class GameControllerManager: ObservableObject {
             Task { @MainActor in self?.handleDisconnect() }
         })
 
-        // A pad may already be paired before the player opens.
         if let existing = GCController.controllers().first {
             attach(existing)
         }
@@ -94,89 +67,94 @@ final class GameControllerManager: ObservableObject {
         releaseAll()
     }
 
+    /// Rebuilds handlers after the remap screen changes a binding.
+    func reloadBindings() {
+        guard let controller = GCController.controllers().first else { return }
+        attach(controller)
+    }
+
     // MARK: Wiring
 
     private func attach(_ controller: GCController) {
-        guard let pad = controller.extendedGamepad else { return }
+        guard let gamepad = controller.extendedGamepad else { return }
 
+        pad = gamepad
         isConnected = true
         controllerName = controller.vendorName
+        bindings = ControllerBindings.effective(for: controller.vendorName ?? "unknown")
 
-        pad.dpad.up.pressedChangedHandler = handler(Pad.up)
-        pad.dpad.down.pressedChangedHandler = handler(Pad.down)
-        pad.dpad.left.pressedChangedHandler = handler(Pad.left)
-        pad.dpad.right.pressedChangedHandler = handler(Pad.right)
+        // Directions come from the d-pad and the left stick, always, with no
+        // binding involved. They are never the thing that goes missing.
+        gamepad.dpad.up.pressedChangedHandler = direction(RetroPad.up)
+        gamepad.dpad.down.pressedChangedHandler = direction(RetroPad.down)
+        gamepad.dpad.left.pressedChangedHandler = direction(RetroPad.left)
+        gamepad.dpad.right.pressedChangedHandler = direction(RetroPad.right)
+        gamepad.leftThumbstick.valueChangedHandler = { [weak self] _, x, y in
+            Task { @MainActor in self?.stick(x: x, y: y) }
+        }
 
-        // The left stick drives the same digital directions, so stick players
-        // and d-pad players both work without a setting.
-        pad.leftThumbstick.valueChangedHandler = { [weak self] _, x, y in
-            Task { @MainActor in
-                self?.stick(x: x, y: y)
+        // Every button the controller actually reports, bound by name.
+        var names: [String] = []
+        for (name, element) in gamepad.elements {
+            guard let button = element as? GCControllerButtonInput else { continue }
+            names.append(name)
+
+            if button.isAnalog {
+                button.valueChangedHandler = { [weak self] _, value, _ in
+                    Task { @MainActor in self?.analog(name, value: value) }
+                }
+            } else {
+                button.pressedChangedHandler = { [weak self] _, _, pressed in
+                    Task { @MainActor in self?.button(name, pressed: pressed) }
+                }
             }
         }
-
-        // Positional face buttons. buttonA is the bottom button on every pad,
-        // which is RetroPad B, and so on around the diamond.
-        pad.buttonA.pressedChangedHandler = handler(Pad.b)
-        pad.buttonB.pressedChangedHandler = handler(Pad.a)
-        pad.buttonX.pressedChangedHandler = handler(Pad.y)
-        pad.buttonY.pressedChangedHandler = handler(Pad.x)
-
-        pad.leftShoulder.pressedChangedHandler = handler(Pad.l)
-        pad.rightShoulder.pressedChangedHandler = handler(Pad.r)
-
-        // Analog triggers need a threshold with hysteresis, or a thumb resting
-        // near the edge chatters the input on and off.
-        pad.leftTrigger.valueChangedHandler = { [weak self] _, value, _ in
-            Task { @MainActor in self?.trigger(Pad.l2, value: value) }
-        }
-        pad.rightTrigger.valueChangedHandler = { [weak self] _, value, _ in
-            Task { @MainActor in self?.trigger(Pad.r2, value: value) }
-        }
-
-        // Start belongs on buttonMenu: that is the button physically labelled
-        // Start or Options on every pad, and arcade play hits it constantly
-        // for credits. It cannot live on buttonHome, which iOS reserves on
-        // most controllers and exposes as nil, and which would have left
-        // Start unreachable on an Xbox pad.
-        pad.buttonMenu.pressedChangedHandler = handler(Pad.start)
-        // Select, and Coin in arcade profiles, on the smaller companion
-        // button: View on Xbox, Create or Share on PlayStation.
-        pad.buttonOptions?.pressedChangedHandler = handler(Pad.select)
-        // The overlay, holding this screen's close button and EmulatorJS's
-        // menu, comes up on the home button where the system allows it.
-        // Tapping the game canvas always works regardless, so no controller
-        // is ever the only way back out.
-        pad.buttonHome?.pressedChangedHandler = { [weak self] _, _, pressed in
-            guard pressed else { return }
-            Task { @MainActor in self?.onMenu?() }
-        }
+        availableButtons = names.sorted()
     }
 
-    private func handler(_ id: Int) -> GCControllerButtonValueChangedHandler {
-        { [weak self] _, _, pressed in
-            Task { @MainActor in self?.emit(id, pressed) }
+    /// A physical button changed. In capture mode it names itself for the
+    /// remap screen; otherwise it drives whatever it is bound to.
+    private func button(_ name: String, pressed: Bool) {
+        if let capture = captureHandler {
+            if pressed { capture(name) }
+            return
         }
+        guard let id = bindings[name] else { return }
+        emit(id, pressed)
     }
 
-    /// Digital directions from an analog stick, with a dead zone so a resting
-    /// thumb does not creep.
-    private func stick(x: Float, y: Float) {
-        let threshold: Float = 0.5
-        emit(Pad.left, x < -threshold)
-        emit(Pad.right, x > threshold)
-        emit(Pad.down, y < -threshold)
-        emit(Pad.up, y > threshold)
-    }
-
-    /// Presses past 0.35 and releases below 0.25, so the band between them
-    /// holds whatever state the trigger was already in.
-    private func trigger(_ id: Int, value: Float) {
-        let wasDown = triggerDown[id] ?? false
+    /// Analog buttons, meaning triggers, need a threshold with hysteresis or
+    /// a resting finger chatters the input on and off.
+    private func analog(_ name: String, value: Float) {
+        let wasDown = triggerDown[name] ?? false
         let isDown = wasDown ? value > 0.25 : value > 0.35
         guard isDown != wasDown else { return }
-        triggerDown[id] = isDown
-        emit(id, isDown)
+        triggerDown[name] = isDown
+        button(name, pressed: isDown)
+    }
+
+    private func direction(_ id: Int) -> GCControllerButtonValueChangedHandler {
+        { [weak self] _, _, pressed in
+            Task { @MainActor in
+                guard self?.captureHandler == nil else { return }
+                self?.emit(id, pressed)
+            }
+        }
+    }
+
+    private func stick(x: Float, y: Float) {
+        guard captureHandler == nil else { return }
+        let threshold: Float = 0.5
+        emit(RetroPad.left, x < -threshold)
+        emit(RetroPad.right, x > threshold)
+        emit(RetroPad.down, y < -threshold)
+        emit(RetroPad.up, y > threshold)
+    }
+
+    /// Routes an input to the game and to anything watching for diagnostics.
+    private func emit(_ id: Int, _ down: Bool) {
+        if down { pressedInputs.insert(id) } else { pressedInputs.remove(id) }
+        send?(id, down)
     }
 
     private func handleDisconnect() {
@@ -184,18 +162,69 @@ final class GameControllerManager: ObservableObject {
         releaseAll()
         isConnected = false
         controllerName = nil
+        availableButtons = []
         onDisconnect?()
     }
 
     /// Drops every input on disconnect, or a direction held at the moment the
     /// pad died would stay held forever.
     private func releaseAll() {
-        for id in [
-            Pad.b, Pad.y, Pad.select, Pad.start, Pad.up, Pad.down, Pad.left,
-            Pad.right, Pad.a, Pad.x, Pad.l, Pad.r, Pad.l2, Pad.r2,
-        ] {
-            emit(id, false)
-        }
+        for id in pressedInputs { send?(id, false) }
+        pressedInputs.removeAll()
         triggerDown.removeAll()
+    }
+
+    // MARK: Remapping
+
+    /// The element name currently bound to an input, if any.
+    func boundButton(for id: Int) -> String? {
+        bindings.first { $0.value == id }?.key
+    }
+
+    /// The input a physical button currently drives, if any.
+    func bindings(for name: String) -> Int? {
+        bindings[name]
+    }
+
+    /// Points a physical button at an input, clearing whatever else claimed
+    /// either side so one press can never fire two inputs.
+    func bind(button name: String, to id: Int) {
+        bindings = bindings.filter { $0.key != name && $0.value != id }
+        bindings[name] = id
+        ControllerBindings.save(bindings, for: storageKey)
+        reloadBindings()
+    }
+
+    func clearBinding(for id: Int) {
+        bindings = bindings.filter { $0.value != id }
+        ControllerBindings.save(bindings, for: storageKey)
+        reloadBindings()
+    }
+
+    func resetBindings() {
+        ControllerBindings.reset(for: storageKey)
+        bindings = ControllerBindings.defaults
+        reloadBindings()
+    }
+
+    /// A readable name for a GameController element, since the raw constants
+    /// read like "Button Options" and mean nothing to most people.
+    static func friendlyName(_ element: String) -> String {
+        switch element {
+        case GCInputButtonA: return "Bottom face button, A or Cross"
+        case GCInputButtonB: return "Right face button, B or Circle"
+        case GCInputButtonX: return "Left face button, X or Square"
+        case GCInputButtonY: return "Top face button, Y or Triangle"
+        case GCInputLeftShoulder: return "Left shoulder, LB or L1"
+        case GCInputRightShoulder: return "Right shoulder, RB or R1"
+        case GCInputLeftTrigger: return "Left trigger, LT or L2"
+        case GCInputRightTrigger: return "Right trigger, RT or R2"
+        case GCInputButtonMenu: return "Menu or Options"
+        case GCInputButtonOptions: return "View, Create or Share"
+        case GCInputButtonHome: return "Home or Guide"
+        case GCInputLeftThumbstickButton: return "Left stick click"
+        case GCInputRightThumbstickButton: return "Right stick click"
+        default: return element
+        }
     }
 }

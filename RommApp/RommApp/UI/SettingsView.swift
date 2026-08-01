@@ -32,6 +32,11 @@ struct SettingsView: View {
                 } label: {
                     Label("Test controller", systemImage: "checklist")
                 }
+                NavigationLink {
+                    ControllerRemapView()
+                } label: {
+                    Label("Change buttons", systemImage: "arrow.triangle.swap")
+                }
             } header: {
                 Text("Physical controller")
             } footer: {
