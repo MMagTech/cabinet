@@ -18,17 +18,28 @@ struct SettingsView: View {
     var body: some View {
         List {
             Section {
-                LabeledContent("Controller") {
-                    if controllers.isConnected {
-                        Label(
-                            controllers.controllerName ?? "Connected",
-                            systemImage: "gamecontroller.fill"
-                        )
-                        .foregroundStyle(.green)
-                    } else {
-                        Text("None connected")
+                // The name goes underneath rather than trailing. As a
+                // LabeledContent value it was squeezed into whatever width
+                // was left after the label, and a real controller name is
+                // longer than that: "OhSnap MCON II" wrapped to a stack of
+                // clipped lines, which rendered as an empty gap the height
+                // of the wrap. Below the title it has the whole row.
+                HStack(spacing: 10) {
+                    Image(systemName: controllers.isConnected
+                          ? "gamecontroller.fill" : "gamecontroller")
+                        .foregroundStyle(controllers.isConnected
+                                         ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Controller")
+                        Text(controllers.isConnected
+                             ? (controllers.controllerName ?? "Connected")
+                             : "None connected")
+                            .font(.caption)
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                     }
+                    Spacer(minLength: 0)
                 }
                 NavigationLink {
                     ControllerRemapView()

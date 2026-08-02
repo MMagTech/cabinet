@@ -41,6 +41,15 @@ struct GameLaunchView: View {
     @State private var continueRun = false
     /// Arcade only: what the cabinet data says this game's controls are,
     /// and the person's current choice, which starts as the data's answer.
+    /// True once someone actually picks a core on this screen.
+    ///
+    /// Every launch used to record whichever core was selected, which
+    /// conflated "what I chose" with "what happened to be default". That
+    /// mattered the moment a better default existed: a game launched once
+    /// on the general arcade core would keep being sent there forever,
+    /// outranking the recommendation for its own board. Only a deliberate
+    /// pick is worth remembering.
+    @State private var coreWasChosen = false
     @State private var arcadeBase: ArcadeProfile?
     @State private var arcadeButtons = 6
     @State private var arcadeWays = "8"
@@ -118,6 +127,11 @@ struct GameLaunchView: View {
         .onChange(of: playing) { _, isPlaying in
             if !isPlaying { refreshResumeOffer() }
         }
+        // Only changes made after the screen has settled are the person's;
+        // the ones during load are this view choosing a default.
+        .onChange(of: selectedCore) { _, _ in
+            if !loading { coreWasChosen = true }
+        }
     }
 
     // MARK: Pieces
@@ -146,7 +160,7 @@ struct GameLaunchView: View {
         Button {
             // Remember the choice, so the next launch of this game, and the
             // next game on this platform, starts where this one left off.
-            LaunchChoices.remember(core: selectedCore, for: rom)
+            if coreWasChosen { LaunchChoices.remember(core: selectedCore, for: rom) }
             playing = true
         } label: {
             Label(playLabel, systemImage: "play.fill")
@@ -308,6 +322,12 @@ struct GameLaunchView: View {
             .pickerStyle(.menu)
             .labelsHidden()
             .frame(maxWidth: .infinity, alignment: .leading)
+
+            if LaunchChoices.isRecommended(core: selectedCore, rom: rom, available: cores) {
+                Text("Recommended for this game's board. The general arcade core runs it too, but not reliably.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

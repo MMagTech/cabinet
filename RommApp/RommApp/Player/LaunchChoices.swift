@@ -33,8 +33,20 @@ struct LaunchChoices {
     /// of a modern collection, so defaulting to it meant confidently
     /// launching the one core this screen itself warns about.
     static func defaultCore(rom: Rom, from available: [String]) -> String? {
+        // A choice made for this exact game always wins: it is the most
+        // specific thing anyone has said about it.
         if let remembered = UserDefaults.standard.string(forKey: "romm.core.rom.\(rom.id)"),
            available.contains(remembered) { return remembered }
+
+        // Then what the board needs, which outranks the platform habit.
+        // Remembering "fbneo" from last night's Neo Geo game must not drag
+        // a CPS2 game onto a core that cannot keep it alive, and arcade is
+        // one platform covering boards with nothing in common.
+        if rom.isArcade,
+           let hinted = CoreHints.core(forShortname: rom.fsNameNoExt, available: available) {
+            return hinted
+        }
+
         if let remembered = UserDefaults.standard.string(forKey: "romm.core.platform.\(rom.platformSlug)"),
            available.contains(remembered) { return remembered }
 
@@ -42,6 +54,13 @@ struct LaunchChoices {
         // why hand picking it fixed every arcade game tonight.
         if available.contains("fbneo") { return "fbneo" }
         return available.first { CoreCatalog.note($0) == nil } ?? available.first
+    }
+
+    /// True when this core is the one the game's board wants, so the
+    /// launch screen can say why it was chosen.
+    static func isRecommended(core: String?, rom: Rom, available: [String]) -> Bool {
+        guard rom.isArcade, let core else { return false }
+        return CoreHints.core(forShortname: rom.fsNameNoExt, available: available) == core
     }
 
     static func remember(core: String?, for rom: Rom) {
