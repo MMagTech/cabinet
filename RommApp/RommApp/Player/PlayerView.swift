@@ -376,25 +376,32 @@ struct PlayerWebView: UIViewRepresentable {
             }
           } catch (e) {}
 
-          // Report which core build actually loaded, rather than inferring it
-          // from the headers being correct. Threading either happened or it
-          // did not, and only the request the page really makes says which.
-          try {
-            const origFetch2 = window.fetch;
-            window.fetch = function (input, init) {
-              try {
-                const u = String(typeof input === "string" ? input : input && input.url);
-                if (u.indexOf("/cores/") !== -1) {
-                  window.webkit.messageHandlers.diag.postMessage(
-                    "core " + u.split("/").pop() +
-                    " isolated=" + !!window.crossOriginIsolated +
-                    " sab=" + (typeof SharedArrayBuffer === "function")
-                  );
-                }
-              } catch (e) {}
-              return origFetch2.call(this, input, init);
-            };
-          } catch (e) {}
+          // Report what the emulator settled on, read from its own state
+          // once a game is running.
+          //
+          // An earlier version watched for the core download instead, which
+          // reported nothing on any replay: EmulatorJS caches cores in
+          // browser storage and never re-requests them, so the only sessions
+          // it could observe were first ever loads.
+          window.__rommReportEmulation = function () {
+            try {
+              const e = window.EJS_emulator;
+              const sab = typeof SharedArrayBuffer === "function";
+              let core = "unknown", threads = false;
+              if (e) {
+                try { core = e.getCore ? e.getCore() : (e.config && e.config.system) || "unknown"; } catch (x) {}
+                try {
+                  const pref = e.preGetSetting && e.preGetSetting("ejs_threads");
+                  threads = sab && (pref ? pref === "enabled" : !!(e.config && e.config.threads));
+                } catch (x) {}
+              }
+              window.webkit.messageHandlers.diag.postMessage(
+                "core " + core + (threads ? "-thread" : "") +
+                " isolated=" + !!window.crossOriginIsolated +
+                " sab=" + sab
+              );
+            } catch (e) {}
+          };
 
           // RomM's app shell wraps every route, the player included, in its
           // site navigation: a fixed header with the logo and account chip,
@@ -442,6 +449,9 @@ struct PlayerWebView: UIViewRepresentable {
             if (on !== gameOn) {
               gameOn = on;
               postGameState(on ? "started" : "stopped");
+              if (on && window.__rommReportEmulation) {
+                setTimeout(window.__rommReportEmulation, 400);
+              }
             }
           });
           gameObserver.observe(document.documentElement, {
