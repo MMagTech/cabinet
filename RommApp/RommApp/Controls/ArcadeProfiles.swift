@@ -17,14 +17,46 @@ struct ArcadeProfile {
     /// taller than wide. Vertical games keep portrait with controls below
     /// the canvas; orientation is a property of the game, not the device.
     let vertical: Bool
+    /// True when the shortname matched nothing and this is the generic
+    /// guess, which the launch screen says out loud: a wrong six button
+    /// default is exactly what the manual override exists to fix.
+    var unmapped: Bool = false
 
     /// The scope doc's generic default: six button, eight way.
     static let fallback = ArcadeProfile(
         profile: "six_button", buttons: 6, ways: "8", coins: 1, parent: nil,
-        vertical: false
+        vertical: false, unmapped: true
     )
 
     var isFourWay: Bool { ways == "4" }
+}
+
+/// Step one of the scope doc's resolution chain: the user picked the
+/// controls for this game, persisted by ROM id. Only the stick and button
+/// count are the user's to change; vertical stays with the cabinet data,
+/// because a TATE monitor is a fact, not a preference.
+enum ArcadeOverride {
+    private static func key(_ romId: Int) -> String {
+        "com.mmagtech.RommApp.arcadeOverride.\(romId)"
+    }
+
+    static func save(buttons: Int, ways: String, for romId: Int) {
+        UserDefaults.standard.set(
+            ["buttons": buttons, "ways": ways], forKey: key(romId)
+        )
+    }
+
+    static func clear(for romId: Int) {
+        UserDefaults.standard.removeObject(forKey: key(romId))
+    }
+
+    static func stored(for romId: Int) -> (buttons: Int, ways: String)? {
+        guard let dict = UserDefaults.standard.dictionary(forKey: key(romId)),
+              let buttons = dict["buttons"] as? Int,
+              let ways = dict["ways"] as? String
+        else { return nil }
+        return (buttons, ways)
+    }
 }
 
 final class ArcadeProfileStore {
@@ -44,10 +76,20 @@ final class ArcadeProfileStore {
         entries = parsed
     }
 
-    /// The resolution chain from the scope doc, minus the manual override,
-    /// which arrives with the layout editor. Shortname, then the cloneof
-    /// parent, then the generic default. The genre heuristic already ran at
-    /// generation time on machines with no input data of their own.
+    /// The full resolution chain from the scope doc: the person's own
+    /// choice for this rom first, then the cabinet data.
+    func resolve(romId: Int, shortname: String) -> ArcadeProfile {
+        let base = resolve(shortname: shortname)
+        guard let choice = ArcadeOverride.stored(for: romId) else { return base }
+        return ArcadeProfile(
+            profile: "override", buttons: choice.buttons, ways: choice.ways,
+            coins: base.coins, parent: base.parent, vertical: base.vertical
+        )
+    }
+
+    /// The data half of the chain: shortname, then the cloneof parent, then
+    /// the generic default. The genre heuristic already ran at generation
+    /// time on machines with no input data of their own.
     func resolve(shortname raw: String) -> ArcadeProfile {
         let name = raw.lowercased()
         if let profile = entry(name) {

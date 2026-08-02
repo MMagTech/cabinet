@@ -34,6 +34,11 @@ struct GameLaunchView: View {
     /// that exact moment is offered, preselected, and declinable.
     @State private var interruptedAt: Date?
     @State private var continueRun = false
+    /// Arcade only: what the cabinet data says this game's controls are,
+    /// and the person's current choice, which starts as the data's answer.
+    @State private var arcadeBase: ArcadeProfile?
+    @State private var arcadeButtons = 6
+    @State private var arcadeWays = "8"
 
     var body: some View {
         GeometryReader { geometry in
@@ -73,6 +78,7 @@ struct GameLaunchView: View {
                             playButton
 
                             if interruptedAt != nil { continueCard }
+                            if arcadeBase != nil { arcadeControlsCard }
                             if !states.isEmpty || !saves.isEmpty { resumeCard }
                         }
                         .frame(maxWidth: .infinity, alignment: .top)
@@ -201,6 +207,7 @@ struct GameLaunchView: View {
                 if interruptedAt != nil { continueCard }
                 if cores.count > 1 { coreCard }
                 if !firmware.isEmpty { firmwareCard }
+                if arcadeBase != nil { arcadeControlsCard }
                 if !states.isEmpty || !saves.isEmpty { resumeCard }
             }
         }
@@ -219,8 +226,70 @@ struct GameLaunchView: View {
                 if interruptedAt != nil { continueCard }
                 if cores.count > 1 { coreCard }
                 if !firmware.isEmpty { firmwareCard }
+                if arcadeBase != nil { arcadeControlsCard }
                 if !states.isEmpty || !saves.isEmpty { resumeCard }
             }
+        }
+    }
+
+    /// The manual override from the scope doc's resolution chain, living on
+    /// the launch screen since the detail screen was cut. Shows what the
+    /// cabinet data resolved to, owns up when the game was not in the map
+    /// at all, and lets the person overrule both. Choices persist per rom
+    /// and matching the data's own answer clears the override entirely.
+    private var arcadeControlsCard: some View {
+        LaunchCard(title: "Arcade controls", systemImage: "dpad") {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 0) {
+                    Picker("Buttons", selection: $arcadeButtons) {
+                        Text("Stick only").tag(0)
+                        ForEach(1...6, id: \.self) { count in
+                            Text(count == 1 ? "1 button" : "\(count) buttons").tag(count)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    Picker("Stick", selection: $arcadeWays) {
+                        Text("Eight way").tag("8")
+                        Text("Four way").tag("4")
+                        Text("Two way").tag("2")
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    Spacer()
+                }
+                Text(arcadeCaption)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .onChange(of: arcadeButtons) { _, _ in storeArcadeChoice() }
+        .onChange(of: arcadeWays) { _, _ in storeArcadeChoice() }
+    }
+
+    private var arcadeCaption: String {
+        guard let base = arcadeBase else { return "" }
+        let isOverride = arcadeButtons != base.buttons || arcadeWays != base.ways
+        if isOverride {
+            return "Your choice. The cabinet data says \(describe(buttons: base.buttons, ways: base.ways))."
+        }
+        if base.unmapped {
+            return "This game is not in the cabinet map, so this is the generic guess. Correct it here if it plays wrong."
+        }
+        return "From the game's cabinet data."
+    }
+
+    private func describe(buttons: Int, ways: String) -> String {
+        let b = buttons == 0 ? "stick only" : (buttons == 1 ? "1 button" : "\(buttons) buttons")
+        return "\(b), \(ways) way"
+    }
+
+    private func storeArcadeChoice() {
+        guard let base = arcadeBase else { return }
+        if arcadeButtons == base.buttons, arcadeWays == base.ways {
+            ArcadeOverride.clear(for: rom.id)
+        } else {
+            ArcadeOverride.save(buttons: arcadeButtons, ways: arcadeWays, for: rom.id)
         }
     }
 
@@ -331,6 +400,14 @@ struct GameLaunchView: View {
     private func load() async {
         cores = CoreCatalog.cores(for: rom.platformSlug)
         selectedCore = LaunchChoices.defaultCore(rom: rom, from: cores)
+
+        if rom.isArcade {
+            let base = ArcadeProfileStore.shared.resolve(shortname: rom.fsNameNoExt)
+            arcadeBase = base
+            let choice = ArcadeOverride.stored(for: rom.id)
+            arcadeButtons = choice?.buttons ?? base.buttons
+            arcadeWays = choice?.ways ?? base.ways
+        }
 
         refreshResumeOffer()
 

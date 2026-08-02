@@ -189,7 +189,9 @@ struct PlayerView: View {
     /// profile map and the layout is built from what the cabinet had.
     private var controlLayout: ControlLayout? {
         if rom.isArcade {
-            let profile = ArcadeProfileStore.shared.resolve(shortname: rom.fsNameNoExt)
+            let profile = ArcadeProfileStore.shared.resolve(
+                romId: rom.id, shortname: rom.fsNameNoExt
+            )
             return ArcadeLayout.build(for: profile)
         }
         return ControlLayout.forPlatform(slug: rom.platformSlug)
@@ -225,7 +227,9 @@ struct PlayerView: View {
     /// shooters, need fewer and simpler inputs.
     private var controlStripHeight: CGFloat {
         if rom.isArcade,
-           ArcadeProfileStore.shared.resolve(shortname: rom.fsNameNoExt).vertical {
+           ArcadeProfileStore.shared.resolve(
+               romId: rom.id, shortname: rom.fsNameNoExt
+           ).vertical {
             return 280
         }
         return 330
