@@ -126,13 +126,17 @@ Required or it breaks in ways that look like app bugs:
 - `preferredScreenEdgesDeferringSystemGestures`
 - Disable bounce scrolling, pull to refresh, double-tap zoom, long-press callout
 
-**Orientation follows the device, not the game.** Revised 2026-08-01 after
-building it: forcing rotation fights the system rotation lock and the user's
-grip, so the app responds to how the phone is held instead of dictating it.
-Portrait gets the canvas above a control strip. Landscape gets the canvas
-centred with controls flanking it in the gutters. Vertical TATE games shine
-in portrait and pay a canvas-size cost in landscape, and that trade belongs
-to the person holding the phone.
+**A game is played in the orientation it was started in.** Revised 2026-08-02
+after living with free rotation on device: resizing the webview mid game makes
+WebKit relay everything out over a wasm core already near its process memory
+ceiling, and iOS sometimes kills the process for it. Crash recovery makes that
+survivable, but even a graceful recovery interrupts a live run, and an
+interruption during a boss is a lost run. So the player locks to the
+orientation it opened in (see `OrientationLock`) and the rest of the app
+rotates freely. Portrait gets the canvas above a control strip. Landscape gets
+the canvas centred with controls flanking it in the gutters. The TATE trade
+still belongs to the person holding the phone, decided by how they hold it
+when they press Play.
 
 **Canvas scaling:** largest integer multiple that fits. Never stretch to fill.
 
@@ -273,8 +277,13 @@ Slots, not a timeline, because that is what the server models. Grey out states
 whose `emulator` does not match the running core. Use `content_hash` to detect
 a server-side change and prompt rather than overwriting.
 
-**Auto-state on background, auto-restore on launch.** Manual slots live in the
-pause menu. The common case involves no user action at all.
+**Auto-state on background, restore by consent.** Revised 2026-08-02 after
+building it: a local autosave is written every thirty seconds of play and at
+the moments a kill is likeliest, and crash recovery restores it silently. A
+session iOS evicted gets a preselected "continue where you left off" card at
+the next launch rather than a silent restore, because a deliberate exit must
+start fresh and only an interrupted one should come back. Manual slots live
+in the pause menu.
 
 RomM forces `save-state-location: browser` and exposes `EJS_onSaveState` and
 `EJS_onSaveSave`. Hook both.
@@ -301,14 +310,19 @@ Shortcuts and Spotlight. iPad layouts. controls.dat labels. Explicit downloads.
 
 1. ~~Current iOS JIT behaviour in WKWebView.~~ Resolved 2026-08-01, see
    Architecture. WASM runs jitted at roughly 0.85x native Swift on iOS 26.6.
-2. Whether `window.EJS_emulator.gameManager` exposes an input method, or whether
-   synthetic `KeyboardEvent` is the input path. **verify**
+2. ~~Whether `window.EJS_emulator.gameManager` exposes an input method.~~
+   Resolved 2026-08-01. `gameManager.simulateInput(player, id, value)` is the
+   same call EmulatorJS's own touch and gamepad paths use; no synthetic
+   `KeyboardEvent` needed. See `PlayerInputBridge`.
 3. ~~Exact scope identifier strings from `/api/docs`.~~ Resolved 2026-08-01.
    All five exist verbatim in RomM 5.1.0. See Auth for the corrected
    `device/init` field list, which was missing two required fields.
 4. Whether the pause menu button lives in the control strip, two-finger tap, or
    both.
-5. Gamepad API suppression method inside the webview.
+5. ~~Gamepad API suppression method inside the webview.~~ Resolved 2026-08-01.
+   `navigator.getGamepads` is replaced with an empty function and the connect
+   events are stopped in capture phase; EmulatorJS polls, so that is the whole
+   suppression. See the auth injection in `PlayerView`.
 6. Thermal and battery behaviour on PS1 and Neo Geo cores.
 7. Why multi-file zip downloads fail through the reverse proxy. Blocks Phase 2,
    not Phase 1.
