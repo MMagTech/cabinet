@@ -317,8 +317,14 @@ Shortcuts and Spotlight. iPad layouts. controls.dat labels. Explicit downloads.
 3. ~~Exact scope identifier strings from `/api/docs`.~~ Resolved 2026-08-01.
    All five exist verbatim in RomM 5.1.0. See Auth for the corrected
    `device/init` field list, which was missing two required fields.
-4. Whether the pause menu button lives in the control strip, two-finger tap, or
-   both.
+4. ~~Whether the pause menu button lives in the control strip, two-finger tap,
+   or both.~~ Resolved 2026-08-02: a Menu pill on the pad, out of the thumb
+   arcs, plus the controller's Menu button. Both freeze the emulator on the
+   press, before the menu is even drawn, because a pause that arrives late is
+   a death in anything that shoots back. The native menu holds Resume, Save
+   state and Quit; saving posts to RomM's states API directly and reports
+   what happened, including the payload too large case that a CV1000 sized
+   state hits on a default proxy body limit.
 5. ~~Gamepad API suppression method inside the webview.~~ Resolved 2026-08-01.
    `navigator.getGamepads` is replaced with an empty function and the connect
    events are stopped in capture phase; EmulatorJS polls, so that is the whole

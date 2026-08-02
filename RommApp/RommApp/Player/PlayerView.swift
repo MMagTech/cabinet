@@ -28,6 +28,11 @@ struct PlayerView: View {
     @State private var overlayVisible = true
     @State private var gameStarted = false
     @State private var recovering = false
+    /// The game is frozen and the pause menu is up. The freeze happens on
+    /// the tap that opens the menu, not after choosing something in it,
+    /// because a pause that arrives late is a death in anything that
+    /// shoots back.
+    @State private var pauseMenuVisible = false
     @StateObject private var input = PlayerInputBridge()
     @ObservedObject private var controllers = GameControllerManager.shared
     /// The scope doc's bet: the opacity slider matters more than any theme.
@@ -104,6 +109,60 @@ struct PlayerView: View {
                 .transition(.opacity)
             }
 
+            // The pause menu, over a frozen machine. Everything here can be
+            // chosen at leisure because the emulator stopped the moment the
+            // menu opened.
+            if pauseMenuVisible {
+                ZStack {
+                    Color.black.opacity(0.55)
+                        .ignoresSafeArea()
+                        .onTapGesture { resumeFromMenu() }
+                    VStack(spacing: 18) {
+                        VStack(spacing: 4) {
+                            Text(rom.displayName)
+                                .font(.headline)
+                                .lineLimit(1)
+                            Text("Paused")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        VStack(spacing: 10) {
+                            Button {
+                                resumeFromMenu()
+                            } label: {
+                                Label("Resume", systemImage: "play.fill")
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 6)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            Button {
+                                input.saveStateToServer()
+                                resumeFromMenu()
+                            } label: {
+                                Label("Save state", systemImage: "square.and.arrow.down")
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 6)
+                            }
+                            .buttonStyle(.bordered)
+                            Button(role: .destructive) {
+                                SessionMarker.recordCleanExit()
+                                dismiss()
+                            } label: {
+                                Label("Quit", systemImage: "xmark")
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 6)
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+                    .frame(maxWidth: 280)
+                    .padding(24)
+                    .background(.regularMaterial, in: .rect(cornerRadius: 20))
+                    .padding(40)
+                }
+                .transition(.opacity)
+            }
+
             // Fades in step with EmulatorJS's menu toggle so nothing sits
             // over the game during play. A tap on the game canvas brings
             // both back, mirroring the injected idle logic.
@@ -129,6 +188,13 @@ struct PlayerView: View {
             .animation(.easeInOut(duration: 0.35), value: overlayVisible)
         }
         .animation(.easeInOut(duration: 0.3), value: recovering)
+        .animation(.easeInOut(duration: 0.15), value: pauseMenuVisible)
+        // A dead web process takes the paused game with it; recovery will
+        // boot and restore, and a stale pause card over that would offer
+        // choices about a machine that no longer exists.
+        .onChange(of: gameStarted) { _, started in
+            if !started { pauseMenuVisible = false }
+        }
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
         .defersSystemGestures(on: .all)
@@ -152,12 +218,11 @@ struct PlayerView: View {
             UIApplication.shared.isIdleTimerDisabled = true
 
             controllers.send = { id, down in input.send(id: id, down: down) }
-            // The pad's menu button reveals the overlay, which is where
-            // EmulatorJS's own menu and this screen's close button live.
-            controllers.onMenu = {
-                overlayVisible = true
-                input.wakeOverlay()
-            }
+            // Menu means pause now, from either input world: the pad's Menu
+            // pill and a controller's Menu button both freeze the game on
+            // the press and open the same native menu.
+            controllers.onMenu = { showPauseMenu() }
+            input.onMenu = { showPauseMenu() }
             // Nobody is holding anything after a disconnect, so stop the
             // game rather than letting it run on unattended. The touch
             // controls reappear on their own.
@@ -235,6 +300,17 @@ struct PlayerView: View {
         return 330
     }
 
+    private func showPauseMenu() {
+        guard gameStarted, !pauseMenuVisible else { return }
+        input.pauseGame()
+        pauseMenuVisible = true
+    }
+
+    private func resumeFromMenu() {
+        pauseMenuVisible = false
+        input.resumeGame()
+    }
+
     /// `.playback` or the phone's ringer switch silences the game.
     private func configureAudioSession() {
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
@@ -249,6 +325,9 @@ struct PlayerView: View {
 /// there is a real input method, and synthetic KeyboardEvents are not needed.
 final class PlayerInputBridge: ObservableObject {
     weak var webView: WKWebView?
+    /// The touch pad's Menu control lands here rather than in the emulator:
+    /// it is not a game input, it is the person asking for the pause menu.
+    var onMenu: (() -> Void)?
 
     func send(id: Int, down: Bool) {
         let js = "window.EJS_emulator && EJS_emulator.gameManager"
@@ -264,10 +343,26 @@ final class PlayerInputBridge: ObservableObject {
         )
     }
 
-    /// Pauses the running game, used when a controller disconnects mid play.
+    /// Pauses the running game: the pause menu opening, or a controller
+    /// disconnecting mid play.
     func pauseGame() {
         webView?.evaluateJavaScript(
             "window.EJS_emulator && !EJS_emulator.paused && EJS_emulator.pause();"
+        )
+    }
+
+    func resumeGame() {
+        webView?.evaluateJavaScript(
+            "window.EJS_emulator && EJS_emulator.paused && EJS_emulator.play();"
+        )
+    }
+
+    /// Saves the frozen moment to RomM as a real server state, through the
+    /// page's own upload hook, so it appears on the launch screen next time
+    /// like any state made through EmulatorJS's menu.
+    func saveStateToServer() {
+        webView?.evaluateJavaScript(
+            "window.__cabinetMenuSave && __cabinetMenuSave();"
         )
     }
 
@@ -346,6 +441,14 @@ struct PlayerWebView: UIViewRepresentable {
                 if let dataURL = message.body as? String {
                     LastFrame.save(dataURL: dataURL, romId: parent.rom.id)
                 }
+            // The outcome of the last menu save, kept because a phone in a
+            // hand has no console: when someone says saving did nothing,
+            // this answers with the status code it got.
+            case "saveResult":
+                UserDefaults.standard.set(
+                    "\(String(describing: message.body)) rom \(parent.rom.id)",
+                    forKey: "com.mmagtech.RommApp.lastStateSave"
+                )
             case "diag":
                 // Recorded rather than logged, because a console cannot be
                 // attached to a phone someone is actually holding and using.
@@ -459,6 +562,7 @@ struct PlayerWebView: UIViewRepresentable {
         config.userContentController.add(context.coordinator, name: "diag")
         config.userContentController.add(context.coordinator, name: "autosave")
         config.userContentController.add(context.coordinator, name: "frame")
+        config.userContentController.add(context.coordinator, name: "saveResult")
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
@@ -480,6 +584,11 @@ struct PlayerWebView: UIViewRepresentable {
         webView.load(request)
 
         let padView = ControlPadView(items: []) { [weak input] id, down in
+            // Menu is native, everything else is the emulator's.
+            if id == RetroPad.overlay {
+                if down { input?.onMenu?() }
+                return
+            }
             input?.send(id: id, down: down)
         }
         padView.backgroundColor = .clear
@@ -596,6 +705,56 @@ struct PlayerWebView: UIViewRepresentable {
           };
           setInterval(save, 30000);
           window.__cabinetAutosaveNow = save;
+
+          // The upload goes through fetch directly rather than RomM's
+          // EJS_onSaveState, which swallows failures into the console and
+          // can sit unresolved for minutes on a body the proxy will refuse.
+          // The person just chose to bank a run; they get told what
+          // happened. The CSRF token rides along from the cookie the same
+          // way RomM's own client sends it, and the auth patch adds the
+          // bearer token like any request. CV1000 class states run over a
+          // hundred megabytes, which reverse proxies commonly refuse: 413
+          // gets its own message because the fix, raising the proxy's body
+          // limit, belongs to the server owner, not the player.
+          window.__cabinetMenuSave = function () {
+            try {
+              const e = window.EJS_emulator;
+              if (!e || !e.started || !e.gameManager) return;
+              const state = e.gameManager.getState();
+              if (!state || !state.length) return;
+              const upload = function (shot) {
+                try {
+                  const fd = new FormData();
+                  fd.append("stateFile", new Blob([state]), "state.save");
+                  fd.append("screenshotFile", shot || new Blob([]), "screenshot.png");
+                  const m = document.cookie.match(/romm_csrftoken=([^;]+)/);
+                  fetch("/api/states?rom_id=\(romId)&emulator=emulatorjs", {
+                    method: "POST",
+                    headers: m ? { "x-csrftoken": m[1] } : {},
+                    body: fd
+                  }).then(function (r) {
+                    if (r.ok) { e.displayMessage("STATE SAVED TO YOUR SERVER"); }
+                    else if (r.status === 413) { e.displayMessage("STATE TOO LARGE FOR THE SERVER"); }
+                    else { e.displayMessage("STATE SAVE FAILED (" + r.status + ")"); }
+                    try { window.webkit.messageHandlers.saveResult.postMessage("http " + r.status); }
+                    catch (x) {}
+                  }).catch(function (err) {
+                    e.displayMessage("STATE SAVE FAILED, CHECK THE CONNECTION");
+                    try { window.webkit.messageHandlers.saveResult.postMessage("network " + err); }
+                    catch (x) {}
+                  });
+                } catch (x) {}
+              };
+              // The canvas source, not retroarch's: the retroarch path waits
+              // for the core to process a screenshot command, and a paused
+              // core processes nothing, so the save would never happen.
+              try {
+                e.takeScreenshot("canvas", "png", 1).then(function (s) {
+                  upload(s && (s.blob || s.screenshot));
+                }).catch(function () { upload(null); });
+              } catch (x) { upload(null); }
+            } catch (x) {}
+          };
 
           window.__cabinetRecover = function (maxAgeMs) {
             try {

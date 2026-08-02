@@ -60,6 +60,20 @@ enum ArcadeLayout {
             fourWay: nil
         ))
 
+        // Menu freezes the game the moment it is pressed, so it lives on
+        // the pad like any control: hunting a pause through a web menu
+        // while something shoots at you is how runs end. Arcade games have
+        // no pause of their own, which is exactly why this one matters.
+        items.append(ControlLayout.Item(
+            kind: .pill,
+            label: "Menu",
+            input: RetroPad.overlay,
+            inputs: nil,
+            frame: ControlLayout.Rect(x: 0.72, y: 0.10, w: 0.17, h: 0.10),
+            extended: ControlLayout.Rect(x: 0.68, y: 0.05, w: 0.25, h: 0.20),
+            fourWay: nil
+        ))
+
         return ControlLayout(
             system: "arcade:\(profile.profile)",
             items: items,
@@ -140,6 +154,17 @@ enum ArcadeLayout {
             inputs: nil,
             frame: ControlLayout.Rect(x: 0.87, y: 0.07, w: 0.10, h: 0.09),
             extended: ControlLayout.Rect(x: 0.84, y: 0.03, w: 0.15, h: 0.16),
+            fourWay: nil
+        ))
+
+        // Beside Coin in the top left gutter, out of both thumb arcs.
+        items.append(ControlLayout.Item(
+            kind: .pill,
+            label: "Menu",
+            input: RetroPad.overlay,
+            inputs: nil,
+            frame: ControlLayout.Rect(x: 0.105, y: 0.07, w: 0.10, h: 0.09),
+            extended: ControlLayout.Rect(x: 0.10, y: 0.03, w: 0.14, h: 0.16),
             fourWay: nil
         ))
 

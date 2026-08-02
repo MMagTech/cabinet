@@ -347,12 +347,18 @@ struct GameLaunchView: View {
             // States are greyed out when written by a different core, because
             // a memory snapshot cannot be loaded by an emulator that did not
             // make it. Saves survive a core change, so they are never greyed.
+            // RomM's emulator field names the player, not the core: states
+            // made through the web player, this app's included, all say
+            // "emulatorjs", and greying those out disabled every state the
+            // pause menu ever saved.
             ForEach(states) { state in
                 choiceRow(
                     label: state.fileName,
                     detail: state.emulator.map { "state, \($0)" } ?? "state",
                     selected: selectedState?.id == state.id,
-                    enabled: state.emulator == nil || state.emulator == selectedCore
+                    enabled: state.emulator == nil
+                        || state.emulator == selectedCore
+                        || state.emulator == "emulatorjs"
                 ) {
                     selectedState = selectedState?.id == state.id ? nil : state
                     selectedSave = nil
