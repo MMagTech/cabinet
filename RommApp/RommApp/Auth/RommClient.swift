@@ -239,7 +239,17 @@ enum RommError: LocalizedError, Equatable {
     case slowDown
     case accessDenied
     case pairingExpired
+    /// The credential itself is bad or gone. Pairing again is the fix.
     case unauthorized
+    /// A valid credential that lacks permission for this request. Pairing
+    /// again can help, since scopes are fixed at pair time, but nothing is
+    /// wrong with the device's sign in.
+    case forbidden
+    /// Refused with no explanation, which RomM itself does not do. Something
+    /// in front of it is blocking this device or network. Never advise
+    /// unpairing for this: the pairing is fine and destroying it fixes
+    /// nothing.
+    case blocked
     case notFound
     case http(Int)
     case transport(String)
@@ -256,7 +266,14 @@ enum RommError: LocalizedError, Equatable {
         case (400, "slow_down"): self = .slowDown
         case (400, "access_denied"): self = .accessDenied
         case (400, "expired_token"): self = .pairingExpired
-        case (401, _), (403, _): self = .unauthorized
+        // RomM's own docs draw the line: 401 is a bad or missing credential,
+        // 403 is a good credential without the required scope. A 403 that
+        // carries no RomM error body at all did not come from RomM, it came
+        // from a proxy or security filter in front of it, which is a
+        // completely different problem with a completely different fix.
+        case (401, _): self = .unauthorized
+        case (403, .some): self = .forbidden
+        case (403, .none): self = .blocked
         case (404, _): self = .notFound
         default: self = .http(status)
         }
@@ -268,7 +285,12 @@ enum RommError: LocalizedError, Equatable {
         case .slowDown: return "Slowing down requests."
         case .accessDenied: return "The request was denied in RomM."
         case .pairingExpired: return "The pairing code expired. Start again to get a new one."
-        case .unauthorized: return "This device is no longer authorised. Pair it again."
+        case .unauthorized:
+            return "This device is signed out. Pair it again from Settings."
+        case .forbidden:
+            return "The server accepted this device but refused the request. It may need pairing again to be granted the permissions this app uses."
+        case .blocked:
+            return "The server refused the connection without explaining why. RomM itself may be fine: something in front of it, like a reverse proxy or a security filter, is likely blocking this device or your network. Nothing is wrong with your pairing, so signing out will not help."
         case .notFound:
             return "That address answered, but it does not look like a RomM server."
         case .http(let code): return "The server returned an error. Code \(code)."
