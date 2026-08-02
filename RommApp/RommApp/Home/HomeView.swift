@@ -140,8 +140,8 @@ struct HomeView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     ForEach(roms) { rom in
-                        NavigationLink {
-                            RomDetailView(rom: rom)
+                        Button {
+                            resuming = rom
                         } label: {
                             VStack(alignment: .leading, spacing: 6) {
                                 CoverImage(path: rom.pathCoverSmall, title: rom.displayName)

@@ -99,8 +99,13 @@ control switches between all-games and platforms.
 
 **Search.** Server-side via the API's search param, debounced.
 
-**Detail.** Cover hero, one primary action (Resume or Play), metadata. Arcade
-variant additionally shows romset shortname and resolved control profile.
+**Detail.** ~~Cover hero, one primary action (Resume or Play), metadata.~~
+Cut 2026-08-01 after building it. RomM's own player page is already a detail
+screen: cover, title, Play, plus the core picker, firmware and save selection
+the app has no substitute for. Ours duplicated the top half of that and added
+a tap for nothing, so tapping a game anywhere now opens the player directly.
+The arcade extras it was meant to carry, romset shortname and resolved control
+profile, need a home if they are still wanted.
 
 **Player.** Full screen webview, native control overlay, pause menu.
 

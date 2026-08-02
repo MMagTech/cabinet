@@ -15,6 +15,7 @@ struct LibraryScreen: View {
     @State private var searchText = ""
     @State private var searchResults: [Rom] = []
     @State private var searching = false
+    @State private var playing: Rom?
 
     var body: some View {
         Group {
@@ -28,6 +29,9 @@ struct LibraryScreen: View {
         .searchable(text: $searchText, prompt: "Search all games")
         .task(id: searchText) { await runSearch() }
         .task { await loadPlatforms() }
+        .fullScreenCover(item: $playing) { rom in
+            PlayerView(rom: rom)
+        }
     }
 
     // MARK: Platforms
@@ -89,8 +93,8 @@ struct LibraryScreen: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(searchResults) { rom in
-                    NavigationLink {
-                        RomDetailView(rom: rom)
+                    Button {
+                        playing = rom
                     } label: {
                         HStack(spacing: 12) {
                             CoverImage(path: rom.pathCoverSmall, title: rom.displayName)
