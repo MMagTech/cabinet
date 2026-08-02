@@ -330,7 +330,7 @@ struct GameLaunchView: View {
             }
             if !missingFirmware.isEmpty {
                 Label {
-                    Text("On the server but missing from its filesystem: \(missingFirmware.map(\.fileName).joined(separator: ", ")). A game that needs one of these will not boot.")
+                    Text("Missing from the server: \(missingFirmware.map(\.fileName).joined(separator: ", "))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } icon: {
