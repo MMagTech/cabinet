@@ -68,7 +68,7 @@ final class GameControllerManager: ObservableObject {
             Task { @MainActor in self?.handleDisconnect() }
         })
 
-        if let existing = GCController.controllers().first {
+        if let existing = GCController.controllers().first(where: { !Self.isSimulatorPhantom($0) }) {
             attach(existing)
         }
     }
@@ -87,7 +87,23 @@ final class GameControllerManager: ObservableObject {
 
     // MARK: Wiring
 
+    /// The iOS simulator always reports a synthetic controller named
+    /// "Gamepad" even when nothing is attached to the Mac. Treating it as
+    /// real suppresses the touch controls in every simulator run, which is
+    /// exactly where they need to be testable. A real controller forwarded
+    /// into the simulator arrives under its own vendor name, so filtering
+    /// on this one name only hides the phantom. Device builds compile this
+    /// check away entirely.
+    private static func isSimulatorPhantom(_ controller: GCController) -> Bool {
+        #if targetEnvironment(simulator)
+        return controller.vendorName == "Gamepad"
+        #else
+        return false
+        #endif
+    }
+
     private func attach(_ controller: GCController) {
+        guard !Self.isSimulatorPhantom(controller) else { return }
         guard let gamepad = controller.extendedGamepad else {
             // Paired and visible to iOS, but not as a standard gamepad. Say
             // so rather than appearing to see nothing at all, because the
@@ -215,7 +231,7 @@ final class GameControllerManager: ObservableObject {
     }
 
     private func handleDisconnect() {
-        guard GCController.controllers().isEmpty else { return }
+        guard GCController.controllers().allSatisfy(Self.isSimulatorPhantom) else { return }
         releaseAll()
         isConnected = false
         controllerName = nil
