@@ -144,9 +144,6 @@ final class GameControllerManager: ObservableObject {
             candidates.append((GCInputRightThumbstickButton, r3))
         }
 
-        #if DEBUG
-        print("GC_ATTACH name=\(controller.vendorName ?? "?") category=\(controller.productCategory) buttons=\(candidates.map(\.0))")
-        #endif
 
         for (name, button) in candidates {
             // Triggers report analog values and need a threshold; everything
@@ -168,14 +165,18 @@ final class GameControllerManager: ObservableObject {
     /// A physical button changed. In capture mode it names itself for the
     /// remap screen; otherwise it drives whatever it is bound to.
     private func button(_ name: String, pressed: Bool) {
-        #if DEBUG
-        print("GC_BUTTON \(name) pressed=\(pressed) capturing=\(captureHandler != nil) bound=\(bindings[name].map(String.init) ?? "none")")
-        #endif
         if let capture = captureHandler {
             if pressed { capture(name) }
             return
         }
         guard let id = bindings[name] else { return }
+
+        // The overlay is not a game input, so it fires on press and is never
+        // forwarded to the emulator.
+        if id == RetroPad.overlay {
+            if pressed { onMenu?() }
+            return
+        }
         emit(id, pressed)
     }
 
@@ -191,9 +192,6 @@ final class GameControllerManager: ObservableObject {
 
     private func direction(_ id: Int) -> GCControllerButtonValueChangedHandler {
         { [weak self] _, _, pressed in
-            #if DEBUG
-            print("GC_DPAD id=\(id) pressed=\(pressed)")
-            #endif
             Task { @MainActor in
                 guard self?.captureHandler == nil else { return }
                 self?.emit(id, pressed)

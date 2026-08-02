@@ -20,6 +20,7 @@ enum ControllerBindings {
         GCInputRightTrigger: RetroPad.r2,
         GCInputButtonMenu: RetroPad.start,
         GCInputButtonOptions: RetroPad.select,  // Coin in arcade profiles
+        GCInputButtonHome: RetroPad.overlay,    // exit and emulator menu
     ]
 
     private static func key(for controller: String) -> String {
@@ -59,10 +60,17 @@ enum RetroPad {
     static let a = 8, x = 9, l = 10, r = 11
     static let l2 = 12, r2 = 13
 
+    /// Not a game input: reveals the overlay holding the close button and
+    /// EmulatorJS's menu. Bindable like anything else, because the Home
+    /// button it defaults to is reserved by iOS on some controllers, and a
+    /// player with no way back out of a game is stuck.
+    static let overlay = -1
+
     /// Every input a person may want to bind, in the order the remap screen
     /// walks through them. Directions are excluded: they come from the d-pad
     /// and stick automatically and are not a source of trouble.
     static let bindable: [(id: Int, label: String, detail: String)] = [
+        (overlay, "Exit and menu", "Shows the close button and the emulator's own menu."),
         (select, "Coin, Select", "Arcade credit. Needed to start any arcade game."),
         (start, "Start", "Begins play once credited."),
         (y, "Arcade button 1", "Light punch in fighters."),

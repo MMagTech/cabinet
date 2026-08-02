@@ -123,7 +123,10 @@ struct PlayerView: View {
             controllers.send = { id, down in input.send(id: id, down: down) }
             // The pad's menu button reveals the overlay, which is where
             // EmulatorJS's own menu and this screen's close button live.
-            controllers.onMenu = { overlayVisible = true }
+            controllers.onMenu = {
+                overlayVisible = true
+                input.wakeOverlay()
+            }
             // Nobody is holding anything after a disconnect, so stop the
             // game rather than letting it run on unattended. The touch
             // controls reappear on their own.
@@ -194,6 +197,14 @@ final class PlayerInputBridge: ObservableObject {
         let js = "window.EJS_emulator && EJS_emulator.gameManager"
             + " && EJS_emulator.gameManager.simulateInput(0, \(id), \(down ? 1 : 0));"
         webView?.evaluateJavaScript(js)
+    }
+
+    /// Reveals the overlay from native code, for controllers with no screen
+    /// to tap. The page then reports visibility back the usual way.
+    func wakeOverlay() {
+        webView?.evaluateJavaScript(
+            "window.__rommWakeOverlay && window.__rommWakeOverlay();"
+        )
     }
 
     /// Pauses the running game, used when a controller disconnects mid play.
@@ -421,6 +432,13 @@ struct PlayerWebView: UIViewRepresentable {
             const touch = event.touches && event.touches[0];
             if (touch && touch.clientY < window.innerHeight * 0.55) wake();
           }, { passive: true, capture: true });
+
+          // A physical controller has no screen to tap, so native code calls
+          // this to reveal the overlay. Going through the same wake keeps one
+          // source of truth: EmulatorJS's menu button and the app's close
+          // button appear and fade together rather than drifting apart.
+          window.__rommWakeOverlay = wake;
+
           wake();
         })();
         """
