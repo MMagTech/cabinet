@@ -63,6 +63,27 @@ struct PlatformGamesView: View {
             UserDefaults.standard.set(mode.rawValue, forKey: Self.modeKey(for: platform.slug))
         }
         .task { await reload() }
+        // The scrubber can only jump to rows that exist, so list mode pulls
+        // the whole set rather than paging on scroll. A list is just names;
+        // even the 1,204 arcade titles are a few small requests, and a
+        // scrubber that stops working past the first page is worse than
+        // none. The loop waits out whichever page fetch is already in
+        // flight rather than trusting `total`, which is zero until the
+        // first page lands and made an earlier version give up instantly.
+        .task(id: viewMode) {
+            guard viewMode == .list else { return }
+            var lastCount = -1
+            while error == nil {
+                if loading {
+                    try? await Task.sleep(for: .milliseconds(100))
+                    continue
+                }
+                if total > 0, roms.count >= total { break }
+                if roms.count == lastCount { break }
+                lastCount = roms.count
+                await loadNextPage()
+            }
+        }
         .fullScreenCover(item: $playing) { rom in
             NavigationStack { GameLaunchView(rom: rom) }
         }
@@ -100,25 +121,60 @@ struct PlatformGamesView: View {
     }
 
     private var list: some View {
-        List {
-            ForEach(roms) { rom in
-                Button {
-                    playing = rom
-                } label: {
-                    Text(rom.displayName)
-                        .lineLimit(1)
-                        .foregroundStyle(.primary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(.rect)
+        ScrollViewReader { proxy in
+            List {
+                ForEach(roms) { rom in
+                    Button {
+                        playing = rom
+                    } label: {
+                        Text(rom.displayName)
+                            .lineLimit(1)
+                            .foregroundStyle(.primary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .onAppear { Task { await loadMoreIfNeeded(current: rom) } }
                 }
-                .buttonStyle(.plain)
-                .onAppear { Task { await loadMoreIfNeeded(current: rom) } }
-            }
 
-            footer
-                .listRowSeparator(.hidden)
+                footer
+                    .listRowSeparator(.hidden)
+            }
+            .listStyle(.plain)
+            // Room for the rail, or the longest titles run underneath it.
+            .contentMargins(.trailing, letterIndex.count > 4 ? 18 : 0, for: .scrollContent)
+            .overlay(alignment: .trailing) {
+                // Only when there is enough alphabet to be worth jumping
+                // around in; a six game list scrolls faster than it scrubs.
+                if letterIndex.count > 4 {
+                    LetterScrubber(letters: letterIndex.map(\.letter)) { letter in
+                        if let id = letterIndex.first(where: { $0.letter == letter })?.romId {
+                            proxy.scrollTo(id, anchor: .top)
+                        }
+                    }
+                }
+            }
         }
-        .listStyle(.plain)
+    }
+
+    /// The first game of each initial, in list order. Non letters group
+    /// under "#" at whichever end the server sorts them to. A leading "The"
+    /// is skipped because the server sorts ignoring it: lettering "The
+    /// Battle of..." under T would plant a stray T in the middle of the B
+    /// section and the rail would jump there.
+    private var letterIndex: [(letter: String, romId: Int)] {
+        var seen = Set<String>()
+        var index: [(String, Int)] = []
+        for rom in roms {
+            var name = rom.displayName
+            if name.lowercased().hasPrefix("the ") { name = String(name.dropFirst(4)) }
+            let first = name.prefix(1).uppercased()
+            let letter = first.rangeOfCharacter(from: .letters) != nil ? first : "#"
+            if seen.insert(letter).inserted {
+                index.append((letter, rom.id))
+            }
+        }
+        return index
     }
 
     @ViewBuilder
@@ -159,5 +215,48 @@ struct PlatformGamesView: View {
             self.error = error.localizedDescription
         }
         loading = false
+    }
+}
+
+/// The letter rail on the trailing edge of a long list, the Contacts
+/// pattern: touch anywhere on it and drag, and the list jumps to the first
+/// title under each letter passed. Jumping is instant rather than animated,
+/// because animating through a thousand rows reads as scrolling, and the
+/// point of a scrubber is not scrolling.
+private struct LetterScrubber: View {
+    let letters: [String]
+    let onSelect: (String) -> Void
+
+    @State private var height: CGFloat = 0
+    @State private var current: String?
+    private let haptic = UISelectionFeedbackGenerator()
+
+    var body: some View {
+        VStack(spacing: 1) {
+            ForEach(letters, id: \.self) { letter in
+                Text(letter)
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.tint)
+                    .frame(width: 16)
+            }
+        }
+        .padding(.vertical, 4)
+        .contentShape(.rect)
+        .onGeometryChange(for: CGFloat.self, of: \.size.height) { height = $0 }
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    guard height > 0, !letters.isEmpty else { return }
+                    let fraction = min(max(value.location.y / height, 0), 0.999)
+                    let letter = letters[Int(fraction * CGFloat(letters.count))]
+                    if letter != current {
+                        current = letter
+                        haptic.selectionChanged()
+                        onSelect(letter)
+                    }
+                }
+                .onEnded { _ in current = nil }
+        )
+        .padding(.trailing, 2)
     }
 }
