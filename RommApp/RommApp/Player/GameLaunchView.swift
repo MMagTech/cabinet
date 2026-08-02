@@ -41,12 +41,17 @@ struct GameLaunchView: View {
                     // Identity and the primary action stay together on the
                     // left, where the eye starts.
                     HStack(alignment: .top, spacing: 20) {
-                        VStack(spacing: 12) {
-                            cover(maxWidth: 140)
+                        // 115 rather than 140: a landscape phone leaves about
+                        // 318 points once the navigation bar and padding take
+                        // theirs, and a taller cover pushed Play off the
+                        // bottom edge. Identity matters less than reaching
+                        // the button.
+                        VStack(spacing: 10) {
+                            cover(maxWidth: 115)
                             titleBlock(centred: true)
                             playButton
                         }
-                        .frame(width: 190)
+                        .frame(width: 170)
 
                         optionsGrid
                             .frame(maxWidth: .infinity, alignment: .top)
@@ -127,7 +132,10 @@ struct GameLaunchView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 250), spacing: 12, alignment: .top)],
+                // 210 rather than 250: the space left beside the cover is
+                // about 500 points, and 250 wide columns fit only once, which
+                // stacked the cards and stretched each to hold two words.
+                columns: [GridItem(.adaptive(minimum: 210), spacing: 12, alignment: .top)],
                 alignment: .leading,
                 spacing: 12
             ) {
