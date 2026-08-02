@@ -80,6 +80,7 @@ struct SettingsView: View {
                 Text("Unpairing signs this device out but remembers the server. Switching servers forgets everything.")
             }
         }
+        .readableWidth()
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .task { controllers.start() }

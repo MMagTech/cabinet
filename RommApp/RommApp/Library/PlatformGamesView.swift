@@ -119,6 +119,7 @@ struct PlatformGamesView: View {
                 .listRowSeparator(.hidden)
         }
         .listStyle(.plain)
+        .readableWidth()
     }
 
     @ViewBuilder
