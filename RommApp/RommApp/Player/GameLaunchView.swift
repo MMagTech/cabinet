@@ -35,19 +35,21 @@ struct GameLaunchView: View {
             let landscape = geometry.size.width > geometry.size.height
             ScrollView {
                 if landscape {
-                    // Cover on the left as identification only. Everything
-                    // actionable lives in the right column so Play sits high
-                    // and cannot be pushed off a short screen.
-                    HStack(alignment: .top, spacing: 22) {
-                        cover(maxWidth: 165)
-                            .frame(width: 165)
-
-                        VStack(alignment: .leading, spacing: 16) {
-                            titleBlock(centred: false)
+                    // A short wide screen has width to spare and almost no
+                    // height, so the option cards sit side by side rather
+                    // than stacking into a column that needs scrolling.
+                    // Identity and the primary action stay together on the
+                    // left, where the eye starts.
+                    HStack(alignment: .top, spacing: 20) {
+                        VStack(spacing: 12) {
+                            cover(maxWidth: 140)
+                            titleBlock(centred: true)
                             playButton
-                            options
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(width: 190)
+
+                        optionsGrid
+                            .frame(maxWidth: .infinity, alignment: .top)
                     }
                     .padding(20)
                 } else {
@@ -111,6 +113,29 @@ struct GameLaunchView: View {
         }
         .buttonStyle(.borderedProminent)
         .disabled(loading)
+    }
+
+    /// Landscape only: cards flow into as many columns as the width allows,
+    /// so two or three of them do not become a scrolling column.
+    @ViewBuilder
+    private var optionsGrid: some View {
+        if loading {
+            HStack(spacing: 10) {
+                ProgressView()
+                Text("Loading options").foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 250), spacing: 12, alignment: .top)],
+                alignment: .leading,
+                spacing: 12
+            ) {
+                if cores.count > 1 { coreCard }
+                if !firmware.isEmpty { firmwareCard }
+                if !states.isEmpty || !saves.isEmpty { resumeCard }
+            }
+        }
     }
 
     @ViewBuilder
