@@ -63,7 +63,6 @@ struct LibraryScreen: View {
                 }
             }
         }
-        .readableWidth()
         .refreshable { await loadPlatforms() }
     }
 
@@ -114,7 +113,6 @@ struct LibraryScreen: View {
             }
         }
         .listStyle(.plain)
-        .readableWidth()
     }
 
     private func runSearch() async {

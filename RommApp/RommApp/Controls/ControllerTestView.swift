@@ -60,7 +60,6 @@ struct ControllerTestView: View {
                 Text("Arcade button numbers match the on screen layout: 1 to 3 are the top row, 4 to 6 the bottom.")
             }
         }
-        .readableWidth()
         .navigationTitle("Test controller")
         .navigationBarTitleDisplayMode(.inline)
         .task { controllers.start() }

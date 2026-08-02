@@ -94,7 +94,6 @@ struct ControllerRemapView: View {
                 }
             }
         }
-        .readableWidth()
         .navigationTitle("Buttons")
         .navigationBarTitleDisplayMode(.inline)
         .task { controllers.start() }
