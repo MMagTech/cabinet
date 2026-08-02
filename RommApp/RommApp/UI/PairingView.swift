@@ -7,6 +7,10 @@ import SwiftUI
 /// where the person is already signed in, which is the whole point of the
 /// device authorization flow: this app never sees the password, and the token
 /// it ends up holding can be revoked from the server without changing it.
+///
+/// A tall stack with a 42 point code in it does not survive a landscape
+/// phone, so the code sits beside the instructions there rather than above
+/// them, and the whole thing scrolls if it still does not fit.
 struct PairingView: View {
     @EnvironmentObject private var session: Session
     @Environment(\.openURL) private var openURL
@@ -17,29 +21,77 @@ struct PairingView: View {
     @State private var pollTask: Task<Void, Never>?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            Spacer()
+        GeometryReader { geometry in
+            let landscape = geometry.size.width > geometry.size.height
+            ScrollView {
+                if landscape {
+                    HStack(alignment: .top, spacing: 28) {
+                        codePanel
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        instructions(landscape: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(24)
+                } else {
+                    VStack(alignment: .leading, spacing: 22) {
+                        heading
+                        codePanel
+                        instructions(landscape: false)
+                    }
+                    .frame(maxWidth: 520)
+                    .frame(maxWidth: .infinity)
+                    .padding(24)
+                }
+            }
+        }
+        .onAppear { begin() }
+        .onDisappear { pollTask?.cancel() }
+    }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Approve this device")
-                    .font(.largeTitle.bold())
-                if let host = session.serverURL?.host {
-                    Text(host)
-                        .font(.callout)
+    // MARK: Pieces
+
+    private var heading: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Approve this device")
+                .font(.largeTitle.bold())
+            if let host = session.serverURL?.host {
+                Text(host)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var codePanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let start {
+                Text("Your code")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(start.userCode)
+                    .font(.system(size: 44, weight: .bold, design: .monospaced))
+                    .minimumScaleFactor(0.6)
+                    .lineLimit(1)
+                    .textSelection(.enabled)
+            } else if error == nil {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Asking the server for a code")
                         .foregroundStyle(.secondary)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func instructions(landscape: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // In landscape the heading moves in here, beside the code, so the
+            // two columns balance instead of one carrying everything.
+            if landscape { heading }
 
             if let start {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Your code")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Text(start.userCode)
-                        .font(.system(size: 42, weight: .bold, design: .monospaced))
-                        .textSelection(.enabled)
-                }
-
                 Button {
                     if let url = session.approvalURL(for: start) { openURL(url) }
                 } label: {
@@ -59,15 +111,9 @@ struct PairingView: View {
                     .font(.callout)
                 }
 
-                Text("Sign in to RomM in the browser if you are not already, then approve the code above. This screen continues on its own.")
+                Text("Sign in to RomM in the browser if you are not already, then approve the code. This screen continues on its own.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-            } else if error == nil {
-                HStack(spacing: 8) {
-                    ProgressView()
-                    Text("Asking the server for a code")
-                        .foregroundStyle(.secondary)
-                }
             }
 
             if let error {
@@ -78,18 +124,13 @@ struct PairingView: View {
                     .buttonStyle(.bordered)
             }
 
-            Spacer()
-
             Button("Use a different server") { session.forgetServer() }
                 .font(.footnote)
-                .frame(maxWidth: .infinity)
+                .padding(.top, 4)
         }
-        .frame(maxWidth: 520)
-        .frame(maxWidth: .infinity)
-        .padding(24)
-        .onAppear { begin() }
-        .onDisappear { pollTask?.cancel() }
     }
+
+    // MARK: Flow
 
     private func begin() {
         pollTask?.cancel()
