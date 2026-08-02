@@ -353,6 +353,22 @@ struct PlayerWebView: UIViewRepresentable {
           window.addEventListener("gamepadconnected", (e) => e.stopImmediatePropagation(), true);
           window.addEventListener("gamepaddisconnected", (e) => e.stopImmediatePropagation(), true);
 
+          // Ask EmulatorJS for the multi threaded build of the core.
+          //
+          // RomM only requests threads for dosbox_pure, ppsspp and azahar, so
+          // arcade cores run single threaded even where a threaded build
+          // exists on the server, and the heaviest boards, Cave's CV1000
+          // among them, have no headroom to spare. EmulatorJS only honours
+          // this when the page is cross origin isolated, which needs COOP and
+          // COEP headers from the server, and falls back to the single
+          // threaded core when it is not, so setting it unconditionally is
+          // safe: with no isolation nothing changes.
+          try {
+            if (typeof SharedArrayBuffer === "function" && window.crossOriginIsolated) {
+              window.EJS_threads = true;
+            }
+          } catch (e) {}
+
           // RomM's app shell wraps every route, the player included, in its
           // site navigation: a fixed header with the logo and account chip,
           // and a bottom nav on small screens (v2 AppLayout.vue). On the
