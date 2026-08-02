@@ -29,11 +29,6 @@ struct SettingsView: View {
                     }
                 }
                 NavigationLink {
-                    ControllerTestView()
-                } label: {
-                    Label("Test controller", systemImage: "checklist")
-                }
-                NavigationLink {
                     ControllerRemapView()
                 } label: {
                     Label("Change buttons", systemImage: "arrow.triangle.swap")
@@ -70,10 +65,6 @@ struct SettingsView: View {
             }
 
             Section {
-                LabeledContent("Threading") {
-                    Text(EmulationInfo.isThreaded ? "On" : "Off")
-                        .foregroundStyle(EmulationInfo.isThreaded ? .green : .secondary)
-                }
                 Text(EmulationInfo.summary)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -83,7 +74,7 @@ struct SettingsView: View {
             } header: {
                 Text("Emulation")
             } footer: {
-                Text("Recorded from the last game you played. Multiple cores need the server to send cross origin isolation headers.")
+                Text("Recorded from the last game you played.")
             }
 
             Section {

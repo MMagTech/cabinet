@@ -163,7 +163,7 @@ struct PlayerView: View {
             OrientationLock.unlock()
             UIApplication.shared.isIdleTimerDisabled = false
             // Detach this screen's callbacks without stopping the shared
-            // manager, which Settings and the test screens also use.
+            // manager, which Settings and the remap screen also use.
             controllers.send = nil
             controllers.onMenu = nil
             controllers.onDisconnect = nil
