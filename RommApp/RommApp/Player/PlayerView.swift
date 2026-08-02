@@ -87,6 +87,11 @@ struct PlayerView: View {
                     TouchControlPad(items: layout.items(landscape: true)) { id, down in
                         input.send(id: id, down: down)
                     }
+                    // A bridged UIKit view has no intrinsic size, so without
+                    // this it collapsed to nothing and the landscape controls
+                    // never appeared at all. Portrait was fine only because
+                    // its strip is given an explicit height.
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .opacity(controlOpacity)
                 } else {
                     VStack {
