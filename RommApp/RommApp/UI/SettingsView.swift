@@ -81,6 +81,11 @@ struct SettingsView: View {
                 if EmulationInfo.recoveries > 0 {
                     LabeledContent("Player reloads survived", value: "\(EmulationInfo.recoveries)")
                 }
+                if let vitals = EmulationInfo.vitalsAtDeath {
+                    Text("Last reload happened at: \(vitals)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             } header: {
                 Text("Emulation")
             } footer: {

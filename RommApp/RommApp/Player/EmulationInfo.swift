@@ -23,6 +23,28 @@ enum EmulationInfo {
         UserDefaults.standard.set(recoveries + 1, forKey: recoveriesKey)
     }
 
+    private static let vitalsKey = "com.mmagtech.RommApp.vitals"
+    private static let vitalsAtDeathKey = "com.mmagtech.RommApp.vitalsAtDeath"
+
+    /// The emulator's memory picture at the last autosave. Overwritten
+    /// constantly while a game runs; interesting only in hindsight.
+    static func recordVitals(_ line: String) {
+        UserDefaults.standard.set(line, forKey: vitalsKey)
+    }
+
+    /// Freezes the last reading when the web process dies, so the numbers
+    /// leading up to a kill survive it. The kill itself reports nothing:
+    /// iOS gives no reason, so the only evidence is what was true a moment
+    /// before.
+    static func freezeVitalsAtDeath() {
+        guard let line = UserDefaults.standard.string(forKey: vitalsKey) else { return }
+        UserDefaults.standard.set(line, forKey: vitalsAtDeathKey)
+    }
+
+    static var vitalsAtDeath: String? {
+        UserDefaults.standard.string(forKey: vitalsAtDeathKey)
+    }
+
     /// The raw line the player recorded, for example
     /// "core fbneo-thread-wasm.data isolated=true sab=true".
     static var raw: String? {

@@ -449,6 +449,10 @@ struct PlayerWebView: UIViewRepresentable {
             // The outcome of the last menu save, kept because a phone in a
             // hand has no console: when someone says saving did nothing,
             // this answers with the status code it got.
+            case "vitals":
+                if let line = message.body as? String {
+                    EmulationInfo.recordVitals(line)
+                }
             case "saveResult":
                 UserDefaults.standard.set(
                     "\(String(describing: message.body)) rom \(parent.rom.id)",
@@ -475,6 +479,7 @@ struct PlayerWebView: UIViewRepresentable {
         /// boot. The kill itself cannot be prevented from inside the app.
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
             EmulationInfo.recordRecovery()
+            EmulationInfo.freezeVitalsAtDeath()
             parent.gameStarted = false
             recoveryAttempts += 1
             guard recoveryAttempts <= 3 else {
@@ -568,6 +573,7 @@ struct PlayerWebView: UIViewRepresentable {
         config.userContentController.add(context.coordinator, name: "autosave")
         config.userContentController.add(context.coordinator, name: "frame")
         config.userContentController.add(context.coordinator, name: "saveResult")
+        config.userContentController.add(context.coordinator, name: "vitals")
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
@@ -679,6 +685,7 @@ struct PlayerWebView: UIViewRepresentable {
         """
         (function () {
           const KEY = "cabinet.autosave.\(romId)";
+          const START = Date.now();
 
           // Autosave has to stay cheap or it becomes the thing it protects
           // against. The webview's content process runs under a much
@@ -721,6 +728,18 @@ struct PlayerWebView: UIViewRepresentable {
               // least headroom left. Back off in proportion.
               const mb = data.length / 1048576;
               schedule(mb > 32 ? 180000 : mb > 8 ? 90000 : 30000);
+
+              // Vitals, so that when the process dies there is evidence
+              // rather than another theory. A phone in a hand has no
+              // console, and iOS reports nothing about why it took a
+              // content process, so the only record is what was true a
+              // moment before.
+              try {
+                window.webkit.messageHandlers.vitals.postMessage(
+                  "state " + mb.toFixed(1) + "MB"
+                    + ", " + Math.round((Date.now() - START) / 1000) + "s in"
+                );
+              } catch (x) {}
             } catch (x) {}
           }
 
