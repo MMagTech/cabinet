@@ -23,6 +23,7 @@ struct PlayerView: View {
     @State private var failed = false
     @State private var overlayVisible = true
     @State private var gameStarted = false
+    @State private var recovering = false
     @StateObject private var input = PlayerInputBridge()
     @ObservedObject private var controllers = GameControllerManager.shared
     /// The scope doc's bet: the opacity slider matters more than any theme.
@@ -63,6 +64,7 @@ struct PlayerView: View {
                     pad: padConfiguration(isLandscape: isLandscape),
                     overlayVisible: $overlayVisible,
                     gameStarted: $gameStarted,
+                    recovering: $recovering,
                     input: input
                 )
             } else if failed {
@@ -73,6 +75,28 @@ struct PlayerView: View {
                         .buttonStyle(.bordered)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+
+            // The curtain for a killed web process. Recovery works, but
+            // watching it work reads as the app crashing: RomM's page
+            // visibly reloads, loading bars included, before the restored
+            // game snaps in. Covering that with a calm native screen turns
+            // the same seconds into a handled hiccup. Opaque and above
+            // everything, including the touch pad, which is useless until
+            // the game is back anyway.
+            if recovering {
+                ZStack {
+                    Color.black.ignoresSafeArea()
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .controlSize(.large)
+                            .tint(.white)
+                        Text("Getting you back in the game")
+                            .font(.callout)
+                            .foregroundStyle(.white.opacity(0.8))
+                    }
+                }
+                .transition(.opacity)
             }
 
             // Fades in step with EmulatorJS's menu toggle so nothing sits
@@ -93,6 +117,7 @@ struct PlayerView: View {
             .allowsHitTesting(overlayVisible)
             .animation(.easeInOut(duration: 0.35), value: overlayVisible)
         }
+        .animation(.easeInOut(duration: 0.3), value: recovering)
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
         .defersSystemGestures(on: .all)
@@ -108,6 +133,10 @@ struct PlayerView: View {
             if phase != .active, gameStarted { input.autosaveNow() }
         }
         .task {
+            // A game is played in the orientation it was started in. See
+            // OrientationLock for why honouring rotation mid game was
+            // worse than refusing it.
+            OrientationLock.lockToCurrent()
             configureAudioSession()
             UIApplication.shared.isIdleTimerDisabled = true
 
@@ -131,6 +160,7 @@ struct PlayerView: View {
             }
         }
         .onDisappear {
+            OrientationLock.unlock()
             UIApplication.shared.isIdleTimerDisabled = false
             // Detach this screen's callbacks without stopping the shared
             // manager, which Settings and the test screens also use.
@@ -249,6 +279,7 @@ struct PlayerWebView: UIViewRepresentable {
     let pad: PadConfiguration
     @Binding var overlayVisible: Bool
     @Binding var gameStarted: Bool
+    @Binding var recovering: Bool
     let input: PlayerInputBridge
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -302,11 +333,23 @@ struct PlayerWebView: UIViewRepresentable {
             EmulationInfo.recordRecovery()
             parent.gameStarted = false
             recoveryAttempts += 1
-            guard recoveryAttempts <= 3 else { return }
+            guard recoveryAttempts <= 3 else {
+                parent.recovering = false
+                return
+            }
             pendingRecovery = true
+            parent.recovering = true
             var request = URLRequest(url: parent.url)
             request.setValue("Bearer \(parent.token)", forHTTPHeaderField: "Authorization")
             webView.load(request)
+
+            // If the game is not back inside a minute, something beyond a
+            // process kill is wrong, and a stuck curtain would hide both
+            // the page's own error and the way out. Lifting it is safe at
+            // any time; it only covers, it never controls.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 60) { [weak self] in
+                self?.parent.recovering = false
+            }
         }
 
         /// A short settle delay before loading the state: the core has only
@@ -315,10 +358,17 @@ struct PlayerWebView: UIViewRepresentable {
         private func resumeAfterRecovery(in webView: WKWebView?) {
             guard pendingRecovery else { return }
             pendingRecovery = false
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
                 webView?.evaluateJavaScript(
                     "window.__cabinetRecover && __cabinetRecover();"
-                )
+                ) { _, _ in
+                    // The state lands within a frame or two of the call;
+                    // the extra beat lets the restored picture render
+                    // before the curtain fades from over it.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        self?.parent.recovering = false
+                    }
+                }
             }
         }
     }
