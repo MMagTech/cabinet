@@ -98,6 +98,9 @@ struct GameLaunchView: View {
 
     private var playButton: some View {
         Button {
+            // Remember the choice, so the next launch of this game, and the
+            // next game on this platform, starts where this one left off.
+            LaunchChoices.remember(core: selectedCore, for: rom)
             playing = true
         } label: {
             Label(selectedState != nil || selectedSave != nil ? "Resume" : "Play",
@@ -224,7 +227,7 @@ struct GameLaunchView: View {
 
     private func load() async {
         cores = CoreCatalog.cores(for: rom.platformSlug)
-        selectedCore = LaunchChoices.storedCore(rom: rom) ?? cores.first
+        selectedCore = LaunchChoices.defaultCore(rom: rom, from: cores)
 
         async let firmwareTask = try? session.firmware(platformId: rom.platformId)
         async let savesTask = try? session.saves(romId: rom.id)

@@ -289,7 +289,7 @@ struct PlayerWebView: UIViewRepresentable {
             )
             config.userContentController.addUserScript(
                 WKUserScript(
-                    source: Self.autoStartInjection,
+                    source: Self.autoStartInjection(expecting: launch.core),
                     injectionTime: .atDocumentEnd,
                     forMainFrameOnly: true
                 )
@@ -324,21 +324,54 @@ struct PlayerWebView: UIViewRepresentable {
         webView.scrollView.isScrollEnabled = !gameStarted
     }
 
-    /// Presses RomM's own Play button once its page is ready, but only when
-    /// the seeded values verifiably took. If they did not, its configuration
-    /// screen is left visible so nothing launches on the wrong emulator.
-    static let autoStartInjection = """
-    (function () {
-      if (!window.__rommLaunchSeeded) return;
-      var tries = 0;
-      var timer = setInterval(function () {
-        tries++;
-        var play = document.querySelector(".r-v2-ejs__play");
-        if (play) { clearInterval(timer); play.click(); return; }
-        if (tries > 60) clearInterval(timer);
-      }, 100);
-    })();
-    """
+    /// Presses RomM's own Play button, but only once its page has visibly
+    /// applied the core that was seeded.
+    ///
+    /// Waiting for the Play button alone is not enough: it renders before
+    /// RomM finishes loading the game asynchronously, so clicking then
+    /// launched on whatever core was default, which for arcade is a 2003
+    /// MAME that cannot start most games. The core name appearing in its own
+    /// picker is proof the configuration was read. Failing to find it leaves
+    /// the page visible rather than guessing, which is the intended
+    /// degradation.
+    static func autoStartInjection(expecting core: String?) -> String {
+        let expected: String
+        if let core, let data = try? JSONEncoder().encode(core),
+           let literal = String(data: data, encoding: .utf8) {
+            expected = literal
+        } else {
+            expected = "null"
+        }
+
+        return """
+        (function () {
+          if (!window.__rommLaunchSeeded) return;
+          var want = \(expected);
+          var tries = 0;
+          var timer = setInterval(function () {
+            tries++;
+            var play = document.querySelector(".r-v2-ejs__play");
+            if (!play) { if (tries > 100) clearInterval(timer); return; }
+
+            // No core to verify means nothing to get wrong, so a settle
+            // delay is enough.
+            if (!want) {
+              if (tries > 8) { clearInterval(timer); play.click(); }
+              return;
+            }
+
+            // Looking for specific component class names was too brittle:
+            // RomM's v2 UI wraps its selects in its own components, so the
+            // markup is not Vuetify's. The core id appearing anywhere in the
+            // rendered page is a looser but far more durable signal that the
+            // configuration was read and applied.
+            var text = (document.body && document.body.innerText) || "";
+            if (text.indexOf(want) !== -1) { clearInterval(timer); play.click(); return; }
+            if (tries > 100) clearInterval(timer);
+          }, 100);
+        })();
+        """
+    }
 
     static func authInjection(token: String) -> String {
         """

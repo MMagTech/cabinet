@@ -25,11 +25,23 @@ struct LaunchChoices {
         core: nil, firmwareId: nil, saveId: nil, stateId: nil, useRommScreen: true
     )
 
-    /// The core someone last used for this game, then for this platform,
-    /// reading the same keys RomM writes so the two stay in agreement.
-    static func storedCore(rom: Rom) -> String? {
-        UserDefaults.standard.string(forKey: "romm.core.rom.\(rom.id)")
-            ?? UserDefaults.standard.string(forKey: "romm.core.platform.\(rom.platformSlug)")
+    /// The core to start on: what was used last, otherwise one that stands a
+    /// chance of running the game.
+    ///
+    /// Never simply the first in the list. RomM lists mame2003 first for
+    /// arcade, an emulator frozen at MAME 0.78 in 2003 that cannot start most
+    /// of a modern collection, so defaulting to it meant confidently
+    /// launching the one core this screen itself warns about.
+    static func defaultCore(rom: Rom, from available: [String]) -> String? {
+        if let remembered = UserDefaults.standard.string(forKey: "romm.core.rom.\(rom.id)"),
+           available.contains(remembered) { return remembered }
+        if let remembered = UserDefaults.standard.string(forKey: "romm.core.platform.\(rom.platformSlug)"),
+           available.contains(remembered) { return remembered }
+
+        // FinalBurn Neo covers Neo Geo, CPS and most arcade boards, and is
+        // why hand picking it fixed every arcade game tonight.
+        if available.contains("fbneo") { return "fbneo" }
+        return available.first { CoreCatalog.note($0) == nil } ?? available.first
     }
 
     static func remember(core: String?, for rom: Rom) {
