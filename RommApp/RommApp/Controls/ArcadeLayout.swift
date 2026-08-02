@@ -74,8 +74,12 @@ enum ArcadeLayout {
             fourWay: nil
         ))
 
+        // The button count rides in the system name because that is what
+        // decides the colours: a game overridden to six buttons needs the
+        // fighter palette even though its profile still says whatever the
+        // cabinet data called it.
         return ControlLayout(
-            system: "arcade:\(profile.profile)",
+            system: "arcade:\(profile.profile):\(max(0, min(profile.buttons, 6)))",
             items: items,
             landscapeItems: landscapeItems(for: profile)
         )

@@ -37,6 +37,14 @@ final class ControlPadView: UIView {
     var items: [ControlLayout.Item] {
         didSet { setNeedsDisplay() }
     }
+    /// The layout's system, which decides what colours the controls take:
+    /// a Neo Geo panel and a Game Boy do not look alike.
+    var system: String = "" {
+        didSet { if system != oldValue { setNeedsDisplay() } }
+    }
+    var theme: ControlTheme = .system {
+        didSet { if theme != oldValue { setNeedsDisplay() } }
+    }
 
     private let send: (Int, Bool) -> Void
     private let haptic = UIImpactFeedbackGenerator(style: .light)
@@ -164,22 +172,49 @@ final class ControlPadView: UIView {
     override func draw(_ rect: CGRect) {
         for item in items {
             let frame = item.frame.resolved(in: bounds.size)
+            let tint = theme.tint(system: system, input: item.input)
             switch item.kind {
             case .dpad:
                 drawDpad(in: frame, inputs: item.inputs ?? [])
             case .button:
-                drawRoundButton(in: frame, label: item.label, active: item.input.map(pressed.contains) ?? false)
+                drawRoundButton(
+                    in: frame, label: item.label, tint: tint,
+                    active: item.input.map(pressed.contains) ?? false
+                )
             case .pill:
-                drawPill(in: frame, label: item.label, active: item.input.map(pressed.contains) ?? false)
+                drawPill(
+                    in: frame, label: item.label, tint: tint,
+                    active: item.input.map(pressed.contains) ?? false
+                )
             }
         }
     }
 
+    /// Labels sit on colour rather than on the game, so they need to be
+    /// solid: the translucent white that reads well over dark art disappears
+    /// against a yellow button.
+    private func labelColor(tint: UIColor?) -> UIColor {
+        tint == nil ? UIColor.white.withAlphaComponent(0.75) : UIColor.white
+    }
+
     /// Every control gets a contrasting outline regardless of theme, or it
-    /// vanishes over bright or dark game content.
-    private func style(active: Bool) -> (fill: UIColor, stroke: UIColor) {
-        (
-            fill: UIColor.white.withAlphaComponent(active ? 0.45 : 0.14),
+    /// vanishes over bright or dark game content. A tinted control keeps the
+    /// white outline for exactly that reason and carries its colour in the
+    /// fill, which is what a glance reads anyway.
+    private func style(active: Bool, tint: UIColor? = nil) -> (fill: UIColor, stroke: UIColor) {
+        guard let tint else {
+            return (
+                fill: UIColor.white.withAlphaComponent(active ? 0.45 : 0.14),
+                stroke: UIColor.white.withAlphaComponent(0.55)
+            )
+        }
+        // Colour needs far more presence than white to survive: the whole
+        // pad carries the visibility slider's alpha on top of this, so a
+        // third of a colour under a further 70 percent reads as mud rather
+        // than as red. Nearly solid when held, so a press is unmistakable in
+        // peripheral vision.
+        return (
+            fill: tint.withAlphaComponent(active ? 0.95 : 0.62),
             stroke: UIColor.white.withAlphaComponent(0.55)
         )
     }
@@ -230,7 +265,7 @@ final class ControlPadView: UIView {
         }
     }
 
-    private func drawRoundButton(in frame: CGRect, label: String?, active: Bool) {
+    private func drawRoundButton(in frame: CGRect, label: String?, tint: UIColor?, active: Bool) {
         let diameter = min(frame.width, frame.height)
         let circleRect = CGRect(
             x: frame.midX - diameter / 2,
@@ -239,33 +274,35 @@ final class ControlPadView: UIView {
             height: diameter
         )
         let circle = UIBezierPath(ovalIn: circleRect)
-        let colors = style(active: active)
+        let colors = style(active: active, tint: tint)
         colors.fill.setFill()
         circle.fill()
         colors.stroke.setStroke()
         circle.lineWidth = 1.5
         circle.stroke()
 
-        drawLabel(label, in: circleRect, fontSize: diameter * 0.34)
+        drawLabel(label, in: circleRect, fontSize: diameter * 0.34, color: labelColor(tint: tint))
     }
 
-    private func drawPill(in frame: CGRect, label: String?, active: Bool) {
+    private func drawPill(in frame: CGRect, label: String?, tint: UIColor?, active: Bool) {
         let pill = UIBezierPath(roundedRect: frame, cornerRadius: frame.height / 2)
-        let colors = style(active: active)
+        let colors = style(active: active, tint: tint)
         colors.fill.setFill()
         pill.fill()
         colors.stroke.setStroke()
         pill.lineWidth = 1.5
         pill.stroke()
 
-        drawLabel(label, in: frame, fontSize: frame.height * 0.42)
+        drawLabel(label, in: frame, fontSize: frame.height * 0.42, color: labelColor(tint: tint))
     }
 
-    private func drawLabel(_ label: String?, in rect: CGRect, fontSize: CGFloat) {
+    private func drawLabel(
+        _ label: String?, in rect: CGRect, fontSize: CGFloat, color: UIColor
+    ) {
         guard let label else { return }
         let attributes: [NSAttributedString.Key: Any] = [
             .font: UIFont.systemFont(ofSize: fontSize, weight: .semibold),
-            .foregroundColor: UIColor.white.withAlphaComponent(0.75),
+            .foregroundColor: color,
         ]
         let size = label.size(withAttributes: attributes)
         label.draw(

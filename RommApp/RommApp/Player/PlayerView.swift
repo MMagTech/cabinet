@@ -72,6 +72,7 @@ struct PlayerView: View {
                     rom: rom,
                     pad: padConfiguration(isLandscape: isLandscape),
                     resumeFromAutosave: resumeFromAutosave,
+                    padSystem: controlLayout?.system ?? "",
                     overlayVisible: $overlayVisible,
                     gameStarted: $gameStarted,
                     recovering: $recovering,
@@ -391,6 +392,8 @@ struct PlayerWebView: UIViewRepresentable {
     let rom: Rom
     let pad: PadConfiguration
     var resumeFromAutosave: Bool = false
+    /// The layout's system name, which decides the control colours.
+    var padSystem: String = ""
     @Binding var overlayVisible: Bool
     @Binding var gameStarted: Bool
     @Binding var recovering: Bool
@@ -598,6 +601,8 @@ struct PlayerWebView: UIViewRepresentable {
 
     func updateUIView(_ container: PlayerContainerView, context: Context) {
         container.webView.scrollView.isScrollEnabled = !gameStarted
+        container.pad.system = padSystem
+        container.pad.theme = ControlTheme.current
         container.apply(pad)
     }
 

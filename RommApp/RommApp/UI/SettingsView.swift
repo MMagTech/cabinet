@@ -10,6 +10,7 @@ struct SettingsView: View {
     @State private var confirmingUnpair = false
     @State private var confirmingForget = false
     @AppStorage("com.mmagtech.RommApp.controlOpacity") private var controlOpacity = 0.7
+    @AppStorage(ControlTheme.key) private var controlTheme = ControlTheme.system.rawValue
     @AppStorage("com.mmagtech.RommApp.useRommPlayerScreen") private var useRommScreen = false
     @ObservedObject private var controllers = GameControllerManager.shared
 
@@ -40,6 +41,15 @@ struct SettingsView: View {
             }
 
             Section {
+                Picker("Button colours", selection: $controlTheme) {
+                    ForEach(ControlTheme.allCases, id: \.self) { theme in
+                        Text(theme.label).tag(theme.rawValue)
+                    }
+                }
+                Text(ControlTheme(rawValue: controlTheme)?.detail ?? "")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text("Touch control visibility")
