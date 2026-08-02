@@ -15,6 +15,10 @@ struct PlayerView: View {
     /// What the native launch screen chose. Defaults to standing aside, so
     /// any caller that does not care keeps the old behaviour exactly.
     var launch: LaunchChoices = .none
+    /// True when the launch screen offered to continue an interrupted
+    /// session and the person took it: once the game starts, the local
+    /// autosave is loaded over it, the same path crash recovery uses.
+    var resumeFromAutosave: Bool = false
 
     @EnvironmentObject private var session: Session
     @Environment(\.dismiss) private var dismiss
@@ -62,6 +66,7 @@ struct PlayerView: View {
                     launch: launch,
                     rom: rom,
                     pad: padConfiguration(isLandscape: isLandscape),
+                    resumeFromAutosave: resumeFromAutosave,
                     overlayVisible: $overlayVisible,
                     gameStarted: $gameStarted,
                     recovering: $recovering,
@@ -160,6 +165,9 @@ struct PlayerView: View {
             }
         }
         .onDisappear {
+            // The one deliberate way out. An evicted app never runs this,
+            // which is exactly how the next launch can tell the difference.
+            SessionMarker.recordCleanExit()
             OrientationLock.unlock()
             UIApplication.shared.isIdleTimerDisabled = false
             // Detach this screen's callbacks without stopping the shared
@@ -277,6 +285,7 @@ struct PlayerWebView: UIViewRepresentable {
     let launch: LaunchChoices
     let rom: Rom
     let pad: PadConfiguration
+    var resumeFromAutosave: Bool = false
     @Binding var overlayVisible: Bool
     @Binding var gameStarted: Bool
     @Binding var recovering: Bool
@@ -286,15 +295,25 @@ struct PlayerWebView: UIViewRepresentable {
 
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         private let parent: PlayerWebView
-        /// Set while a reload is recovering from a dead content process, so
-        /// the next game start pulls the autosave back in. Never set by a
-        /// normal launch, which must respect the launch screen's choices.
-        private var pendingRecovery = false
+        /// Set while a game start should pull the autosave back in: either a
+        /// reload recovering from a dead content process, or a launch the
+        /// person explicitly asked to continue. Never set by a plain launch,
+        /// which must respect the launch screen's choices.
+        private var pendingRecovery: Bool
+        /// How old an autosave the restore may use. Crash recovery keeps it
+        /// tight, because there the person chose nothing and a wrong restore
+        /// is a surprise. An accepted continue offer widens it to the same
+        /// half day the offer itself allows.
+        private var recoveryWindowMs = 300_000
         /// Recoveries attempted this session. If reloading itself keeps
         /// killing the process, stopping is kinder than a reload loop.
         private var recoveryAttempts = 0
 
-        init(_ parent: PlayerWebView) { self.parent = parent }
+        init(_ parent: PlayerWebView) {
+            self.parent = parent
+            pendingRecovery = parent.resumeFromAutosave
+            if parent.resumeFromAutosave { recoveryWindowMs = 43_200_000 }
+        }
 
         func userContentController(
             _ controller: WKUserContentController,
@@ -308,8 +327,11 @@ struct PlayerWebView: UIViewRepresentable {
             case "gameState":
                 if message.body as? String == "started" {
                     parent.gameStarted = true
+                    SessionMarker.recordGameRunning(romId: parent.rom.id)
                     resumeAfterRecovery(in: message.webView)
                 }
+            case "autosave":
+                SessionMarker.recordAutosave(romId: parent.rom.id)
             case "diag":
                 // Recorded rather than logged, because a console cannot be
                 // attached to a phone someone is actually holding and using.
@@ -338,6 +360,7 @@ struct PlayerWebView: UIViewRepresentable {
                 return
             }
             pendingRecovery = true
+            recoveryWindowMs = 300_000
             parent.recovering = true
             var request = URLRequest(url: parent.url)
             request.setValue("Bearer \(parent.token)", forHTTPHeaderField: "Authorization")
@@ -358,9 +381,10 @@ struct PlayerWebView: UIViewRepresentable {
         private func resumeAfterRecovery(in webView: WKWebView?) {
             guard pendingRecovery else { return }
             pendingRecovery = false
+            let window = recoveryWindowMs
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
                 webView?.evaluateJavaScript(
-                    "window.__cabinetRecover && __cabinetRecover();"
+                    "window.__cabinetRecover && __cabinetRecover(\(window));"
                 ) { _, _ in
                     // The state lands within a frame or two of the call;
                     // the extra beat lets the restored picture render
@@ -419,6 +443,7 @@ struct PlayerWebView: UIViewRepresentable {
         config.userContentController.add(context.coordinator, name: "overlay")
         config.userContentController.add(context.coordinator, name: "gameState")
         config.userContentController.add(context.coordinator, name: "diag")
+        config.userContentController.add(context.coordinator, name: "autosave")
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
@@ -532,21 +557,26 @@ struct PlayerWebView: UIViewRepresentable {
               const data = e.gameManager.getState();
               if (data && data.length) {
                 e.storage.states.put(KEY, { t: Date.now(), data: data });
+                // Mirrored to native so the launch screen can decide
+                // whether an autosave is worth offering before any
+                // webview exists to ask.
+                try { window.webkit.messageHandlers.autosave.postMessage(true); }
+                catch (x) {}
               }
             } catch (x) {}
           };
           setInterval(save, 30000);
           window.__cabinetAutosaveNow = save;
 
-          window.__cabinetRecover = function () {
+          window.__cabinetRecover = function (maxAgeMs) {
             try {
               const e = window.EJS_emulator;
               if (!e || !e.storage || !e.storage.states) return;
               e.storage.states.get(KEY).then(function (rec) {
                 if (!rec || !rec.data || !rec.t) return;
-                if (Date.now() - rec.t > 300000) return;
+                if (Date.now() - rec.t > (maxAgeMs || 300000)) return;
                 e.gameManager.loadState(new Uint8Array(rec.data));
-                e.displayMessage("RESTORED AFTER A RELOAD");
+                e.displayMessage("PICKING UP WHERE YOU LEFT OFF");
               }).catch(function () {});
             } catch (x) {}
           };

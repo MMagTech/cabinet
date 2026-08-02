@@ -29,6 +29,11 @@ struct GameLaunchView: View {
     @State private var selectedState: GameState?
     @State private var loading = true
     @State private var playing = false
+    /// Set when the last session of this game died without a clean exit and
+    /// a fresh local autosave exists: iOS took the game, so getting back to
+    /// that exact moment is offered, preselected, and declinable.
+    @State private var interruptedAt: Date?
+    @State private var continueRun = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -67,6 +72,7 @@ struct GameLaunchView: View {
 
                             playButton
 
+                            if interruptedAt != nil { continueCard }
                             if !states.isEmpty || !saves.isEmpty { resumeCard }
                         }
                         .frame(maxWidth: .infinity, alignment: .top)
@@ -92,7 +98,7 @@ struct GameLaunchView: View {
         }
         .task { await load() }
         .fullScreenCover(isPresented: $playing) {
-            PlayerView(rom: rom, launch: launchChoices)
+            PlayerView(rom: rom, launch: launchChoices, resumeFromAutosave: continueRun)
         }
     }
 
@@ -125,8 +131,7 @@ struct GameLaunchView: View {
             LaunchChoices.remember(core: selectedCore, for: rom)
             playing = true
         } label: {
-            Label(selectedState != nil || selectedSave != nil ? "Resume" : "Play",
-                  systemImage: "play.fill")
+            Label(playLabel, systemImage: "play.fill")
                 .font(.headline)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 15)
@@ -134,6 +139,38 @@ struct GameLaunchView: View {
         .buttonStyle(.borderedProminent)
         .disabled(loading)
     }
+
+    private var playLabel: String {
+        if continueRun { return "Continue" }
+        return selectedState != nil || selectedSave != nil ? "Resume" : "Play"
+    }
+
+    /// The offer to pick an interrupted run back up. A card like the others,
+    /// preselected because iOS ending the game is the one case where "right
+    /// where I was" is almost always the answer, and declinable because
+    /// almost is not always.
+    private var continueCard: some View {
+        LaunchCard(title: "Interrupted game", systemImage: "arrow.uturn.backward.circle") {
+            choiceRow(
+                label: "Continue where you left off",
+                detail: interruptedAt.map {
+                    "the game was closed by iOS " + Self.ago.localizedString(
+                        for: $0, relativeTo: Date()
+                    )
+                } ?? "the game was closed by iOS",
+                selected: continueRun,
+                enabled: true
+            ) {
+                continueRun.toggle()
+                if continueRun {
+                    selectedState = nil
+                    selectedSave = nil
+                }
+            }
+        }
+    }
+
+    private static let ago = RelativeDateTimeFormatter()
 
     /// Landscape only: cards flow into as many columns as the width allows,
     /// so two or three of them do not become a scrolling column.
@@ -154,6 +191,7 @@ struct GameLaunchView: View {
                 alignment: .leading,
                 spacing: 12
             ) {
+                if interruptedAt != nil { continueCard }
                 if cores.count > 1 { coreCard }
                 if !firmware.isEmpty { firmwareCard }
                 if !states.isEmpty || !saves.isEmpty { resumeCard }
@@ -171,6 +209,7 @@ struct GameLaunchView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             VStack(spacing: 14) {
+                if interruptedAt != nil { continueCard }
                 if cores.count > 1 { coreCard }
                 if !firmware.isEmpty { firmwareCard }
                 if !states.isEmpty || !saves.isEmpty { resumeCard }
@@ -219,6 +258,7 @@ struct GameLaunchView: View {
                 ) {
                     selectedState = selectedState?.id == state.id ? nil : state
                     selectedSave = nil
+                    if selectedState != nil { continueRun = false }
                 }
             }
             ForEach(saves) { save in
@@ -230,6 +270,7 @@ struct GameLaunchView: View {
                 ) {
                     selectedSave = selectedSave?.id == save.id ? nil : save
                     selectedState = nil
+                    if selectedSave != nil { continueRun = false }
                 }
             }
         }
@@ -261,8 +302,11 @@ struct GameLaunchView: View {
         LaunchChoices(
             core: selectedCore,
             firmwareId: selectedFirmware?.id,
-            saveId: selectedSave?.id,
-            stateId: selectedState?.id,
+            // Continuing an interrupted run supersedes any server side
+            // choice: the autosave loads over whatever the page booted,
+            // so seeding a state as well would just boot into it twice.
+            saveId: continueRun ? nil : selectedSave?.id,
+            stateId: continueRun ? nil : selectedState?.id,
             useRommScreen: useRommScreen
         )
     }
@@ -270,6 +314,11 @@ struct GameLaunchView: View {
     private func load() async {
         cores = CoreCatalog.cores(for: rom.platformSlug)
         selectedCore = LaunchChoices.defaultCore(rom: rom, from: cores)
+
+        if SessionMarker.offersResume(romId: rom.id) {
+            interruptedAt = SessionMarker.autosaveDate(romId: rom.id)
+            continueRun = true
+        }
 
         async let firmwareTask = try? session.firmware(platformId: rom.platformId)
         async let savesTask = try? session.saves(romId: rom.id)
