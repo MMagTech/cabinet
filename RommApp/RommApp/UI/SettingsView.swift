@@ -77,6 +77,9 @@ struct SettingsView: View {
                 Text(EmulationInfo.summary)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if EmulationInfo.recoveries > 0 {
+                    LabeledContent("Player reloads survived", value: "\(EmulationInfo.recoveries)")
+                }
             } header: {
                 Text("Emulation")
             } footer: {

@@ -9,6 +9,19 @@ import Foundation
 /// quietly fall back to the single threaded one.
 enum EmulationInfo {
     static let key = "com.mmagtech.RommApp.lastCoreInfo"
+    static let recoveriesKey = "com.mmagtech.RommApp.playerRecoveries"
+
+    /// How many times iOS killed the player's web process and the app
+    /// recovered by reloading. Counted because the kill is invisible by
+    /// design: if it happens often, that is worth knowing about, and the
+    /// only place it can be observed is a phone in someone's hands.
+    static var recoveries: Int {
+        UserDefaults.standard.integer(forKey: recoveriesKey)
+    }
+
+    static func recordRecovery() {
+        UserDefaults.standard.set(recoveries + 1, forKey: recoveriesKey)
+    }
 
     /// The raw line the player recorded, for example
     /// "core fbneo-thread-wasm.data isolated=true sab=true".

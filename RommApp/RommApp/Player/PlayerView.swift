@@ -18,6 +18,7 @@ struct PlayerView: View {
 
     @EnvironmentObject private var session: Session
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @State private var context: (url: URL, token: String)?
     @State private var failed = false
     @State private var overlayVisible = true
@@ -95,6 +96,17 @@ struct PlayerView: View {
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
         .defersSystemGestures(on: .all)
+        // The two moments iOS is most likely to kill the webview's content
+        // process are a rotation, which spikes memory while WebKit relays
+        // everything out, and the app leaving the foreground. An autosave
+        // fired at each moment bounds what a kill can cost to seconds,
+        // instead of whatever the periodic save happened to capture.
+        .onChange(of: isLandscape) { _, _ in
+            if gameStarted { input.autosaveNow() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active, gameStarted { input.autosaveNow() }
+        }
         .task {
             configureAudioSession()
             UIApplication.shared.isIdleTimerDisabled = true
@@ -210,6 +222,14 @@ final class PlayerInputBridge: ObservableObject {
             "window.EJS_emulator && !EJS_emulator.paused && EJS_emulator.pause();"
         )
     }
+
+    /// Writes an autosave state right now, ahead of a moment that might kill
+    /// the webview's content process.
+    func autosaveNow() {
+        webView?.evaluateJavaScript(
+            "window.__cabinetAutosaveNow && __cabinetAutosaveNow();"
+        )
+    }
 }
 
 struct PlayerWebView: UIViewRepresentable {
@@ -233,8 +253,15 @@ struct PlayerWebView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
-    final class Coordinator: NSObject, WKScriptMessageHandler {
+    final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         private let parent: PlayerWebView
+        /// Set while a reload is recovering from a dead content process, so
+        /// the next game start pulls the autosave back in. Never set by a
+        /// normal launch, which must respect the launch screen's choices.
+        private var pendingRecovery = false
+        /// Recoveries attempted this session. If reloading itself keeps
+        /// killing the process, stopping is kinder than a reload loop.
+        private var recoveryAttempts = 0
 
         init(_ parent: PlayerWebView) { self.parent = parent }
 
@@ -250,6 +277,7 @@ struct PlayerWebView: UIViewRepresentable {
             case "gameState":
                 if message.body as? String == "started" {
                     parent.gameStarted = true
+                    resumeAfterRecovery(in: message.webView)
                 }
             case "diag":
                 // Recorded rather than logged, because a console cannot be
@@ -259,6 +287,38 @@ struct PlayerWebView: UIViewRepresentable {
                 }
             default:
                 break
+            }
+        }
+
+        /// iOS killed the webview's content process, which takes the running
+        /// emulator with it. Observed in the wild when a rotation's relayout
+        /// spikes memory past what the watchdog allows a CV1000 sized core.
+        /// The page is reloaded deliberately: the launch seed scripts run
+        /// again, RomM's play button gets pressed again, and once the game
+        /// reports started the autosave written before the kill is loaded,
+        /// so the player lands near where they were instead of at a cold
+        /// boot. The kill itself cannot be prevented from inside the app.
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            EmulationInfo.recordRecovery()
+            parent.gameStarted = false
+            recoveryAttempts += 1
+            guard recoveryAttempts <= 3 else { return }
+            pendingRecovery = true
+            var request = URLRequest(url: parent.url)
+            request.setValue("Bearer \(parent.token)", forHTTPHeaderField: "Authorization")
+            webView.load(request)
+        }
+
+        /// A short settle delay before loading the state: the core has only
+        /// just started and FBNeo needs a beat before a full machine state
+        /// lands cleanly.
+        private func resumeAfterRecovery(in webView: WKWebView?) {
+            guard pendingRecovery else { return }
+            pendingRecovery = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                webView?.evaluateJavaScript(
+                    "window.__cabinetRecover && __cabinetRecover();"
+                )
             }
         }
     }
@@ -298,11 +358,20 @@ struct PlayerWebView: UIViewRepresentable {
             )
         }
 
+        config.userContentController.addUserScript(
+            WKUserScript(
+                source: Self.recoveryInjection(romId: rom.id),
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            )
+        )
+
         config.userContentController.add(context.coordinator, name: "overlay")
         config.userContentController.add(context.coordinator, name: "gameState")
         config.userContentController.add(context.coordinator, name: "diag")
 
         let webView = WKWebView(frame: .zero, configuration: config)
+        webView.navigationDelegate = context.coordinator
         input.webView = webView
         webView.isOpaque = false
         webView.backgroundColor = .black
@@ -378,6 +447,59 @@ struct PlayerWebView: UIViewRepresentable {
             if (text.indexOf(want) !== -1) { clearInterval(timer); play.click(); return; }
             if (tries > 100) clearInterval(timer);
           }, 100);
+        })();
+        """
+    }
+
+    /// The safety net for a killed content process. iOS can take the
+    /// webview's process, and the emulator inside it, at any moment it needs
+    /// memory back, and no app is exempt. What can be controlled is the
+    /// cost: a state autosaved into the browser's own on disk storage every
+    /// thirty seconds, plus on demand at the risky moments, means the
+    /// recovery reload resumes near where play stopped.
+    ///
+    /// EmulatorJS's own state store is reused rather than a parallel
+    /// database: `storage.states` is the IndexedDB home of its save state
+    /// slots, it survives the process dying, and it needs no schema of this
+    /// app's own. The key carries the rom id so games never collide.
+    ///
+    /// Loading is native initiated only. The page cannot tell a crash
+    /// recovery from a fresh launch, but the app can, and a fresh launch
+    /// must never have its chosen save quietly replaced by an autosave.
+    /// The five minute freshness guard is for the one gap the native flag
+    /// cannot see: a kill that lands before the first autosave of a new
+    /// session, where the store still holds a state from a previous day.
+    static func recoveryInjection(romId: Int) -> String {
+        """
+        (function () {
+          const KEY = "cabinet.autosave.\(romId)";
+
+          const save = () => {
+            try {
+              const e = window.EJS_emulator;
+              if (!e || !e.started || e.paused) return;
+              if (!e.gameManager || !e.storage || !e.storage.states) return;
+              const data = e.gameManager.getState();
+              if (data && data.length) {
+                e.storage.states.put(KEY, { t: Date.now(), data: data });
+              }
+            } catch (x) {}
+          };
+          setInterval(save, 30000);
+          window.__cabinetAutosaveNow = save;
+
+          window.__cabinetRecover = function () {
+            try {
+              const e = window.EJS_emulator;
+              if (!e || !e.storage || !e.storage.states) return;
+              e.storage.states.get(KEY).then(function (rec) {
+                if (!rec || !rec.data || !rec.t) return;
+                if (Date.now() - rec.t > 300000) return;
+                e.gameManager.loadState(new Uint8Array(rec.data));
+                e.displayMessage("RESTORED AFTER A RELOAD");
+              }).catch(function () {});
+            } catch (x) {}
+          };
         })();
         """
     }
