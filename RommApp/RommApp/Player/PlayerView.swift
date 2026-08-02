@@ -108,6 +108,12 @@ struct PlayerView: View {
             // over the game during play. A tap on the game canvas brings
             // both back, mirroring the injected idle logic.
             Button {
+                // Cleared here as well as in onDisappear: the launch screen
+                // refreshes its continue offer the moment dismissal starts,
+                // and onDisappear only runs when the animation ends, so
+                // clearing only there loses the race and the offer to rewind
+                // a deliberate exit flashes back up.
+                SessionMarker.recordCleanExit()
                 dismiss()
             } label: {
                 Image(systemName: "xmark")
@@ -332,6 +338,10 @@ struct PlayerWebView: UIViewRepresentable {
                 }
             case "autosave":
                 SessionMarker.recordAutosave(romId: parent.rom.id)
+            case "frame":
+                if let dataURL = message.body as? String {
+                    LastFrame.save(dataURL: dataURL, romId: parent.rom.id)
+                }
             case "diag":
                 // Recorded rather than logged, because a console cannot be
                 // attached to a phone someone is actually holding and using.
@@ -444,6 +454,7 @@ struct PlayerWebView: UIViewRepresentable {
         config.userContentController.add(context.coordinator, name: "gameState")
         config.userContentController.add(context.coordinator, name: "diag")
         config.userContentController.add(context.coordinator, name: "autosave")
+        config.userContentController.add(context.coordinator, name: "frame")
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
@@ -563,6 +574,20 @@ struct PlayerWebView: UIViewRepresentable {
                 try { window.webkit.messageHandlers.autosave.postMessage(true); }
                 catch (x) {}
               }
+              // The frame itself rides along, for the Home hero. A Blob
+              // cannot cross the bridge, so it goes as a data URL.
+              try {
+                e.takeScreenshot(undefined, "png", 1).then(function (shot) {
+                  var blob = shot && (shot.blob || shot.screenshot);
+                  if (!blob) return;
+                  var r = new FileReader();
+                  r.onload = function () {
+                    try { window.webkit.messageHandlers.frame.postMessage(r.result); }
+                    catch (x) {}
+                  };
+                  r.readAsDataURL(blob);
+                }).catch(function () {});
+              } catch (x) {}
             } catch (x) {}
           };
           setInterval(save, 30000);

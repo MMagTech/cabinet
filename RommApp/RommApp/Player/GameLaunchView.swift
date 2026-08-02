@@ -100,6 +100,13 @@ struct GameLaunchView: View {
         .fullScreenCover(isPresented: $playing) {
             PlayerView(rom: rom, launch: launchChoices, resumeFromAutosave: continueRun)
         }
+        // Coming back from a session the person closed themselves, the
+        // interruption is spent: leaving the card up would offer to rewind
+        // a deliberate exit. Re-ask the marker, which the clean exit
+        // cleared.
+        .onChange(of: playing) { _, isPlaying in
+            if !isPlaying { refreshResumeOffer() }
+        }
     }
 
     // MARK: Pieces
@@ -311,14 +318,21 @@ struct GameLaunchView: View {
         )
     }
 
+    private func refreshResumeOffer() {
+        if SessionMarker.offersResume(romId: rom.id) {
+            interruptedAt = SessionMarker.autosaveDate(romId: rom.id)
+            continueRun = true
+        } else {
+            interruptedAt = nil
+            continueRun = false
+        }
+    }
+
     private func load() async {
         cores = CoreCatalog.cores(for: rom.platformSlug)
         selectedCore = LaunchChoices.defaultCore(rom: rom, from: cores)
 
-        if SessionMarker.offersResume(romId: rom.id) {
-            interruptedAt = SessionMarker.autosaveDate(romId: rom.id)
-            continueRun = true
-        }
+        refreshResumeOffer()
 
         async let firmwareTask = try? session.firmware(platformId: rom.platformId)
         async let savesTask = try? session.saves(romId: rom.id)

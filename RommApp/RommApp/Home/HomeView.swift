@@ -93,7 +93,20 @@ struct HomeView: View {
         Button {
             resuming = rom
         } label: {
-            CoverImage(path: rom.pathCoverLarge ?? rom.pathCoverSmall, title: rom.displayName)
+            // The frame you left on, when the player has recorded one, per
+            // the scope doc's Home. Box art is the fallback, not the point:
+            // the hero is your game mid-moment, inviting you back into it.
+            Group {
+                if let frame = LastFrame.image(romId: rom.id) {
+                    Image(uiImage: frame)
+                        .resizable()
+                } else {
+                    CoverImage(
+                        path: rom.pathCoverLarge ?? rom.pathCoverSmall,
+                        title: rom.displayName
+                    )
+                }
+            }
                 .aspectRatio(3.0 / 4.0, contentMode: .fill)
                 .frame(maxWidth: .infinity)
                 .frame(height: height)
