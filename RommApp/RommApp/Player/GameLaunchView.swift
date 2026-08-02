@@ -22,6 +22,11 @@ struct GameLaunchView: View {
     @State private var cores: [String] = []
     @State private var selectedCore: String?
     @State private var firmware: [Firmware] = []
+    /// Firmware the server knows about but cannot actually serve: the entry
+    /// exists, the file behind it is gone. Silently hiding these looked
+    /// like the platform needed no BIOS at all, and the first sign of
+    /// trouble was a game booting to black.
+    @State private var missingFirmware: [Firmware] = []
     @State private var selectedFirmware: Firmware?
     @State private var saves: [GameSave] = []
     @State private var states: [GameState] = []
@@ -69,7 +74,7 @@ struct GameLaunchView: View {
                                 if cores.count > 1 {
                                     coreCard.frame(maxWidth: .infinity)
                                 }
-                                if !firmware.isEmpty {
+                                if showsFirmwareCard {
                                     firmwareCard.frame(maxWidth: .infinity)
                                 }
                             }
@@ -206,7 +211,7 @@ struct GameLaunchView: View {
             ) {
                 if interruptedAt != nil { continueCard }
                 if cores.count > 1 { coreCard }
-                if !firmware.isEmpty { firmwareCard }
+                if showsFirmwareCard { firmwareCard }
                 if arcadeBase != nil { arcadeControlsCard }
                 if !states.isEmpty || !saves.isEmpty { resumeCard }
             }
@@ -225,7 +230,7 @@ struct GameLaunchView: View {
             VStack(spacing: 14) {
                 if interruptedAt != nil { continueCard }
                 if cores.count > 1 { coreCard }
-                if !firmware.isEmpty { firmwareCard }
+                if showsFirmwareCard { firmwareCard }
                 if arcadeBase != nil { arcadeControlsCard }
                 if !states.isEmpty || !saves.isEmpty { resumeCard }
             }
@@ -306,17 +311,34 @@ struct GameLaunchView: View {
         }
     }
 
+    private var showsFirmwareCard: Bool {
+        !firmware.isEmpty || !missingFirmware.isEmpty
+    }
+
     private var firmwareCard: some View {
         LaunchCard(title: "BIOS", systemImage: "memorychip") {
-            Picker("BIOS", selection: $selectedFirmware) {
-                Text("None").tag(Optional<Firmware>.none)
-                ForEach(firmware) { item in
-                    Text(item.fileName).tag(Optional(item))
+            if !firmware.isEmpty {
+                Picker("BIOS", selection: $selectedFirmware) {
+                    Text("None").tag(Optional<Firmware>.none)
+                    ForEach(firmware) { item in
+                        Text(item.fileName).tag(Optional(item))
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if !missingFirmware.isEmpty {
+                Label {
+                    Text("On the server but missing from its filesystem: \(missingFirmware.map(\.fileName).joined(separator: ", ")). A game that needs one of these will not boot.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .font(.caption)
                 }
             }
-            .pickerStyle(.menu)
-            .labelsHidden()
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -415,7 +437,9 @@ struct GameLaunchView: View {
         async let savesTask = try? session.saves(romId: rom.id)
         async let statesTask = try? session.states(romId: rom.id)
 
-        firmware = (await firmwareTask ?? []).filter { !$0.missingFromFS }
+        let allFirmware = await firmwareTask ?? []
+        firmware = allFirmware.filter { !$0.missingFromFS }
+        missingFirmware = allFirmware.filter { $0.missingFromFS }
         saves = await savesTask ?? []
         states = (await statesTask ?? []).sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
 
