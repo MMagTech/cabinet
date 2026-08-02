@@ -61,6 +61,20 @@ struct SettingsView: View {
             }
 
             Section {
+                LabeledContent("Threading") {
+                    Text(EmulationInfo.isThreaded ? "On" : "Off")
+                        .foregroundStyle(EmulationInfo.isThreaded ? .green : .secondary)
+                }
+                Text(EmulationInfo.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Emulation")
+            } footer: {
+                Text("Recorded from the last game you played. Multiple cores need the server to send cross origin isolation headers.")
+            }
+
+            Section {
                 LabeledContent("Server", value: session.serverURL?.host ?? "unknown")
                 if let version = session.serverVersion {
                     LabeledContent("RomM version", value: version)

@@ -243,7 +243,11 @@ struct PlayerWebView: UIViewRepresentable {
                     parent.gameStarted = true
                 }
             case "diag":
-                print("PLAYER_DIAG \(message.body)")
+                // Recorded rather than logged, because a console cannot be
+                // attached to a phone someone is actually holding and using.
+                if let text = message.body as? String {
+                    UserDefaults.standard.set(text, forKey: EmulationInfo.key)
+                }
             default:
                 break
             }
