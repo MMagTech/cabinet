@@ -422,9 +422,18 @@ struct PlayerWebView: UIViewRepresentable {
         /// is a surprise. An accepted continue offer widens it to the same
         /// half day the offer itself allows.
         private var recoveryWindowMs = 300_000
-        /// Recoveries attempted this session. If reloading itself keeps
-        /// killing the process, stopping is kinder than a reload loop.
-        private var recoveryAttempts = 0
+        /// When each recovery happened this session.
+        ///
+        /// This used to be a plain count capped at three, written when a
+        /// killed web process looked like a rare accident. It is not rare:
+        /// the same kill reproduces in Safari with none of this app
+        /// involved, roughly once a minute of play, so a cap of three
+        /// meant the fourth kill of a long session stranded the player on
+        /// a dead screen. What actually needs guarding against is a reload
+        /// loop, where recovery itself is what kills the process, and that
+        /// looks completely different: several deaths within seconds of
+        /// each other rather than a steady drumbeat minutes apart.
+        private var recoveryTimes: [Date] = []
 
         init(_ parent: PlayerWebView) {
             self.parent = parent
@@ -485,20 +494,30 @@ struct PlayerWebView: UIViewRepresentable {
             }
         }
 
-        /// iOS killed the webview's content process, which takes the running
-        /// emulator with it. Observed in the wild when a rotation's relayout
-        /// spikes memory past what the watchdog allows a CV1000 sized core.
-        /// The page is reloaded deliberately: the launch seed scripts run
-        /// again, RomM's play button gets pressed again, and once the game
-        /// reports started the autosave written before the kill is loaded,
-        /// so the player lands near where they were instead of at a cold
-        /// boot. The kill itself cannot be prevented from inside the app.
+        /// The web process died, taking the running emulator with it.
+        ///
+        /// This is not something the app causes and not something it can
+        /// prevent: the same kill reproduces in Safari on the same phone,
+        /// with the same core and none of this app's code, about a minute
+        /// into playing. So the job here is not to stop it happening, it
+        /// is to make it cost as little as possible. The page is reloaded
+        /// deliberately, the launch seeds and auto start press Play again,
+        /// and once the game reports started the autosave from just before
+        /// the kill is loaded, so play resumes near where it stopped.
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
             EmulationInfo.recordRecovery()
             EmulationInfo.freezeVitalsAtDeath()
             parent.gameStarted = false
-            recoveryAttempts += 1
-            guard recoveryAttempts <= 3 else {
+
+            // Recovery is unlimited by design, because the deaths are
+            // unlimited. Only a genuine reload loop, three deaths inside
+            // half a minute, is worth giving up on: a steady kill every
+            // minute is survivable forever and stopping would strand
+            // someone mid session.
+            let now = Date()
+            recoveryTimes.append(now)
+            recoveryTimes = recoveryTimes.filter { now.timeIntervalSince($0) < 30 }
+            guard recoveryTimes.count < 3 else {
                 parent.recovering = false
                 return
             }
@@ -756,8 +775,14 @@ struct PlayerWebView: UIViewRepresentable {
               // every thirty seconds is its own memory emergency, and the
               // games with the biggest states are exactly the ones with the
               // least headroom left. Back off in proportion.
+              // Cheap states are saved often, because the interval is
+              // exactly how much play a kill costs, and the kills are not
+              // going to stop. Progear's state is 0.3MB: writing that every
+              // ten seconds is nothing, and it turns a death into losing a
+              // few seconds rather than half a minute. Only the genuinely
+              // huge states have to be rationed.
               const mb = data.length / 1048576;
-              schedule(mb > 32 ? 180000 : mb > 8 ? 90000 : 30000);
+              schedule(mb > 32 ? 180000 : mb > 8 ? 90000 : mb > 2 ? 30000 : 10000);
 
               // Vitals, so that when the process dies there is evidence
               // rather than another theory. A phone in a hand has no
