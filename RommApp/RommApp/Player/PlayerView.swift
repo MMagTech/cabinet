@@ -208,7 +208,8 @@ struct PlayerView: View {
             if gameStarted { input.autosaveNow() }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase != .active, gameStarted { input.autosaveNow() }
+            guard phase != .active, gameStarted else { return }
+            input.autosaveNow()
         }
         .task {
             // A game is played in the orientation it was started in. See
@@ -374,6 +375,7 @@ final class PlayerInputBridge: ObservableObject {
             "window.__cabinetAutosaveNow && __cabinetAutosaveNow();"
         )
     }
+
 }
 
 struct PlayerWebView: UIViewRepresentable {
@@ -678,37 +680,95 @@ struct PlayerWebView: UIViewRepresentable {
         (function () {
           const KEY = "cabinet.autosave.\(romId)";
 
-          const save = () => {
+          // Autosave has to stay cheap or it becomes the thing it protects
+          // against. The webview's content process runs under a much
+          // tighter memory ceiling than the app, and every allocation here
+          // competes with the emulator's own footprint. An earlier version
+          // took a full resolution PNG on every save and base64'd it across
+          // the bridge, roughly ten megabytes of churn every thirty
+          // seconds, and killed the process about every fifth cycle.
+          //
+          // So: the state is saved on a timer whose period scales with how
+          // big the state actually is, and the screenshot is not on the
+          // timer at all.
+          let period = 30000;
+          let timer = null;
+
+          const schedule = (ms) => {
+            if (ms === period && timer) return;
+            period = ms;
+            if (timer) clearInterval(timer);
+            timer = setInterval(save, period);
+          };
+
+          function save() {
             try {
               const e = window.EJS_emulator;
               if (!e || !e.started || e.paused) return;
               if (!e.gameManager || !e.storage || !e.storage.states) return;
               const data = e.gameManager.getState();
-              if (data && data.length) {
-                e.storage.states.put(KEY, { t: Date.now(), data: data });
-                // Mirrored to native so the launch screen can decide
-                // whether an autosave is worth offering before any
-                // webview exists to ask.
-                try { window.webkit.messageHandlers.autosave.postMessage(true); }
-                catch (x) {}
-              }
-              // The frame itself rides along, for the Home hero. A Blob
-              // cannot cross the bridge, so it goes as a data URL.
-              try {
-                e.takeScreenshot(undefined, "png", 1).then(function (shot) {
-                  var blob = shot && (shot.blob || shot.screenshot);
-                  if (!blob) return;
-                  var r = new FileReader();
-                  r.onload = function () {
-                    try { window.webkit.messageHandlers.frame.postMessage(r.result); }
-                    catch (x) {}
-                  };
-                  r.readAsDataURL(blob);
-                }).catch(function () {});
-              } catch (x) {}
+              if (!data || !data.length) return;
+              e.storage.states.put(KEY, { t: Date.now(), data: data });
+              // Mirrored to native so the launch screen can decide whether
+              // an autosave is worth offering before any webview exists to
+              // ask.
+              try { window.webkit.messageHandlers.autosave.postMessage(true); }
+              catch (x) {}
+
+              // A CV1000 state is over a hundred megabytes. Copying that
+              // every thirty seconds is its own memory emergency, and the
+              // games with the biggest states are exactly the ones with the
+              // least headroom left. Back off in proportion.
+              const mb = data.length / 1048576;
+              schedule(mb > 32 ? 180000 : mb > 8 ? 90000 : 30000);
+            } catch (x) {}
+          }
+
+          // The Home hero's frame, on a slow timer of its own.
+          //
+          // It cannot ride the pause: the core writes its screenshot on the
+          // next emulated frame, and pausing stops frames, so a capture
+          // fired alongside a pause returns a correctly sized black
+          // rectangle. Delaying the pause to let it through would defeat
+          // the one thing the pause menu is for. A lazy timer sidesteps
+          // that entirely, and the hero being a couple of minutes stale is
+          // invisible: it is a picture of your game, not a clock.
+          //
+          // Downscaled to a small jpeg before crossing the bridge, because
+          // the bridge takes a base64 string and a full resolution png
+          // becomes megabytes of it.
+          window.__cabinetCaptureFrame = function () {
+            try {
+              const e = window.EJS_emulator;
+              if (!e || !e.started || e.paused) return;
+              // The core's own screenshot path, not the canvas: the canvas
+              // is WebGL and reads back empty once a frame is presented,
+              // which yields a perfectly sized black rectangle. Safe here
+              // only because this is always called while the game is still
+              // running, never after the pause has landed.
+              e.takeScreenshot(undefined, "png", 1).then(function (shot) {
+                const blob = shot && (shot.blob || shot.screenshot);
+                if (!blob) return;
+                return createImageBitmap(blob).then(function (bitmap) {
+                  const w = Math.min(bitmap.width, 480);
+                  const h = Math.max(1, Math.round(bitmap.height * (w / bitmap.width)));
+                  const off = document.createElement("canvas");
+                  off.width = w;
+                  off.height = h;
+                  off.getContext("2d").drawImage(bitmap, 0, 0, w, h);
+                  bitmap.close();
+                  const url = off.toDataURL("image/jpeg", 0.6);
+                  off.width = 0;
+                  off.height = 0;
+                  try { window.webkit.messageHandlers.frame.postMessage(url); }
+                  catch (x) {}
+                });
+              }).catch(function () {});
             } catch (x) {}
           };
-          setInterval(save, 30000);
+
+          schedule(30000);
+          setInterval(window.__cabinetCaptureFrame, 120000);
           window.__cabinetAutosaveNow = save;
 
           // The upload goes through fetch directly rather than RomM's
