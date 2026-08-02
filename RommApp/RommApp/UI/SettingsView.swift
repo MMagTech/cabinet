@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var confirmingForget = false
     @AppStorage("com.mmagtech.RommApp.controlOpacity") private var controlOpacity = 0.7
     @AppStorage(ControlTheme.key) private var controlTheme = ControlTheme.system.rawValue
+    @AppStorage(PlayerAutosave.key) private var autosaveEnabled = true
     @AppStorage("com.mmagtech.RommApp.useRommPlayerScreen") private var useRommScreen = false
     @ObservedObject private var controllers = GameControllerManager.shared
 
@@ -72,6 +73,17 @@ struct SettingsView: View {
                 Text("Launching games")
             } footer: {
                 Text("Off means Cabinet shows its own screen for choosing an emulator, BIOS and save. On hands that back to RomM's web page, which is always available as a fallback.")
+            }
+
+            Section {
+                Toggle("Autosave while playing", isOn: $autosaveEnabled)
+                Text(autosaveEnabled
+                     ? "Keeps a local snapshot every half minute so a game iOS closes costs seconds, not the run."
+                     : "Off. Nothing is written while you play, and a game iOS closes starts over.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Saving")
             }
 
             Section {

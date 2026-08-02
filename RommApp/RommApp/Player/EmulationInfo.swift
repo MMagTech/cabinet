@@ -85,3 +85,18 @@ enum EmulationInfo {
         return "\(coreName) loaded single threaded. The server is not sending the cross origin isolation headers that threading needs."
     }
 }
+
+/// Whether the player keeps a local autosave while a game runs.
+///
+/// On by default, because it is what makes a killed web process cost
+/// seconds instead of a run. It is a setting rather than a constant
+/// because the honest answer to "is the autosave what keeps killing my
+/// game" is to switch it off and find out, and because someone who never
+/// wants a background write is entitled to that.
+enum PlayerAutosave {
+    static let key = "com.mmagtech.RommApp.autosaveEnabled"
+
+    static var isEnabled: Bool {
+        UserDefaults.standard.object(forKey: key) as? Bool ?? true
+    }
+}

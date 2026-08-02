@@ -439,6 +439,15 @@ struct PlayerWebView: UIViewRepresentable {
                     parent.gameStarted = true
                     SessionMarker.recordGameRunning(romId: parent.rom.id)
                     resumeAfterRecovery(in: message.webView)
+                    if !pendingRecovery {
+                        // Nothing is going to be restored, so last
+                        // session's state is dead weight in this origin's
+                        // storage. Drop it before this session starts
+                        // writing its own.
+                        message.webView?.evaluateJavaScript(
+                            "window.__cabinetDropAutosave && __cabinetDropAutosave();"
+                        )
+                    }
                 }
             case "autosave":
                 SessionMarker.recordAutosave(romId: parent.rom.id)
@@ -561,7 +570,9 @@ struct PlayerWebView: UIViewRepresentable {
 
         config.userContentController.addUserScript(
             WKUserScript(
-                source: Self.recoveryInjection(romId: rom.id),
+                source: Self.recoveryInjection(
+                    romId: rom.id, autosaveEnabled: PlayerAutosave.isEnabled
+                ),
                 injectionTime: .atDocumentStart,
                 forMainFrameOnly: true
             )
@@ -681,7 +692,7 @@ struct PlayerWebView: UIViewRepresentable {
     /// The five minute freshness guard is for the one gap the native flag
     /// cannot see: a kill that lands before the first autosave of a new
     /// session, where the store still holds a state from a previous day.
-    static func recoveryInjection(romId: Int) -> String {
+    static func recoveryInjection(romId: Int, autosaveEnabled: Bool) -> String {
         """
         (function () {
           const KEY = "cabinet.autosave.\(romId)";
@@ -786,8 +797,26 @@ struct PlayerWebView: UIViewRepresentable {
             } catch (x) {}
           };
 
-          schedule(30000);
-          setInterval(window.__cabinetCaptureFrame, 120000);
+          // Autosaves were never deleted, so every game ever played left
+          // its largest state in this origin's storage permanently: a
+          // hundred and thirty seven megabytes for one Cave game, sitting
+          // there while an unrelated game runs. WebKit accounts storage
+          // per origin, and the origin here also holds the cached ROMs, so
+          // an unbounded pile of dead states is the last thing this process
+          // needs. The previous session's state is dropped once the current
+          // one no longer needs it, which is the moment the game is up and
+          // any restore has already happened.
+          window.__cabinetDropAutosave = function () {
+            try {
+              const e = window.EJS_emulator;
+              if (e && e.storage && e.storage.states) e.storage.states.remove(KEY);
+            } catch (x) {}
+          };
+
+          if (\(autosaveEnabled ? "true" : "false")) {
+            schedule(30000);
+            setInterval(window.__cabinetCaptureFrame, 120000);
+          }
           window.__cabinetAutosaveNow = save;
 
           // The upload goes through fetch directly rather than RomM's
