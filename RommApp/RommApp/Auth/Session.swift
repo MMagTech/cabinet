@@ -170,6 +170,23 @@ final class Session: ObservableObject {
         return try await client.coverData(path: path)
     }
 
+    // MARK: Launch data
+
+    func saves(romId: Int) async throws -> [GameSave] {
+        guard let client else { throw RommError.transport("No server selected.") }
+        return try await client.saves(romId: romId)
+    }
+
+    func states(romId: Int) async throws -> [GameState] {
+        guard let client else { throw RommError.transport("No server selected.") }
+        return try await client.states(romId: romId)
+    }
+
+    func firmware(platformId: Int) async throws -> [Firmware] {
+        guard let client else { throw RommError.transport("No server selected.") }
+        return try await client.firmware(platformId: platformId)
+    }
+
     // MARK: Player
 
     /// Everything the player webview needs: where to go and how to prove who

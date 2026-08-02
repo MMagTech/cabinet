@@ -64,7 +64,7 @@ struct PlatformGamesView: View {
         }
         .task { await reload() }
         .fullScreenCover(item: $playing) { rom in
-            PlayerView(rom: rom)
+            NavigationStack { GameLaunchView(rom: rom) }
         }
     }
 

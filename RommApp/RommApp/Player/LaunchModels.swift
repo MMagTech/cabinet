@@ -1,0 +1,113 @@
+import Foundation
+
+/// A saved game, the cartridge battery kind. Survives changing cores.
+struct GameSave: Decodable, Identifiable, Hashable {
+    let id: Int
+    let fileName: String
+    let updatedAt: String?
+    let emulator: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case fileName = "file_name"
+        case updatedAt = "updated_at"
+        case emulator
+    }
+}
+
+/// A save state, a snapshot of memory. Tied to the core that wrote it, which
+/// is why the launch screen greys out states from a different emulator rather
+/// than letting someone load one that cannot work.
+struct GameState: Decodable, Identifiable, Hashable {
+    let id: Int
+    let fileName: String
+    let updatedAt: String?
+    let emulator: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case fileName = "file_name"
+        case updatedAt = "updated_at"
+        case emulator
+    }
+}
+
+/// A BIOS file the platform may require. The app never manages these, it only
+/// picks among what the server reports.
+struct Firmware: Decodable, Identifiable, Hashable {
+    let id: Int
+    let fileName: String
+    let isVerified: Bool
+    let missingFromFS: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case fileName = "file_name"
+        case isVerified = "is_verified"
+        case missingFromFS = "missing_from_fs"
+    }
+}
+
+/// Which emulator cores can run a given platform.
+///
+/// Mirrored from RomM's frontend map at build time rather than fetched,
+/// because it is a static table that changes only when RomM adds platform
+/// support. Falling back to an empty list is safe: the launch screen then
+/// offers no core choice and RomM's own page picks, exactly as it does today.
+enum CoreCatalog {
+    private static let map: [String: [String]] = {
+        guard let url = Bundle.main.url(forResource: "cores", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let parsed = try? JSONDecoder().decode([String: [String]].self, from: data)
+        else { return [:] }
+        return parsed
+    }()
+
+    static func cores(for platformSlug: String) -> [String] {
+        map[platformSlug] ?? []
+    }
+
+    /// Friendlier than the raw core id, which means nothing to most people.
+    static func displayName(_ core: String) -> String {
+        switch core {
+        case "fbneo": return "FinalBurn Neo"
+        case "mame2003": return "MAME 2003"
+        case "mame2003_plus": return "MAME 2003 Plus"
+        case "fbalpha2012_cps1": return "FB Alpha, CPS1"
+        case "fbalpha2012_cps2": return "FB Alpha, CPS2"
+        case "snes9x": return "Snes9x"
+        case "bsnes": return "bsnes"
+        case "gambatte": return "Gambatte"
+        case "mgba": return "mGBA"
+        case "mupen64plus_next": return "Mupen64Plus Next"
+        case "pcsx_rearmed": return "PCSX ReARMed"
+        case "genesis_plus_gx": return "Genesis Plus GX"
+        case "picodrive": return "PicoDrive"
+        case "melonds": return "melonDS"
+        case "desmume2015": return "DeSmuME"
+        case "opera": return "Opera"
+        case "puae": return "PUAE"
+        case "handy": return "Handy"
+        case "prosystem": return "ProSystem"
+        case "stella2014": return "Stella"
+        default: return core
+        }
+    }
+
+    /// A hint for the ones where the default is a trap. RomM offers the oldest
+    /// MAME first for arcade, which cannot run anything newer than 2003.
+    static func note(_ core: String) -> String? {
+        switch core {
+        case "mame2003":
+            return "MAME 0.78 from 2003. Games newer than that will not start."
+        case "mame2003_plus":
+            return "Wider compatibility than MAME 2003, still an old set."
+        case "fbneo":
+            return "Best for Neo Geo, CPS and most arcade boards."
+        case "fbalpha2012_cps1", "fbalpha2012_cps2":
+            return "Specialised for Capcom CPS hardware."
+        default:
+            return nil
+        }
+    }
+}

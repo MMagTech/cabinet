@@ -157,6 +157,37 @@ actor RommClient {
         return try await send(req, decoding: RomPage.self)
     }
 
+    /// Saves, states and firmware for the launch screen. Each is a plain
+    /// list the server already models, so nothing here reinterprets RomM.
+    func saves(romId: Int) async throws -> [GameSave] {
+        try await sendQuery("/api/saves", [URLQueryItem(name: "rom_id", value: String(romId))])
+    }
+
+    func states(romId: Int) async throws -> [GameState] {
+        try await sendQuery("/api/states", [URLQueryItem(name: "rom_id", value: String(romId))])
+    }
+
+    func firmware(platformId: Int) async throws -> [Firmware] {
+        try await sendQuery(
+            "/api/firmware", [URLQueryItem(name: "platform_id", value: String(platformId))]
+        )
+    }
+
+    private func sendQuery<T: Decodable>(_ path: String, _ query: [URLQueryItem]) async throws -> T {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = query
+        guard let url = components?.url else {
+            throw RommError.transport("Could not build the request address.")
+        }
+        var req = URLRequest(url: url)
+        if let accessToken {
+            req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+        return try await send(req, decoding: T.self)
+    }
+
     /// Raw bytes of a cover image.
     ///
     /// `path_cover_small` arrives as a complete server relative URL, prefix,

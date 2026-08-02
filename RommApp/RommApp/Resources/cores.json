@@ -1,0 +1,291 @@
+{
+  "3do": [
+    "opera"
+  ],
+  "3ds": [
+    "azahar"
+  ],
+  "acpc": [
+    "cap32",
+    "crocods"
+  ],
+  "amiga": [
+    "puae"
+  ],
+  "amiga-cd32": [
+    "puae"
+  ],
+  "arcade": [
+    "mame2003",
+    "mame2003_plus",
+    "fbneo",
+    "fbalpha2012_cps1",
+    "fbalpha2012_cps2"
+  ],
+  "atari-2600-plus": [
+    "stella2014"
+  ],
+  "atari-lynx-mkii": [
+    "handy"
+  ],
+  "atari2600": [
+    "stella2014"
+  ],
+  "atari5200": [
+    "a5200"
+  ],
+  "atari7800": [
+    "prosystem"
+  ],
+  "c-plus-4": [
+    "vice_xplus4"
+  ],
+  "c128": [
+    "vice_x128"
+  ],
+  "c64": [
+    "vice_x64sc",
+    "vice_x64"
+  ],
+  "colecovision": [
+    "gearcoleco"
+  ],
+  "commmodore-128": [
+    "vice_x128"
+  ],
+  "commodore-64c": [
+    "vice_x64sc",
+    "vice_x64"
+  ],
+  "cpet": [
+    "vice_xpet"
+  ],
+  "doom": [
+    "prboom"
+  ],
+  "dos": [
+    "dosbox_pure"
+  ],
+  "famicom": [
+    "fceumm",
+    "nestopia"
+  ],
+  "fds": [
+    "fceumm",
+    "nestopia"
+  ],
+  "game-boy-adavance-sp": [
+    "mgba"
+  ],
+  "game-boy-light": [
+    "gambatte",
+    "mgba"
+  ],
+  "game-boy-micro": [
+    "mgba"
+  ],
+  "game-boy-pocket": [
+    "gambatte",
+    "mgba"
+  ],
+  "game-televisison": [
+    "fceumm"
+  ],
+  "gamegear": [
+    "genesis_plus_gx",
+    "genesis_plus_gx_wide"
+  ],
+  "gb": [
+    "gambatte",
+    "mgba"
+  ],
+  "gba": [
+    "mgba"
+  ],
+  "gbc": [
+    "gambatte",
+    "mgba"
+  ],
+  "genesis": [
+    "genesis_plus_gx",
+    "genesis_plus_gx_wide"
+  ],
+  "intellivision": [
+    "freeintv"
+  ],
+  "ique-player": [
+    "mupen64plus_next"
+  ],
+  "jaguar": [
+    "virtualjaguar"
+  ],
+  "lynx": [
+    "handy"
+  ],
+  "master-system-girl": [
+    "genesis_plus_gx",
+    "genesis_plus_gx_wide"
+  ],
+  "master-system-super-compact": [
+    "genesis_plus_gx",
+    "genesis_plus_gx_wide"
+  ],
+  "mega-pc": [
+    "genesis_plus_gx",
+    "genesis_plus_gx_wide"
+  ],
+  "n64": [
+    "mupen64plus_next",
+    "parallel_n64"
+  ],
+  "nds": [
+    "melonds",
+    "desmume",
+    "desmume2015"
+  ],
+  "neo-geo-pocket": [
+    "mednafen_ngp"
+  ],
+  "neo-geo-pocket-color": [
+    "mednafen_ngp"
+  ],
+  "neogeoaes": [
+    "fbneo"
+  ],
+  "neogeomvs": [
+    "fbneo"
+  ],
+  "nes": [
+    "fceumm",
+    "nestopia"
+  ],
+  "new-nintendo-3ds": [
+    "azahar"
+  ],
+  "new-style-nes": [
+    "fceumm"
+  ],
+  "new-style-super-nes-model-sns-101": [
+    "snes9x",
+    "bsnes"
+  ],
+  "nintendo-ds-lite": [
+    "melonds",
+    "desmume",
+    "desmume2015"
+  ],
+  "nintendo-dsi": [
+    "melonds",
+    "desmume",
+    "desmume2015"
+  ],
+  "nintendo-dsi-xl": [
+    "melonds",
+    "desmume",
+    "desmume2015"
+  ],
+  "pc-fx": [
+    "mednafen_pcfx"
+  ],
+  "philips-cd-i": [
+    "same_cdi"
+  ],
+  "psp": [
+    "ppsspp"
+  ],
+  "psx": [
+    "pcsx_rearmed",
+    "mednafen_psx_hw"
+  ],
+  "saturn": [
+    "yabause"
+  ],
+  "sega-game-box-9": [
+    "genesis_plus_gx",
+    "genesis_plus_gx_wide"
+  ],
+  "sega-mark-iii": [
+    "genesis_plus_gx",
+    "genesis_plus_gx_wide"
+  ],
+  "sega-master-system-ii": [
+    "genesis_plus_gx",
+    "genesis_plus_gx_wide",
+    "smsplus"
+  ],
+  "sega-mega-drive-2-slash-genesis": [
+    "genesis_plus_gx",
+    "genesis_plus_gx_wide"
+  ],
+  "sega-mega-jet": [
+    "genesis_plus_gx",
+    "genesis_plus_gx_wide"
+  ],
+  "sega-nomad": [
+    "genesis_plus_gx",
+    "genesis_plus_gx_wide"
+  ],
+  "sega32": [
+    "picodrive"
+  ],
+  "segacd": [
+    "genesis_plus_gx",
+    "genesis_plus_gx_wide",
+    "picodrive"
+  ],
+  "sfam": [
+    "snes9x",
+    "bsnes"
+  ],
+  "sms": [
+    "genesis_plus_gx",
+    "genesis_plus_gx_wide"
+  ],
+  "snes": [
+    "snes9x",
+    "bsnes"
+  ],
+  "super-famicom-jr-model-shvc-101": [
+    "snes9x",
+    "bsnes"
+  ],
+  "super-famicom-shvc-001": [
+    "snes9x",
+    "bsnes"
+  ],
+  "super-nintendo-original-european-version": [
+    "snes9x",
+    "bsnes"
+  ],
+  "supergrafx": [
+    "mednafen_pce"
+  ],
+  "swancrystal": [
+    "mednafen_wswan"
+  ],
+  "tera-drive": [
+    "genesis_plus_gx",
+    "genesis_plus_gx_wide"
+  ],
+  "tg16": [
+    "mednafen_pce"
+  ],
+  "turbografx-cd": [
+    "mednafen_pce"
+  ],
+  "vic-20": [
+    "vice_xvic"
+  ],
+  "virtualboy": [
+    "beetle_vb"
+  ],
+  "wonderswan": [
+    "mednafen_wswan"
+  ],
+  "wonderswan-color": [
+    "mednafen_wswan"
+  ],
+  "zxs": [
+    "fuse"
+  ]
+}

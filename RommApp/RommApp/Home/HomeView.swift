@@ -40,7 +40,7 @@ struct HomeView: View {
             .task { await load() }
             .refreshable { await load() }
             .fullScreenCover(item: $resuming) { rom in
-                PlayerView(rom: rom)
+                NavigationStack { GameLaunchView(rom: rom) }
             }
             .onChange(of: resuming == nil) { _, playerClosed in
                 if playerClosed { Task { await load() } }

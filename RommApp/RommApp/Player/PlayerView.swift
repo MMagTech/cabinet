@@ -12,6 +12,9 @@ import WebKit
 /// locking mid session, or a stray edge swipe killing the run.
 struct PlayerView: View {
     let rom: Rom
+    /// What the native launch screen chose. Defaults to standing aside, so
+    /// any caller that does not care keeps the old behaviour exactly.
+    var launch: LaunchChoices = .none
 
     @EnvironmentObject private var session: Session
     @Environment(\.dismiss) private var dismiss
@@ -49,6 +52,8 @@ struct PlayerView: View {
                 PlayerWebView(
                     url: context.url,
                     token: context.token,
+                    launch: launch,
+                    rom: rom,
                     overlayVisible: $overlayVisible,
                     gameStarted: $gameStarted,
                     input: input
@@ -218,6 +223,8 @@ final class PlayerInputBridge: ObservableObject {
 struct PlayerWebView: UIViewRepresentable {
     let url: URL
     let token: String
+    let launch: LaunchChoices
+    let rom: Rom
     @Binding var overlayVisible: Bool
     @Binding var gameStarted: Bool
     let input: PlayerInputBridge
@@ -271,6 +278,24 @@ struct PlayerWebView: UIViewRepresentable {
             forMainFrameOnly: false
         )
         config.userContentController.addUserScript(script)
+
+        // Seed RomM's own storage with what the launch screen chose, before
+        // its page reads any of it, then press its Play button once the page
+        // is ready. Both are skipped when the launch screen stood aside.
+        let seed = launch.injection(for: rom)
+        if !seed.isEmpty {
+            config.userContentController.addUserScript(
+                WKUserScript(source: seed, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+            )
+            config.userContentController.addUserScript(
+                WKUserScript(
+                    source: Self.autoStartInjection,
+                    injectionTime: .atDocumentEnd,
+                    forMainFrameOnly: true
+                )
+            )
+        }
+
         config.userContentController.add(context.coordinator, name: "overlay")
         config.userContentController.add(context.coordinator, name: "gameState")
         config.userContentController.add(context.coordinator, name: "diag")
@@ -298,6 +323,22 @@ struct PlayerWebView: UIViewRepresentable {
     func updateUIView(_ webView: WKWebView, context: Context) {
         webView.scrollView.isScrollEnabled = !gameStarted
     }
+
+    /// Presses RomM's own Play button once its page is ready, but only when
+    /// the seeded values verifiably took. If they did not, its configuration
+    /// screen is left visible so nothing launches on the wrong emulator.
+    static let autoStartInjection = """
+    (function () {
+      if (!window.__rommLaunchSeeded) return;
+      var tries = 0;
+      var timer = setInterval(function () {
+        tries++;
+        var play = document.querySelector(".r-v2-ejs__play");
+        if (play) { clearInterval(timer); play.click(); return; }
+        if (tries > 60) clearInterval(timer);
+      }, 100);
+    })();
+    """
 
     static func authInjection(token: String) -> String {
         """

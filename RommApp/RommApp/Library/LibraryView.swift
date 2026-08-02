@@ -30,7 +30,7 @@ struct LibraryScreen: View {
         .task(id: searchText) { await runSearch() }
         .task { await loadPlatforms() }
         .fullScreenCover(item: $playing) { rom in
-            PlayerView(rom: rom)
+            NavigationStack { GameLaunchView(rom: rom) }
         }
     }
 
