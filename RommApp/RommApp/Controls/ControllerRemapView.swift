@@ -55,6 +55,41 @@ struct ControllerRemapView: View {
                 }
             }
 
+            // Whole arrangements first, per button surgery second. Six
+            // arcade buttons on a four button pad is a solved problem with
+            // two good answers, and most people just want to pick one.
+            if controllers.isConnected {
+                Section {
+                    ForEach(ControllerBindings.presets, id: \.name) { preset in
+                        Button {
+                            controllers.applyBindings(preset.map)
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: controllers.matchesBindings(preset.map)
+                                      ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(controllers.matchesBindings(preset.map)
+                                                     ? AnyShapeStyle(.tint)
+                                                     : AnyShapeStyle(.tertiary))
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(preset.name)
+                                        .foregroundStyle(.primary)
+                                    Text(preset.detail)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                            }
+                            .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } header: {
+                    Text("Six button fighters")
+                } footer: {
+                    Text("Punches across the top row, kicks across the bottom, matching the arcade panel. Editing any button below makes the arrangement custom.")
+                }
+            }
+
             Section {
                 ForEach(RetroPad.bindable, id: \.id) { input in
                     row(for: input)

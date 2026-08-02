@@ -2,25 +2,62 @@ import GameController
 
 /// Which physical button drives which emulator input, per controller.
 ///
-/// Defaults follow the SNES Street Fighter II arrangement that libretro's
-/// arcade cores expect, but defaults are only a starting point: compact pads
+/// Six arcade buttons have to land somewhere on a pad with four face
+/// buttons, and the scope doc calls the fold required, not optional. Two
+/// arrangements ship. The default puts the heavies on the right side, HP on
+/// RB and HK on RT, which is how every console Street Fighter port maps a
+/// pad and what most people's hands already know. The variant puts the
+/// heavies on the two bumpers instead, for pads whose triggers travel too
+/// far to tap in a combo. Defaults are only a starting point: compact pads
 /// often expose no Options button at all, which would otherwise leave Coin
 /// unreachable and an arcade game unplayable. Anything can be rebound, and
 /// choices are remembered per controller model.
 enum ControllerBindings {
-    /// GameController element name to RetroPad id.
+    /// GameController element name to RetroPad id. The scope doc's fold:
+    /// punches across the top (X, Y, RB), kicks across the bottom (A, B, RT).
     static let defaults: [String: Int] = [
-        GCInputButtonA: RetroPad.b,             // bottom face, arcade 4
-        GCInputButtonB: RetroPad.a,             // right face, arcade 5
-        GCInputButtonX: RetroPad.y,             // left face, arcade 1
-        GCInputButtonY: RetroPad.x,             // top face, arcade 2
-        GCInputLeftShoulder: RetroPad.l,        // arcade 3
-        GCInputRightShoulder: RetroPad.r,       // arcade 6
-        GCInputLeftTrigger: RetroPad.l2,
-        GCInputRightTrigger: RetroPad.r2,
+        GCInputButtonX: RetroPad.y,             // left face, arcade 1, LP
+        GCInputButtonY: RetroPad.x,             // top face, arcade 2, MP
+        GCInputRightShoulder: RetroPad.l,       // arcade 3, HP
+        GCInputButtonA: RetroPad.b,             // bottom face, arcade 4, LK
+        GCInputButtonB: RetroPad.a,             // right face, arcade 5, MK
+        GCInputRightTrigger: RetroPad.r,        // arcade 6, HK
+        GCInputLeftShoulder: RetroPad.l2,
+        GCInputLeftTrigger: RetroPad.r2,
         GCInputButtonMenu: RetroPad.start,
         GCInputButtonOptions: RetroPad.select,  // Coin in arcade profiles
         GCInputButtonHome: RetroPad.overlay,    // exit and emulator menu
+    ]
+
+    /// The bumpers variant: heavies on LB and RB, triggers unused by the
+    /// six. The SNES Street Fighter II arrangement.
+    static let bumpers: [String: Int] = [
+        GCInputButtonX: RetroPad.y,             // arcade 1, LP
+        GCInputButtonY: RetroPad.x,             // arcade 2, MP
+        GCInputLeftShoulder: RetroPad.l,        // arcade 3, HP
+        GCInputButtonA: RetroPad.b,             // arcade 4, LK
+        GCInputButtonB: RetroPad.a,             // arcade 5, MK
+        GCInputRightShoulder: RetroPad.r,       // arcade 6, HK
+        GCInputLeftTrigger: RetroPad.l2,
+        GCInputRightTrigger: RetroPad.r2,
+        GCInputButtonMenu: RetroPad.start,
+        GCInputButtonOptions: RetroPad.select,
+        GCInputButtonHome: RetroPad.overlay,
+    ]
+
+    /// The choices the remap screen offers whole, before any per button
+    /// editing.
+    static let presets: [(name: String, detail: String, map: [String: Int])] = [
+        (
+            "Heavies on the right side",
+            "HP on RB, HK on RT. How console fighters map a pad.",
+            defaults
+        ),
+        (
+            "Heavies on the bumpers",
+            "HP on LB, HK on RB. For pads whose triggers travel too far.",
+            bumpers
+        ),
     ]
 
     private static func key(for controller: String) -> String {

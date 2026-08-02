@@ -268,6 +268,19 @@ final class GameControllerManager: ObservableObject {
         reloadBindings()
     }
 
+    /// Replaces the whole map at once, which is what choosing a preset means.
+    func applyBindings(_ map: [String: Int]) {
+        bindings = map
+        ControllerBindings.save(map, for: storageKey)
+        reloadBindings()
+    }
+
+    /// Whether the current map is exactly this one, so the preset rows can
+    /// show which arrangement is in effect and neither once it is edited.
+    func matchesBindings(_ map: [String: Int]) -> Bool {
+        bindings == map
+    }
+
     func clearBinding(for id: Int) {
         bindings = bindings.filter { $0.value != id }
         ControllerBindings.save(bindings, for: storageKey)
