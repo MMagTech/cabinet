@@ -59,6 +59,8 @@ struct ServerSetupView: View {
 
             Spacer()
         }
+        .frame(maxWidth: 520)
+        .frame(maxWidth: .infinity)
         .padding(24)
         .onAppear { addressFocused = true }
     }

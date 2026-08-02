@@ -84,6 +84,8 @@ struct PairingView: View {
                 .font(.footnote)
                 .frame(maxWidth: .infinity)
         }
+        .frame(maxWidth: 520)
+        .frame(maxWidth: .infinity)
         .padding(24)
         .onAppear { begin() }
         .onDisappear { pollTask?.cancel() }
