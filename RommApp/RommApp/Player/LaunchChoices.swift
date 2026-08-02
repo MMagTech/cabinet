@@ -61,6 +61,9 @@ struct LaunchChoices {
         var clears = ""
         if saveId == nil { clears += "drop(\(jsString("player:\(rom.platformSlug):save_id")));\n" }
         if stateId == nil { clears += "drop(\(jsString("player:\(rom.platformSlug):state_id")));\n" }
+        // A BIOS left over from a previous game on the same platform would
+        // otherwise be applied to one that must not have it.
+        if firmwareId == nil { clears += "drop(\(jsString("player:\(rom.platformSlug):bios_id")));\n" }
 
         return """
         (function () {

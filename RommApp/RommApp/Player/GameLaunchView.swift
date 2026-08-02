@@ -234,8 +234,13 @@ struct GameLaunchView: View {
         saves = await savesTask ?? []
         states = (await statesTask ?? []).sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
 
-        // Prefer a verified BIOS, matching the scope doc.
-        selectedFirmware = firmware.first { $0.isVerified } ?? firmware.first
+        // Deliberately no BIOS by default. Every arcade game shares one
+        // platform, so "first verified firmware" meant forcing neogeo.zip
+        // onto Cave and Capcom boards that have nothing to do with Neo Geo,
+        // and a wrong BIOS stops a game booting entirely. RomM only supplies
+        // one when the core asks for it, so absent unless chosen is the
+        // honest default.
+        selectedFirmware = nil
         loading = false
     }
 }
