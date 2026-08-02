@@ -19,7 +19,11 @@ struct ControlLayout: Decodable {
     let landscapeItems: [Item]?
 
     func items(landscape: Bool) -> [Item] {
-        landscape ? (landscapeItems ?? items) : items
+        // Nil coalescing alone would hand back an empty landscape array as
+        // though it were a real layout, leaving nothing to draw and nothing
+        // to touch. Empty falls back the same as missing.
+        guard landscape, let wide = landscapeItems, !wide.isEmpty else { return items }
+        return wide
     }
 
     struct Item: Decodable {

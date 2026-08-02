@@ -56,6 +56,14 @@ final class ControlPadView: UIView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
+    /// Redraw whenever the view is resized. Without this the controls keep
+    /// the geometry they were first laid out with, so a rotation moves the
+    /// view but not the controls inside it.
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        setNeedsDisplay()
+    }
+
     /// Touches land here only inside a control's extended frame. Everything
     /// else passes through to the webview underneath, which matters in
     /// landscape where this view overlays the whole screen: taps on the game

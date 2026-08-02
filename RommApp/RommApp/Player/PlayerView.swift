@@ -29,11 +29,16 @@ struct PlayerView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            content(isLandscape: geometry.size.width > geometry.size.height)
+            content(size: geometry.size)
         }
     }
 
-    private func content(isLandscape: Bool) -> some View {
+    private func content(size: CGSize) -> some View {
+        let isLandscape = size.width > size.height
+        return content(isLandscape: isLandscape, size: size)
+    }
+
+    private func content(isLandscape: Bool, size: CGSize) -> some View {
         ZStack(alignment: .topLeading) {
             Color.black.ignoresSafeArea()
 
@@ -54,13 +59,10 @@ struct PlayerView: View {
                     token: context.token,
                     launch: launch,
                     rom: rom,
+                    pad: padConfiguration(isLandscape: isLandscape),
                     overlayVisible: $overlayVisible,
                     gameStarted: $gameStarted,
                     input: input
-                )
-                .padding(
-                    .bottom,
-                    showsTouchControls && !isLandscape ? controlStripHeight : 0
                 )
             } else if failed {
                 VStack(spacing: 12) {
@@ -70,39 +72,6 @@ struct PlayerView: View {
                         .buttonStyle(.bordered)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-
-            // The native pad replaces EmulatorJS's web touch controls, which
-            // the injection hides. It appears once the game actually starts,
-            // so RomM's pre play page stays fully tappable, and steps aside
-            // entirely while a physical controller is driving.
-            //
-            // Portrait: a strip below the canvas. Landscape: the pad spans
-            // the whole screen with controls in the gutters flanking the
-            // centred canvas, and passes touches through everywhere else.
-            // Orientation follows the device; the person holding the phone
-            // decides, never the app.
-            if showsTouchControls, let layout = controlLayout {
-                if isLandscape {
-                    TouchControlPad(items: layout.items(landscape: true)) { id, down in
-                        input.send(id: id, down: down)
-                    }
-                    // A bridged UIKit view has no intrinsic size, so without
-                    // this it collapsed to nothing and the landscape controls
-                    // never appeared at all. Portrait was fine only because
-                    // its strip is given an explicit height.
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .opacity(controlOpacity)
-                } else {
-                    VStack {
-                        Spacer()
-                        TouchControlPad(items: layout.items(landscape: false)) { id, down in
-                            input.send(id: id, down: down)
-                        }
-                        .frame(height: controlStripHeight)
-                    }
-                    .opacity(controlOpacity)
-                }
             }
 
             // Fades in step with EmulatorJS's menu toggle so nothing sits
@@ -177,6 +146,24 @@ struct PlayerView: View {
         gameStarted && !controllers.isConnected && controlLayout != nil
     }
 
+    /// What the container should do with the touch pad. The pad lives inside
+    /// the same UIKit hierarchy as the webview now: as SwiftUI siblings the
+    /// webview won every touch wherever the two overlapped, which in
+    /// landscape is everywhere, and the controls drew perfectly while
+    /// receiving nothing. Same hierarchy makes the layering a guarantee
+    /// instead of a negotiation between frameworks.
+    private func padConfiguration(isLandscape: Bool) -> PlayerWebView.PadConfiguration {
+        guard showsTouchControls, let layout = controlLayout else { return .hidden }
+        if isLandscape {
+            return .overlay(items: layout.items(landscape: true), opacity: controlOpacity)
+        }
+        return .bottomStrip(
+            items: layout.items(landscape: false),
+            height: controlStripHeight,
+            opacity: controlOpacity
+        )
+    }
+
     /// Vertical games trade some control height for canvas: their picture is
     /// taller than wide and every point matters, while their genres, mostly
     /// shooters, need fewer and simpler inputs.
@@ -226,10 +213,20 @@ final class PlayerInputBridge: ObservableObject {
 }
 
 struct PlayerWebView: UIViewRepresentable {
+    /// Where the touch pad sits relative to the game, decided by the host.
+    enum PadConfiguration {
+        case hidden
+        /// Full screen pad over the canvas, controls in the gutters.
+        case overlay(items: [ControlLayout.Item], opacity: Double)
+        /// Pad below the canvas, the portrait arrangement.
+        case bottomStrip(items: [ControlLayout.Item], height: CGFloat, opacity: Double)
+    }
+
     let url: URL
     let token: String
     let launch: LaunchChoices
     let rom: Rom
+    let pad: PadConfiguration
     @Binding var overlayVisible: Bool
     @Binding var gameStarted: Bool
     let input: PlayerInputBridge
@@ -266,7 +263,7 @@ struct PlayerWebView: UIViewRepresentable {
         }
     }
 
-    func makeUIView(context: Context) -> WKWebView {
+    func makeUIView(context: Context) -> PlayerContainerView {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
@@ -322,11 +319,18 @@ struct PlayerWebView: UIViewRepresentable {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         webView.load(request)
-        return webView
+
+        let padView = ControlPadView(items: []) { [weak input] id, down in
+            input?.send(id: id, down: down)
+        }
+        padView.backgroundColor = .clear
+        padView.isMultipleTouchEnabled = true
+        return PlayerContainerView(webView: webView, pad: padView)
     }
 
-    func updateUIView(_ webView: WKWebView, context: Context) {
-        webView.scrollView.isScrollEnabled = !gameStarted
+    func updateUIView(_ container: PlayerContainerView, context: Context) {
+        container.webView.scrollView.isScrollEnabled = !gameStarted
+        container.apply(pad)
     }
 
     /// Presses RomM's own Play button, but only once its page has visibly
@@ -583,5 +587,61 @@ struct PlayerWebView: UIViewRepresentable {
               let literal = String(data: data, encoding: .utf8)
         else { return "\"\"" }
         return literal
+    }
+}
+
+
+/// One UIKit hierarchy holding the webview and the touch pad.
+///
+/// They used to be SwiftUI siblings, and wherever they overlapped the
+/// webview received every touch while the pad received none, despite the pad
+/// drawing exactly where it should. In landscape they overlap everywhere, so
+/// the controls looked right and did nothing, and a rotation to portrait,
+/// where they do not overlap, made them work. With both views in one
+/// hierarchy the pad is simply the topmost subview, and its own point(inside:)
+/// decides what passes through to the game underneath.
+final class PlayerContainerView: UIView {
+    let webView: WKWebView
+    let pad: ControlPadView
+
+    private var placement: PlayerWebView.PadConfiguration = .hidden
+
+    init(webView: WKWebView, pad: ControlPadView) {
+        self.webView = webView
+        self.pad = pad
+        super.init(frame: .zero)
+        backgroundColor = .black
+        addSubview(webView)
+        addSubview(pad)
+        pad.isHidden = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    func apply(_ configuration: PlayerWebView.PadConfiguration) {
+        placement = configuration
+        switch configuration {
+        case .hidden:
+            pad.isHidden = true
+        case .overlay(let items, let opacity), .bottomStrip(let items, _, let opacity):
+            pad.items = items
+            pad.alpha = opacity
+            pad.isHidden = false
+        }
+        setNeedsLayout()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        switch placement {
+        case .hidden, .overlay:
+            webView.frame = bounds
+            pad.frame = bounds
+        case .bottomStrip(_, let height, _):
+            let split = max(bounds.height - height, 0)
+            webView.frame = CGRect(x: 0, y: 0, width: bounds.width, height: split)
+            pad.frame = CGRect(x: 0, y: split, width: bounds.width, height: height)
+        }
     }
 }
