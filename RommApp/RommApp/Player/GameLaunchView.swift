@@ -41,20 +41,35 @@ struct GameLaunchView: View {
                     // Identity and the primary action stay together on the
                     // left, where the eye starts.
                     HStack(alignment: .top, spacing: 20) {
-                        // 115 rather than 140: a landscape phone leaves about
-                        // 318 points once the navigation bar and padding take
-                        // theirs, and a taller cover pushed Play off the
-                        // bottom edge. Identity matters less than reaching
-                        // the button.
+                        // Identity on the left, choices and the action on
+                        // the right. The cover stays small because a
+                        // landscape phone leaves roughly 318 points once the
+                        // navigation bar and padding take theirs.
                         VStack(spacing: 10) {
                             cover(maxWidth: 115)
                             titleBlock(centred: true)
-                            playButton
                         }
                         .frame(width: 170)
 
-                        optionsGrid
-                            .frame(maxWidth: .infinity, alignment: .top)
+                        VStack(spacing: 12) {
+                            // Equal halves. Both cards carry a label and a
+                            // picker and nothing else, so they match without
+                            // being forced to.
+                            HStack(alignment: .top, spacing: 12) {
+                                if cores.count > 1 {
+                                    coreCard.frame(maxWidth: .infinity)
+                                }
+                                if !firmware.isEmpty {
+                                    firmwareCard.frame(maxWidth: .infinity)
+                                }
+                            }
+                            .fixedSize(horizontal: false, vertical: true)
+
+                            playButton
+
+                            if !states.isEmpty || !saves.isEmpty { resumeCard }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .top)
                     }
                     .padding(20)
                 } else {
@@ -173,12 +188,6 @@ struct GameLaunchView: View {
             .pickerStyle(.menu)
             .labelsHidden()
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            if let selectedCore, let note = CoreCatalog.note(selectedCore) {
-                Text(note)
-                    .font(.caption)
-                    .foregroundStyle(selectedCore == "mame2003" ? .orange : .secondary)
-            }
         }
     }
 
