@@ -331,10 +331,17 @@ final class PlayerInputBridge: ObservableObject {
     /// it is not a game input, it is the person asking for the pause menu.
     var onMenu: (() -> Void)?
 
+    /// Sends one input change to the emulator.
+    ///
+    /// The expression is kept as short as it can possibly be because this
+    /// is the hottest path in the app: every direction change and every
+    /// button edge crosses here, and each call is an IPC hop plus a fresh
+    /// script compile inside the web process. The resident helper is
+    /// installed once at document start, so what gets compiled per press is
+    /// a dozen characters rather than a hundred and ten with three property
+    /// lookups. Nothing about the emulator side changes.
     func send(id: Int, down: Bool) {
-        let js = "window.EJS_emulator && EJS_emulator.gameManager"
-            + " && EJS_emulator.gameManager.simulateInput(0, \(id), \(down ? 1 : 0));"
-        webView?.evaluateJavaScript(js)
+        webView?.evaluateJavaScript("__ci(\(id),\(down ? 1 : 0))")
     }
 
     /// Reveals the overlay from native code, for controllers with no screen
@@ -697,6 +704,18 @@ struct PlayerWebView: UIViewRepresentable {
         (function () {
           const KEY = "cabinet.autosave.\(romId)";
           const START = Date.now();
+
+          // The input path, resident so the native side never has to ship
+          // it again. Held on window rather than closed over so it survives
+          // being called from an evaluateJavaScript with no scope of its
+          // own, and resolved fresh each call because gameManager does not
+          // exist until a game loads.
+          window.__ci = function (id, down) {
+            try {
+              const e = window.EJS_emulator;
+              if (e && e.gameManager) e.gameManager.simulateInput(0, id, down);
+            } catch (x) {}
+          };
 
           // Autosave has to stay cheap or it becomes the thing it protects
           // against. The webview's content process runs under a much
