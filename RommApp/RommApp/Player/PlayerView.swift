@@ -242,6 +242,8 @@ struct PlayerWebView: UIViewRepresentable {
                 if message.body as? String == "started" {
                     parent.gameStarted = true
                 }
+            case "diag":
+                print("PLAYER_DIAG \(message.body)")
             default:
                 break
             }
@@ -267,6 +269,7 @@ struct PlayerWebView: UIViewRepresentable {
         config.userContentController.addUserScript(script)
         config.userContentController.add(context.coordinator, name: "overlay")
         config.userContentController.add(context.coordinator, name: "gameState")
+        config.userContentController.add(context.coordinator, name: "diag")
 
         let webView = WKWebView(frame: .zero, configuration: config)
         input.webView = webView
@@ -367,6 +370,26 @@ struct PlayerWebView: UIViewRepresentable {
             if (typeof SharedArrayBuffer === "function" && window.crossOriginIsolated) {
               window.EJS_threads = true;
             }
+          } catch (e) {}
+
+          // Report which core build actually loaded, rather than inferring it
+          // from the headers being correct. Threading either happened or it
+          // did not, and only the request the page really makes says which.
+          try {
+            const origFetch2 = window.fetch;
+            window.fetch = function (input, init) {
+              try {
+                const u = String(typeof input === "string" ? input : input && input.url);
+                if (u.indexOf("/cores/") !== -1) {
+                  window.webkit.messageHandlers.diag.postMessage(
+                    "core " + u.split("/").pop() +
+                    " isolated=" + !!window.crossOriginIsolated +
+                    " sab=" + (typeof SharedArrayBuffer === "function")
+                  );
+                }
+              } catch (e) {}
+              return origFetch2.call(this, input, init);
+            };
           } catch (e) {}
 
           // RomM's app shell wraps every route, the player included, in its
