@@ -127,6 +127,9 @@ struct PairingView: View {
             Button("Use a different server") { session.forgetServer() }
                 .font(.footnote)
                 .padding(.top, 4)
+                // The last thing in the column, so it is the one that gets
+                // clipped against the bottom edge without room of its own.
+                .padding(.bottom, 16)
         }
     }
 
