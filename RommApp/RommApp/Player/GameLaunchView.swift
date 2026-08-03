@@ -13,6 +13,7 @@ import SwiftUI
 /// value is ignored and its page falls back to its own defaults, which is
 /// exactly the behaviour before this screen existed.
 struct GameLaunchView: View {
+    @ObservedObject private var compatibility = Compatibility.shared
     let rom: Rom
 
     @EnvironmentObject private var session: Session
@@ -39,8 +40,6 @@ struct GameLaunchView: View {
     /// that exact moment is offered, preselected, and declinable.
     @State private var interruptedAt: Date?
     @State private var continueRun = false
-    /// Arcade only: what the cabinet data says this game's controls are,
-    /// and the person's current choice, which starts as the data's answer.
     /// True once someone actually picks a core on this screen.
     ///
     /// Every launch used to record whichever core was selected, which
@@ -50,6 +49,8 @@ struct GameLaunchView: View {
     /// outranking the recommendation for its own board. Only a deliberate
     /// pick is worth remembering.
     @State private var coreWasChosen = false
+    /// Arcade only: what the cabinet data says this game's controls are,
+    /// and the person's current choice, which starts as the data's answer.
     @State private var arcadeBase: ArcadeProfile?
     @State private var arcadeButtons = 6
     @State private var arcadeWays = "8"
@@ -92,6 +93,7 @@ struct GameLaunchView: View {
                             playButton
 
                             if interruptedAt != nil { continueCard }
+                            compatibilityCard
                             if arcadeBase != nil { arcadeControlsCard }
                             if !states.isEmpty || !saves.isEmpty { resumeCard }
                         }
@@ -309,6 +311,39 @@ struct GameLaunchView: View {
             ArcadeOverride.clear(for: rom.id)
         } else {
             ArcadeOverride.save(buttons: arcadeButtons, ways: arcadeWays, for: rom.id)
+        }
+    }
+
+    /// Says what is known about this game running here, and never more
+    /// than one thing: either it has been marked, or the app has watched
+    /// it die enough times to raise the subject. Silent otherwise, which
+    /// is almost always.
+    @ViewBuilder
+    private var compatibilityCard: some View {
+        if compatibility.isMarked(rom.id) {
+            LaunchCard(title: "Marked as not working", systemImage: "exclamationmark.triangle") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("You marked this game as not working on this phone. It will still play if you want to try again.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Remove the mark") {
+                        compatibility.setMarked(false, romId: rom.id)
+                    }
+                    .font(.callout)
+                }
+            }
+        } else if compatibility.shouldSuggestMark(romId: rom.id) {
+            LaunchCard(title: "This game keeps closing", systemImage: "exclamationmark.triangle") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("It has closed itself \(compatibility.crashes(romId: rom.id)) times on this phone. Some boards do not survive here, and a different emulator above sometimes fixes it.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Mark it as not working") {
+                        compatibility.setMarked(true, romId: rom.id)
+                    }
+                    .font(.callout)
+                }
+            }
         }
     }
 

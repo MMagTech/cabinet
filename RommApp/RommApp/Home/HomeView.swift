@@ -10,6 +10,7 @@ import SwiftUI
 /// card and the rest sits beside it.
 struct HomeView: View {
     @EnvironmentObject private var session: Session
+    @ObservedObject private var compatibility = Compatibility.shared
 
     @State private var recent: [Rom] = []
     @State private var loaded = false
@@ -160,13 +161,18 @@ struct HomeView: View {
                                 CoverImage(path: rom.pathCoverSmall, title: rom.displayName)
                                     .frame(width: 100, height: 133)
                                     .clipShape(.rect(cornerRadius: 10))
+                                    .compatibilityBadge(romId: rom.id, compact: true)
                                 Text(rom.displayName)
                                     .font(.caption)
                                     .lineLimit(1)
                                     .frame(width: 100, alignment: .leading)
+                                    .foregroundStyle(
+                                        compatibility.isMarked(rom.id) ? .secondary : .primary
+                                    )
                             }
                         }
                         .buttonStyle(.plain)
+                        .compatibilityMenu(romId: rom.id)
                     }
                 }
             }

@@ -10,6 +10,7 @@ struct PlatformGamesView: View {
     let platform: Platform
 
     @EnvironmentObject private var session: Session
+    @ObservedObject private var compatibility = Compatibility.shared
     @State private var roms: [Rom] = []
     @State private var total = 0
     @State private var loading = false
@@ -103,14 +104,19 @@ struct PlatformGamesView: View {
                             CoverImage(path: rom.pathCoverSmall, title: rom.displayName)
                                 .aspectRatio(3.0 / 4.0, contentMode: .fit)
                                 .clipShape(.rect(cornerRadius: 10))
+                                .compatibilityBadge(romId: rom.id)
 
                             Text(rom.displayName)
                                 .font(.caption)
                                 .lineLimit(1)
                                 .frame(maxWidth: .infinity, alignment: .leading)
+                                .foregroundStyle(
+                                    compatibility.isMarked(rom.id) ? .secondary : .primary
+                                )
                         }
                     }
                     .buttonStyle(.plain)
+                    .compatibilityMenu(romId: rom.id)
                     .onAppear { Task { await loadMoreIfNeeded(current: rom) } }
                 }
             }
@@ -127,13 +133,24 @@ struct PlatformGamesView: View {
                     Button {
                         playing = rom
                     } label: {
-                        Text(rom.displayName)
-                            .lineLimit(1)
-                            .foregroundStyle(.primary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(.rect)
+                        HStack(spacing: 8) {
+                            Text(rom.displayName)
+                                .lineLimit(1)
+                                .foregroundStyle(
+                                    compatibility.isMarked(rom.id) ? .secondary : .primary
+                                )
+                            Spacer(minLength: 0)
+                            if compatibility.isMarked(rom.id) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
+                    .compatibilityMenu(romId: rom.id)
                     .onAppear { Task { await loadMoreIfNeeded(current: rom) } }
                 }
 

@@ -507,6 +507,7 @@ struct PlayerWebView: UIViewRepresentable {
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
             EmulationInfo.recordRecovery()
             EmulationInfo.freezeVitalsAtDeath()
+            Compatibility.shared.recordCrash(romId: parent.rom.id)
             parent.gameStarted = false
 
             // Recovery is unlimited by design, because the deaths are
@@ -587,7 +588,12 @@ struct PlayerWebView: UIViewRepresentable {
             )
             config.userContentController.addUserScript(
                 WKUserScript(
-                    source: Self.autoStartInjection(expecting: launch.core),
+                    source: Self.autoStartInjection(
+                        expecting: launch.core,
+                        // Proof that the seeded core was applied only means
+                        // something when there was a choice to get wrong.
+                        verifyCore: CoreCatalog.cores(for: rom.platformSlug).count > 1
+                    ),
                     injectionTime: .atDocumentEnd,
                     forMainFrameOnly: true
                 )
@@ -661,9 +667,18 @@ struct PlayerWebView: UIViewRepresentable {
     /// picker is proof the configuration was read. Failing to find it leaves
     /// the page visible rather than guessing, which is the intended
     /// degradation.
-    static func autoStartInjection(expecting core: String?) -> String {
+    /// - Parameter verifyCore: whether to wait for proof that the seeded
+    ///   core was applied before pressing Play. This is worth waiting for
+    ///   on arcade, where picking wrong means a 2003 MAME that cannot run
+    ///   most of the library. It is not worth waiting for on a platform
+    ///   with a single core, where there is nothing to get wrong and no
+    ///   picker for the id to appear in, so the proof never arrives and
+    ///   auto start used to give up and strand the player on RomM's own
+    ///   screen. That was every single core system: Game Boy Advance, the
+    ///   Nintendo handhelds, most consoles.
+    static func autoStartInjection(expecting core: String?, verifyCore: Bool) -> String {
         let expected: String
-        if let core, let data = try? JSONEncoder().encode(core),
+        if let core, verifyCore, let data = try? JSONEncoder().encode(core),
            let literal = String(data: data, encoding: .utf8) {
             expected = literal
         } else {
