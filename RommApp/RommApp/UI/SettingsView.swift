@@ -12,7 +12,6 @@ struct SettingsView: View {
     @AppStorage("com.mmagtech.RommApp.controlOpacity") private var controlOpacity = 0.7
     @AppStorage(ControlTheme.key) private var controlTheme = ControlTheme.system.rawValue
     @AppStorage(PlayerAutosave.key) private var autosaveEnabled = true
-    @AppStorage("com.mmagtech.RommApp.useRommPlayerScreen") private var useRommScreen = false
     @ObservedObject private var controllers = GameControllerManager.shared
 
     var body: some View {
@@ -76,14 +75,6 @@ struct SettingsView: View {
                 Text("Controls")
             } footer: {
                 Text("How strongly the on screen controls show over the game. They respond to touch at any visibility.")
-            }
-
-            Section {
-                Toggle("Use RomM's own launch screen", isOn: $useRommScreen)
-            } header: {
-                Text("Launching games")
-            } footer: {
-                Text("Off means Cabinet shows its own screen for choosing an emulator, BIOS and save. On hands that back to RomM's web page, which is always available as a fallback.")
             }
 
             Section {

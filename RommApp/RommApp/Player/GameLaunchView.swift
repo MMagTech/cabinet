@@ -18,7 +18,6 @@ struct GameLaunchView: View {
 
     @EnvironmentObject private var session: Session
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("com.mmagtech.RommApp.useRommPlayerScreen") private var useRommScreen = false
 
     @State private var cores: [String] = []
     @State private var selectedCore: String?
@@ -465,8 +464,7 @@ struct GameLaunchView: View {
             // choice: the autosave loads over whatever the page booted,
             // so seeding a state as well would just boot into it twice.
             saveId: continueRun ? nil : selectedSave?.id,
-            stateId: continueRun ? nil : selectedState?.id,
-            useRommScreen: useRommScreen
+            stateId: continueRun ? nil : selectedState?.id
         )
     }
 

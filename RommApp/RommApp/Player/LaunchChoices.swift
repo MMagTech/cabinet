@@ -17,13 +17,11 @@ struct LaunchChoices {
     let firmwareId: Int?
     let saveId: Int?
     let stateId: Int?
-    /// When true, the native screen stands aside entirely and RomM's own page
-    /// is shown as it always was. The escape hatch, in Settings.
-    let useRommScreen: Bool
 
-    static let none = LaunchChoices(
-        core: nil, firmwareId: nil, saveId: nil, stateId: nil, useRommScreen: true
-    )
+    /// Seeds nothing, for a player opened without a launch screen in front
+    /// of it. RomM's page then applies its own defaults, exactly as it did
+    /// before any of this existed.
+    static let none = LaunchChoices(core: nil, firmwareId: nil, saveId: nil, stateId: nil)
 
     /// The core to start on: what was used last, otherwise one that stands a
     /// chance of running the game.
@@ -72,8 +70,6 @@ struct LaunchChoices {
     /// JavaScript that seeds RomM's storage, confirms it took, and reports
     /// back so native code knows whether skipping its screen is safe.
     func injection(for rom: Rom) -> String {
-        guard !useRommScreen else { return "" }
-
         func entry(_ key: String, _ value: String?) -> String {
             guard let value else { return "" }
             return "put(\(jsString(key)), \(jsString(value)));\n"
