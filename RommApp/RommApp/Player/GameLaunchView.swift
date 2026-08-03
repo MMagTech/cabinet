@@ -56,6 +56,9 @@ struct GameLaunchView: View {
     /// resolved once here and threaded to everything downstream that needs
     /// it, rather than recomputed piecemeal. See `Rom.canonicalPlatformSlug`.
     @State private var canonicalSlug = ""
+    /// A keyboard machine, not a gamepad one. See ComputerPlatforms: this
+    /// app does not offer touch play for these, on purpose, not yet.
+    @State private var isComputerPlatform = false
     /// Arcade only: what the cabinet data says this game's controls are,
     /// and the person's current choice, which starts as the data's answer.
     @State private var arcadeBase: ArcadeProfile?
@@ -99,6 +102,7 @@ struct GameLaunchView: View {
 
                             playButton
 
+                            if isComputerPlatform { computerPlatformCard }
                             if interruptedAt != nil { continueCard }
                             compatibilityCard
                             if arcadeBase != nil { arcadeControlsCard }
@@ -174,18 +178,33 @@ struct GameLaunchView: View {
             }
             playing = true
         } label: {
-            Label(playLabel, systemImage: "play.fill")
+            Label(playLabel, systemImage: isComputerPlatform ? "keyboard" : "play.fill")
                 .font(.headline)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 15)
         }
         .buttonStyle(.borderedProminent)
-        .disabled(loading)
+        .disabled(loading || isComputerPlatform)
     }
 
     private var playLabel: String {
+        if isComputerPlatform { return "Not playable here yet" }
         if continueRun { return "Continue" }
         return selectedState != nil || selectedSave != nil ? "Resume" : "Play"
+    }
+
+    /// Why the button above is not a button right now. A keyboard machine
+    /// has no fixed pad this app can honestly draw, so it does not try,
+    /// rather than offering a control scheme that looks like it works and
+    /// does not. Download support, once the app has any, is the planned
+    /// way to still get this game, through a real emulator on a real
+    /// keyboard instead.
+    private var computerPlatformCard: some View {
+        LaunchCard(title: "Needs a keyboard", systemImage: "keyboard") {
+            Text("This platform is controlled with a keyboard, not a game pad, and this app does not offer that yet. A future version may let you download the ROM to play it in another emulator.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 
     /// The offer to pick an interrupted run back up. A card like the others,
@@ -234,6 +253,7 @@ struct GameLaunchView: View {
                 alignment: .leading,
                 spacing: 12
             ) {
+                if isComputerPlatform { computerPlatformCard }
                 if interruptedAt != nil { continueCard }
                 if cores.count > 1 { coreCard }
                 if showsFirmwareCard { firmwareCard }
@@ -253,6 +273,7 @@ struct GameLaunchView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             VStack(spacing: 14) {
+                if isComputerPlatform { computerPlatformCard }
                 if interruptedAt != nil { continueCard }
                 if cores.count > 1 { coreCard }
                 if showsFirmwareCard { firmwareCard }
@@ -490,6 +511,7 @@ struct GameLaunchView: View {
 
     private func load() async {
         canonicalSlug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
+        isComputerPlatform = ComputerPlatforms.contains(canonicalSlug)
         cores = CoreCatalog.cores(for: canonicalSlug)
         selectedCore = LaunchChoices.defaultCore(rom: rom, canonicalSlug: canonicalSlug, from: cores)
 
