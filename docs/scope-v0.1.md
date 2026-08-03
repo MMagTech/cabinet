@@ -312,27 +312,27 @@ there. Thumbnails turn the weakest screen in the app into one of the better
 ones and make the pause menu's save and load loop legible instead of an act of
 faith. Best payoff for the effort on this list.
 
-**3. The console pad is the wrong shape for most consoles.** Found and
-confirmed 2026-08-03, and this now leads the list: there are exactly two
-bundled touch layouts, `default.json` and `gb.json`, and every console
-platform that is not Game Boy gets `default`, which draws only two face
-buttons, A and B. SNES has four, X and Y are simply unreachable by touch
-today, and SNES is only the one that got noticed first. Genesis, N64, PSX,
-Saturn and the rest are each some further wrong shape, not audited yet.
-Arcade already does this properly, a profile resolved per game from MAME's
-own data; consoles need the equivalent, one real layout per pad shape rather
-than one generic layout for all of them. Scope this to gamepad shaped
-systems only, every console, handheld and arcade platform in the `Next`
-item 5 audit below: keyboard machines are handled separately and are not
-part of this. Moving the controls afterward, a real editor since layouts are
-already normalised 0 to 1 data, is the natural follow on once the shapes
-themselves are correct, but fixing wrong is more urgent than fixing fixed.
+**Done, 2026-08-03: the console pad is the wrong shape for most consoles.**
+Was down to two bundled touch layouts, `default.json` and `gb.json`, and
+every console platform that was not Game Boy got `default`, two face
+buttons only. Fifteen pad shapes now cover every non-computer, non-arcade
+platform RomM's core map lists, sourced from EmulatorJS's own code where the
+mapping was not obvious rather than guessed, including a real analog stick
+for N64 (a new `stick` item kind, not previously possible), which was
+expected to need blocking the way keyboard machines are and did not: its
+buttons are ordinary digital buttons, and the stick was buildable once
+looked into properly. Nintendo DS turned out to need no new engineering
+either, its touch screen is real `WKWebView` content the control strip
+already leaves uncovered. Verified live in the simulator, not yet in a real
+play session on device. Moving the controls, a real editor since layouts are
+already normalised 0 to 1 data, is the natural follow on now that the shapes
+themselves are correct, but is not on this list yet.
 
-**4. Collections.** RomM models them and the app ignores them. An A to Z rail
+**3. Collections.** RomM models them and the app ignores them. An A to Z rail
 is enough for a console library and not enough for 1,200 arcade games, which
 need grouping by something a person cares about rather than by spelling.
 
-**5. Download for platforms this app cannot run.** Settled 2026-08-03. Not
+**4. Download for platforms this app cannot run.** Settled 2026-08-03. Not
 every platform RomM lists is playable in a browser at all: Dreamcast is
 absent from RomM's own core map entirely, and Flash runs through Ruffle, an
 engine this player does not integrate with. Neither is a bug; both are limits
