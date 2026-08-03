@@ -2,9 +2,6 @@
   "3do": [
     "opera"
   ],
-  "3ds": [
-    "azahar"
-  ],
   "acpc": [
     "cap32",
     "crocods"
@@ -92,8 +89,7 @@
     "fceumm"
   ],
   "gamegear": [
-    "genesis_plus_gx",
-    "genesis_plus_gx_wide"
+    "genesis_plus_gx"
   ],
   "gb": [
     "gambatte",
@@ -107,11 +103,7 @@
     "mgba"
   ],
   "genesis": [
-    "genesis_plus_gx",
-    "genesis_plus_gx_wide"
-  ],
-  "intellivision": [
-    "freeintv"
+    "genesis_plus_gx"
   ],
   "ique-player": [
     "mupen64plus_next"
@@ -123,16 +115,13 @@
     "handy"
   ],
   "master-system-girl": [
-    "genesis_plus_gx",
-    "genesis_plus_gx_wide"
+    "genesis_plus_gx"
   ],
   "master-system-super-compact": [
-    "genesis_plus_gx",
-    "genesis_plus_gx_wide"
+    "genesis_plus_gx"
   ],
   "mega-pc": [
-    "genesis_plus_gx",
-    "genesis_plus_gx_wide"
+    "genesis_plus_gx"
   ],
   "n64": [
     "mupen64plus_next",
@@ -159,15 +148,11 @@
     "fceumm",
     "nestopia"
   ],
-  "new-nintendo-3ds": [
-    "azahar"
-  ],
   "new-style-nes": [
     "fceumm"
   ],
   "new-style-super-nes-model-sns-101": [
-    "snes9x",
-    "bsnes"
+    "snes9x"
   ],
   "nintendo-ds-lite": [
     "melonds",
@@ -201,61 +186,48 @@
     "yabause"
   ],
   "sega-game-box-9": [
-    "genesis_plus_gx",
-    "genesis_plus_gx_wide"
+    "genesis_plus_gx"
   ],
   "sega-mark-iii": [
-    "genesis_plus_gx",
-    "genesis_plus_gx_wide"
+    "genesis_plus_gx"
   ],
   "sega-master-system-ii": [
     "genesis_plus_gx",
-    "genesis_plus_gx_wide",
     "smsplus"
   ],
   "sega-mega-drive-2-slash-genesis": [
-    "genesis_plus_gx",
-    "genesis_plus_gx_wide"
+    "genesis_plus_gx"
   ],
   "sega-mega-jet": [
-    "genesis_plus_gx",
-    "genesis_plus_gx_wide"
+    "genesis_plus_gx"
   ],
   "sega-nomad": [
-    "genesis_plus_gx",
-    "genesis_plus_gx_wide"
+    "genesis_plus_gx"
   ],
   "sega32": [
     "picodrive"
   ],
   "segacd": [
     "genesis_plus_gx",
-    "genesis_plus_gx_wide",
     "picodrive"
   ],
   "sfam": [
-    "snes9x",
-    "bsnes"
+    "snes9x"
   ],
   "sms": [
-    "genesis_plus_gx",
-    "genesis_plus_gx_wide"
+    "genesis_plus_gx"
   ],
   "snes": [
-    "snes9x",
-    "bsnes"
+    "snes9x"
   ],
   "super-famicom-jr-model-shvc-101": [
-    "snes9x",
-    "bsnes"
+    "snes9x"
   ],
   "super-famicom-shvc-001": [
-    "snes9x",
-    "bsnes"
+    "snes9x"
   ],
   "super-nintendo-original-european-version": [
-    "snes9x",
-    "bsnes"
+    "snes9x"
   ],
   "supergrafx": [
     "mednafen_pce"
@@ -264,8 +236,7 @@
     "mednafen_wswan"
   ],
   "tera-drive": [
-    "genesis_plus_gx",
-    "genesis_plus_gx_wide"
+    "genesis_plus_gx"
   ],
   "tg16": [
     "mednafen_pce"

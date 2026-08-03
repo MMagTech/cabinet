@@ -50,10 +50,30 @@ struct Firmware: Decodable, Identifiable, Hashable {
 
 /// Which emulator cores can run a given platform.
 ///
-/// Mirrored from RomM's frontend map at build time rather than fetched,
-/// because it is a static table that changes only when RomM adds platform
-/// support. Falling back to an empty list is safe: the launch screen then
-/// offers no core choice and RomM's own page picks, exactly as it does today.
+/// RomM's API has no endpoint for this. The only real source is
+/// `_EJS_CORES_MAP` in RomM's own frontend, which is what its player reads
+/// to build its core picker, so this file is generated from that constant
+/// rather than typed by hand. Regenerate with tools/generate_cores_map.py
+/// whenever RomM's core support moves on.
+///
+/// A first attempt at correcting this file by hand on 2026-08-02 made
+/// things worse before it made them better: two entries, bsnes and
+/// genesis_plus_gx_wide, were removed believing them fabricated, having
+/// been checked against the wrong source, EmulatorJS's own generic core
+/// registry rather than RomM's. They are real. RomM's file also carries a
+/// second map, `_EJS_NIGHTLY_CORES_MAP`, layered in only when a server has
+/// netplay enabled, an admin toggle this app cannot see. bsnes and
+/// genesis_plus_gx_wide live only there, along with 3ds, new-nintendo-3ds
+/// and intellivision entirely. The generator deliberately reads only the
+/// stable map: seeding a nightly only core against a server that does not
+/// have it would reproduce exactly the bug this exists to prevent,
+/// EmulatorJS actually attempting to download a core file that is not
+/// there, which shows as a red "Error downloading core" rather than a
+/// clean fallback.
+///
+/// Falling back to an empty list is safe: the launch screen then offers no
+/// core choice and RomM's own page picks, exactly as it does for every
+/// platform this map excludes today.
 enum CoreCatalog {
     private static let map: [String: [String]] = {
         guard let url = Bundle.main.url(forResource: "cores", withExtension: "json"),

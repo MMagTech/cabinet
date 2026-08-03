@@ -782,7 +782,17 @@ struct PlayerWebView: UIViewRepresentable {
             // configuration was read and applied.
             var text = (document.body && document.body.innerText) || "";
             if (text.indexOf(want) !== -1) { clearInterval(timer); play.click(); return; }
-            if (tries > 100) clearInterval(timer);
+
+            // Giving up here used to mean leaving RomM's own screen sitting
+            // untouched, which is the "have to press Play a second time"
+            // bug: any mismatch, however harmless, stranded the whole
+            // launch. But nothing about tapping Play depends on the seed
+            // having matched. RomM's page always has some core selected,
+            // ours or its own default, and reaching this screen at all
+            // already means whatever choice mattered was made back on the
+            // native launch screen. Pressing Play late is a worse pick,
+            // never a worse experience than not pressing it at all.
+            if (tries > 100) { clearInterval(timer); play.click(); }
           }, 100);
         })();
         """
