@@ -64,6 +64,8 @@ struct GameLaunchView: View {
     @State private var arcadeBase: ArcadeProfile?
     @State private var arcadeButtons = 6
     @State private var arcadeWays = "8"
+    @State private var togglingFavorite = false
+    @State private var favoriteError: String?
 
     var body: some View {
         GeometryReader { geometry in
@@ -126,6 +128,9 @@ struct GameLaunchView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
+                favoriteButton
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 Button("Close") { dismiss() }
             }
         }
@@ -148,6 +153,37 @@ struct GameLaunchView: View {
     }
 
     // MARK: Pieces
+
+    /// A star, not a card: this is a status toggle someone glances at and
+    /// taps in passing, not a decision that needs its own explanation on
+    /// the screen the way the arcade or firmware choices do.
+    private var favoriteButton: some View {
+        Button {
+            let romId = rom.id
+            togglingFavorite = true
+            Task {
+                do {
+                    try await session.toggleFavorite(romId: romId)
+                } catch {
+                    favoriteError = error.localizedDescription
+                }
+                togglingFavorite = false
+            }
+        } label: {
+            Image(systemName: session.isFavorite(romId: rom.id) ? "star.fill" : "star")
+                .foregroundStyle(session.isFavorite(romId: rom.id) ? .yellow : .primary)
+        }
+        .disabled(togglingFavorite)
+        .alert(
+            "Couldn't update favorites",
+            isPresented: Binding(get: { favoriteError != nil }, set: { if !$0 { favoriteError = nil } }),
+            presenting: favoriteError
+        ) { _ in
+            Button("OK") { favoriteError = nil }
+        } message: { message in
+            Text(message)
+        }
+    }
 
     private func cover(maxWidth: CGFloat) -> some View {
         CoverImage(path: rom.pathCoverLarge ?? rom.pathCoverSmall, title: rom.displayName)

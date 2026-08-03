@@ -33,6 +33,12 @@ final class Session: ObservableObject {
     /// a slug. `/api/platforms` is fetched for this anyway to build the
     /// library's platform list, so this just keeps a second look up handy.
     @Published private(set) var platformNames: [Int: String] = [:]
+    /// Ids of every rom in the favorite collection, kept in sync with every
+    /// toggle so `isFavorite` never has to make a network call to answer.
+    @Published private(set) var favoriteRomIds: Set<Int> = []
+    /// The favorite collection itself, once found or created. Nil before
+    /// the first load, or on a server nobody has favorited anything on yet.
+    private var favoriteCollection: Collection?
 
     private var client: RommClient?
 
@@ -154,6 +160,13 @@ final class Session: ObservableObject {
                 }
             )
         }
+        Task { [weak self] in
+            guard let self, let client else { return }
+            let collections = (try? await client.collections()) ?? []
+            guard let favorites = collections.first(where: { $0.isFavorite }) else { return }
+            self.favoriteCollection = favorites
+            self.favoriteRomIds = Set(favorites.romIds)
+        }
     }
 
     // MARK: Leaving
@@ -213,6 +226,40 @@ final class Session: ObservableObject {
     func coverData(path: String) async throws -> Data {
         guard let client else { throw RommError.transport("No server selected.") }
         return try await client.coverData(path: path)
+    }
+
+    // MARK: Favorites
+
+    func isFavorite(romId: Int) -> Bool {
+        favoriteRomIds.contains(romId)
+    }
+
+    func favoriteRoms(limit: Int = 10) async throws -> [Rom] {
+        guard let client else { throw RommError.transport("No server selected.") }
+        return try await client.favoriteRoms(limit: limit)
+    }
+
+    /// Adds or removes a rom from the favorite collection, creating that
+    /// collection the first time anyone on this server favorites anything.
+    /// `favoriteRomIds` updates from the response rather than being guessed
+    /// locally, so it always reflects what the server actually holds.
+    func toggleFavorite(romId: Int) async throws {
+        guard let client else { throw RommError.transport("No server selected.") }
+
+        let collection: Collection
+        if let favoriteCollection {
+            collection = favoriteCollection
+        } else {
+            collection = try await client.createFavoriteCollection()
+            self.favoriteCollection = collection
+        }
+
+        let updated = favoriteRomIds.contains(romId)
+            ? try await client.removeRom(romId, fromCollection: collection.id)
+            : try await client.addRom(romId, toCollection: collection.id)
+
+        favoriteCollection = updated
+        favoriteRomIds = Set(updated.romIds)
     }
 
     // MARK: Launch data

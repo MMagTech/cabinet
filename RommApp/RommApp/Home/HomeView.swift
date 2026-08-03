@@ -17,6 +17,7 @@ struct HomeView: View {
     }
 
     @State private var recent: [Rom] = []
+    @State private var favorites: [Rom] = []
     @State private var loaded = false
     @State private var resuming: Rom?
 
@@ -60,10 +61,13 @@ struct HomeView: View {
             if let hero = recent.first {
                 heroCard(for: hero, height: 360, wide: false)
                 if recent.count > 1 {
-                    rotationRow(Array(recent.dropFirst()))
+                    rotationRow("Keep playing", Array(recent.dropFirst()))
                 }
             } else if loaded {
                 emptyState
+            }
+            if !favorites.isEmpty {
+                rotationRow("Favorites", favorites)
             }
             libraryLink
         }
@@ -81,9 +85,12 @@ struct HomeView: View {
 
             VStack(alignment: .leading, spacing: 20) {
                 if recent.count > 1 {
-                    rotationRow(Array(recent.dropFirst()))
+                    rotationRow("Keep playing", Array(recent.dropFirst()))
                 } else if loaded, recent.isEmpty {
                     emptyState
+                }
+                if !favorites.isEmpty {
+                    rotationRow("Favorites", favorites)
                 }
                 libraryLink
             }
@@ -150,9 +157,9 @@ struct HomeView: View {
         .buttonStyle(.plain)
     }
 
-    private func rotationRow(_ roms: [Rom]) -> some View {
+    private func rotationRow(_ title: String, _ roms: [Rom]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Keep playing")
+            Text(title)
                 .font(.headline)
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -213,6 +220,9 @@ struct HomeView: View {
     private func load() async {
         if let roms = try? await session.recentlyPlayed() {
             recent = roms
+        }
+        if let favs = try? await session.favoriteRoms() {
+            favorites = favs
         }
         loaded = true
     }

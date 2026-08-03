@@ -228,6 +228,86 @@ actor RommClient {
         return try await send(req, decoding: RomPage.self)
     }
 
+    // MARK: Favorites
+
+    /// Every collection this account owns. Used only to find the one
+    /// carrying `is_favorite`, never listed as a collections feature.
+    func collections() async throws -> [Collection] {
+        try await send(request(path: "/api/collections"), decoding: [Collection].self)
+    }
+
+    /// Creates the favorite collection the first time someone favorites a
+    /// game on a server where nobody, on any client, has favorited one
+    /// before. `is_public`/`is_favorite` are query parameters, not body
+    /// fields, confirmed against RomM's own frontend
+    /// (`services/api/collection.ts`'s `createCollection`), which is also
+    /// why an empty multipart body with just a name is enough: every other
+    /// field defaults server side.
+    func createFavoriteCollection(name: String = "Favorites") async throws -> Collection {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("/api/collections"), resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [
+            URLQueryItem(name: "is_public", value: "false"),
+            URLQueryItem(name: "is_favorite", value: "true"),
+        ]
+        guard let url = components?.url else {
+            throw RommError.transport("Could not build the request address.")
+        }
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        if let accessToken {
+            req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"name\"\r\n\r\n".data(using: .utf8)!)
+        body.append("\(name)\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        req.httpBody = body
+
+        return try await send(req, decoding: Collection.self)
+    }
+
+    func addRom(_ romId: Int, toCollection collectionId: Int) async throws -> Collection {
+        try await sendCollectionRoms(collectionId, romId: romId, method: "POST")
+    }
+
+    func removeRom(_ romId: Int, fromCollection collectionId: Int) async throws -> Collection {
+        try await sendCollectionRoms(collectionId, romId: romId, method: "DELETE")
+    }
+
+    private func sendCollectionRoms(_ collectionId: Int, romId: Int, method: String) async throws -> Collection {
+        var req = request(path: "/api/collections/\(collectionId)/roms", method: method)
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["rom_ids": [romId]])
+        return try await send(req, decoding: Collection.self)
+    }
+
+    /// Roms in the favorite collection, same shape and paging as the
+    /// library's own roms() call, for the Home screen's favorites rail.
+    func favoriteRoms(limit: Int = 10) async throws -> [Rom] {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("/api/roms"), resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [
+            URLQueryItem(name: "favorite", value: "true"),
+            URLQueryItem(name: "limit", value: String(limit)),
+        ]
+        guard let url = components?.url else {
+            throw RommError.transport("Could not build the request address.")
+        }
+        var req = URLRequest(url: url)
+        if let accessToken {
+            req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+        return try await send(req, decoding: RomPage.self).items
+    }
+
     /// Saves, states and firmware for the launch screen. Each is a plain
     /// list the server already models, so nothing here reinterprets RomM.
     func saves(romId: Int) async throws -> [GameSave] {

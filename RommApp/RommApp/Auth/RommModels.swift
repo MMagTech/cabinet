@@ -74,6 +74,24 @@ struct Platform: Decodable, Identifiable, Hashable {
     }
 }
 
+/// A user collection, decoding only what favoriting needs. RomM marks the
+/// one collection a person favorites into with `is_favorite`, distinct from
+/// `/api/collections/virtual`'s metadata groupings: this is a real,
+/// server-provisioned collection, found by that flag, never assumed to be
+/// named "Favourites" or any other string.
+struct Collection: Decodable, Identifiable {
+    let id: Int
+    let name: String
+    let isFavorite: Bool
+    let romIds: [Int]
+
+    enum CodingKeys: String, CodingKey {
+        case id, name
+        case isFavorite = "is_favorite"
+        case romIds = "rom_ids"
+    }
+}
+
 /// Scopes are fixed at pair time. Adding one later means the person has to pair
 /// again, so this list is deliberately in one place and should change rarely.
 ///
@@ -100,5 +118,10 @@ enum RommScopes {
         "assets.read",
         "assets.write",
         "collections.read",
+        // Favoriting a game, added 2026-08-03. Every existing pairing
+        // predates this and must pair again once it hits a write to
+        // /api/collections: see RommError.forbidden's message, which
+        // already covers exactly this case.
+        "collections.write",
     ]
 }
