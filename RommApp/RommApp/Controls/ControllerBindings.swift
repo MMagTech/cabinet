@@ -106,40 +106,36 @@ enum RetroPad {
     /// Every input a person may want to bind, in the order the remap screen
     /// walks through them. Directions are excluded: they come from the d-pad
     /// and stick automatically and are not a source of trouble.
+    /// Names have to hold for the whole library, not just arcade.
+    ///
+    /// These used to be labelled "Arcade button 1" through 6 and described
+    /// entirely in terms of fighting games, which reads as nonsense while
+    /// binding a pad for Game Boy or Mega Drive, where the same input is
+    /// simply B or A. Each row now leads with the arcade position, since
+    /// that is what the on screen pad prints and what an arcade panel is
+    /// laid out as, and names the console equivalent underneath so the row
+    /// still means something on every other system.
     static let bindable: [(id: Int, label: String, detail: String)] = [
-        (overlay, "Exit and menu", "Shows the close button and the emulator's own menu."),
-        (select, "Coin, Select", "Arcade credit. Needed to start any arcade game."),
-        (start, "Start", "Begins play once credited."),
-        (y, "Arcade button 1", "Light punch in fighters."),
-        (x, "Arcade button 2", "Medium punch."),
-        (l, "Arcade button 3", "Heavy punch."),
-        (b, "Arcade button 4", "Light kick. The main action button in most games."),
-        (a, "Arcade button 5", "Medium kick."),
-        (r, "Arcade button 6", "Heavy kick."),
-        (l2, "L2", "Rarely used by arcade games."),
-        (r2, "R2", "Rarely used by arcade games."),
+        (overlay, "Pause menu", "Freezes the game and opens the menu to resume, save or quit."),
+        (select, "Coin", "Insert a credit. Select on a console."),
+        (start, "Start", "Begins play once credited. Start on a console."),
+        // Console equivalents are given as the input's own short name, not
+        // as a physical position. "Left shoulder on a console pad" sitting
+        // beside an assignment reading "Right shoulder, RB" looks like a
+        // contradiction, when in truth one names the input and the other
+        // the button now driving it. A letter cannot be misread that way.
+        (y, "Button 1", "Top row, left. Y on a console pad."),
+        (x, "Button 2", "Top row, middle. X on a console pad."),
+        (l, "Button 3", "Top row, right. L on a console pad."),
+        (b, "Button 4", "Bottom row, left. B on a console pad."),
+        (a, "Button 5", "Bottom row, middle. A on a console pad."),
+        (r, "Button 6", "Bottom row, right. R on a console pad."),
+        (l2, "L2", "Used by a few console games, almost no arcade ones."),
+        (r2, "R2", "Used by a few console games, almost no arcade ones."),
     ]
 
     static func label(for id: Int) -> String {
         bindable.first { $0.id == id }?.label ?? "Input \(id)"
     }
 
-    /// Everything the test screen watches, directions included, since a stick
-    /// that reports nothing is worth seeing too.
-    static let diagnostics: [(id: Int, label: String, from: String)] = [
-        (up, "Up", "D-pad or left stick"),
-        (down, "Down", "D-pad or left stick"),
-        (left, "Left", "D-pad or left stick"),
-        (right, "Right", "D-pad or left stick"),
-        (select, "Coin, Select", "Assigned in Change buttons"),
-        (start, "Start", "Assigned in Change buttons"),
-        (y, "Arcade button 1", "Assigned in Change buttons"),
-        (x, "Arcade button 2", "Assigned in Change buttons"),
-        (l, "Arcade button 3", "Assigned in Change buttons"),
-        (b, "Arcade button 4", "Assigned in Change buttons"),
-        (a, "Arcade button 5", "Assigned in Change buttons"),
-        (r, "Arcade button 6", "Assigned in Change buttons"),
-        (l2, "L2", "Assigned in Change buttons"),
-        (r2, "R2", "Assigned in Change buttons"),
-    ]
 }

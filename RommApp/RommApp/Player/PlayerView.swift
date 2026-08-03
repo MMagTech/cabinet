@@ -37,6 +37,10 @@ struct PlayerView: View {
     /// out. Nil until it starts, so closing a player that never loaded
     /// reports nothing.
     @State private var startedAt: Date?
+    /// Loading throws away everything since the save, and the button sits
+    /// inches from Resume in a menu people stab at under pressure. A
+    /// misfire would cost the run the save was protecting.
+    @State private var confirmingLoad = false
     @StateObject private var input = PlayerInputBridge()
     @ObservedObject private var controllers = GameControllerManager.shared
     /// The scope doc's bet: the opacity slider matters more than any theme.
@@ -149,6 +153,21 @@ struct PlayerView: View {
                                     .padding(.vertical, 6)
                             }
                             .buttonStyle(.bordered)
+                            // Only when there is something to go back to,
+                            // and only from the core that made it: a state
+                            // one core wrote cannot be read by another, so
+                            // a stale button would promise a rescue it
+                            // could not perform.
+                            if ManualSave.date(romId: rom.id) != nil {
+                                Button {
+                                    confirmingLoad = true
+                                } label: {
+                                    Label("Load last save", systemImage: "arrow.uturn.backward")
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 6)
+                                }
+                                .buttonStyle(.bordered)
+                            }
                             Button(role: .destructive) {
                                 SessionMarker.recordCleanExit()
                                 dismiss()
@@ -194,6 +213,25 @@ struct PlayerView: View {
         }
         .animation(.easeInOut(duration: 0.3), value: recovering)
         .animation(.easeInOut(duration: 0.15), value: pauseMenuVisible)
+        .confirmationDialog(
+            "Go back to your last save?",
+            isPresented: $confirmingLoad,
+            titleVisibility: .visible
+        ) {
+            Button("Load it", role: .destructive) {
+                input.loadLastState()
+                resumeFromMenu()
+            }
+        } message: {
+            // The timestamp belongs here, at the moment of deciding, rather
+            // than crammed under a button label as a second line. iOS
+            // buttons are one line; dialogs are where the detail goes.
+            if let saved = ManualSave.date(romId: rom.id) {
+                Text("Saved at \(saved.formatted(date: .omitted, time: .shortened)). Everything since then is lost.")
+            } else {
+                Text("Everything since then is lost.")
+            }
+        }
         // A dead web process takes the paused game with it; recovery will
         // boot and restore, and a stale pause card over that would offer
         // choices about a machine that no longer exists.
@@ -400,6 +438,13 @@ final class PlayerInputBridge: ObservableObject {
         )
     }
 
+    /// Puts back the last state banked from the pause menu.
+    func loadLastState() {
+        webView?.evaluateJavaScript(
+            "window.__cabinetLoadManual && __cabinetLoadManual();"
+        )
+    }
+
     /// Writes an autosave state right now, ahead of a moment that might kill
     /// the webview's content process.
     func autosaveNow() {
@@ -499,6 +544,8 @@ struct PlayerWebView: UIViewRepresentable {
             // The outcome of the last menu save, kept because a phone in a
             // hand has no console: when someone says saving did nothing,
             // this answers with the status code it got.
+            case "manualSave":
+                ManualSave.record(romId: parent.rom.id)
             case "vitals":
                 if let line = message.body as? String {
                     EmulationInfo.recordVitals(line)
@@ -641,6 +688,7 @@ struct PlayerWebView: UIViewRepresentable {
         config.userContentController.add(context.coordinator, name: "autosave")
         config.userContentController.add(context.coordinator, name: "frame")
         config.userContentController.add(context.coordinator, name: "saveResult")
+        config.userContentController.add(context.coordinator, name: "manualSave")
         config.userContentController.add(context.coordinator, name: "vitals")
 
         let webView = WKWebView(frame: .zero, configuration: config)
@@ -762,7 +810,23 @@ struct PlayerWebView: UIViewRepresentable {
         """
         (function () {
           const KEY = "cabinet.autosave.\(romId)";
+          const MANUAL_KEY = "cabinet.manual.\(romId)";
           const START = Date.now();
+
+          // Puts back the last state banked from the pause menu. Separate
+          // from the autosave, which is a safety net nobody asked for and
+          // should never overwrite a moment someone deliberately kept.
+          window.__cabinetLoadManual = function () {
+            try {
+              const e = window.EJS_emulator;
+              if (!e || !e.started || !e.storage || !e.storage.states) return;
+              e.storage.states.get(MANUAL_KEY).then(function (rec) {
+                if (!rec || !rec.data) return;
+                e.gameManager.loadState(new Uint8Array(rec.data));
+                e.displayMessage("BACK AT YOUR SAVED MOMENT");
+              }).catch(function () {});
+            } catch (x) {}
+          };
 
           // The input path, resident so the native side never has to ship
           // it again. Held on window rather than closed over so it survives
@@ -919,6 +983,19 @@ struct PlayerWebView: UIViewRepresentable {
               if (!e || !e.started || !e.gameManager) return;
               const state = e.gameManager.getState();
               if (!state || !state.length) return;
+
+              // Kept locally as well as sent to the server, so the pause
+              // menu can put it back without a round trip and without
+              // caring whether the upload succeeded. This is the copy Load
+              // reads, which also means it always came from the core
+              // currently running: a snapshot one core made is unreadable
+              // by another.
+              try {
+                if (e.storage && e.storage.states) {
+                  e.storage.states.put(MANUAL_KEY, { t: Date.now(), data: state });
+                  window.webkit.messageHandlers.manualSave.postMessage(true);
+                }
+              } catch (x) {}
               const upload = function (shot) {
                 try {
                   const fd = new FormData();

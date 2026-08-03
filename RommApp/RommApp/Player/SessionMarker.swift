@@ -13,6 +13,25 @@ import Foundation
 /// The autosave timestamps live here too, mirrored from the injected script,
 /// because native code has to decide whether an offer is worth making before
 /// any webview exists to ask.
+/// When a state was last banked from the pause menu, per game.
+///
+/// The state itself lives in the webview's storage; this is only the fact
+/// that one exists, which native code needs before the webview is asked
+/// anything, to decide whether the pause menu should offer to go back.
+enum ManualSave {
+    private static func key(_ romId: Int) -> String {
+        "com.mmagtech.RommApp.manualSave.\(romId)"
+    }
+
+    static func record(romId: Int) {
+        UserDefaults.standard.set(Date(), forKey: key(romId))
+    }
+
+    static func date(romId: Int) -> Date? {
+        UserDefaults.standard.object(forKey: key(romId)) as? Date
+    }
+}
+
 enum SessionMarker {
     private static let runningKey = "com.mmagtech.RommApp.gameInProgress"
     private static func autosaveKey(_ romId: Int) -> String {
