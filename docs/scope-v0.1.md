@@ -312,12 +312,21 @@ there. Thumbnails turn the weakest screen in the app into one of the better
 ones and make the pause menu's save and load loop legible instead of an act of
 faith. Best payoff for the effort on this list.
 
-**3. Moving the touch controls.** The most requested feature in every touch
-emulator that has ever shipped, because everybody's hands are different.
-The architecture is already ready: layouts are data with normalised 0 to 1
-frames, so an editor writes JSON rather than code, and arcade layouts are
-built from the same shape at runtime. This is the point where touch controls
-stop being tolerated and start being liked.
+**3. The console pad is the wrong shape for most consoles.** Found and
+confirmed 2026-08-03, and this now leads the list: there are exactly two
+bundled touch layouts, `default.json` and `gb.json`, and every console
+platform that is not Game Boy gets `default`, which draws only two face
+buttons, A and B. SNES has four, X and Y are simply unreachable by touch
+today, and SNES is only the one that got noticed first. Genesis, N64, PSX,
+Saturn and the rest are each some further wrong shape, not audited yet.
+Arcade already does this properly, a profile resolved per game from MAME's
+own data; consoles need the equivalent, one real layout per pad shape rather
+than one generic layout for all of them. Scope this to gamepad shaped
+systems only, every console, handheld and arcade platform in the `Next`
+item 5 audit below: keyboard machines are handled separately and are not
+part of this. Moving the controls afterward, a real editor since layouts are
+already normalised 0 to 1 data, is the natural follow on once the shapes
+themselves are correct, but fixing wrong is more urgent than fixing fixed.
 
 **4. Collections.** RomM models them and the app ignores them. An A to Z rail
 is enough for a console library and not enough for 1,200 arcade games, which
@@ -333,6 +342,19 @@ alternative instead: download the ROM, and its BIOS if the platform needs
 one, so the game is still usable through RetroArch or another native
 emulator. This rides on the same ROM fetch machinery offline browsing needs,
 so it belongs right after it, not as a separate project.
+
+A second, deliberately separate reason lands here too, settled 2026-08-03:
+keyboard machines, C64, Amiga, DOS and the rest, `ComputerPlatforms.swift`.
+Not unplayable by EmulatorJS the way Dreamcast is; unplayable *by touch*,
+which this app does not pretend to fix with a bad on screen keyboard. The
+launch screen blocks Play on these today with a plain explanation. Download
+is the planned way out for them too, once this item exists; an on screen
+keyboard is not planned at all, stated in the code as a decision rather
+than a gap. A physical Bluetooth keyboard should already reach these games
+today with no app support needed, reasoned from the code, not yet confirmed
+on a real keyboard: nothing here intercepts hardware key events before a
+WKWebView delivers them, and EmulatorJS has its own keyboard handling for
+exactly these cores.
 
 Netplay was considered on 2026-08-02 and declined, with reasons worth keeping
 because they will come up again. It is entirely socket based over
