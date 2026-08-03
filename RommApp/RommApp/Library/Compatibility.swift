@@ -103,7 +103,7 @@ private struct CompatibilityMenu: ViewModifier {
                 compatibility.setMarked(!marked, romId: romId)
             } label: {
                 Label(
-                    marked ? "Works on this phone" : "Does not work on this phone",
+                    marked ? "Compatible" : "Incompatible",
                     systemImage: marked ? "checkmark.circle" : "exclamationmark.triangle"
                 )
             }
