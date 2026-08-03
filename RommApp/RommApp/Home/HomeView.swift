@@ -43,8 +43,14 @@ struct HomeView: View {
                     }
                 }
             }
-            .task { await load() }
             .refreshable { await load() }
+            // A game reached through Library, not Home's own resume flow,
+            // has its own fullScreenCover and never touches `resuming`, so
+            // the reload below never sees it close. Reappearing covers both:
+            // it fires on first appearance same as `.task` would, and again
+            // every time navigation brings Home back into view, favoriting
+            // included.
+            .onAppear { Task { await load() } }
             .fullScreenCover(item: $resuming) { rom in
                 NavigationStack { GameLaunchView(rom: rom) }
             }
