@@ -35,6 +35,17 @@ struct HomeView: View {
             }
             .navigationTitle("Home")
             .toolbar {
+                // Navigation, not content: lives in the bar so it never
+                // scrolls away and never competes with however many rails
+                // Home ends up growing (favorites, keep playing, whatever
+                // comes next), rather than a card fighting them for space.
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink {
+                        LibraryScreen()
+                    } label: {
+                        Image(systemName: "square.grid.2x2")
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
                         SettingsView()
@@ -75,7 +86,6 @@ struct HomeView: View {
             if !favorites.isEmpty {
                 rotationRow("Favorites", favorites)
             }
-            libraryLink
         }
         .padding(20)
     }
@@ -98,7 +108,6 @@ struct HomeView: View {
                 if !favorites.isEmpty {
                     rotationRow("Favorites", favorites)
                 }
-                libraryLink
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -194,23 +203,6 @@ struct HomeView: View {
                 }
             }
         }
-    }
-
-    private var libraryLink: some View {
-        NavigationLink {
-            LibraryScreen()
-        } label: {
-            HStack {
-                Label("Browse the library", systemImage: "square.grid.2x2")
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(16)
-            .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 14))
-        }
-        .buttonStyle(.plain)
     }
 
     private var emptyState: some View {
