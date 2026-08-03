@@ -95,6 +95,56 @@ actor RommClient {
         try await send(request(path: "/api/platforms"), decoding: [Platform].self)
     }
 
+    /// Tells the server a game is being played, which is what puts it at
+    /// the top of everything ordered by last played.
+    ///
+    /// RomM's own web player reports this over a socket, emitting an
+    /// activity heartbeat while a game runs. That socket does not survive
+    /// this app's webview, so nothing was ever recorded: a game played here
+    /// never reached Home's own resume list, and never showed as played in
+    /// RomM's web UI either, which is how the gap was noticed.
+    ///
+    /// This is the endpoint RomM publishes for exactly that situation,
+    /// described in its own docs as being for external devices, and it
+    /// needs only the scope this app already pairs with. A plain POST is
+    /// also a great deal easier to keep working than a socket.
+    func reportPlaying(romId: Int) async {
+        var req = request(path: "/api/activity/heartbeat", method: "POST")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "rom_id": romId,
+            "device_id": Self.deviceIdentifier,
+        ])
+        // Deliberately silent. Failing to record a play is not worth
+        // interrupting one over.
+        _ = try? await session.data(for: req)
+    }
+
+    /// Records a finished session, which is what actually gives a game a
+    /// last played time.
+    ///
+    /// The heartbeat above is presence, answering "what is being played
+    /// right now" and living in Redis. This is history, and the two are
+    /// separate: sending only heartbeats left games with no last played
+    /// time at all, so a game played here never reached Home's resume list
+    /// or RomM's own.
+    func reportPlaySession(romId: Int, start: Date, end: Date) async {
+        var req = request(path: "/api/play-sessions", method: "POST")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let stamp = ISO8601DateFormatter()
+        stamp.formatOptions = [.withInternetDateTime]
+        req.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "device_id": Self.deviceIdentifier,
+            "sessions": [[
+                "rom_id": romId,
+                "start_time": stamp.string(from: start),
+                "end_time": stamp.string(from: end),
+                "duration_ms": max(0, Int(end.timeIntervalSince(start) * 1000)),
+            ]],
+        ])
+        _ = try? await session.data(for: req)
+    }
+
     /// The games with play history, most recent first. Same query RomM's own
     /// home screen makes (frontend getRecentPlayedRoms), so this app's Home
     /// agrees with the web UI about what you were last playing.

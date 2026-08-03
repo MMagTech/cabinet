@@ -33,6 +33,10 @@ struct PlayerView: View {
     /// because a pause that arrives late is a death in anything that
     /// shoots back.
     @State private var pauseMenuVisible = false
+    /// When the game actually began, for the session reported on the way
+    /// out. Nil until it starts, so closing a player that never loaded
+    /// reports nothing.
+    @State private var startedAt: Date?
     @StateObject private var input = PlayerInputBridge()
     @ObservedObject private var controllers = GameControllerManager.shared
     /// The scope doc's bet: the opacity slider matters more than any theme.
@@ -196,6 +200,19 @@ struct PlayerView: View {
         .onChange(of: gameStarted) { _, started in
             if !started { pauseMenuVisible = false }
         }
+        // Tell the server this game is being played, so it reaches Home's
+        // resume list and RomM's own. Repeated while the session lasts,
+        // since the server treats these as a liveness signal rather than a
+        // single event, and a long session should not look like it ended
+        // two minutes in.
+        .task(id: gameStarted) {
+            guard gameStarted else { return }
+            if startedAt == nil { startedAt = Date() }
+            while !Task.isCancelled {
+                await session.reportPlaying(romId: rom.id)
+                try? await Task.sleep(for: .seconds(60))
+            }
+        }
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
         .defersSystemGestures(on: .all)
@@ -238,6 +255,14 @@ struct PlayerView: View {
             }
         }
         .onDisappear {
+            // Report the finished session on a task of its own rather than
+            // the view's, which is being torn down: a .task here would be
+            // cancelled before the request left.
+            if let startedAt {
+                let session = session
+                let romId = rom.id
+                Task { await session.reportPlaySession(romId: romId, start: startedAt, end: Date()) }
+            }
             // The one deliberate way out. An evicted app never runs this,
             // which is exactly how the next launch can tell the difference.
             SessionMarker.recordCleanExit()

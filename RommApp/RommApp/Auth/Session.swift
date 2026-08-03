@@ -153,6 +153,14 @@ final class Session: ObservableObject {
         return try await client.recentlyPlayed()
     }
 
+    func reportPlaying(romId: Int) async {
+        await client?.reportPlaying(romId: romId)
+    }
+
+    func reportPlaySession(romId: Int, start: Date, end: Date) async {
+        await client?.reportPlaySession(romId: romId, start: start, end: end)
+    }
+
     func roms(
         platformId: Int? = nil,
         searchTerm: String? = nil,
