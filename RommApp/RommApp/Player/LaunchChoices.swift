@@ -30,7 +30,7 @@ struct LaunchChoices {
     /// arcade, an emulator frozen at MAME 0.78 in 2003 that cannot start most
     /// of a modern collection, so defaulting to it meant confidently
     /// launching the one core this screen itself warns about.
-    static func defaultCore(rom: Rom, from available: [String]) -> String? {
+    static func defaultCore(rom: Rom, canonicalSlug: String, from available: [String]) -> String? {
         // A choice made for this exact game always wins: it is the most
         // specific thing anyone has said about it.
         if let remembered = UserDefaults.standard.string(forKey: "romm.core.rom.\(rom.id)"),
@@ -45,7 +45,12 @@ struct LaunchChoices {
             return hinted
         }
 
-        if let remembered = UserDefaults.standard.string(forKey: "romm.core.platform.\(rom.platformSlug)"),
+        // Remembered per canonical platform, not per folder name, so two
+        // servers that named the same platform differently do not each
+        // start from a blank slate, and so this cannot collide with the
+        // stale "romm.core.platform.tg16" style keys a build before the
+        // slug fix could have written.
+        if let remembered = UserDefaults.standard.string(forKey: "romm.core.canonicalPlatform.\(canonicalSlug)"),
            available.contains(remembered) { return remembered }
 
         // FinalBurn Neo covers Neo Geo, CPS and most arcade boards, and is
@@ -61,14 +66,21 @@ struct LaunchChoices {
         return CoreHints.core(forShortname: rom.fsNameNoExt, available: available) == core
     }
 
-    static func remember(core: String?, for rom: Rom) {
+    static func remember(core: String?, canonicalSlug: String, for rom: Rom) {
         guard let core else { return }
         UserDefaults.standard.set(core, forKey: "romm.core.rom.\(rom.id)")
-        UserDefaults.standard.set(core, forKey: "romm.core.platform.\(rom.platformSlug)")
+        UserDefaults.standard.set(core, forKey: "romm.core.canonicalPlatform.\(canonicalSlug)")
     }
 
     /// JavaScript that seeds RomM's storage, confirms it took, and reports
     /// back so native code knows whether skipping its screen is safe.
+    ///
+    /// Storage keys stay namespaced by `rom.platformSlug`, the IGDB slug:
+    /// that is the exact value RomM's own page uses to build these same
+    /// keys (`createPlayerStorage(rom.id, rom.platform_slug)` in its Play
+    /// view), so writing anywhere else would seed a key its page never
+    /// reads. `canonicalSlug` is not RomM's key; it exists only so this
+    /// app can resolve a valid core in the first place.
     func injection(for rom: Rom) -> String {
         func entry(_ key: String, _ value: String?) -> String {
             guard let value else { return "" }
@@ -92,6 +104,48 @@ struct LaunchChoices {
         // otherwise be applied to one that must not have it.
         if firmwareId == nil { clears += "drop(\(jsString("player:\(rom.platformSlug):bios_id")));\n" }
 
+        // The rescue. RomM's own boot() picks a core by looking up
+        // `rom.platform_slug` directly in its bundled core catalogue, with
+        // no folder name normalisation at that call site, unlike the check
+        // that decides whether to show a Play button at all. Any platform
+        // whose IGDB slug is not itself a catalogue key, TurboGrafx-16's
+        // "turbografx16--1" among them, gets an empty supported list from
+        // that lookup, and window.EJS_core is left undefined no matter what
+        // this app seeds into localStorage: RomM validates a stored core
+        // against that same empty list before trusting it. Seeding cannot
+        // reach this.
+        //
+        // A polling patch tried here first and did not hold: EmulatorJS
+        // reads EJS_core and starts fetching the core file within a few
+        // milliseconds of boot() running, faster than a setInterval's first
+        // tick ever arrives, so the correction landed after the damage was
+        // already done. An accessor closes that race instead of racing it.
+        // This script runs at document start, before any of RomM's own
+        // code, so it is guaranteed to define the property first: RomM's
+        // later `window.EJS_core = core` becomes a call to this setter, and
+        // every read after it, EmulatorJS's own included, is a call to this
+        // getter, synchronously, with no window in between where the wrong
+        // value could be observed. Whatever RomM did manage to resolve on
+        // its own is never touched.
+        let rescue = core.map { value in
+            """
+            (function () {
+              var rescueValue = \(jsString(value));
+              var actual;
+              try {
+                Object.defineProperty(window, "EJS_core", {
+                  configurable: true,
+                  enumerable: true,
+                  get: function () {
+                    return (actual === undefined || actual === null) ? rescueValue : actual;
+                  },
+                  set: function (v) { actual = v; }
+                });
+              } catch (e) {}
+            })();
+            """
+        } ?? ""
+
         return """
         (function () {
           var ok = true;
@@ -103,6 +157,7 @@ struct LaunchChoices {
         \(writes)\(clears)
           window.__rommLaunchSeeded = ok;
         })();
+        \(rescue)
         """
     }
 

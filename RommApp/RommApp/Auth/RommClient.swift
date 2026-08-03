@@ -145,6 +145,27 @@ actor RommClient {
         _ = try? await session.data(for: req)
     }
 
+    /// Maps a platform's folder name to the short name EmulatorJS's core
+    /// catalogue actually uses, admin edited per install at Settings >
+    /// Platforms on the server. RomM's own page reads this from the same
+    /// endpoint before picking a core; skipping it is exactly what let a
+    /// TurboGrafx-16 library named anything other than the one folder name
+    /// this app happened to guess load no core at all. `/api/config` needs
+    /// no scope beyond being logged in, and decodes only the one field this
+    /// app uses out of a much larger response, so a future RomM adding
+    /// fields here cannot break this.
+    func platformsVersions() async throws -> [String: String] {
+        let req = request(path: "/api/config")
+        return try await send(req, decoding: PlatformsVersionsResponse.self).platformsVersions
+    }
+
+    private struct PlatformsVersionsResponse: Decodable {
+        let platformsVersions: [String: String]
+        enum CodingKeys: String, CodingKey {
+            case platformsVersions = "PLATFORMS_VERSIONS"
+        }
+    }
+
     /// The games with play history, most recent first. Same query RomM's own
     /// home screen makes (frontend getRecentPlayedRoms), so this app's Home
     /// agrees with the web UI about what you were last playing.

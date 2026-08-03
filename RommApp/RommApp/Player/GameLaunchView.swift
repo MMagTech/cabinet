@@ -48,6 +48,10 @@ struct GameLaunchView: View {
     /// outranking the recommendation for its own board. Only a deliberate
     /// pick is worth remembering.
     @State private var coreWasChosen = false
+    /// The short name EmulatorJS's core catalogue actually indexes by,
+    /// resolved once here and threaded to everything downstream that needs
+    /// it, rather than recomputed piecemeal. See `Rom.canonicalPlatformSlug`.
+    @State private var canonicalSlug = ""
     /// Arcade only: what the cabinet data says this game's controls are,
     /// and the person's current choice, which starts as the data's answer.
     @State private var arcadeBase: ArcadeProfile?
@@ -161,7 +165,9 @@ struct GameLaunchView: View {
         Button {
             // Remember the choice, so the next launch of this game, and the
             // next game on this platform, starts where this one left off.
-            if coreWasChosen { LaunchChoices.remember(core: selectedCore, for: rom) }
+            if coreWasChosen {
+                LaunchChoices.remember(core: selectedCore, canonicalSlug: canonicalSlug, for: rom)
+            }
             playing = true
         } label: {
             Label(playLabel, systemImage: "play.fill")
@@ -479,8 +485,9 @@ struct GameLaunchView: View {
     }
 
     private func load() async {
-        cores = CoreCatalog.cores(for: rom.platformSlug)
-        selectedCore = LaunchChoices.defaultCore(rom: rom, from: cores)
+        canonicalSlug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
+        cores = CoreCatalog.cores(for: canonicalSlug)
+        selectedCore = LaunchChoices.defaultCore(rom: rom, canonicalSlug: canonicalSlug, from: cores)
 
         if rom.isArcade {
             let base = ArcadeProfileStore.shared.resolve(shortname: rom.fsNameNoExt)

@@ -20,6 +20,14 @@ final class Session: ObservableObject {
     @Published private(set) var serverURL: URL?
     @Published private(set) var serverVersion: String?
     @Published private(set) var scopes: [String] = []
+    /// An admin can rename any platform's folder to whatever they like, and
+    /// RomM remembers the mapping from that folder name back to the short
+    /// name EmulatorJS actually knows, admin editable at Settings > Platforms
+    /// on the server. `/api/config` is where RomM's own page reads this, and
+    /// it is the only place this app can learn it too: nothing about a
+    /// platform's folder name can be assumed or bundled, it is chosen fresh
+    /// on every install.
+    @Published private(set) var platformsVersions: [String: String] = [:]
 
     private var client: RommClient?
 
@@ -48,6 +56,7 @@ final class Session: ObservableObject {
 
         client = RommClient(baseURL: url, accessToken: token)
         stage = .ready
+        refreshPlatformConfig()
     }
 
     // MARK: Step one, the address
@@ -73,6 +82,7 @@ final class Session: ObservableObject {
         if let host = url.host, let token = Keychain.token(forHost: host) {
             await candidate.setAccessToken(token)
             stage = .ready
+            refreshPlatformConfig()
         } else {
             stage = .needsPairing
         }
@@ -117,6 +127,18 @@ final class Session: ObservableObject {
 
         scopes = token.scopes
         stage = .ready
+        refreshPlatformConfig()
+    }
+
+    /// Fire and forget: nothing blocks on this. A game screen opened before
+    /// it lands just falls back to the platform's own folder name as its
+    /// best guess, the same graceful fallback RomM's own page makes when it
+    /// has no mapping either.
+    private func refreshPlatformConfig() {
+        Task { [weak self] in
+            guard let self, let client else { return }
+            self.platformsVersions = (try? await client.platformsVersions()) ?? [:]
+        }
     }
 
     // MARK: Leaving

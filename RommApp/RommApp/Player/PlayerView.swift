@@ -23,6 +23,13 @@ struct PlayerView: View {
     @EnvironmentObject private var session: Session
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    /// The short name EmulatorJS's core catalogue actually indexes by. See
+    /// `Rom.canonicalPlatformSlug`: `rom.platformSlug` is IGDB's metadata
+    /// slug and answers a different question, one that happens to agree
+    /// with EmulatorJS's naming only by coincidence on most platforms.
+    private var canonicalSlug: String {
+        rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
+    }
     @State private var context: (url: URL, token: String)?
     @State private var failed = false
     @State private var overlayVisible = true
@@ -80,6 +87,7 @@ struct PlayerView: View {
                     rom: rom,
                     pad: padConfiguration(isLandscape: isLandscape),
                     resumeFromAutosave: resumeFromAutosave,
+                    canonicalPlatformSlug: canonicalSlug,
                     padSystem: controlLayout?.system ?? "",
                     overlayVisible: $overlayVisible,
                     gameStarted: $gameStarted,
@@ -324,7 +332,7 @@ struct PlayerView: View {
             )
             return ArcadeLayout.build(for: profile)
         }
-        return ControlLayout.forPlatform(slug: rom.platformSlug)
+        return ControlLayout.forPlatform(slug: canonicalSlug)
     }
 
     /// Touch controls show only while a game is running and no physical
@@ -471,6 +479,11 @@ struct PlayerWebView: UIViewRepresentable {
     let rom: Rom
     let pad: PadConfiguration
     var resumeFromAutosave: Bool = false
+    /// The short name EmulatorJS's core catalogue indexes by, resolved once
+    /// in `PlayerView` and passed down here rather than recomputed: this
+    /// view has no `Session` of its own to read the live folder mapping
+    /// from. See `Rom.canonicalPlatformSlug`.
+    var canonicalPlatformSlug: String = ""
     /// The layout's system name, which decides the control colours.
     var padSystem: String = ""
     @Binding var overlayVisible: Bool
@@ -664,7 +677,7 @@ struct PlayerWebView: UIViewRepresentable {
                         expecting: launch.core,
                         // Proof that the seeded core was applied only means
                         // something when there was a choice to get wrong.
-                        verifyCore: CoreCatalog.cores(for: rom.platformSlug).count > 1
+                        verifyCore: CoreCatalog.cores(for: canonicalPlatformSlug).count > 1
                     ),
                     injectionTime: .atDocumentEnd,
                     forMainFrameOnly: true
