@@ -1,0 +1,118 @@
+{
+ "system": "n64",
+ "_ergonomics": "The stick sits where a d-pad sits everywhere else, since it is this pad's primary input, not a secondary one. C-buttons cluster on the right the way they do on the real pad, banded so a diagonal (C-up-right for the camera) falls out of the overlap the same way the main d-pad's diagonals do elsewhere. Z is a shoulder because it is one on the hardware, EmulatorJS's index table notwithstanding.",
+ "items": [
+  {
+   "kind": "stick",
+   "inputs": [16, 17, 18, 19],
+   "frame": {"x": 0.05, "y": 0.32, "w": 0.34, "h": 0.34},
+   "extended": {"x": 0.0, "y": 0.2, "w": 0.44, "h": 0.5}
+  },
+  {
+   "kind": "dpad",
+   "label": "C",
+   "inputs": [23, 22, 21, 20],
+   "frame": {"x": 0.64, "y": 0.5, "w": 0.3, "h": 0.4},
+   "extended": {"x": 0.58, "y": 0.42, "w": 0.4, "h": 0.55}
+  },
+  {
+   "kind": "button",
+   "label": "A",
+   "input": 8,
+   "frame": {"x": 0.62, "y": 0.16, "w": 0.16, "h": 0.2},
+   "extended": {"x": 0.56, "y": 0.09, "w": 0.26, "h": 0.32}
+  },
+  {
+   "kind": "button",
+   "label": "B",
+   "input": 0,
+   "frame": {"x": 0.42, "y": 0.16, "w": 0.16, "h": 0.2},
+   "extended": {"x": 0.36, "y": 0.09, "w": 0.26, "h": 0.32}
+  },
+  {
+   "kind": "pill",
+   "label": "L",
+   "input": 10,
+   "frame": {"x": 0.03, "y": 0.03, "w": 0.14, "h": 0.09},
+   "extended": {"x": 0.0, "y": 0.0, "w": 0.2, "h": 0.16}
+  },
+  {
+   "kind": "pill",
+   "label": "Z",
+   "input": 12,
+   "frame": {"x": 0.19, "y": 0.03, "w": 0.14, "h": 0.09},
+   "extended": {"x": 0.16, "y": 0.0, "w": 0.2, "h": 0.16}
+  },
+  {
+   "kind": "pill",
+   "label": "R",
+   "input": 11,
+   "frame": {"x": 0.83, "y": 0.03, "w": 0.14, "h": 0.09},
+   "extended": {"x": 0.8, "y": 0.0, "w": 0.2, "h": 0.16}
+  },
+  {
+   "kind": "pill",
+   "label": "Start",
+   "input": 3,
+   "frame": {"x": 0.4, "y": 0.03, "w": 0.2, "h": 0.09},
+   "extended": {"x": 0.36, "y": 0.0, "w": 0.28, "h": 0.16}
+  }
+ ],
+ "landscapeItems": [
+  {
+   "kind": "stick",
+   "inputs": [16, 17, 18, 19],
+   "frame": {"x": 0.02, "y": 0.32, "w": 0.19, "h": 0.34},
+   "extended": {"x": 0.0, "y": 0.22, "w": 0.26, "h": 0.5}
+  },
+  {
+   "kind": "dpad",
+   "label": "C",
+   "inputs": [23, 22, 21, 20],
+   "frame": {"x": 0.79, "y": 0.5, "w": 0.19, "h": 0.34},
+   "extended": {"x": 0.73, "y": 0.42, "w": 0.27, "h": 0.48}
+  },
+  {
+   "kind": "button",
+   "label": "A",
+   "input": 8,
+   "frame": {"x": 0.79, "y": 0.14, "w": 0.09, "h": 0.15},
+   "extended": {"x": 0.74, "y": 0.07, "w": 0.16, "h": 0.25}
+  },
+  {
+   "kind": "button",
+   "label": "B",
+   "input": 0,
+   "frame": {"x": 0.66, "y": 0.14, "w": 0.09, "h": 0.15},
+   "extended": {"x": 0.61, "y": 0.07, "w": 0.16, "h": 0.25}
+  },
+  {
+   "kind": "pill",
+   "label": "L",
+   "input": 10,
+   "frame": {"x": 0.03, "y": 0.06, "w": 0.1, "h": 0.09},
+   "extended": {"x": 0.0, "y": 0.02, "w": 0.15, "h": 0.16}
+  },
+  {
+   "kind": "pill",
+   "label": "Z",
+   "input": 12,
+   "frame": {"x": 0.16, "y": 0.06, "w": 0.1, "h": 0.09},
+   "extended": {"x": 0.14, "y": 0.02, "w": 0.13, "h": 0.16}
+  },
+  {
+   "kind": "pill",
+   "label": "R",
+   "input": 11,
+   "frame": {"x": 0.87, "y": 0.06, "w": 0.1, "h": 0.09},
+   "extended": {"x": 0.84, "y": 0.02, "w": 0.15, "h": 0.16}
+  },
+  {
+   "kind": "pill",
+   "label": "Start",
+   "input": 3,
+   "frame": {"x": 0.455, "y": 0.42, "w": 0.09, "h": 0.09},
+   "extended": {"x": 0.42, "y": 0.38, "w": 0.16, "h": 0.15}
+  }
+ ]
+}

@@ -28,7 +28,14 @@ struct ControlLayout: Decodable {
 
     struct Item: Decodable {
         enum Kind: String, Decodable {
-            case dpad, button, pill
+            /// A continuous analog control. Unlike every other kind here,
+            /// its ids are not RetroPad button ids: EmulatorJS reads a
+            /// stick through `GameManager.simulateInput` at four dedicated
+            /// indices, one per direction, each carrying a magnitude from
+            /// 0 to 0x7fff rather than a boolean down/up. Confirmed against
+            /// EmulatorJS's own on screen stick, `data/src/emulator.js`,
+            /// not assumed from the RetroPad table above.
+            case dpad, button, pill, stick
         }
 
         let kind: Kind
@@ -37,6 +44,8 @@ struct ControlLayout: Decodable {
         /// A 8, L 10, R 11), confirmed against the EmulatorJS 4.2.3 bundle.
         let input: Int?
         /// D-pad only: up, down, left, right, in that order.
+        /// Stick only: x-positive, x-negative, y-positive, y-negative, the
+        /// same order and meaning as EmulatorJS's own `inputValues`.
         let inputs: [Int]?
         let frame: Rect
         let extended: Rect
@@ -62,12 +71,57 @@ struct ControlLayout: Decodable {
     }
 
     /// The layout for a platform slug, falling back to the generic pad.
-    /// One file per system under Resources/ControlLayouts.
+    /// One file per real pad shape under Resources/ControlLayouts, not one
+    /// per platform: a Super Famicom and a European SNES are the same
+    /// controller wearing a different name, and get the same file.
+    ///
+    /// Keyed by canonical slug (`Rom.canonicalPlatformSlug`), the same
+    /// contract every other platform keyed lookup in this app follows, and
+    /// sourced from every non-computer, non-arcade entry in
+    /// `Resources/cores.json`. Arcade resolves through `ArcadeProfileStore`
+    /// instead and never reaches this switch. A slug with no fixed digital
+    /// pad this app can honestly draw (a mouse or light gun game, a light
+    /// gun peripheral, a keypad heavy machine like the 5200 or ColecoVision)
+    /// falls through to `default` rather than being blocked: unlike a
+    /// keyboard machine or an analog stick, a two button pad is at least a
+    /// plausible, if incomplete, way to play, so it is offered rather than
+    /// refused.
     static func forPlatform(slug: String) -> ControlLayout? {
         let name: String
         switch slug {
-        case "gb", "gbc", "dmg": name = "gb"
-        default: name = "default"
+        case "gb", "gbc", "dmg", "game-boy-light", "game-boy-pocket":
+            name = "gb"
+        case "gba", "game-boy-adavance-sp", "game-boy-micro":
+            name = "gba"
+        case "snes", "sfam", "new-style-super-nes-model-sns-101",
+             "super-famicom-jr-model-shvc-101", "super-famicom-shvc-001",
+             "super-nintendo-original-european-version":
+            name = "snes"
+        case "genesis", "sega-mega-drive-2-slash-genesis", "sega-nomad",
+             "mega-pc", "sega-mega-jet", "tera-drive", "segacd", "sega32":
+            name = "genesis"
+        case "saturn":
+            name = "saturn"
+        case "psx":
+            name = "psx"
+        case "psp":
+            name = "psp"
+        case "pc-fx":
+            name = "pcfx"
+        case "tg16", "turbografx-cd", "supergrafx":
+            name = "pce"
+        case "3do":
+            name = "threedo"
+        case "lynx", "atari-lynx-mkii":
+            name = "lynx"
+        case "wonderswan", "wonderswan-color", "swancrystal":
+            name = "wonderswan"
+        case "nds", "nintendo-ds-lite", "nintendo-dsi", "nintendo-dsi-xl":
+            name = "nds"
+        case "n64", "ique-player":
+            name = "n64"
+        default:
+            name = "default"
         }
         guard let url = Bundle.main.url(forResource: name, withExtension: "json"),
               let data = try? Data(contentsOf: url),

@@ -20,9 +20,13 @@ struct TouchControlPad: UIViewRepresentable {
     let items: [ControlLayout.Item]
     /// Called with a RetroArch input id and whether it is now down.
     let send: (Int, Bool) -> Void
+    /// A stick's live position. Called with its four `inputs` ids, in
+    /// x-positive/x-negative/y-positive/y-negative order, and the current
+    /// x/y each from -1 to 1. Defaults to a no-op for layouts with no stick.
+    var sendStick: (_ ids: [Int], _ x: Double, _ y: Double) -> Void = { _, _, _ in }
 
     func makeUIView(context: Context) -> ControlPadView {
-        let view = ControlPadView(items: items, send: send)
+        let view = ControlPadView(items: items, send: send, sendStick: sendStick)
         view.backgroundColor = .clear
         view.isMultipleTouchEnabled = true
         return view
@@ -47,16 +51,27 @@ final class ControlPadView: UIView {
     }
 
     private let send: (Int, Bool) -> Void
+    private let sendStick: (_ ids: [Int], _ x: Double, _ y: Double) -> Void
     private let haptic = UIImpactFeedbackGenerator(style: .light)
 
     /// Inputs currently held down, across all touches.
     private var pressed: Set<Int> = []
     /// What each live touch is contributing. A d-pad touch owns several.
     private var touchInputs: [UITouch: Set<Int>] = [:]
+    /// The one touch currently dragging the stick, if any: only one stick
+    /// ever appears in a layout, so only one touch can own it.
+    private var stickTouch: UITouch?
+    /// The stick's current position, -1 to 1 on each axis, for drawing the
+    /// knob and for zeroing on release.
+    private var stickPosition: CGPoint = .zero
 
-    init(items: [ControlLayout.Item], send: @escaping (Int, Bool) -> Void) {
+    init(
+        items: [ControlLayout.Item], send: @escaping (Int, Bool) -> Void,
+        sendStick: @escaping (_ ids: [Int], _ x: Double, _ y: Double) -> Void = { _, _, _ in }
+    ) {
         self.items = items
         self.send = send
+        self.sendStick = sendStick
         super.init(frame: .zero)
         contentMode = .redraw
     }
@@ -84,23 +99,68 @@ final class ControlPadView: UIView {
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         for touch in touches {
-            touchInputs[touch] = inputs(at: touch.location(in: self))
+            let point = touch.location(in: self)
+            if stickTouch == nil, let stick = stickItem(at: point) {
+                stickTouch = touch
+                updateStick(stick, at: point)
+                continue
+            }
+            touchInputs[touch] = inputs(at: point)
         }
         reconcile()
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        for touch in touches where touchInputs[touch] != nil {
-            touchInputs[touch] = inputs(at: touch.location(in: self))
+        for touch in touches {
+            if touch == stickTouch, let stick = items.first(where: { $0.kind == .stick }) {
+                updateStick(stick, at: touch.location(in: self))
+                continue
+            }
+            if touchInputs[touch] != nil {
+                touchInputs[touch] = inputs(at: touch.location(in: self))
+            }
         }
         reconcile()
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         for touch in touches {
+            if touch == stickTouch {
+                stickTouch = nil
+                stickPosition = .zero
+                if let stick = items.first(where: { $0.kind == .stick }), let ids = stick.inputs, ids.count == 4 {
+                    sendStick(ids, 0, 0)
+                }
+                setNeedsDisplay()
+                continue
+            }
             touchInputs[touch] = nil
         }
         reconcile()
+    }
+
+    /// The stick item whose extended frame contains this point, if any.
+    private func stickItem(at point: CGPoint) -> ControlLayout.Item? {
+        items.first { $0.kind == .stick && $0.extended.resolved(in: bounds.size).contains(point) }
+    }
+
+    /// A stick's position is its offset from its own frame's center, capped
+    /// to the frame's half-extent so it cannot report beyond fully deflected,
+    /// then sent through as a magnitude the way EmulatorJS's own stick does.
+    private func updateStick(_ stick: ControlLayout.Item, at point: CGPoint) {
+        guard let ids = stick.inputs, ids.count == 4 else { return }
+        let frame = stick.frame.resolved(in: bounds.size)
+        let dx = (point.x - frame.midX) / (frame.width / 2)
+        let dy = (point.y - frame.midY) / (frame.height / 2)
+        let magnitude = min(1, (dx * dx + dy * dy).squareRoot())
+        let angle = atan2(dy, dx)
+        let x = magnitude == 0 ? 0 : cos(angle) * magnitude
+        let y = magnitude == 0 ? 0 : sin(angle) * magnitude
+        stickPosition = CGPoint(x: x, y: y)
+        // Screen y grows downward; EmulatorJS's own stick treats a push up
+        // as positive y, so the sign flips crossing into RetroPad terms.
+        sendStick(ids, Double(x), Double(-y))
+        setNeedsDisplay()
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -146,6 +206,11 @@ final class ControlPadView: UIView {
                 }
             case .button, .pill:
                 if let id = item.input { held.insert(id) }
+            case .stick:
+                // Handled separately: a stick is claimed by a touch in
+                // touchesBegan and tracked through updateStick, not through
+                // this digital held-id path.
+                break
             }
         }
         return held
@@ -186,8 +251,33 @@ final class ControlPadView: UIView {
                     in: frame, label: item.label, tint: tint,
                     active: item.input.map(pressed.contains) ?? false
                 )
+            case .stick:
+                drawStick(in: frame)
             }
         }
+    }
+
+    private func drawStick(in frame: CGRect) {
+        let radius = min(frame.width, frame.height) / 2
+        let center = CGPoint(x: frame.midX, y: frame.midY)
+        let active = stickTouch != nil
+        let colors = style(active: active)
+
+        let base = UIBezierPath(arcCenter: center, radius: radius, startAngle: 0, endAngle: .pi * 2, clockwise: true)
+        colors.fill.setFill()
+        base.fill()
+        colors.stroke.setStroke()
+        base.lineWidth = 1.5
+        base.stroke()
+
+        let knobRadius = radius * 0.42
+        let knobCenter = CGPoint(
+            x: center.x + stickPosition.x * (radius - knobRadius),
+            y: center.y + stickPosition.y * (radius - knobRadius)
+        )
+        let knob = UIBezierPath(arcCenter: knobCenter, radius: knobRadius, startAngle: 0, endAngle: .pi * 2, clockwise: true)
+        UIColor.white.withAlphaComponent(active ? 0.85 : 0.55).setFill()
+        knob.fill()
     }
 
     /// Labels sit on colour rather than on the game, so they need to be

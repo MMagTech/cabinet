@@ -1,0 +1,322 @@
+{
+ "system": "nds",
+ "_ergonomics": "No Menu pill: DS games already fill both screens with real content, and the pause menu opens from the same edge-tap gesture as every other layout without needing a dedicated button in front of it.",
+ "items": [
+  {
+   "kind": "dpad",
+   "inputs": [
+    4,
+    5,
+    6,
+    7
+   ],
+   "frame": {
+    "x": 0.07,
+    "y": 0.38,
+    "w": 0.4,
+    "h": 0.52
+   },
+   "extended": {
+    "x": 0.020000000000000004,
+    "y": 0.3,
+    "w": 0.5,
+    "h": 0.68
+   }
+  },
+  {
+   "kind": "button",
+   "label": "A",
+   "input": 8,
+   "frame": {
+    "x": 0.8,
+    "y": 0.46,
+    "w": 0.15,
+    "h": 0.19
+   },
+   "extended": {
+    "x": 0.75,
+    "y": 0.4,
+    "w": 0.25,
+    "h": 0.31
+   }
+  },
+  {
+   "kind": "button",
+   "label": "B",
+   "input": 0,
+   "frame": {
+    "x": 0.65,
+    "y": 0.62,
+    "w": 0.15,
+    "h": 0.19
+   },
+   "extended": {
+    "x": 0.6,
+    "y": 0.56,
+    "w": 0.25,
+    "h": 0.31
+   }
+  },
+  {
+   "kind": "button",
+   "label": "X",
+   "input": 9,
+   "frame": {
+    "x": 0.65,
+    "y": 0.3,
+    "w": 0.15,
+    "h": 0.19
+   },
+   "extended": {
+    "x": 0.6,
+    "y": 0.24,
+    "w": 0.25,
+    "h": 0.31
+   }
+  },
+  {
+   "kind": "button",
+   "label": "Y",
+   "input": 1,
+   "frame": {
+    "x": 0.5,
+    "y": 0.46,
+    "w": 0.15,
+    "h": 0.19
+   },
+   "extended": {
+    "x": 0.45,
+    "y": 0.4,
+    "w": 0.25,
+    "h": 0.31
+   }
+  },
+  {
+   "kind": "pill",
+   "label": "L",
+   "input": 10,
+   "frame": {
+    "x": 0.03,
+    "y": 0.03,
+    "w": 0.16,
+    "h": 0.1
+   },
+   "extended": {
+    "x": 0.0,
+    "y": 0.0,
+    "w": 0.22,
+    "h": 0.16
+   }
+  },
+  {
+   "kind": "pill",
+   "label": "R",
+   "input": 11,
+   "frame": {
+    "x": 0.81,
+    "y": 0.03,
+    "w": 0.16,
+    "h": 0.1
+   },
+   "extended": {
+    "x": 0.78,
+    "y": 0.0,
+    "w": 0.21999999999999997,
+    "h": 0.16
+   }
+  },
+  {
+   "kind": "pill",
+   "label": "Select",
+   "input": 2,
+   "frame": {
+    "x": 0.28,
+    "y": 0.03,
+    "w": 0.19,
+    "h": 0.1
+   },
+   "extended": {
+    "x": 0.25,
+    "y": 0.0,
+    "w": 0.25,
+    "h": 0.16
+   }
+  },
+  {
+   "kind": "pill",
+   "label": "Start",
+   "input": 3,
+   "frame": {
+    "x": 0.53,
+    "y": 0.03,
+    "w": 0.19,
+    "h": 0.1
+   },
+   "extended": {
+    "x": 0.5,
+    "y": 0.0,
+    "w": 0.25,
+    "h": 0.16
+   }
+  }
+ ],
+ "landscapeItems": [
+  {
+   "kind": "dpad",
+   "inputs": [
+    4,
+    5,
+    6,
+    7
+   ],
+   "frame": {
+    "x": 0.03,
+    "y": 0.42,
+    "w": 0.19,
+    "h": 0.42
+   },
+   "extended": {
+    "x": 0.0,
+    "y": 0.31999999999999995,
+    "w": 0.25,
+    "h": 0.58
+   }
+  },
+  {
+   "kind": "button",
+   "label": "A",
+   "input": 8,
+   "frame": {
+    "x": 0.9,
+    "y": 0.46,
+    "w": 0.065,
+    "h": 0.15
+   },
+   "extended": {
+    "x": 0.85,
+    "y": 0.4,
+    "w": 0.15000000000000002,
+    "h": 0.27
+   }
+  },
+  {
+   "kind": "button",
+   "label": "B",
+   "input": 0,
+   "frame": {
+    "x": 0.815,
+    "y": 0.58,
+    "w": 0.065,
+    "h": 0.15
+   },
+   "extended": {
+    "x": 0.7649999999999999,
+    "y": 0.52,
+    "w": 0.165,
+    "h": 0.27
+   }
+  },
+  {
+   "kind": "button",
+   "label": "X",
+   "input": 9,
+   "frame": {
+    "x": 0.815,
+    "y": 0.34,
+    "w": 0.065,
+    "h": 0.15
+   },
+   "extended": {
+    "x": 0.7649999999999999,
+    "y": 0.28,
+    "w": 0.165,
+    "h": 0.27
+   }
+  },
+  {
+   "kind": "button",
+   "label": "Y",
+   "input": 1,
+   "frame": {
+    "x": 0.74,
+    "y": 0.46,
+    "w": 0.065,
+    "h": 0.15
+   },
+   "extended": {
+    "x": 0.69,
+    "y": 0.4,
+    "w": 0.165,
+    "h": 0.27
+   }
+  },
+  {
+   "kind": "pill",
+   "label": "L",
+   "input": 10,
+   "frame": {
+    "x": 0.03,
+    "y": 0.06,
+    "w": 0.1,
+    "h": 0.09
+   },
+   "extended": {
+    "x": 0.0,
+    "y": 0.03,
+    "w": 0.16,
+    "h": 0.15
+   }
+  },
+  {
+   "kind": "pill",
+   "label": "R",
+   "input": 11,
+   "frame": {
+    "x": 0.87,
+    "y": 0.06,
+    "w": 0.1,
+    "h": 0.09
+   },
+   "extended": {
+    "x": 0.84,
+    "y": 0.03,
+    "w": 0.16,
+    "h": 0.15
+   }
+  },
+  {
+   "kind": "pill",
+   "label": "Select",
+   "input": 2,
+   "frame": {
+    "x": 0.03,
+    "y": 0.19,
+    "w": 0.1,
+    "h": 0.09
+   },
+   "extended": {
+    "x": 0.0,
+    "y": 0.16,
+    "w": 0.16,
+    "h": 0.15
+   }
+  },
+  {
+   "kind": "pill",
+   "label": "Start",
+   "input": 3,
+   "frame": {
+    "x": 0.87,
+    "y": 0.19,
+    "w": 0.1,
+    "h": 0.09
+   },
+   "extended": {
+    "x": 0.84,
+    "y": 0.16,
+    "w": 0.16,
+    "h": 0.15
+   }
+  }
+ ]
+}

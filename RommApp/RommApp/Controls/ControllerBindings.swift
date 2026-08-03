@@ -103,6 +103,13 @@ enum RetroPad {
     /// player with no way back out of a game is stuck.
     static let overlay = -1
 
+    /// N64 only: EmulatorJS's own indices for the main stick (16 to 19) and
+    /// the four C-buttons (20 to 23), confirmed against its source, not the
+    /// standard RetroPad table above. Anything in this range must go through
+    /// `PlayerView.Input.send`'s magnitude path, `__cm`, never the boolean
+    /// `__ci` one: EmulatorJS reads both through the same analog dispatch.
+    static func n64AnalogAxis(_ id: Int) -> Bool { (16...23).contains(id) }
+
     /// Every input a person may want to bind, in the order the remap screen
     /// walks through them. Directions are excluded: they come from the d-pad
     /// and stick automatically and are not a source of trouble.

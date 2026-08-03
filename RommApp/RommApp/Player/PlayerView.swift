@@ -412,7 +412,40 @@ final class PlayerInputBridge: ObservableObject {
     /// a dozen characters rather than a hundred and ten with three property
     /// lookups. Nothing about the emulator side changes.
     func send(id: Int, down: Bool) {
+        // N64's C-buttons are ordinary digital buttons on the real pad, but
+        // EmulatorJS reads them through the same analog dispatch path as its
+        // stick, not the plain digital one: confirmed from its own on screen
+        // control scheme in data/src/emulator.js, where each C-button is a
+        // "joystickInput" button carrying a fixed index (C-Up 23, C-Down 22,
+        // C-Left 21, C-Right 20) rather than a RetroPad id. A boolean __ci
+        // call would arrive as magnitude 1 out of a possible 0x7fff, well
+        // under whatever deadzone the core reads a press against, and never
+        // register. See RetroPad.n64AnalogAxis(id:).
+        if RetroPad.n64AnalogAxis(id) {
+            webView?.evaluateJavaScript("__cm(\(id),\(down ? 0x7fff : 0))")
+            return
+        }
         webView?.evaluateJavaScript("__ci(\(id),\(down ? 1 : 0))")
+    }
+
+    /// A stick's live position, x and y each -1 to 1. `ids` are
+    /// x-positive/x-negative/y-positive/y-negative, EmulatorJS's own order.
+    /// Each axis sends whichever direction is live at full drag magnitude
+    /// and zeroes the other, the exact scheme EmulatorJS's own on screen
+    /// stick uses (`data/src/emulator.js`'s nipplejs "move" handler), so a
+    /// touch drag and EmulatorJS's own stick are indistinguishable to the
+    /// core.
+    func sendStick(ids: [Int], x: Double, y: Double) {
+        guard ids.count == 4 else { return }
+        let scale = 0x7fff as Double
+        let xMag = Int((abs(x) * scale).rounded())
+        let yMag = Int((abs(y) * scale).rounded())
+        webView?.evaluateJavaScript("""
+        __cm(\(ids[0]),\(x > 0 ? xMag : 0));\
+        __cm(\(ids[1]),\(x < 0 ? xMag : 0));\
+        __cm(\(ids[2]),\(y > 0 ? yMag : 0));\
+        __cm(\(ids[3]),\(y < 0 ? yMag : 0));
+        """)
     }
 
     /// Reveals the overlay from native code, for controllers with no screen
@@ -723,14 +756,18 @@ struct PlayerWebView: UIViewRepresentable {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         webView.load(request)
 
-        let padView = ControlPadView(items: []) { [weak input] id, down in
-            // Menu is native, everything else is the emulator's.
-            if id == RetroPad.overlay {
-                if down { input?.onMenu?() }
-                return
-            }
-            input?.send(id: id, down: down)
-        }
+        let padView = ControlPadView(
+            items: [],
+            send: { [weak input] id, down in
+                // Menu is native, everything else is the emulator's.
+                if id == RetroPad.overlay {
+                    if down { input?.onMenu?() }
+                    return
+                }
+                input?.send(id: id, down: down)
+            },
+            sendStick: { [weak input] ids, x, y in input?.sendStick(ids: ids, x: x, y: y) }
+        )
         padView.backgroundColor = .clear
         padView.isMultipleTouchEnabled = true
         return PlayerContainerView(webView: webView, pad: padView)
@@ -860,6 +897,16 @@ struct PlayerWebView: UIViewRepresentable {
             try {
               const e = window.EJS_emulator;
               if (e && e.gameManager) e.gameManager.simulateInput(0, id, down);
+            } catch (x) {}
+          };
+
+          // The magnitude twin of __ci above, for N64's stick and C-button
+          // indices (16-23), which EmulatorJS reads as analog values rather
+          // than a boolean down/up. Same call, same resident reasoning.
+          window.__cm = function (id, value) {
+            try {
+              const e = window.EJS_emulator;
+              if (e && e.gameManager) e.gameManager.simulateInput(0, id, value);
             } catch (x) {}
           };
 

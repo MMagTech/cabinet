@@ -1,0 +1,76 @@
+{
+ "system": "wonderswan",
+ "_ergonomics": "The X d-pad is the primary one and sits where every other layout's d-pad sits. The Y d-pad is a second, real input on the hardware, not a duplicate: WonderSwan's own libretro core reads it back as the shoulder buttons (Y-left=L, Y-right=R, Y-down=L2, Y-up=R2), confirmed against the core's RetroPad mapping, not guessed, so it is drawn as a small second pad in the top band rather than folded into the corners as plain shoulders.",
+ "items": [
+  {
+   "kind": "dpad",
+   "inputs": [4, 5, 6, 7],
+   "frame": {"x": 0.05, "y": 0.38, "w": 0.34, "h": 0.46},
+   "extended": {"x": 0.0, "y": 0.3, "w": 0.42, "h": 0.6}
+  },
+  {
+   "kind": "dpad",
+   "label": "Y",
+   "inputs": [13, 12, 10, 11],
+   "frame": {"x": 0.62, "y": 0.4, "w": 0.28, "h": 0.38},
+   "extended": {"x": 0.56, "y": 0.32, "w": 0.36, "h": 0.5}
+  },
+  {
+   "kind": "button",
+   "label": "A",
+   "input": 8,
+   "frame": {"x": 0.42, "y": 0.62, "w": 0.16, "h": 0.2},
+   "extended": {"x": 0.37, "y": 0.56, "w": 0.24, "h": 0.3}
+  },
+  {
+   "kind": "button",
+   "label": "B",
+   "input": 0,
+   "frame": {"x": 0.42, "y": 0.15, "w": 0.16, "h": 0.2},
+   "extended": {"x": 0.37, "y": 0.09, "w": 0.24, "h": 0.3}
+  },
+  {
+   "kind": "pill",
+   "label": "Start",
+   "input": 3,
+   "frame": {"x": 0.4, "y": 0.03, "w": 0.2, "h": 0.09},
+   "extended": {"x": 0.36, "y": 0.0, "w": 0.28, "h": 0.15}
+  }
+ ],
+ "landscapeItems": [
+  {
+   "kind": "dpad",
+   "inputs": [4, 5, 6, 7],
+   "frame": {"x": 0.03, "y": 0.42, "w": 0.19, "h": 0.42},
+   "extended": {"x": 0.0, "y": 0.32, "w": 0.24, "h": 0.58}
+  },
+  {
+   "kind": "dpad",
+   "label": "Y",
+   "inputs": [13, 12, 10, 11],
+   "frame": {"x": 0.78, "y": 0.42, "w": 0.19, "h": 0.42},
+   "extended": {"x": 0.74, "y": 0.32, "w": 0.24, "h": 0.58}
+  },
+  {
+   "kind": "button",
+   "label": "A",
+   "input": 8,
+   "frame": {"x": 0.5, "y": 0.62, "w": 0.09, "h": 0.16},
+   "extended": {"x": 0.46, "y": 0.55, "w": 0.15, "h": 0.26}
+  },
+  {
+   "kind": "button",
+   "label": "B",
+   "input": 0,
+   "frame": {"x": 0.5, "y": 0.18, "w": 0.09, "h": 0.16},
+   "extended": {"x": 0.46, "y": 0.11, "w": 0.15, "h": 0.26}
+  },
+  {
+   "kind": "pill",
+   "label": "Start",
+   "input": 3,
+   "frame": {"x": 0.455, "y": 0.42, "w": 0.09, "h": 0.09},
+   "extended": {"x": 0.42, "y": 0.38, "w": 0.16, "h": 0.15}
+  }
+ ]
+}
