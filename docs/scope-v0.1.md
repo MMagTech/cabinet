@@ -290,11 +290,61 @@ RomM forces `save-state-location: browser` and exposes `EJS_onSaveState` and
 
 ---
 
+## Next
+
+Agreed 2026-08-02, in this order. Each was cut from v0.1 and has earned its
+way back for a stated reason, not because the list looked short.
+
+**1. Offline library browsing.** No network currently means no app at all:
+Home is empty, the library is empty, and you cannot even see what you own.
+That is a thin client feeling on a device that spends real time on planes and
+subways. Cache the game list, the platforms and the cover art, and say plainly
+in the UI that starting a game still needs a connection. Deliberately not
+offline *play*: RomM serves the player page as `no-cache` and its page needs
+the network, so playing offline would mean serving EmulatorJS from inside the
+app, which contradicts "load RomM's own player, do not reimplement it". That
+trade is not worth reopening for this.
+
+**2. Save states you can see.** The launch screen's resume card is a list of
+identical filenames, which is useless for choosing. RomM stores a screenshot
+alongside every state and the app already uploads them, so the data is sitting
+there. Thumbnails turn the weakest screen in the app into one of the better
+ones and make the pause menu's save and load loop legible instead of an act of
+faith. Best payoff for the effort on this list.
+
+**3. Moving the touch controls.** The most requested feature in every touch
+emulator that has ever shipped, because everybody's hands are different.
+The architecture is already ready: layouts are data with normalised 0 to 1
+frames, so an editor writes JSON rather than code, and arcade layouts are
+built from the same shape at runtime. This is the point where touch controls
+stop being tolerated and start being liked.
+
+**4. Collections.** RomM models them and the app ignores them. An A to Z rail
+is enough for a console library and not enough for 1,200 arcade games, which
+need grouping by something a person cares about rather than by spelling.
+
+Netplay was considered on 2026-08-02 and declined, with reasons worth keeping
+because they will come up again. It is entirely socket based over
+`/netplay/socket.io`, and sockets are this app's known weak spot: RomM's
+activity socket does not survive the webview, which is why play reporting had
+to move to REST, and netplay has no REST to fall back on. The web process
+still dies unpredictably, and in a match that strands the other player rather
+than costing seconds. EmulatorJS netplay is lockstep rather than rollback, so
+two phones on cellular would feel bad in exactly the games that would want it.
+And RomM's own page sets no netplay configuration, so the app would be reaching
+past it into EmulatorJS internals, which is the coupling that breaks the
+existing third party client across versions. Revisit only if a socket is first
+proven to survive the webview.
+
+---
+
 ## Cut from v0.1
 
-Layout editor. View mode sheet with four densities. Collections. Play time stats.
-Netplay. Cheats. Patches. Multi-disc swapping. Offline library browsing. AirPlay.
-Shortcuts and Spotlight. iPad layouts. controls.dat labels. Explicit downloads.
+View mode sheet with four densities. Play time stats. Netplay. Cheats.
+Patches. Multi-disc swapping. AirPlay. Shortcuts and Spotlight. iPad layouts.
+controls.dat labels. Explicit downloads.
+
+Layout editor, collections and offline library browsing moved to Next above.
 
 ---
 
