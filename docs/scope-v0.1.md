@@ -323,6 +323,17 @@ stop being tolerated and start being liked.
 is enough for a console library and not enough for 1,200 arcade games, which
 need grouping by something a person cares about rather than by spelling.
 
+**5. Download for platforms this app cannot run.** Settled 2026-08-03. Not
+every platform RomM lists is playable in a browser at all: Dreamcast is
+absent from RomM's own core map entirely, and Flash runs through Ruffle, an
+engine this player does not integrate with. Neither is a bug; both are limits
+of what EmulatorJS itself can run. The honest fix is not to hide the game,
+it is to stop offering a Play button that leads nowhere and offer the
+alternative instead: download the ROM, and its BIOS if the platform needs
+one, so the game is still usable through RetroArch or another native
+emulator. This rides on the same ROM fetch machinery offline browsing needs,
+so it belongs right after it, not as a separate project.
+
 Netplay was considered on 2026-08-02 and declined, with reasons worth keeping
 because they will come up again. It is entirely socket based over
 `/netplay/socket.io`, and sockets are this app's known weak spot: RomM's
