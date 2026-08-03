@@ -7,6 +7,10 @@ import SwiftUI
 /// keystroke and results match what the RomM web UI would find.
 struct LibraryScreen: View {
     @EnvironmentObject private var session: Session
+    @AppStorage(PlatformLabelSource.key) private var labelSourceRaw = PlatformLabelSource.platformName.rawValue
+    private var labelSource: PlatformLabelSource {
+        PlatformLabelSource(rawValue: labelSourceRaw) ?? .platformName
+    }
 
     @State private var platforms: [Platform] = []
     @State private var loading = true
@@ -53,7 +57,7 @@ struct LibraryScreen: View {
                         PlatformGamesView(platform: platform)
                     } label: {
                         HStack {
-                            Text(platform.name ?? platform.slug)
+                            Text(platformLabel(for: platform))
                             Spacer()
                             Text("\(platform.romCount)")
                                 .foregroundStyle(.secondary)
@@ -71,11 +75,23 @@ struct LibraryScreen: View {
         error = nil
         do {
             platforms = try await session.platforms()
-                .sorted { ($0.name ?? $0.slug) < ($1.name ?? $1.slug) }
+                .sorted { platformLabel(for: $0) < platformLabel(for: $1) }
         } catch {
             self.error = error.localizedDescription
         }
         loading = false
+    }
+
+    /// Same choice as `Rom.platformLabel`, for a `Platform` itself rather
+    /// than a rom: no per-rom display name to fall through, only the
+    /// metadata name and the folder it was scanned from.
+    private func platformLabel(for platform: Platform) -> String {
+        let metadataName = platform.displayName.flatMap { $0.isEmpty ? nil : $0 }
+        let folderName = platform.fsSlug.isEmpty ? nil : platform.fsSlug
+        switch labelSource {
+        case .platformName: return metadataName ?? folderName ?? platform.slug
+        case .folderName: return folderName ?? metadataName ?? platform.slug
+        }
     }
 
     // MARK: Search
@@ -103,7 +119,7 @@ struct LibraryScreen: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(rom.displayName)
                                     .lineLimit(1)
-                                Text(rom.platformSlug)
+                                Text(rom.platformLabel(source: labelSource, platformNames: session.platformNames))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }

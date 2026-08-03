@@ -11,6 +11,10 @@ import SwiftUI
 struct HomeView: View {
     @EnvironmentObject private var session: Session
     @ObservedObject private var compatibility = Compatibility.shared
+    @AppStorage(PlatformLabelSource.key) private var labelSourceRaw = PlatformLabelSource.platformName.rawValue
+    private var labelSource: PlatformLabelSource {
+        PlatformLabelSource(rawValue: labelSourceRaw) ?? .platformName
+    }
 
     @State private var recent: [Rom] = []
     @State private var loaded = false
@@ -125,7 +129,7 @@ struct HomeView: View {
                             .font(wide ? .headline : .title2.bold())
                             .foregroundStyle(.white)
                             .lineLimit(2)
-                        Text(rom.platformDisplayName ?? rom.platformSlug)
+                        Text(rom.platformLabel(source: labelSource, platformNames: session.platformNames))
                             .font(wide ? .caption : .subheadline)
                             .foregroundStyle(.white.opacity(0.75))
                     }

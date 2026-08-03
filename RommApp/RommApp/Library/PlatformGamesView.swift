@@ -11,6 +11,10 @@ struct PlatformGamesView: View {
 
     @EnvironmentObject private var session: Session
     @ObservedObject private var compatibility = Compatibility.shared
+    @AppStorage(PlatformLabelSource.key) private var labelSourceRaw = PlatformLabelSource.platformName.rawValue
+    private var labelSource: PlatformLabelSource {
+        PlatformLabelSource(rawValue: labelSourceRaw) ?? .platformName
+    }
     @State private var roms: [Rom] = []
     @State private var total = 0
     @State private var loading = false
@@ -32,6 +36,18 @@ struct PlatformGamesView: View {
         "com.mmagtech.RommApp.viewMode.\(slug)"
     }
 
+    /// Same fallback order as `Rom.platformLabel`, one rung shorter: a
+    /// platform has no display name field of its own to fall back through,
+    /// only its curated name, its folder name, and the slug last of all.
+    private var platformLabel: String {
+        let metadataName = platform.displayName.flatMap { $0.isEmpty ? nil : $0 }
+        let folderName = platform.fsSlug.isEmpty ? nil : platform.fsSlug
+        switch labelSource {
+        case .platformName: return metadataName ?? folderName ?? platform.slug
+        case .folderName: return folderName ?? metadataName ?? platform.slug
+        }
+    }
+
     var body: some View {
         Group {
             if let error {
@@ -49,7 +65,7 @@ struct PlatformGamesView: View {
                 }
             }
         }
-        .navigationTitle(platform.name ?? platform.slug)
+        .navigationTitle(platformLabel)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

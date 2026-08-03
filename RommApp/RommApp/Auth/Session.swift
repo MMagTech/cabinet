@@ -28,6 +28,11 @@ final class Session: ObservableObject {
     /// platform's folder name can be assumed or bundled, it is chosen fresh
     /// on every install.
     @Published private(set) var platformsVersions: [String: String] = [:]
+    /// Every platform's real name, by id, so a rom whose own display name
+    /// is missing can borrow its platform's instead of falling straight to
+    /// a slug. `/api/platforms` is fetched for this anyway to build the
+    /// library's platform list, so this just keeps a second look up handy.
+    @Published private(set) var platformNames: [Int: String] = [:]
 
     private var client: RommClient?
 
@@ -133,11 +138,21 @@ final class Session: ObservableObject {
     /// Fire and forget: nothing blocks on this. A game screen opened before
     /// it lands just falls back to the platform's own folder name as its
     /// best guess, the same graceful fallback RomM's own page makes when it
-    /// has no mapping either.
+    /// has no mapping either, and display screens fall back the same way
+    /// down to whatever slug they already had.
     private func refreshPlatformConfig() {
         Task { [weak self] in
             guard let self, let client else { return }
             self.platformsVersions = (try? await client.platformsVersions()) ?? [:]
+        }
+        Task { [weak self] in
+            guard let self, let client else { return }
+            let platforms = (try? await client.platforms()) ?? []
+            self.platformNames = Dictionary(
+                uniqueKeysWithValues: platforms.compactMap { platform in
+                    platform.displayName.map { (platform.id, $0) }
+                }
+            )
         }
     }
 

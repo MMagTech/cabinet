@@ -65,6 +65,53 @@ struct Rom: Decodable, Identifiable, Hashable {
     func canonicalPlatformSlug(platformsVersions: [String: String]) -> String {
         (platformsVersions[platformFsSlug] ?? platformFsSlug).lowercased()
     }
+
+    /// What to put in front of someone for this rom's platform. Never used
+    /// for a lookup, only for a label: `canonicalPlatformSlug` above is the
+    /// value anything that talks to RomM or this app's own bundled data
+    /// must use instead.
+    ///
+    /// Metadata name and folder name can each be wrong in ways the other is
+    /// not: a platform matched against an ambiguous IGDB entry gets a
+    /// mangled metadata name with no folder involved, a platform someone
+    /// named badly on disk has a clean metadata name sitting right next to
+    /// it. Neither wrong answer is rare enough to hardcode a fix for, so
+    /// which one leads is a setting rather than a fallback order this app
+    /// decides alone. Both sides still fall back toward the raw slug
+    /// before ever failing to show anything.
+    func platformLabel(source: PlatformLabelSource, platformNames: [Int: String]) -> String {
+        let metadataName = { () -> String? in
+            if let name = platformNames[platformId], !name.isEmpty { return name }
+            if let display = platformDisplayName, !display.isEmpty { return display }
+            return nil
+        }
+        let folderName = { !platformFsSlug.isEmpty ? platformFsSlug : nil }
+
+        switch source {
+        case .platformName:
+            return metadataName() ?? folderName() ?? platformSlug
+        case .folderName:
+            return folderName() ?? metadataName() ?? platformSlug
+        }
+    }
+}
+
+/// Which name wins when showing a platform: RomM's own metadata name, the
+/// same one its own web UI shows once an admin sets a custom name, or the
+/// folder it was scanned from, which is usually what someone already calls
+/// it. A setting because either can be the wrong one for a given server,
+/// and there is no way to know which without asking.
+enum PlatformLabelSource: String, CaseIterable {
+    case platformName, folderName
+
+    static let key = "com.mmagtech.RommApp.platformLabelSource"
+
+    var label: String {
+        switch self {
+        case .platformName: return "Platform name"
+        case .folderName: return "Folder name"
+        }
+    }
 }
 
 /// `GET /api/roms` wraps results in limit and offset pagination.

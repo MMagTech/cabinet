@@ -14,6 +14,10 @@ import SwiftUI
 /// exactly the behaviour before this screen existed.
 struct GameLaunchView: View {
     @ObservedObject private var compatibility = Compatibility.shared
+    @AppStorage(PlatformLabelSource.key) private var labelSourceRaw = PlatformLabelSource.platformName.rawValue
+    private var labelSource: PlatformLabelSource {
+        PlatformLabelSource(rawValue: labelSourceRaw) ?? .platformName
+    }
     let rom: Rom
 
     @EnvironmentObject private var session: Session
@@ -154,7 +158,7 @@ struct GameLaunchView: View {
             Text(rom.displayName)
                 .font(.title2.bold())
                 .multilineTextAlignment(centred ? .center : .leading)
-            Text(rom.platformDisplayName ?? rom.platformSlug)
+            Text(rom.platformLabel(source: labelSource, platformNames: session.platformNames))
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }

@@ -56,11 +56,20 @@ struct DeviceAuthToken: Decodable {
 struct Platform: Decodable, Identifiable, Hashable {
     let id: Int
     let name: String?
+    /// RomM's own computed `custom_name or name`: whatever an admin set at
+    /// Settings > that platform's info drawer, or the metadata name when
+    /// nobody has. RomM's own UI shows this, never the raw `name` on its
+    /// own, so a display screen should read this and not `name` directly,
+    /// or an admin's fix in that drawer would silently go unseen here.
+    let displayName: String?
     let slug: String
+    let fsSlug: String
     let romCount: Int
 
     enum CodingKeys: String, CodingKey {
         case id, name, slug
+        case displayName = "display_name"
+        case fsSlug = "fs_slug"
         case romCount = "rom_count"
     }
 }

@@ -12,6 +12,7 @@ struct SettingsView: View {
     @AppStorage("com.mmagtech.RommApp.controlOpacity") private var controlOpacity = 0.7
     @AppStorage(ControlTheme.key) private var controlTheme = ControlTheme.system.rawValue
     @AppStorage(PlayerAutosave.key) private var autosaveEnabled = true
+    @AppStorage(PlatformLabelSource.key) private var platformLabelSourceRaw = PlatformLabelSource.platformName.rawValue
     @ObservedObject private var controllers = GameControllerManager.shared
 
     var body: some View {
@@ -104,6 +105,18 @@ struct SettingsView: View {
                 Text("Emulation")
             } footer: {
                 Text("Recorded from the last game you played.")
+            }
+
+            Section {
+                Picker("Platform names", selection: $platformLabelSourceRaw) {
+                    ForEach(PlatformLabelSource.allCases, id: \.self) { source in
+                        Text(source.label).tag(source.rawValue)
+                    }
+                }
+            } header: {
+                Text("Library")
+            } footer: {
+                Text("A server's metadata name and the folder a platform was scanned from can each be wrong in ways the other is not. Switch here if a platform looks strange.")
             }
 
             Section {
