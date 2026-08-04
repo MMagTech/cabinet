@@ -35,6 +35,10 @@ struct PlayerView: View {
     @State private var overlayVisible = true
     @State private var gameStarted = false
     @State private var recovering = false
+    /// EmulatorJS's own boot status, mirrored from the page. Nil before the
+    /// page's loading text has appeared at all, which the curtain still
+    /// covers, just with an indeterminate chase instead of a real count.
+    @State private var bootStatus: LoadingStatus?
     /// The game is frozen and the pause menu is up. The freeze happens on
     /// the tap that opens the menu, not after choosing something in it,
     /// because a pause that arrives late is a death in anything that
@@ -92,6 +96,7 @@ struct PlayerView: View {
                     overlayVisible: $overlayVisible,
                     gameStarted: $gameStarted,
                     recovering: $recovering,
+                    bootStatus: $bootStatus,
                     input: input
                 )
             } else if failed {
@@ -102,6 +107,15 @@ struct PlayerView: View {
                         .buttonStyle(.bordered)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+
+            // The boot curtain. RomM's own loading UI never actually shows:
+            // this sits over the webview from the moment it exists until the
+            // game reports started, same as the recovery curtain just below,
+            // just for the ordinary first boot rather than a crash.
+            if context != nil, !gameStarted, !recovering {
+                BootCurtain(title: rom.displayName, status: bootStatus)
+                    .transition(.opacity)
             }
 
             // The curtain for a killed web process. Recovery works, but
@@ -232,6 +246,7 @@ struct PlayerView: View {
         }
         .animation(.easeInOut(duration: 0.3), value: recovering)
         .animation(.easeInOut(duration: 0.15), value: pauseMenuVisible)
+        .animation(.easeInOut(duration: 0.3), value: gameStarted)
         .confirmationDialog(
             "Go back to your last save?",
             isPresented: $confirmingLoad,
@@ -534,6 +549,7 @@ struct PlayerWebView: UIViewRepresentable {
     @Binding var overlayVisible: Bool
     @Binding var gameStarted: Bool
     @Binding var recovering: Bool
+    @Binding var bootStatus: LoadingStatus?
     let input: PlayerInputBridge
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -577,6 +593,10 @@ struct PlayerWebView: UIViewRepresentable {
             case "overlay":
                 if let visible = message.body as? Bool {
                     parent.overlayVisible = visible
+                }
+            case "loadingStatus":
+                if let text = message.body as? String, !text.isEmpty {
+                    parent.bootStatus = LoadingStatus(raw: text)
                 }
             case "gameState":
                 if message.body as? String == "started" {
@@ -639,6 +659,9 @@ struct PlayerWebView: UIViewRepresentable {
             EmulationInfo.freezeVitalsAtDeath()
             Compatibility.shared.recordCrash(romId: parent.rom.id)
             parent.gameStarted = false
+            // Stale, so the boot curtain does not flash the old run's
+            // status text once the recovery curtain above it lifts.
+            parent.bootStatus = nil
 
             // Recovery is unlimited by design, because the deaths are
             // unlimited. Only a genuine reload loop, three deaths inside
@@ -741,6 +764,7 @@ struct PlayerWebView: UIViewRepresentable {
         )
 
         config.userContentController.add(context.coordinator, name: "overlay")
+        config.userContentController.add(context.coordinator, name: "loadingStatus")
         config.userContentController.add(context.coordinator, name: "gameState")
         config.userContentController.add(context.coordinator, name: "diag")
         config.userContentController.add(context.coordinator, name: "autosave")
@@ -1288,6 +1312,30 @@ struct PlayerWebView: UIViewRepresentable {
             childList: true,
             attributes: true,
             attributeFilter: ["style"],
+          });
+
+          // EmulatorJS's own boot status, mirrored verbatim so the native
+          // curtain can show real progress instead of a black flash while
+          // this page loads underneath it. The element (.ejs_loading_text)
+          // is created fresh each load and removed once the game starts,
+          // so this re-queries on every mutation rather than caching a
+          // reference, the same reasoning the game state observer above
+          // already follows for its own element.
+          let lastStatusText = null;
+          const statusObserver = new MutationObserver(() => {
+            const el = document.querySelector(".ejs_loading_text");
+            const text = el ? el.innerText : null;
+            if (text && text !== lastStatusText) {
+              lastStatusText = text;
+              try {
+                window.webkit.messageHandlers.loadingStatus.postMessage(text);
+              } catch (e) {}
+            }
+          });
+          statusObserver.observe(document.documentElement, {
+            subtree: true,
+            childList: true,
+            characterData: true,
           });
 
           // Overlay idle logic. The close button and the EmulatorJS menu
