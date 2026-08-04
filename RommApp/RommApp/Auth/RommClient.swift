@@ -169,7 +169,7 @@ actor RommClient {
     /// The games with play history, most recent first. Same query RomM's own
     /// home screen makes (frontend getRecentPlayedRoms), so this app's Home
     /// agrees with the web UI about what you were last playing.
-    func recentlyPlayed(limit: Int = 8) async throws -> [Rom] {
+    func recentlyPlayed(limit: Int = 8, offset: Int = 0) async throws -> RomPage {
         var components = URLComponents(
             url: baseURL.appendingPathComponent("/api/roms"),
             resolvingAgainstBaseURL: false
@@ -179,6 +179,7 @@ actor RommClient {
             URLQueryItem(name: "order_dir", value: "desc"),
             URLQueryItem(name: "last_played", value: "true"),
             URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "offset", value: String(offset)),
         ]
         guard let url = components?.url else {
             throw RommError.transport("Could not build the request address.")
@@ -188,7 +189,7 @@ actor RommClient {
         if let accessToken {
             req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         }
-        return try await send(req, decoding: RomPage.self).items
+        return try await send(req, decoding: RomPage.self)
     }
 
     /// One page of games, optionally narrowed to a platform or a search term.

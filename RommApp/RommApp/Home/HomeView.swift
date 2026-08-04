@@ -78,13 +78,13 @@ struct HomeView: View {
             if let hero = recent.first {
                 heroCard(for: hero, height: 360, wide: false)
                 if recent.count > 1 {
-                    rotationRow("Keep playing", Array(recent.dropFirst()))
+                    rotationRow("Recent", Array(recent.dropFirst()), seeAll: .recentlyPlayed)
                 }
             } else if loaded {
                 emptyState
             }
             if !favorites.isEmpty {
-                rotationRow("Favorites", favorites)
+                rotationRow("Favorites", favorites, seeAll: session.favoriteCollection.map { .collection($0) })
             }
         }
         .padding(20)
@@ -101,12 +101,12 @@ struct HomeView: View {
 
             VStack(alignment: .leading, spacing: 20) {
                 if recent.count > 1 {
-                    rotationRow("Keep playing", Array(recent.dropFirst()))
+                    rotationRow("Recent", Array(recent.dropFirst()), seeAll: .recentlyPlayed)
                 } else if loaded, recent.isEmpty {
                     emptyState
                 }
                 if !favorites.isEmpty {
-                    rotationRow("Favorites", favorites)
+                    rotationRow("Favorites", favorites, seeAll: session.favoriteCollection.map { .collection($0) })
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -172,10 +172,30 @@ struct HomeView: View {
         .buttonStyle(.plain)
     }
 
-    private func rotationRow(_ title: String, _ roms: [Rom]) -> some View {
+    /// `seeAll` is the full list this rail is a preview of. Nil only
+    /// transiently, before that destination has finished loading (the
+    /// favorite collection isn't known until the first fetch lands), in
+    /// which case the header is a plain label rather than a broken link.
+    private func rotationRow(_ title: String, _ roms: [Rom], seeAll: RomListView.Source?) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(.headline)
+            if let seeAll {
+                NavigationLink {
+                    RomListView(source: seeAll)
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(title)
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .buttonStyle(.plain)
+            } else {
+                Text(title)
+                    .font(.headline)
+            }
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
@@ -216,8 +236,8 @@ struct HomeView: View {
     }
 
     private func load() async {
-        if let roms = try? await session.recentlyPlayed() {
-            recent = roms
+        if let page = try? await session.recentlyPlayed() {
+            recent = page.items
         }
         if let favs = try? await session.favoriteRoms() {
             favorites = favs

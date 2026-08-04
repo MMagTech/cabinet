@@ -11,11 +11,16 @@ struct RomListView: View {
     enum Source {
         case platform(Platform)
         case collection(Collection)
+        /// Home's "Recent" rail in full. Not a RomM concept the way a
+        /// collection is, just the same last-played query Home already
+        /// makes, unpaged there and paged here.
+        case recentlyPlayed
 
         var title: String {
             switch self {
             case .platform(let platform): return platform.slug
             case .collection(let collection): return collection.name
+            case .recentlyPlayed: return "Recent"
             }
         }
 
@@ -25,6 +30,7 @@ struct RomListView: View {
             switch self {
             case .platform(let platform): return "platform.\(platform.slug)"
             case .collection(let collection): return "collection.\(collection.id)"
+            case .recentlyPlayed: return "recentlyPlayed"
             }
         }
     }
@@ -73,6 +79,8 @@ struct RomListView: View {
             }
         case .collection(let collection):
             return collection.name
+        case .recentlyPlayed:
+            return "Recent"
         }
     }
 
@@ -275,6 +283,8 @@ struct RomListView: View {
                 page = try await session.roms(platformId: platform.id, offset: roms.count)
             case .collection(let collection):
                 page = try await session.roms(collectionId: collection.id, offset: roms.count)
+            case .recentlyPlayed:
+                page = try await session.recentlyPlayed(limit: 60, offset: roms.count)
             }
             roms.append(contentsOf: page.items)
             total = page.total

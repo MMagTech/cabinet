@@ -38,7 +38,9 @@ final class Session: ObservableObject {
     @Published private(set) var favoriteRomIds: Set<Int> = []
     /// The favorite collection itself, once found or created. Nil before
     /// the first load, or on a server nobody has favorited anything on yet.
-    private var favoriteCollection: Collection?
+    /// Published, not just private state, so Home's "Favorites" rail can
+    /// link straight to it once it exists.
+    @Published private(set) var favoriteCollection: Collection?
 
     private var client: RommClient?
 
@@ -198,9 +200,9 @@ final class Session: ObservableObject {
         return try await client.platforms()
     }
 
-    func recentlyPlayed() async throws -> [Rom] {
+    func recentlyPlayed(limit: Int = 8, offset: Int = 0) async throws -> RomPage {
         guard let client else { throw RommError.transport("No server selected.") }
-        return try await client.recentlyPlayed()
+        return try await client.recentlyPlayed(limit: limit, offset: offset)
     }
 
     func reportPlaying(romId: Int) async {
