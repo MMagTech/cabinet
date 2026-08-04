@@ -157,9 +157,13 @@ final class ControlPadView: UIView {
         let x = magnitude == 0 ? 0 : cos(angle) * magnitude
         let y = magnitude == 0 ? 0 : sin(angle) * magnitude
         stickPosition = CGPoint(x: x, y: y)
-        // Screen y grows downward; EmulatorJS's own stick treats a push up
-        // as positive y, so the sign flips crossing into RetroPad terms.
-        sendStick(ids, Double(x), Double(-y))
+        // No sign flip: EmulatorJS's own y-positive slot is confirmed to
+        // mean "down", not "up", by N64's C-buttons, whose analog indices
+        // follow the same four slot pattern and are independently confirmed
+        // against source (C-Down sits in the y-positive slot). That matches
+        // screen y, which already grows downward, so the raw touch delta is
+        // exactly the value to send, no conversion needed.
+        sendStick(ids, Double(x), Double(y))
         setNeedsDisplay()
     }
 
