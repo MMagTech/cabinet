@@ -131,9 +131,13 @@ struct PlayerView: View {
             // menu opened.
             if pauseMenuVisible {
                 ZStack {
+                    // No tap-to-dismiss here on purpose: this menu holds a
+                    // destructive action, and a stray tap outside it while
+                    // reaching for something else used to resume the game
+                    // out from under whoever opened it. Resume is a real
+                    // button now, not a rest state you can back into.
                     Color.black.opacity(0.55)
                         .ignoresSafeArea()
-                        .onTapGesture { resumeFromMenu() }
                     VStack(spacing: 18) {
                         VStack(spacing: 4) {
                             Text(rom.displayName)
@@ -144,14 +148,22 @@ struct PlayerView: View {
                                 .foregroundStyle(.secondary)
                         }
                         VStack(spacing: 10) {
-                            Button {
-                                resumeFromMenu()
+                            // Quit leads, not trails: the destructive choice
+                            // sat at the bottom, exactly where a thumb
+                            // reaching up into a centred popup naturally
+                            // lands, which is the easiest button in the
+                            // menu to hit by accident. Resume closes the
+                            // stack instead, in the spot that reach favours,
+                            // since it is the one button worth favouring.
+                            Button(role: .destructive) {
+                                SessionMarker.recordCleanExit()
+                                dismiss()
                             } label: {
-                                Label("Resume", systemImage: "play.fill")
+                                Label("Quit", systemImage: "xmark")
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 6)
                             }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.bordered)
                             Button {
                                 input.saveStateToServer()
                                 resumeFromMenu()
@@ -176,15 +188,14 @@ struct PlayerView: View {
                                 }
                                 .buttonStyle(.bordered)
                             }
-                            Button(role: .destructive) {
-                                SessionMarker.recordCleanExit()
-                                dismiss()
+                            Button {
+                                resumeFromMenu()
                             } label: {
-                                Label("Quit", systemImage: "xmark")
+                                Label("Resume", systemImage: "play.fill")
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 6)
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.borderedProminent)
                         }
                     }
                     .frame(maxWidth: 280)
