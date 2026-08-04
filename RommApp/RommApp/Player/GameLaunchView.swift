@@ -52,6 +52,10 @@ struct GameLaunchView: View {
     /// outranking the recommendation for its own board. Only a deliberate
     /// pick is worth remembering.
     @State private var coreWasChosen = false
+    /// Same reasoning as `coreWasChosen`, for firmware: only a deliberate
+    /// pick is worth remembering, not whatever the remembered default
+    /// itself happened to preselect.
+    @State private var firmwareWasChosen = false
     /// The short name EmulatorJS's core catalogue actually indexes by,
     /// resolved once here and threaded to everything downstream that needs
     /// it, rather than recomputed piecemeal. See `Rom.canonicalPlatformSlug`.
@@ -150,6 +154,9 @@ struct GameLaunchView: View {
         .onChange(of: selectedCore) { _, _ in
             if !loading { coreWasChosen = true }
         }
+        .onChange(of: selectedFirmware) { _, _ in
+            if !loading { firmwareWasChosen = true }
+        }
     }
 
     // MARK: Pieces
@@ -211,6 +218,9 @@ struct GameLaunchView: View {
             // next game on this platform, starts where this one left off.
             if coreWasChosen {
                 LaunchChoices.remember(core: selectedCore, canonicalSlug: canonicalSlug, for: rom)
+            }
+            if firmwareWasChosen, !rom.isArcade {
+                LaunchChoices.remember(firmwareId: selectedFirmware?.id, platformId: rom.platformId)
             }
             playing = true
         } label: {
@@ -571,13 +581,14 @@ struct GameLaunchView: View {
         saves = await savesTask ?? []
         states = (await statesTask ?? []).sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
 
-        // Deliberately no BIOS by default. Every arcade game shares one
-        // platform, so "first verified firmware" meant forcing neogeo.zip
-        // onto Cave and Capcom boards that have nothing to do with Neo Geo,
-        // and a wrong BIOS stops a game booting entirely. RomM only supplies
-        // one when the core asks for it, so absent unless chosen is the
-        // honest default.
-        selectedFirmware = nil
+        // Deliberately no BIOS by default on arcade. Every arcade game
+        // shares one platform, so "first verified firmware" meant forcing
+        // neogeo.zip onto Cave and Capcom boards that have nothing to do
+        // with Neo Geo, and a wrong BIOS stops a game booting entirely.
+        // Everywhere else, a platform genuinely has one BIOS every game on
+        // it wants, so what was picked last is worth remembering the same
+        // way a core choice is.
+        selectedFirmware = rom.isArcade ? nil : LaunchChoices.defaultFirmware(platformId: rom.platformId, from: firmware)
         loading = false
     }
 }

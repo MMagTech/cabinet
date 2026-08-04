@@ -72,6 +72,26 @@ struct LaunchChoices {
         UserDefaults.standard.set(core, forKey: "romm.core.canonicalPlatform.\(canonicalSlug)")
     }
 
+    /// The BIOS to preselect: whatever was picked last on this platform, if
+    /// the server still has it. A platform, not a per-game choice, unlike
+    /// core: a machine either needs its BIOS or it does not, and every game
+    /// on it needs the same file, so there is no equivalent of a CPS2 board
+    /// wanting a different answer than the platform habit.
+    static func defaultFirmware(platformId: Int, from available: [Firmware]) -> Firmware? {
+        guard let remembered = UserDefaults.standard.object(forKey: "romm.firmware.platform.\(platformId)") as? Int
+        else { return nil }
+        return available.first { $0.id == remembered }
+    }
+
+    static func remember(firmwareId: Int?, platformId: Int) {
+        let key = "romm.firmware.platform.\(platformId)"
+        guard let firmwareId else {
+            UserDefaults.standard.removeObject(forKey: key)
+            return
+        }
+        UserDefaults.standard.set(firmwareId, forKey: key)
+    }
+
     /// JavaScript that seeds RomM's storage, confirms it took, and reports
     /// back so native code knows whether skipping its screen is safe.
     ///
