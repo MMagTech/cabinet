@@ -79,17 +79,26 @@ struct Platform: Decodable, Identifiable, Hashable {
 /// `/api/collections/virtual`'s metadata groupings: this is a real,
 /// server-provisioned collection, found by that flag, never assumed to be
 /// named "Favourites" or any other string.
-struct Collection: Decodable, Identifiable {
+struct Collection: Decodable, Identifiable, Hashable {
     let id: Int
     let name: String
     let isFavorite: Bool
     let romIds: [Int]
+    let romCount: Int
+    let pathCoverSmall: String?
+    let pathCoverLarge: String?
 
     enum CodingKeys: String, CodingKey {
         case id, name
         case isFavorite = "is_favorite"
         case romIds = "rom_ids"
+        case romCount = "rom_count"
+        case pathCoverSmall = "path_cover_small"
+        case pathCoverLarge = "path_cover_large"
     }
+
+    static func == (lhs: Collection, rhs: Collection) -> Bool { lhs.id == rhs.id }
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 
 /// Scopes are fixed at pair time. Adding one later means the person has to pair

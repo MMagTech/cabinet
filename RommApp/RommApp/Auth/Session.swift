@@ -213,19 +213,31 @@ final class Session: ObservableObject {
 
     func roms(
         platformId: Int? = nil,
+        collectionId: Int? = nil,
         searchTerm: String? = nil,
         limit: Int = 60,
         offset: Int = 0
     ) async throws -> RomPage {
         guard let client else { throw RommError.transport("No server selected.") }
         return try await client.roms(
-            platformId: platformId, searchTerm: searchTerm, limit: limit, offset: offset
+            platformId: platformId, collectionId: collectionId,
+            searchTerm: searchTerm, limit: limit, offset: offset
         )
     }
 
     func coverData(path: String) async throws -> Data {
         guard let client else { throw RommError.transport("No server selected.") }
         return try await client.coverData(path: path)
+    }
+
+    // MARK: Collections
+
+    /// Every collection this account owns, favorite one included, for the
+    /// library's Collections tab. Not cached like `favoriteRomIds`: this is
+    /// browsed on demand, not read on every launch screen.
+    func collections() async throws -> [Collection] {
+        guard let client else { throw RommError.transport("No server selected.") }
+        return try await client.collections()
     }
 
     // MARK: Favorites

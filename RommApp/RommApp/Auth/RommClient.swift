@@ -195,6 +195,7 @@ actor RommClient {
     /// Search runs on the server, matching the scope doc.
     func roms(
         platformId: Int? = nil,
+        collectionId: Int? = nil,
         searchTerm: String? = nil,
         limit: Int = 60,
         offset: Int = 0
@@ -207,6 +208,9 @@ actor RommClient {
         ]
         if let platformId {
             query.append(URLQueryItem(name: "platform_ids", value: String(platformId)))
+        }
+        if let collectionId {
+            query.append(URLQueryItem(name: "collection_id", value: String(collectionId)))
         }
         if let searchTerm, !searchTerm.isEmpty {
             query.append(URLQueryItem(name: "search_term", value: searchTerm))

@@ -1,13 +1,35 @@
 import SwiftUI
 
-/// The games of one platform, as a cover grid or a compact text list.
+/// The games of one platform or one collection, as a cover grid or a compact
+/// text list.
 ///
-/// The mode preference persists per platform slug, because arcade sets often
-/// have no cover art and a grid of gray tiles is worse than a text list, while
-/// console libraries look far better as covers. One preference for both would
-/// force a bad default on one of them.
-struct PlatformGamesView: View {
-    let platform: Platform
+/// The mode preference persists per source, because arcade sets often have
+/// no cover art and a grid of gray tiles is worse than a text list, while
+/// console libraries look far better as covers. One preference for both
+/// would force a bad default on one of them.
+struct RomListView: View {
+    enum Source {
+        case platform(Platform)
+        case collection(Collection)
+
+        var title: String {
+            switch self {
+            case .platform(let platform): return platform.slug
+            case .collection(let collection): return collection.name
+            }
+        }
+
+        /// Distinguishes a platform and a collection that happen to share an
+        /// id, which their own ids alone cannot: they are different tables.
+        var modeKey: String {
+            switch self {
+            case .platform(let platform): return "platform.\(platform.slug)"
+            case .collection(let collection): return "collection.\(collection.id)"
+            }
+        }
+    }
+
+    let source: Source
 
     @EnvironmentObject private var session: Session
     @ObservedObject private var compatibility = Compatibility.shared
@@ -26,25 +48,31 @@ struct PlatformGamesView: View {
         case grid, list
     }
 
-    init(platform: Platform) {
-        self.platform = platform
-        let stored = UserDefaults.standard.string(forKey: Self.modeKey(for: platform.slug))
+    init(source: Source) {
+        self.source = source
+        let stored = UserDefaults.standard.string(forKey: Self.modeKey(for: source.modeKey))
         _viewMode = State(initialValue: stored.flatMap(ViewMode.init) ?? .grid)
     }
 
-    private static func modeKey(for slug: String) -> String {
-        "com.mmagtech.RommApp.viewMode.\(slug)"
+    private static func modeKey(for sourceKey: String) -> String {
+        "com.mmagtech.RommApp.viewMode.\(sourceKey)"
     }
 
     /// Same fallback order as `Rom.platformLabel`, one rung shorter: a
     /// platform has no display name field of its own to fall back through,
-    /// only its curated name, its folder name, and the slug last of all.
-    private var platformLabel: String {
-        let metadataName = platform.displayName.flatMap { $0.isEmpty ? nil : $0 }
-        let folderName = platform.fsSlug.isEmpty ? nil : platform.fsSlug
-        switch labelSource {
-        case .platformName: return metadataName ?? folderName ?? platform.slug
-        case .folderName: return folderName ?? metadataName ?? platform.slug
+    /// only its curated name, its folder name, and the slug last of all. A
+    /// collection has no such ambiguity, its name is just its name.
+    private var navigationLabel: String {
+        switch source {
+        case .platform(let platform):
+            let metadataName = platform.displayName.flatMap { $0.isEmpty ? nil : $0 }
+            let folderName = platform.fsSlug.isEmpty ? nil : platform.fsSlug
+            switch labelSource {
+            case .platformName: return metadataName ?? folderName ?? platform.slug
+            case .folderName: return folderName ?? metadataName ?? platform.slug
+            }
+        case .collection(let collection):
+            return collection.name
         }
     }
 
@@ -65,7 +93,7 @@ struct PlatformGamesView: View {
                 }
             }
         }
-        .navigationTitle(platformLabel)
+        .navigationTitle(navigationLabel)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -77,7 +105,7 @@ struct PlatformGamesView: View {
             }
         }
         .onChange(of: viewMode) { _, mode in
-            UserDefaults.standard.set(mode.rawValue, forKey: Self.modeKey(for: platform.slug))
+            UserDefaults.standard.set(mode.rawValue, forKey: Self.modeKey(for: source.modeKey))
         }
         .task { await reload() }
         // The scrubber can only jump to rows that exist, so list mode pulls
@@ -241,7 +269,13 @@ struct PlatformGamesView: View {
         guard !loading else { return }
         loading = true
         do {
-            let page = try await session.roms(platformId: platform.id, offset: roms.count)
+            let page: RomPage
+            switch source {
+            case .platform(let platform):
+                page = try await session.roms(platformId: platform.id, offset: roms.count)
+            case .collection(let collection):
+                page = try await session.roms(collectionId: collection.id, offset: roms.count)
+            }
             roms.append(contentsOf: page.items)
             total = page.total
         } catch {

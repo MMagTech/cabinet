@@ -13,26 +13,49 @@ struct LibraryScreen: View {
     }
 
     @State private var platforms: [Platform] = []
-    @State private var loading = true
-    @State private var error: String?
+    @State private var loadingPlatforms = true
+    @State private var platformsError: String?
+
+    @State private var collections: [Collection] = []
+    @State private var loadingCollections = true
+    @State private var collectionsError: String?
+
+    @State private var browsing: Browsing = .platforms
 
     @State private var searchText = ""
     @State private var searchResults: [Rom] = []
     @State private var searching = false
     @State private var playing: Rom?
 
+    enum Browsing: String, CaseIterable {
+        case platforms = "Platforms", collections = "Collections"
+    }
+
     var body: some View {
         Group {
             if !searchText.isEmpty {
                 searchList
             } else {
-                platformList
+                VStack(spacing: 0) {
+                    Picker("Browse by", selection: $browsing) {
+                        ForEach(Browsing.allCases, id: \.self) { Text($0.rawValue) }
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+
+                    switch browsing {
+                    case .platforms: platformList
+                    case .collections: collectionList
+                    }
+                }
             }
         }
         .navigationTitle("Library")
         .searchable(text: $searchText, prompt: "Search all games")
         .task(id: searchText) { await runSearch() }
         .task { await loadPlatforms() }
+        .task { await loadCollections() }
         .fullScreenCover(item: $playing) { rom in
             NavigationStack { GameLaunchView(rom: rom) }
         }
@@ -42,19 +65,19 @@ struct LibraryScreen: View {
 
     private var platformList: some View {
         List {
-            if loading {
+            if loadingPlatforms {
                 HStack(spacing: 10) {
                     ProgressView()
                     Text("Loading your library")
                         .foregroundStyle(.secondary)
                 }
-            } else if let error {
-                Text(error).foregroundStyle(.red)
+            } else if let platformsError {
+                Text(platformsError).foregroundStyle(.red)
                 Button("Try again") { Task { await loadPlatforms() } }
             } else {
                 ForEach(platforms) { platform in
                     NavigationLink {
-                        PlatformGamesView(platform: platform)
+                        RomListView(source: .platform(platform))
                     } label: {
                         HStack {
                             Text(platformLabel(for: platform))
@@ -71,15 +94,65 @@ struct LibraryScreen: View {
     }
 
     private func loadPlatforms() async {
-        loading = true
-        error = nil
+        loadingPlatforms = true
+        platformsError = nil
         do {
             platforms = try await session.platforms()
                 .sorted { platformLabel(for: $0) < platformLabel(for: $1) }
         } catch {
-            self.error = error.localizedDescription
+            platformsError = error.localizedDescription
         }
-        loading = false
+        loadingPlatforms = false
+    }
+
+    // MARK: Collections
+
+    private var collectionList: some View {
+        List {
+            if loadingCollections {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("Loading your collections")
+                        .foregroundStyle(.secondary)
+                }
+            } else if let collectionsError {
+                Text(collectionsError).foregroundStyle(.red)
+                Button("Try again") { Task { await loadCollections() } }
+            } else if collections.isEmpty {
+                Text("No collections yet. Make one in RomM to see it here.")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(collections) { collection in
+                    NavigationLink {
+                        RomListView(source: .collection(collection))
+                    } label: {
+                        HStack(spacing: 12) {
+                            CoverImage(path: collection.pathCoverSmall, title: collection.name)
+                                .frame(width: 40, height: 40)
+                                .clipShape(.rect(cornerRadius: 8))
+                            Text(collection.name)
+                            Spacer()
+                            Text("\(collection.romCount)")
+                                .foregroundStyle(.secondary)
+                                .font(.callout.monospacedDigit())
+                        }
+                    }
+                }
+            }
+        }
+        .refreshable { await loadCollections() }
+    }
+
+    private func loadCollections() async {
+        loadingCollections = true
+        collectionsError = nil
+        do {
+            collections = try await session.collections()
+                .sorted { $0.name < $1.name }
+        } catch {
+            collectionsError = error.localizedDescription
+        }
+        loadingCollections = false
     }
 
     /// Same choice as `Rom.platformLabel`, for a `Platform` itself rather
