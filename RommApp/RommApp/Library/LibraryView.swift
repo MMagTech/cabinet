@@ -75,16 +75,17 @@ struct LibraryScreen: View {
                 Text(platformsError).foregroundStyle(.red)
                 Button("Try again") { Task { await loadPlatforms() } }
             } else {
-                ForEach(platforms) { platform in
-                    NavigationLink {
-                        RomListView(source: .platform(platform))
-                    } label: {
-                        HStack {
-                            Text(platformLabel(for: platform))
-                            Spacer()
-                            Text("\(platform.romCount)")
-                                .foregroundStyle(.secondary)
-                                .font(.callout.monospacedDigit())
+                if !supportedPlatforms.isEmpty {
+                    Section("Supported") {
+                        ForEach(supportedPlatforms) { platform in
+                            platformRow(platform)
+                        }
+                    }
+                }
+                if !unsupportedPlatforms.isEmpty {
+                    Section("Unsupported") {
+                        ForEach(unsupportedPlatforms) { platform in
+                            platformRow(platform)
                         }
                     }
                 }
@@ -92,6 +93,34 @@ struct LibraryScreen: View {
         }
         .refreshable { await loadPlatforms() }
     }
+
+    private func platformRow(_ platform: Platform) -> some View {
+        NavigationLink {
+            RomListView(source: .platform(platform))
+        } label: {
+            HStack {
+                Text(platformLabel(for: platform))
+                Spacer()
+                Text("\(platform.romCount)")
+                    .foregroundStyle(.secondary)
+                    .font(.callout.monospacedDigit())
+            }
+        }
+    }
+
+    /// A platform this app can actually put a Play button in front of:
+    /// not a keyboard machine, per `ComputerPlatforms`, and RomM's own core
+    /// map, `Resources/cores.json`, actually lists a core for it. Dreamcast
+    /// and Flash fail this the same way a keyboard machine does, just for a
+    /// different reason, no core exists at all rather than no touch input.
+    private func isSupported(_ platform: Platform) -> Bool {
+        let canonicalSlug = (session.platformsVersions[platform.fsSlug] ?? platform.fsSlug).lowercased()
+        guard !ComputerPlatforms.contains(canonicalSlug) else { return false }
+        return !CoreCatalog.cores(for: canonicalSlug).isEmpty
+    }
+
+    private var supportedPlatforms: [Platform] { platforms.filter(isSupported) }
+    private var unsupportedPlatforms: [Platform] { platforms.filter { !isSupported($0) } }
 
     private func loadPlatforms() async {
         loadingPlatforms = true
