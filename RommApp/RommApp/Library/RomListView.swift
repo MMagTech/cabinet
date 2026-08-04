@@ -157,6 +157,7 @@ struct RomListView: View {
                                 .aspectRatio(3.0 / 4.0, contentMode: .fit)
                                 .clipShape(.rect(cornerRadius: 10))
                                 .compatibilityBadge(romId: rom.id)
+                                .favoriteBadge(romId: rom.id)
 
                             Text(rom.displayName)
                                 .font(.caption)
@@ -168,7 +169,7 @@ struct RomListView: View {
                         }
                     }
                     .buttonStyle(.plain)
-                    .compatibilityMenu(romId: rom.id)
+                    .gameContextMenu(romId: rom.id)
                     .onAppear { Task { await loadMoreIfNeeded(current: rom) } }
                 }
             }
@@ -192,6 +193,11 @@ struct RomListView: View {
                                     compatibility.isMarked(rom.id) ? .secondary : .primary
                                 )
                             Spacer(minLength: 0)
+                            if session.isFavorite(romId: rom.id) {
+                                Image(systemName: "star.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.yellow)
+                            }
                             if compatibility.isMarked(rom.id) {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .font(.caption)
@@ -202,7 +208,7 @@ struct RomListView: View {
                         .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
-                    .compatibilityMenu(romId: rom.id)
+                    .gameContextMenu(romId: rom.id)
                     .onAppear { Task { await loadMoreIfNeeded(current: rom) } }
                 }
 

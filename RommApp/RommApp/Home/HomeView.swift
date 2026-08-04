@@ -208,6 +208,7 @@ struct HomeView: View {
                                     .frame(width: 100, height: 133)
                                     .clipShape(.rect(cornerRadius: 10))
                                     .compatibilityBadge(romId: rom.id, compact: true)
+                                    .favoriteBadge(romId: rom.id, compact: true)
                                 Text(rom.displayName)
                                     .font(.caption)
                                     .lineLimit(1)
@@ -218,7 +219,7 @@ struct HomeView: View {
                             }
                         }
                         .buttonStyle(.plain)
-                        .compatibilityMenu(romId: rom.id)
+                        .gameContextMenu(romId: rom.id)
                     }
                 }
             }

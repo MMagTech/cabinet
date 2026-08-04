@@ -88,17 +88,53 @@ private struct CompatibilityBadge: ViewModifier {
     }
 }
 
+/// A star in the corner opposite the compatibility badge, shown only when
+/// the game is favorited. Reads at a glance in a grid without opening
+/// anything, the same job the compatibility triangle does for the other
+/// question a cover alone cannot answer.
+private struct FavoriteBadge: ViewModifier {
+    @EnvironmentObject private var session: Session
+    let romId: Int
+    var compact = false
+
+    func body(content: Content) -> some View {
+        content.overlay(alignment: .topLeading) {
+            if session.isFavorite(romId: romId) {
+                Image(systemName: "star.fill")
+                    .font(compact ? .caption2 : .footnote)
+                    .foregroundStyle(.yellow)
+                    .padding(compact ? 4 : 6)
+                    .background(.regularMaterial, in: .circle)
+                    .padding(compact ? 4 : 6)
+            }
+        }
+    }
+}
+
 /// The long press menu, used everywhere a game can be tapped. A press
 /// rather than a swipe because a cover grid has no swipe to give, and one
 /// gesture across both views is worth more than the better gesture in one
-/// of them.
-private struct CompatibilityMenu: ViewModifier {
+/// of them. Favoriting lives in the same menu rather than its own: two
+/// long-press menus on one view do not merge, the second silently wins, so
+/// every question a list can't otherwise answer without opening the game
+/// belongs in this one place.
+private struct GameContextMenu: ViewModifier {
     @ObservedObject private var compatibility = Compatibility.shared
+    @EnvironmentObject private var session: Session
     let romId: Int
 
     func body(content: Content) -> some View {
         let marked = compatibility.isMarked(romId)
+        let favorited = session.isFavorite(romId: romId)
         return content.contextMenu {
+            Button {
+                Task { try? await session.toggleFavorite(romId: romId) }
+            } label: {
+                Label(
+                    favorited ? "Unfavorite" : "Favorite",
+                    systemImage: favorited ? "star.slash" : "star"
+                )
+            }
             Button {
                 compatibility.setMarked(!marked, romId: romId)
             } label: {
@@ -116,7 +152,11 @@ extension View {
         modifier(CompatibilityBadge(romId: romId, compact: compact))
     }
 
-    func compatibilityMenu(romId: Int) -> some View {
-        modifier(CompatibilityMenu(romId: romId))
+    func favoriteBadge(romId: Int, compact: Bool = false) -> some View {
+        modifier(FavoriteBadge(romId: romId, compact: compact))
+    }
+
+    func gameContextMenu(romId: Int) -> some View {
+        modifier(GameContextMenu(romId: romId))
     }
 }
