@@ -396,6 +396,17 @@ past it into EmulatorJS internals, which is the coupling that breaks the
 existing third party client across versions. Revisit only if a socket is first
 proven to survive the webview.
 
+**Flagged, 2026-08-04, not yet a confirmed bug: some PSX games specifically,
+not PSX as a platform.** Unlike Dreamcast, PSX is genuinely supported, real
+cores exist (`pcsx_rearmed`, `mednafen_psx_hw`) and games play, Harmful Park
+confirmed working. One earlier title failed in a way that looked like it
+might be per game rather than platform wide, though the one case checked
+turned out to be a missing BIOS upload in RomM, not an app bug. Worth
+revisiting if a pattern shows up across multiple titles with BIOS confirmed
+present: could be a specific game's demands (see Open items 6, PS1 thermal
+and battery behaviour, already flagged unverified) rather than anything
+wrong with PSX support itself.
+
 ---
 
 ## Cut from v0.1
