@@ -168,8 +168,17 @@ final class ControlPadView: UIView {
     }
 
     /// The inputs a touch at this point should be holding.
+    ///
+    /// A d-pad's four bands are meant to overlap: a corner touch reporting
+    /// both an up and a right is the diagonal, not a mistake. Two separate
+    /// buttons overlapping is a different situation, an accident of two
+    /// generous extended frames sitting close together, and reporting both
+    /// is exactly the double press this was built to prevent. So buttons
+    /// and pills resolve to whichever one's center is nearest, one winner
+    /// only, while the d-pad keeps its own overlap untouched.
     private func inputs(at point: CGPoint) -> Set<Int> {
         var held: Set<Int> = []
+        var nearestButton: (id: Int, distance: CGFloat)?
 
         for item in items {
             let extended = item.extended.resolved(in: bounds.size)
@@ -205,13 +214,23 @@ final class ControlPadView: UIView {
                     if unit.x > 0.60 { held.insert(ids[3]) }   // right
                 }
             case .button, .pill:
-                if let id = item.input { held.insert(id) }
+                guard let id = item.input else { break }
+                let frame = item.frame.resolved(in: bounds.size)
+                let dx = point.x - frame.midX
+                let dy = point.y - frame.midY
+                let distance = dx * dx + dy * dy
+                if nearestButton == nil || distance < nearestButton!.distance {
+                    nearestButton = (id, distance)
+                }
             case .stick:
                 // Handled separately: a stick is claimed by a touch in
                 // touchesBegan and tracked through updateStick, not through
                 // this digital held-id path.
                 break
             }
+        }
+        if let nearestButton {
+            held.insert(nearestButton.id)
         }
         return held
     }
