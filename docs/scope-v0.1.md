@@ -323,16 +323,43 @@ expected to need blocking the way keyboard machines are and did not: its
 buttons are ordinary digital buttons, and the stick was buildable once
 looked into properly. Nintendo DS turned out to need no new engineering
 either, its touch screen is real `WKWebView` content the control strip
-already leaves uncovered. Verified live in the simulator, not yet in a real
-play session on device. Moving the controls, a real editor since layouts are
-already normalised 0 to 1 data, is the natural follow on now that the shapes
-themselves are correct, but is not on this list yet.
+already leaves uncovered. Moving the controls, a real editor since layouts
+are already normalised 0 to 1 data, is the natural follow on now that the
+shapes themselves are correct, but is not on this list yet.
 
-**3. Collections.** RomM models them and the app ignores them. An A to Z rail
-is enough for a console library and not enough for 1,200 arcade games, which
-need grouping by something a person cares about rather than by spelling.
+A second pass the same week fixed two more real gaps, both found by
+playing, not by auditing: twin-stick arcade games (Smash TV, Robotron)
+were missing an entire required input, since `ArcadeProfile` only ever
+modelled one joystick, not the second one these games are built around.
+MAME's own "doublejoy" control type was already being classified for this
+by `tools/mame_profiles.py`, just never read on the Swift side. And every
+layout's button hit testing had a real bug, not just a spacing one: two
+buttons whose generous extended zones overlapped both fired on a touch in
+that overlap, which read as accidentally hitting two buttons on any dense
+layout, arcade worst of all. Both verified live on device, not just in the
+simulator.
 
-**4. Download for platforms this app cannot run.** Settled 2026-08-03. Not
+Rollerball and dial controls (Arkanoid's paddle, Tempest's spinner,
+Centipede and Marble Madness's trackball) are a related, larger gap,
+deliberately not attempted alongside twin-stick: a second joystick was
+obviously the same shape as controls this app already draws, continuous
+rotation and unbounded relative motion are not obviously anything, and
+whether either can be made to feel good on a touchscreen at all is an open
+question, not just an unbuilt one. Worth a real feasibility pass before
+committing to it, not a guess.
+
+**Done, 2026-08-03: Collections.** RomM models them, the app now reads
+regular user made collections, browsable from a segmented control on the
+Library screen alongside platforms, same `RomListView` grid or list either
+one uses. Deliberately not virtual collections (metadata groupings like
+genre or franchise, the thing that actually solves 1,200 arcade games
+having no grouping beyond A to Z) or smart collections (rule based, the
+least likely thing anyone running a personal instance has actually set
+up): user collections were the same shape as the Favourites collection
+this app already reads, so shipped first; the other two remain real,
+unscheduled work, not abandoned.
+
+**3. Download for platforms this app cannot run.** Settled 2026-08-03. Not
 every platform RomM lists is playable in a browser at all: Dreamcast is
 absent from RomM's own core map entirely, and Flash runs through Ruffle, an
 engine this player does not integrate with. Neither is a bug; both are limits
