@@ -412,16 +412,17 @@ final class PlayerInputBridge: ObservableObject {
     /// a dozen characters rather than a hundred and ten with three property
     /// lookups. Nothing about the emulator side changes.
     func send(id: Int, down: Bool) {
-        // N64's C-buttons are ordinary digital buttons on the real pad, but
-        // EmulatorJS reads them through the same analog dispatch path as its
-        // stick, not the plain digital one: confirmed from its own on screen
-        // control scheme in data/src/emulator.js, where each C-button is a
-        // "joystickInput" button carrying a fixed index (C-Up 23, C-Down 22,
-        // C-Left 21, C-Right 20) rather than a RetroPad id. A boolean __ci
-        // call would arrive as magnitude 1 out of a possible 0x7fff, well
-        // under whatever deadzone the core reads a press against, and never
-        // register. See RetroPad.n64AnalogAxis(id:).
-        if RetroPad.n64AnalogAxis(id) {
+        // N64's C-buttons and a twin-stick arcade game's second joystick are
+        // both ordinary digital buttons on the real hardware, but EmulatorJS
+        // and the core underneath it route both through the analog dispatch
+        // path, not the plain digital one: N64's C-buttons confirmed from
+        // EmulatorJS's own control scheme in data/src/emulator.js, the
+        // arcade case from FBNeo's libretro port funneling a second
+        // joystick's directions into RETRO_DEVICE_ANALOG's right stick. A
+        // boolean __ci call would arrive as magnitude 1 out of a possible
+        // 0x7fff, well under whatever deadzone either reads a press against,
+        // and never register. See RetroPad.isAnalogAxis(id:).
+        if RetroPad.isAnalogAxis(id) {
             webView?.evaluateJavaScript("__cm(\(id),\(down ? 0x7fff : 0))")
             return
         }

@@ -29,6 +29,17 @@ struct ArcadeProfile {
     )
 
     var isFourWay: Bool { ways == "4" }
+
+    /// MAME's own "doublejoy" control type, classified by
+    /// tools/mame_profiles.py: two joysticks per player, Smash TV and
+    /// Robotron the canonical shape, one for movement and one that both
+    /// aims and fires by direction, often with no dedicated fire button at
+    /// all. A tank-drive game like Battlezone is technically the same MAME
+    /// control type with a different shape, forward/back per tread rather
+    /// than an 8-way aim; it gets the same second stick here rather than
+    /// its own case; the override picker is the fix for a game this guess
+    /// is wrong for, the same as it is for anything else in this profile.
+    var isDualStick: Bool { profile == "dual_stick" }
 }
 
 /// Step one of the scope doc's resolution chain: the user picked the

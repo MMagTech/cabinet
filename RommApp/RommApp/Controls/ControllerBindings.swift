@@ -103,12 +103,17 @@ enum RetroPad {
     /// player with no way back out of a game is stuck.
     static let overlay = -1
 
-    /// N64 only: EmulatorJS's own indices for the main stick (16 to 19) and
-    /// the four C-buttons (20 to 23), confirmed against its source, not the
-    /// standard RetroPad table above. Anything in this range must go through
-    /// `PlayerView.Input.send`'s magnitude path, `__cm`, never the boolean
-    /// `__ci` one: EmulatorJS reads both through the same analog dispatch.
-    static func n64AnalogAxis(_ id: Int) -> Bool { (16...23).contains(id) }
+    /// EmulatorJS's own indices for its first and second analog sticks (16
+    /// to 19, 20 to 23), confirmed against its source, not the standard
+    /// RetroPad table above, and confirmed generic to the bridge itself
+    /// rather than particular to any one core: N64's stick and C-buttons use
+    /// them, Virtual Boy's second d-pad uses the same block for its own
+    /// control scheme, and FBNeo's arcade cores route a twin-stick game's
+    /// second joystick through the identical right-analog-stick indices.
+    /// Anything in this range must go through `PlayerView.Input.send`'s
+    /// magnitude path, `__cm`, never the boolean `__ci` one: EmulatorJS
+    /// reads both through the same analog dispatch regardless of source.
+    static func isAnalogAxis(_ id: Int) -> Bool { (16...23).contains(id) }
 
     /// Every input a person may want to bind, in the order the remap screen
     /// walks through them. Directions are excluded: they come from the d-pad

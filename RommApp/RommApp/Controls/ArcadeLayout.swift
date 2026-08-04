@@ -23,18 +23,35 @@ enum ArcadeLayout {
 
         // The stick, low in the left thumb's arc, pivoting from the bottom
         // corner grip. Four way games actively suppress diagonals, which
-        // matters for the Pac-Man and Donkey Kong family.
-        items.append(ControlLayout.Item(
-            kind: .dpad,
-            label: nil,
-            input: nil,
-            inputs: [4, 5, 6, 7],
-            frame: ControlLayout.Rect(x: 0.07, y: 0.38, w: 0.40, h: 0.52),
-            extended: ControlLayout.Rect(x: 0.02, y: 0.30, w: 0.50, h: 0.68),
-            fourWay: profile.isFourWay
-        ))
-
-        items.append(contentsOf: actionButtons(count: max(0, min(profile.buttons, 6))))
+        // matters for the Pac-Man and Donkey Kong family. A twin-stick game
+        // shrinks it to leave room for the second one mirroring it on the
+        // right, where the action button arc would otherwise go: aiming is
+        // this genre's primary control, not a secondary one competing with
+        // movement for space.
+        if profile.isDualStick {
+            items.append(ControlLayout.Item(
+                kind: .dpad,
+                label: nil,
+                input: nil,
+                inputs: [4, 5, 6, 7],
+                frame: ControlLayout.Rect(x: 0.04, y: 0.40, w: 0.34, h: 0.46),
+                extended: ControlLayout.Rect(x: 0.0, y: 0.32, w: 0.40, h: 0.62),
+                fourWay: false
+            ))
+            items.append(secondStick(landscape: false))
+            items.append(contentsOf: dualStickButtons(count: profile.buttons))
+        } else {
+            items.append(ControlLayout.Item(
+                kind: .dpad,
+                label: nil,
+                input: nil,
+                inputs: [4, 5, 6, 7],
+                frame: ControlLayout.Rect(x: 0.07, y: 0.38, w: 0.40, h: 0.52),
+                extended: ControlLayout.Rect(x: 0.02, y: 0.30, w: 0.50, h: 0.68),
+                fourWay: profile.isFourWay
+            ))
+            items.append(contentsOf: actionButtons(count: max(0, min(profile.buttons, 6))))
+        }
 
         // Coin and Start are pressed a few times a session, so they take the
         // top band of the strip, out of both thumb arcs where mid-game hands
@@ -89,6 +106,48 @@ enum ArcadeLayout {
     /// the gutters. Frames are normalised against the full screen.
     private static func landscapeItems(for profile: ArcadeProfile) -> [ControlLayout.Item] {
         var items: [ControlLayout.Item] = []
+
+        if profile.isDualStick {
+            items.append(ControlLayout.Item(
+                kind: .dpad,
+                label: nil,
+                input: nil,
+                inputs: [4, 5, 6, 7],
+                frame: ControlLayout.Rect(x: 0.03, y: 0.42, w: 0.19, h: 0.42),
+                extended: ControlLayout.Rect(x: 0.00, y: 0.32, w: 0.24, h: 0.58),
+                fourWay: false
+            ))
+            items.append(secondStick(landscape: true))
+            items.append(contentsOf: dualStickButtons(count: profile.buttons, landscape: true))
+            items.append(ControlLayout.Item(
+                kind: .button,
+                label: "Coin",
+                input: 2,
+                inputs: nil,
+                frame: ControlLayout.Rect(x: 0.025, y: 0.06, w: 0.065, h: 0.15),
+                extended: ControlLayout.Rect(x: 0.00, y: 0.02, w: 0.10, h: 0.24),
+                fourWay: nil
+            ))
+            items.append(ControlLayout.Item(
+                kind: .pill,
+                label: "Start",
+                input: 3,
+                inputs: nil,
+                frame: ControlLayout.Rect(x: 0.87, y: 0.07, w: 0.10, h: 0.09),
+                extended: ControlLayout.Rect(x: 0.84, y: 0.03, w: 0.15, h: 0.16),
+                fourWay: nil
+            ))
+            items.append(ControlLayout.Item(
+                kind: .pill,
+                label: "Menu",
+                input: RetroPad.overlay,
+                inputs: nil,
+                frame: ControlLayout.Rect(x: 0.105, y: 0.07, w: 0.10, h: 0.09),
+                extended: ControlLayout.Rect(x: 0.10, y: 0.03, w: 0.14, h: 0.16),
+                fourWay: nil
+            ))
+            return items
+        }
 
         items.append(ControlLayout.Item(
             kind: .dpad,
@@ -227,6 +286,69 @@ enum ArcadeLayout {
             }
         }
 
+        return items
+    }
+
+    /// The second joystick, mirroring the first on the right rather than
+    /// taking the action buttons' usual arc: aiming is this genre's primary
+    /// control. Drawn as a d-pad, the same digital cross the first stick is,
+    /// because it is one on the real cabinet; FBNeo routes it through the
+    /// analog right stick indices underneath, which `PlayerView.Input.send`
+    /// already handles for anything in that range, so nothing here needs to
+    /// know the difference.
+    private static func secondStick(landscape: Bool) -> ControlLayout.Item {
+        let ids = [23, 22, 21, 20]   // up, down, left, right
+        if landscape {
+            return ControlLayout.Item(
+                kind: .dpad, label: nil, input: nil, inputs: ids,
+                frame: ControlLayout.Rect(x: 0.78, y: 0.42, w: 0.19, h: 0.42),
+                extended: ControlLayout.Rect(x: 0.76, y: 0.32, w: 0.24, h: 0.58),
+                fourWay: false
+            )
+        }
+        return ControlLayout.Item(
+            kind: .dpad, label: nil, input: nil, inputs: ids,
+            frame: ControlLayout.Rect(x: 0.62, y: 0.40, w: 0.34, h: 0.46),
+            extended: ControlLayout.Rect(x: 0.60, y: 0.32, w: 0.40, h: 0.62),
+            fourWay: false
+        )
+    }
+
+    /// A twin-stick game's own fire/bomb buttons, ordinary digital buttons
+    /// on the real cabinet and RetroPad ids here, unlike the sticks either
+    /// side of them: only a joystick's directions get the analog reroute.
+    /// Portrait, they sit in the gap the two sticks leave between them, the
+    /// one open patch of strip; landscape has no equivalent gap, so they
+    /// stack in the same top corner Start already occupies its own game's
+    /// worth of room away from.
+    private static func dualStickButtons(count: Int, landscape: Bool = false) -> [ControlLayout.Item] {
+        let ids = [0, 8, 1, 9]
+        let shown = max(0, min(count, 4))
+        guard shown > 0 else { return [] }
+
+        func item(id: Int, label: String, x: Double, y: Double, w: Double, h: Double) -> ControlLayout.Item {
+            ControlLayout.Item(
+                kind: .button, label: label, input: id, inputs: nil,
+                frame: ControlLayout.Rect(x: x, y: y, w: w, h: h),
+                extended: ControlLayout.Rect(x: x - 0.03, y: y - 0.03, w: w + 0.06, h: h + 0.06),
+                fourWay: nil
+            )
+        }
+
+        var items: [ControlLayout.Item] = []
+        if landscape {
+            let positions: [(Double, Double)] = [(0.50, 0.30), (0.50, 0.48), (0.44, 0.30), (0.44, 0.48)]
+            for index in 0..<shown {
+                let (x, y) = positions[index]
+                items.append(item(id: ids[index], label: "\(index + 1)", x: x, y: y, w: 0.06, h: 0.14))
+            }
+        } else {
+            let positions: [(Double, Double)] = [(0.43, 0.48), (0.43, 0.68), (0.35, 0.48), (0.51, 0.48)]
+            for index in 0..<shown {
+                let (x, y) = positions[index]
+                items.append(item(id: ids[index], label: "\(index + 1)", x: x, y: y, w: 0.14, h: 0.16))
+            }
+        }
         return items
     }
 }
