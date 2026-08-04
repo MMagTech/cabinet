@@ -126,10 +126,7 @@ struct LibraryScreen: View {
                     NavigationLink {
                         RomListView(source: .collection(collection))
                     } label: {
-                        HStack(spacing: 12) {
-                            CoverImage(path: collection.pathCoverSmall, title: collection.name)
-                                .frame(width: 40, height: 40)
-                                .clipShape(.rect(cornerRadius: 8))
+                        HStack {
                             Text(collection.name)
                             Spacer()
                             Text("\(collection.romCount)")
