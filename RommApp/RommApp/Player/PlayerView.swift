@@ -114,7 +114,10 @@ struct PlayerView: View {
             // game reports started, same as the recovery curtain just below,
             // just for the ordinary first boot rather than a crash.
             if context != nil, !gameStarted, !recovering {
-                BootCurtain(title: rom.displayName, status: bootStatus)
+                BootCurtain(
+                    title: rom.displayName, status: bootStatus,
+                    coverPath: rom.pathCoverLarge ?? rom.pathCoverSmall
+                )
                     .transition(.opacity)
             }
 
