@@ -116,6 +116,7 @@ struct PlayerView: View {
             if context != nil, !gameStarted, !recovering {
                 BootCurtain(
                     title: rom.displayName, status: bootStatus,
+                    platformLabel: rom.platformLabel(source: .platformName, platformNames: session.platformNames),
                     coverPath: rom.pathCoverLarge ?? rom.pathCoverSmall
                 )
                     .transition(.opacity)
