@@ -354,9 +354,26 @@ the safer build, since an in game editor would put drag handling inside
 `PlayerView`, the one performance sensitive path in the app that nothing
 else touches. The only thing it would buy is immediate feel, recoverable
 later with a pause menu shortcut into the same screen if it is ever wanted.
-Arcade is the open question, since one platform covers boards with nothing
-in common and its controls resolve through a chain rather than a lookup: an
-edit there needs a decided link to attach to, and that is unresolved.
+Arcade looked like the hard case and is not. Its pads are generated from a
+few parameters rather than read from a file, and the generator already
+stamps each one with an identity, `arcade:<profile>:<buttons>`, currently
+used only to pick button colours. That string is the key an edit saves
+against, so the editor's arcade section lists *shapes*, not games: edit six
+button once and every fighter follows. Two expected complications are not
+real. Four way versus eight way is a behavioural flag on an identically
+positioned d-pad, so it needs no separate entry. TATE cabinets are handled
+by locking those games to portrait, so they use the portrait arrangement
+like everything else rather than needing a third case. The theoretical
+space is fifteen to thirty combinations; showing only the shapes a library
+actually resolves to should cut that to a handful, named in plain language
+with the person's own games as examples.
+
+Both orientations are edited, not derived. Layouts already carry two sets
+of positions, portrait normalised against the control strip below the game
+and landscape normalised against the full screen in the gutters flanking
+the canvas, and neither can be computed from the other. So a shape is
+arranged twice and saved as the same two arrays the bundled files already
+use.
 
 A second pass the same week fixed two more real gaps, both found by
 playing, not by auditing: twin-stick arcade games (Smash TV, Robotron)
