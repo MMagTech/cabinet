@@ -35,6 +35,10 @@ struct BootCurtain: View {
     let title: String
     let status: LoadingStatus?
     let platformLabel: String
+    /// The boot watchdog's voice. Nil almost always; set when loading has
+    /// gone quiet long enough that a person would start wondering, so the
+    /// difference between hung and handled is the curtain saying so.
+    var watchdogNote: String? = nil
     /// `pathCoverLarge` falling back to `pathCoverSmall`, the same choice
     /// the launch screen makes.
     let coverPath: String?
@@ -87,7 +91,12 @@ struct BootCurtain: View {
                     .foregroundStyle(.white)
                     .lineLimit(1)
 
-                if let status {
+                if let watchdogNote {
+                    Text(watchdogNote)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.7))
+                        .lineLimit(1)
+                } else if let status {
                     Text(status.phase.trimmingCharacters(in: .whitespaces))
                         .font(.system(size: 12, weight: .medium, design: .monospaced))
                         .foregroundStyle(.white.opacity(0.55))

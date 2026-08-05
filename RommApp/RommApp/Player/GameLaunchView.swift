@@ -41,6 +41,13 @@ struct GameLaunchView: View {
     /// actual reason this card needed thumbnails and dates at all.
     @State private var showAllStates = false
     @State private var deletingAssetIds: Set<Int> = []
+    @State private var viewingScreenshot: ScreenshotTarget?
+
+    private struct ScreenshotTarget: Identifiable {
+        let id = UUID()
+        let path: String?
+        let title: String
+    }
     @State private var pendingStateDelete: GameState?
     @State private var pendingSaveDelete: GameSave?
     @State private var loading = true
@@ -211,6 +218,9 @@ struct GameLaunchView: View {
             Button("OK") { playError = nil }
         } message: {
             Text(playError ?? "")
+        }
+        .sheet(item: $viewingScreenshot) { target in
+            ScreenshotViewer(path: target.path, title: target.title)
         }
         // Coming back from a session the person closed themselves, the
         // interruption is spent: leaving the card up would offer to rewind
@@ -948,7 +958,10 @@ struct GameLaunchView: View {
             .buttonStyle(.plain)
             .disabled(!enabled)
             .opacity(enabled ? 1 : 0.4)
-            rowMenu { pendingStateDelete = state }
+            rowMenu(
+                screenshotPath: state.screenshotPath, title: RommDate.relativeLabel(state.updatedAt),
+                delete: { pendingStateDelete = state }
+            )
         }
         .opacity(deletingAssetIds.contains(state.id) ? 0.4 : 1)
     }
@@ -974,7 +987,10 @@ struct GameLaunchView: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            rowMenu { pendingSaveDelete = save }
+            rowMenu(
+                screenshotPath: save.screenshotPath, title: RommDate.relativeLabel(save.updatedAt),
+                delete: { pendingSaveDelete = save }
+            )
         }
         .opacity(deletingAssetIds.contains(save.id) ? 0.4 : 1)
     }
@@ -986,14 +1002,20 @@ struct GameLaunchView: View {
     /// this screen. A menu is the native answer for a form row, matching
     /// how Settings itself handles a destructive action inline.
     ///
-    /// Delete alone, no screenshot viewer. Thumbnails and an on-demand
-    /// viewer were both built and both pulled: this app's own saves have
-    /// no usable screenshot (the game is frozen before Save can be
-    /// reached, and a paused WebGL canvas reads back blank), and a
-    /// feature that can only ever show other devices' saves promises more
-    /// than it delivers. The dates are what actually tell rows apart.
-    private func rowMenu(delete: @escaping () -> Void) -> some View {
+    /// Screenshot is left off the menu entirely when there is none to
+    /// show, rather than shown disabled: nothing to act on, nothing to
+    /// grey out. The option exists again at all because captures at save
+    /// time work now, the frame grabbed on the way into the pause; every
+    /// state saved before that fix simply has no screenshot to offer.
+    private func rowMenu(
+        screenshotPath: String?, title: String, delete: @escaping () -> Void
+    ) -> some View {
         Menu {
+            if screenshotPath != nil {
+                Button("Screenshot", systemImage: "photo") {
+                    viewingScreenshot = ScreenshotTarget(path: screenshotPath, title: title)
+                }
+            }
             Button("Delete", systemImage: "trash", role: .destructive, action: delete)
         } label: {
             Image(systemName: "ellipsis.circle")

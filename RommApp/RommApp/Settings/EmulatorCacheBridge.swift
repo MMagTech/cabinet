@@ -190,6 +190,51 @@ final class EmulatorCacheBridge: NSObject, ObservableObject {
         }
     }
 
+    /// Deletes the databases EmulatorJS can rebuild on its own: the core
+    /// cache, and the legacy EmulatorJS-Cache a wrong-schema bridge once
+    /// wrote. Never the roms cache, states, or saves.
+    ///
+    /// Exists because of a real failure found 2026-08-05: installing a
+    /// build over a running game killed the WebContent process
+    /// mid-transaction and wedged EmulatorJS-core, after which every boot
+    /// hung forever at the exact point EmulatorJS reads that database to
+    /// check for a cached core, one fetch after cores/reports/<core>.json
+    /// in the network log. A wedged IndexedDB read never resolves and
+    /// never errors, so nothing downstream can time it out; deleting the
+    /// database is the repair, and cores simply redownload.
+    func repairPlayerStorage() async {
+        guard isReady, let webView else { return }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            deleteContinuation = continuation
+            webView.evaluateJavaScript(Self.repairScript)
+        }
+    }
+
+    private static let repairScript = """
+    (function () {
+        var finished = false;
+        function done() {
+            if (finished) return;
+            finished = true;
+            window.webkit.messageHandlers.cacheDeleted.postMessage(true);
+        }
+        var pending = 2;
+        function step() { pending -= 1; if (pending <= 0) done(); }
+        ["EmulatorJS-core", "EmulatorJS-Cache"].forEach(function (name) {
+            try {
+                console.log("[repair] deleting", name);
+                var req = indexedDB.deleteDatabase(name);
+                req.onsuccess = function () { console.log("[repair] deleted", name); step(); };
+                req.onerror = function () { console.error("[repair] delete failed", name, req.error); step(); };
+                req.onblocked = function () { console.error("[repair] delete blocked", name); step(); };
+            } catch (e) { step(); }
+        });
+        // A wedged database can hang even its own deletion callbacks;
+        // reporting done after a hard timeout beats hanging the button.
+        setTimeout(done, 8000);
+    })();
+    """
+
     func refresh() async {
         guard isReady, let webView else { return }
         let result = await withCheckedContinuation { (continuation: CheckedContinuation<[CachedFile], Never>) in

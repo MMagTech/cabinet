@@ -293,6 +293,11 @@ final class Session: ObservableObject {
         return try await client.stateContent(state)
     }
 
+    func screenshotData(path: String) async throws -> Data {
+        guard let client else { throw RommError.transport("No server selected.") }
+        return try await client.screenshotData(path: path)
+    }
+
     func deleteStates(ids: [Int]) async throws {
         guard let client else { throw RommError.transport("No server selected.") }
         try await client.deleteStates(ids: ids)

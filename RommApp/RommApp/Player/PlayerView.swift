@@ -54,6 +54,29 @@ struct PlayerView: View {
     @State private var failed = false
     @State private var overlayVisible = true
     @State private var gameStarted = false
+    /// Boot watchdog. `lastBootProgress` moves whenever the loading status
+    /// changes; a boot whose status has been frozen for 20 seconds without
+    /// the game starting is stalled, and the known cause is a wedged
+    /// EmulatorJS-core database (a mid-transaction process kill corrupts
+    /// it, after which its reads never resolve and never error, so nothing
+    /// downstream can time out). The repair is deleting that database and
+    /// reloading, attempted automatically once; a second stall lifts the
+    /// curtain instead, so a genuinely broken boot shows the page's own
+    /// error rather than a progress screen that never ends.
+    @State private var lastBootProgress = Date()
+    @State private var bootRepairAttempted = false
+    /// Nil while booting normally. Set once the watchdog gives up, which
+    /// now happens for two distinct reasons that deserve different words:
+    /// no network at all, detected before wasting the one repair attempt
+    /// on storage that was never broken, or a stall that persisted even
+    /// after repairing it.
+    @State private var bootFailure: BootFailure?
+    @State private var bootWatchdogNote: String?
+
+    enum BootFailure: Equatable {
+        case offline
+        case stalled
+    }
     @State private var recovering = false
     /// EmulatorJS's own boot status, mirrored from the page. Nil before the
     /// page's loading text has appeared at all, which the curtain still
@@ -134,13 +157,29 @@ struct PlayerView: View {
             // this sits over the webview from the moment it exists until the
             // game reports started, same as the recovery curtain just below,
             // just for the ordinary first boot rather than a crash.
-            if context != nil, !gameStarted, !recovering {
+            if context != nil, !gameStarted, !recovering, bootFailure == nil {
                 BootCurtain(
                     title: rom.displayName, status: bootStatus,
                     platformLabel: rom.platformLabel(source: .platformName, platformNames: session.platformNames),
+                    watchdogNote: bootWatchdogNote,
                     coverPath: rom.pathCoverLarge ?? rom.pathCoverSmall
                 )
                     .transition(.opacity)
+            }
+
+            // What the watchdog hands back when it gives up, instead of
+            // just letting the curtain drop and exposing whatever raw
+            // page state is underneath: a native explanation and a real
+            // retry, the same "clear message, not a crash" shape
+            // OfflineNotice already gives Home, the library and search.
+            if let bootFailure {
+                PlayerLoadFailure(reason: bootFailure) {
+                    self.bootFailure = nil
+                    bootRepairAttempted = false
+                    bootWatchdogNote = nil
+                    lastBootProgress = Date()
+                    input.reloadPage()
+                }
             }
 
             // The curtain for a killed web process. Recovery works, but
@@ -204,8 +243,13 @@ struct PlayerView: View {
                             }
                             .buttonStyle(.bordered)
                             Button {
+                                // Deliberately no resumeFromMenu() here.
+                                // Saving used to drop straight back into
+                                // gameplay, which meant a save landed while
+                                // still under whatever pressure caused it.
+                                // The menu now stays up: Save just saves,
+                                // and Resume is its own explicit tap.
                                 input.saveStateToServer()
-                                resumeFromMenu()
                             } label: {
                                 Label("Save state", systemImage: "square.and.arrow.down")
                                     .frame(maxWidth: .infinity)
@@ -294,6 +338,61 @@ struct PlayerView: View {
         // A dead web process takes the paused game with it; recovery will
         // boot and restore, and a stale pause card over that would offer
         // choices about a machine that no longer exists.
+        .onChange(of: bootStatus) { _, _ in
+            lastBootProgress = Date()
+            bootWatchdogNote = nil
+        }
+        // The watchdog loop. Checks every five seconds rather than
+        // scheduling one precise timer, because the deadline moves with
+        // every status change and a coarse poll is simpler than rebuilding
+        // a timer on each one.
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                guard !gameStarted, context != nil, !recovering, bootFailure == nil else { continue }
+                let quiet = Date().timeIntervalSince(lastBootProgress)
+                // The narration comes well before the repair: a person
+                // starts doubting a frozen screen long before twenty
+                // seconds, and the difference between hung and handled is
+                // the curtain admitting it noticed.
+                if quiet > 10, bootWatchdogNote == nil, !bootRepairAttempted {
+                    bootWatchdogNote = "Taking longer than usual"
+                }
+                guard quiet > 20 else { continue }
+                // Checked at every give-up decision, not just the first:
+                // a repair-and-reload attempted with no network fails for
+                // an unrelated reason and would otherwise mislabel a
+                // plain connectivity problem as a storage one on the
+                // second stall too.
+                guard await NetworkMonitor.shared.isConnected else {
+                    bootFailure = .offline
+                    DiagnosticsLog.record(
+                        context: "Boot watchdog",
+                        message: "Boot stalled with no network; skipped storage repair.",
+                        romVersion: session.serverVersion
+                    )
+                    continue
+                }
+                if bootRepairAttempted {
+                    bootFailure = .stalled
+                    DiagnosticsLog.record(
+                        context: "Boot watchdog",
+                        message: "Boot stalled again after storage repair; curtain lifted.",
+                        romVersion: session.serverVersion
+                    )
+                } else {
+                    bootRepairAttempted = true
+                    lastBootProgress = Date()
+                    bootWatchdogNote = "Fixing a loading problem"
+                    DiagnosticsLog.record(
+                        context: "Boot watchdog",
+                        message: "Boot stalled 20s with no progress; repairing core storage and reloading.",
+                        romVersion: session.serverVersion
+                    )
+                    input.repairCoreStorageAndReload()
+                }
+            }
+        }
         .onChange(of: gameStarted) { _, started in
             if !started { pauseMenuVisible = false }
         }
@@ -510,15 +609,30 @@ final class PlayerInputBridge: ObservableObject {
 
     /// Pauses the running game: the pause menu opening, or a controller
     /// disconnecting mid play.
+    ///
+    /// Through `__cabinetPauseWithCapture`, which grabs one frame on its
+    /// way down and then pauses from inside that same frame callback: the
+    /// only moment a WebGL canvas is readable is between a draw and its
+    /// composite, so the pixels have to be taken while the game still
+    /// renders, and this is the last instant it does. Costs at most one
+    /// rendered frame of pause latency, ~8 to 16ms, below the variance of
+    /// the tap itself. The captured frame is held for Save and dumped on
+    /// resume. Falls back to a plain pause if the helper is not resident.
     func pauseGame() {
         webView?.evaluateJavaScript(
-            "window.EJS_emulator && !EJS_emulator.paused && EJS_emulator.pause();"
+            """
+            if (window.__cabinetPauseWithCapture) { __cabinetPauseWithCapture(); }
+            else if (window.EJS_emulator && !EJS_emulator.paused) { EJS_emulator.pause(); }
+            """
         )
     }
 
     func resumeGame() {
         webView?.evaluateJavaScript(
-            "window.EJS_emulator && EJS_emulator.paused && EJS_emulator.play();"
+            """
+            window.__cabinetHeldShot = null;
+            window.EJS_emulator && EJS_emulator.paused && EJS_emulator.play();
+            """
         )
     }
 
@@ -536,6 +650,41 @@ final class PlayerInputBridge: ObservableObject {
         webView?.evaluateJavaScript(
             "window.__cabinetLoadManual && __cabinetLoadManual();"
         )
+    }
+
+    /// Deletes the EmulatorJS-core database and reloads the page: the
+    /// repair for a boot wedged on a corrupted core cache, run inside the
+    /// player's own webview since IndexedDB is origin scoped and this
+    /// webview is already on RomM's origin. Cores redownload on the
+    /// reload; states, saves and the ROM cache live in other databases
+    /// and are untouched. The reload happens through location.reload, so
+    /// every injected script reruns exactly as on a first load.
+    func repairCoreStorageAndReload() {
+        webView?.evaluateJavaScript(
+            """
+            (function () {
+              var reloaded = false;
+              function go() {
+                if (reloaded) return;
+                reloaded = true;
+                location.reload();
+              }
+              try {
+                var req = indexedDB.deleteDatabase("EmulatorJS-core");
+                req.onsuccess = go;
+                req.onerror = go;
+                req.onblocked = go;
+                setTimeout(go, 4000);
+              } catch (e) { go(); }
+            })();
+            """
+        )
+    }
+
+    /// A plain reload, nothing deleted: for retrying after a connectivity
+    /// failure, where nothing pointed at the core cache being the problem.
+    func reloadPage() {
+        webView?.evaluateJavaScript("location.reload();")
     }
 
     /// Writes an autosave state right now, ahead of a moment that might kill
@@ -1010,6 +1159,82 @@ struct PlayerWebView: UIViewRepresentable {
           const STATE_BASE = \(escapedBase);
           const START = Date.now();
 
+          // Pause, but read one frame on the way down. The drawing buffer
+          // of a WebGL canvas is only readable between a draw and its
+          // composite (no preserveDrawingBuffer), so the grab is scheduled
+          // into the next animation frame, while the game still renders,
+          // and the pause fires synchronously right after the readback in
+          // that same callback. Total added pause latency: one rendered
+          // frame at most, with a 50ms timeout backstop so a throttled
+          // rAF can never leave the game running.
+          //
+          // The shot is held for Save (a screenshot of the moment actually
+          // being saved, which a post-pause capture can never produce,
+          // verified blank twice before) and dumped when the menu resumes
+          // without saving.
+          window.__cabinetHeldShot = null;
+          window.__cabinetPauseWithCapture = function () {
+            try {
+              const e = window.EJS_emulator;
+              if (!e || e.paused) return;
+              window.__cabinetHeldShot = null;
+              let done = false;
+              const freeze = function () {
+                if (done) return;
+                done = true;
+                try { if (!e.paused) e.pause(); } catch (x) {}
+              };
+              requestAnimationFrame(function () {
+                try {
+                  const src = e.canvas;
+                  if (src && src.width > 0 && src.height > 0) {
+                    const w = Math.min(src.width, 1000);
+                    const h = Math.max(1, Math.round(src.height * (w / src.width)));
+                    const off = document.createElement("canvas");
+                    off.width = w;
+                    off.height = h;
+                    const ctx = off.getContext("2d", { alpha: false });
+                    ctx.drawImage(src, 0, 0, w, h);
+                    freeze();
+                    // Everything after the freeze is off the hot path.
+                    // Blank detection samples a grid of pixels: a failed
+                    // readback is solid black, and a real game frame is
+                    // not, so any lit sample proves the grab took. The
+                    // stride is computed from the pixel count, not fixed,
+                    // so this always takes roughly the same number of
+                    // samples: a fixed byte stride tuned against a large
+                    // arcade canvas left a native-resolution console
+                    // frame (NES included, often under 300 pixels wide)
+                    // with only a handful of samples, and Jackal's own
+                    // dark backgrounds landed on every one of them,
+                    // discarding a perfectly good capture as blank.
+                    const sample = ctx.getImageData(0, 0, w, h).data;
+                    const stride = Math.max(4, Math.floor((w * h) / 200) * 4);
+                    let lit = false;
+                    for (let i = 0; i < sample.length; i += stride) {
+                      if (sample[i] > 8 || sample[i + 1] > 8 || sample[i + 2] > 8) { lit = true; break; }
+                    }
+                    if (lit) {
+                      off.toBlob(function (blob) {
+                        if (blob) window.__cabinetHeldShot = blob;
+                      }, "image/png");
+                    }
+                    off.width = 0;
+                    off.height = 0;
+                  } else {
+                    freeze();
+                  }
+                } catch (x) { freeze(); }
+              });
+              setTimeout(freeze, 50);
+            } catch (x) {
+              try {
+                const e = window.EJS_emulator;
+                if (e && !e.paused) e.pause();
+              } catch (y) {}
+            }
+          };
+
           // Puts back the last state banked from the pause menu. Separate
           // from the autosave, which is a safety net nobody asked for and
           // should never overwrite a moment someone deliberately kept.
@@ -1233,19 +1458,37 @@ struct PlayerWebView: UIViewRepresentable {
               // what lets the launch screen's compatibility greying
               // mean something for states made here.
               //
-              // No screenshot, deliberately, where RomM's player sends
-              // one. Its save button captures while the game still
-              // renders; this menu freezes the game on the tap that
-              // opens it, before Save can be reached, and a paused WebGL
-              // canvas reads back blank (no preserveDrawingBuffer).
-              // Every capture attempted here shipped an empty image, so
-              // the field is omitted, which the API allows, rather than
-              // pretending.
+              // The screenshot is the frame grabbed on the way into the
+              // pause menu, held by __cabinetPauseWithCapture: a capture
+              // attempted here, after the pause, reads back blank
+              // (verified twice), so the only correct picture of this
+              // moment is the one taken while the game still rendered,
+              // one frame before the freeze. Omitted entirely when no
+              // held shot survived its blank check, which the API
+              // allows, rather than sending an empty image.
               try {
                 const stamp = new Date().toISOString()
                   .replace(/[:.]/g, "-").replace("T", " ").replace("Z", "");
                 const fd = new FormData();
                 fd.append("stateFile", new Blob([state]), STATE_BASE + " [" + stamp + "].state");
+                const shot = window.__cabinetHeldShot;
+                if (shot) {
+                  fd.append("screenshotFile", shot, STATE_BASE + " [" + stamp + "].png");
+                  // The same image becomes Home's hero frame for this
+                  // save, replacing the timer frame that could trail the
+                  // saved moment by minutes. Sent before manualSave fires
+                  // on the native side so the banked copy is this one.
+                  try {
+                    const reader = new FileReader();
+                    reader.onload = function () {
+                      try { window.webkit.messageHandlers.frame.postMessage(reader.result); }
+                      catch (x) {}
+                      try { window.webkit.messageHandlers.manualSave.postMessage(true); }
+                      catch (x) {}
+                    };
+                    reader.readAsDataURL(shot);
+                  } catch (x) {}
+                }
                 const core = (typeof window.EJS_core === "string" && window.EJS_core)
                   ? window.EJS_core : "emulatorjs";
                 const m = document.cookie.match(/romm_csrftoken=([^;]+)/);
@@ -1632,6 +1875,49 @@ final class PlayerContainerView: UIView {
             let split = max(bounds.height - height, 0)
             webView.frame = CGRect(x: 0, y: 0, width: bounds.width, height: split)
             pad.frame = CGRect(x: 0, y: split, width: bounds.width, height: height)
+        }
+    }
+}
+
+/// What the boot watchdog shows in place of the raw webview once it has
+/// genuinely given up. White on black, matching `BootCurtain`'s own
+/// styling rather than reaching for a system component here: a
+/// `ContentUnavailableView` leans on adaptive colors tuned for a normal
+/// page background, not the fixed black the player always sits on.
+private struct PlayerLoadFailure: View {
+    let reason: PlayerView.BootFailure
+    let retry: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            VStack(spacing: 14) {
+                Image(systemName: reason == .offline ? "wifi.slash" : "exclamationmark.triangle")
+                    .font(.system(size: 34))
+                    .foregroundStyle(.white.opacity(0.8))
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.65))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                Button("Try again", action: retry)
+                    .buttonStyle(.borderedProminent)
+                    .padding(.top, 6)
+            }
+        }
+    }
+
+    private var title: String {
+        reason == .offline ? "No connection to your server" : "This game couldn't load"
+    }
+
+    private var message: String {
+        switch reason {
+        case .offline: return "Check your signal, then try again."
+        case .stalled: return "Something kept it from starting. Try again, or check your connection."
         }
     }
 }

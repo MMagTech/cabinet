@@ -446,6 +446,13 @@ actor RommClient {
         }
     }
 
+    /// The screenshot attached to a save or a state, resolved exactly like
+    /// a cover: a server relative `download_path`, not a content-by-id
+    /// endpoint.
+    func screenshotData(path: String) async throws -> Data {
+        try await assetData(path: path)
+    }
+
     /// Shared by every asset fetched through a raw relative path rather
     /// than a `/content` endpoint: percent-encode (the timestamp query
     /// RomM's cover paths carry has a literal space in it), resolve

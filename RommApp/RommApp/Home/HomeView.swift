@@ -23,6 +23,9 @@ struct HomeView: View {
     @State private var resuming: Rom?
     @State private var directLaunch: DirectLaunch?
     @State private var preparingResume = false
+    @ObservedObject private var quickActions = QuickActionRouter.shared
+    @State private var quickPushRecents = false
+    @State private var quickPushFavorites = false
 
     /// Everything the player needs to start without the launch screen in
     /// front of it. Identifiable so it can drive a `fullScreenCover` the
@@ -109,6 +112,23 @@ struct HomeView: View {
             }
             .onChange(of: directLaunch == nil) { _, playerClosed in
                 if playerClosed { Task { await load() } }
+            }
+            // Home's share of a quick action, taken when, and only when,
+            // this screen can actually act on it: resume needs the recents
+            // fetch to have landed, favorites needs the collection known.
+            // Checked on every signal that could newly make one possible,
+            // since a cold start sets the action before any of them.
+            .onChange(of: quickActions.pending) { _, _ in consumeQuickAction() }
+            .onChange(of: loaded) { _, _ in consumeQuickAction() }
+            .onChange(of: session.favoriteCollection) { _, _ in consumeQuickAction() }
+            .onAppear { consumeQuickAction() }
+            .navigationDestination(isPresented: $quickPushRecents) {
+                RomListView(source: .recentlyPlayed)
+            }
+            .navigationDestination(isPresented: $quickPushFavorites) {
+                if let favorites = session.favoriteCollection {
+                    RomListView(source: .collection(favorites))
+                }
             }
         }
     }
@@ -306,6 +326,31 @@ struct HomeView: View {
             .buttonStyle(.plain)
             .disabled(preparingResume)
             .padding(12)
+        }
+    }
+
+    private func consumeQuickAction() {
+        guard let action = quickActions.pending else { return }
+        switch action {
+        case .search:
+            // The tab bar's job, never this screen's.
+            return
+        case .resume:
+            // No recents once loaded means nothing to resume; the action
+            // dissolves into just opening the app, which is the honest
+            // reading of Resume with nothing to resume into.
+            guard loaded else { return }
+            quickActions.pending = nil
+            if let first = recent.first {
+                Task { await beginResume(first) }
+            }
+        case .recents:
+            quickActions.pending = nil
+            quickPushRecents = true
+        case .favorites:
+            guard session.favoriteCollection != nil else { return }
+            quickActions.pending = nil
+            quickPushFavorites = true
         }
     }
 
