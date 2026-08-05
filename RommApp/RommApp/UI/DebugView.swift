@@ -15,6 +15,12 @@ import UIKit
 struct DebugView: View {
     @EnvironmentObject private var session: Session
     @State private var copied = false
+    /// Read once for the diagnostics text only. The artwork cache is
+    /// deliberately not a setting: it manages its own size, re-downloads
+    /// anything it drops, and clearing it fixes nothing, so there is
+    /// nothing here for anyone to act on. The number is still worth
+    /// carrying in a bug report.
+    @State private var artworkBytes: Int64 = 0
 
     // TODO: this repo is not final. Update once the real one is settled,
     // this one is just where development has lived so far.
@@ -123,12 +129,14 @@ struct DebugView: View {
         }
         .navigationTitle("Debug")
         .navigationBarTitleDisplayMode(.inline)
+        .task { artworkBytes = await CoverCache.shared.diskUsage() }
     }
 
     private var diagnosticsText: String {
         var lines = [
             "Cabinet \(Self.appVersion), iOS \(UIDevice.current.systemVersion), \(Self.deviceModel)",
             "Free storage: \(Self.freeStorage)",
+            "Artwork cache: \(ByteCountFormatter.string(fromByteCount: artworkBytes, countStyle: .file))",
             "RomM \(session.serverVersion ?? "unknown") at \(session.serverURL?.host ?? "unknown")",
             "Pairing scopes: \(session.scopes.isEmpty ? "none" : session.scopes.joined(separator: ", "))",
             EmulationInfo.summary,

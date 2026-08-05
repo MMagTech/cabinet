@@ -19,7 +19,13 @@ actor RommClient {
         self.accessToken = accessToken
 
         let config = URLSessionConfiguration.default
-        config.waitsForConnectivity = true
+        // Deliberately false. With it on, a request made with no signal
+        // sits waiting for a connection that is not coming, so every
+        // screen showed a spinner for the full timeout before admitting
+        // anything was wrong. Failing immediately is what lets the UI say
+        // "you're offline" and offer a retry while the person still has
+        // the patience to use it.
+        config.waitsForConnectivity = false
         config.timeoutIntervalForRequest = 30
         self.session = URLSession(configuration: config)
     }
@@ -446,7 +452,13 @@ actor RommClient {
     }
 
     private func send<T: Decodable>(_ req: URLRequest, decoding: T.Type) async throws -> T {
-        let (data, response) = try await session.data(for: req)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: req)
+        } catch let error as URLError {
+            throw RommError(urlError: error)
+        }
 
         guard let http = response as? HTTPURLResponse else {
             throw RommError.transport("The server sent a response the app could not read.")
@@ -497,9 +509,30 @@ enum RommError: LocalizedError, Equatable {
     /// nothing.
     case blocked
     case notFound
+    /// No usable connection, or one that died mid request. Distinct from
+    /// every other case here because it is the only one the person can
+    /// fix themselves by moving somewhere with signal, so the UI answers
+    /// it with a retry rather than an explanation.
+    case offline
     case http(Int)
     case transport(String)
     case decoding(String)
+
+    /// Separates "there is no connection" from every other networking
+    /// failure. A server that is genuinely unreachable at a good address
+    /// counts as offline too: from where the person is standing, an
+    /// unplugged server and an empty signal bar are the same problem with
+    /// the same answer, try again later.
+    init(urlError: URLError) {
+        switch urlError.code {
+        case .notConnectedToInternet, .networkConnectionLost, .dataNotAllowed,
+            .cannotFindHost, .cannotConnectToHost, .timedOut,
+            .internationalRoamingOff, .callIsActive, .secureConnectionFailed:
+            self = .offline
+        default:
+            self = .transport(urlError.localizedDescription)
+        }
+    }
 
     /// RomM signals device flow states as HTTP 400 with an OAuth style
     /// `detail` string, which the OpenAPI spec does not document.
@@ -539,6 +572,8 @@ enum RommError: LocalizedError, Equatable {
             return "The server refused the connection without explaining why. RomM itself may be fine: something in front of it, like a reverse proxy or a security filter, is likely blocking this device or your network. Nothing is wrong with your pairing, so signing out will not help."
         case .notFound:
             return "That address answered, but it does not look like a RomM server."
+        case .offline:
+            return "No connection to your server."
         case .http(let code): return "The server returned an error. Code \(code)."
         case .transport(let message): return message
         case .decoding(let type):

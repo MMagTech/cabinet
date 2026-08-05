@@ -46,7 +46,7 @@ struct RomListView: View {
     @State private var roms: [Rom] = []
     @State private var total = 0
     @State private var loading = false
-    @State private var error: String?
+    @State private var error: LoadFailure?
     @State private var viewMode: ViewMode
     @State private var playing: Rom?
 
@@ -86,11 +86,13 @@ struct RomListView: View {
 
     var body: some View {
         Group {
-            if let error {
+            if error == .offline {
+                OfflineNotice { await reload() }
+            } else if let error {
                 ContentUnavailableView {
                     Label("Could not load games", systemImage: "wifi.exclamationmark")
                 } description: {
-                    Text(error)
+                    Text(error.message)
                 } actions: {
                     Button("Try again") { Task { await reload() } }
                 }
@@ -295,7 +297,7 @@ struct RomListView: View {
             roms.append(contentsOf: page.items)
             total = page.total
         } catch {
-            self.error = error.localizedDescription
+            self.error = LoadFailure(error)
         }
         loading = false
     }

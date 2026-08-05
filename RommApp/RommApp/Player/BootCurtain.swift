@@ -118,12 +118,12 @@ struct BootCurtain: View {
 
     private func loadCover() async {
         guard cover == nil, let coverPath else { return }
-        if let cached = CoverCache.shared.image(forKey: coverPath) {
+        if let cached = await CoverCache.shared.image(forKey: coverPath) {
             cover = cached
             return
         }
         guard let data = try? await session.coverData(path: coverPath), let image = UIImage(data: data) else { return }
-        CoverCache.shared.set(image, forKey: coverPath)
+        await CoverCache.shared.set(image, data: data, forKey: coverPath)
         withAnimation(.easeInOut(duration: 0.3)) {
             cover = image
         }

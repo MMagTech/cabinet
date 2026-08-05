@@ -19,6 +19,7 @@ struct HomeView: View {
     @State private var recent: [Rom] = []
     @State private var favorites: [Rom] = []
     @State private var loaded = false
+    @State private var offline = false
     @State private var resuming: Rom?
 
     var body: some View {
@@ -26,7 +27,14 @@ struct HomeView: View {
             GeometryReader { geometry in
                 let landscape = geometry.size.width > geometry.size.height
                 ScrollView {
-                    if landscape {
+                    // Nothing cached means nothing to show behind a banner,
+                    // so offline replaces the content rather than sitting
+                    // above it. Kept inside the ScrollView so pull to
+                    // refresh still works as a second way to retry.
+                    if offline, recent.isEmpty, favorites.isEmpty {
+                        OfflineNotice { await load() }
+                            .frame(minHeight: geometry.size.height * 0.8)
+                    } else if landscape {
                         wideLayout(height: geometry.size.height)
                     } else {
                         tallLayout
@@ -35,17 +43,11 @@ struct HomeView: View {
             }
             .navigationTitle("Home")
             .toolbar {
-                // Navigation, not content: lives in the bar so it never
-                // scrolls away and never competes with however many rails
-                // Home ends up growing (favorites, keep playing, whatever
-                // comes next), rather than a card fighting them for space.
-                ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink {
-                        LibraryScreen()
-                    } label: {
-                        Image(systemName: "square.grid.2x2")
-                    }
-                }
+                // Settings only. The library and search moved to the tab
+                // bar, where a thumb actually rests: on a large phone the
+                // top trailing corner is the worst place for the two
+                // things reached every session. Settings earns its place
+                // here precisely because it is reached rarely.
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
                         SettingsView()
@@ -236,9 +238,20 @@ struct HomeView: View {
         }
     }
 
+    /// Only the recents call decides whether this reads as offline: it is
+    /// the one every account makes, where favorites is empty for plenty of
+    /// people legitimately. A failure that is not a connection problem
+    /// keeps the old quiet behaviour, since Home has no good place to put
+    /// a server side error and the library screen will explain it properly
+    /// the moment they go looking.
     private func load() async {
-        if let page = try? await session.recentlyPlayed() {
-            recent = page.items
+        do {
+            recent = try await session.recentlyPlayed().items
+            offline = false
+        } catch RommError.offline {
+            offline = true
+        } catch {
+            // Left as is on purpose, see above.
         }
         if let favs = try? await session.favoriteRoms() {
             favorites = favs

@@ -4,7 +4,8 @@ import SwiftUI
 /// because the request may need the bearer token and AsyncImage cannot add one.
 ///
 /// Decoded images are kept in one shared in-memory cache so scrolling back
-/// through the grid does not refetch every cover.
+/// through the grid does not refetch every cover, and written to disk
+/// underneath it so a cold launch does not re-download the whole library.
 struct CoverImage: View {
     let path: String?
     let title: String
@@ -43,7 +44,7 @@ struct CoverImage: View {
     private func load() async {
         guard image == nil, !failed, let path else { return }
 
-        if let cached = CoverCache.shared.image(forKey: path) {
+        if let cached = await CoverCache.shared.image(forKey: path) {
             image = cached
             return
         }
@@ -54,7 +55,7 @@ struct CoverImage: View {
                 failed = true
                 return
             }
-            CoverCache.shared.set(decoded, forKey: path)
+            await CoverCache.shared.set(decoded, data: data, forKey: path)
             image = decoded
         } catch {
             failed = true
@@ -62,20 +63,131 @@ struct CoverImage: View {
     }
 }
 
-final class CoverCache {
+/// Two tiers: an in-memory cache for the current session, and a disk cache
+/// underneath it so covers survive the app being closed. Before the disk
+/// tier existed, every cold launch re-downloaded the whole visible library,
+/// which is slow on a weak connection and pure waste on a metered one.
+///
+/// Kept deliberately simple. Nothing here tracks which game a file belongs
+/// to or tries to stay in step with the server: a cover is disposable, and
+/// the worst case for a stale one is re-downloading it.
+actor CoverCache {
     static let shared = CoverCache()
 
-    private let cache: NSCache<NSString, UIImage> = {
+    /// No expiry on purpose. RomM's cover paths carry the timestamp of the
+    /// last artwork change (`...small.png?ts=2025-03-11 06:50:19`) and that
+    /// whole string is the key here, so replacing a game's art in RomM
+    /// changes the key and downloads the new file by itself. An age limit
+    /// on top of that would only throw away valid artwork and re-fetch it,
+    /// which is the exact data waste this cache exists to avoid.
+    ///
+    /// Trimmed back to this, least recently used first, whenever a write
+    /// pushes it over. Small covers run 20 to 50KB, so this holds a few
+    /// thousand of them: a ceiling that a normal library never reaches,
+    /// not a budget. Living in the system caches directory means iOS can
+    /// also reclaim the whole thing under real storage pressure.
+    private static let maxBytes = 200 * 1024 * 1024
+
+    private let memory: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 400
         return cache
     }()
 
+    private let directory: URL = {
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        let directory = base.appendingPathComponent("Covers", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }()
+
+    /// Bytes written since the last size check. Checking on every write
+    /// would mean listing the whole directory per cover, and checking only
+    /// once per launch (the first version of this) would let a long
+    /// session blow well past the cap without noticing: someone scrolling
+    /// a 50,000 game library does thousands of writes before they ever
+    /// relaunch. Re-checking every few megabytes costs one directory
+    /// listing per 200 or so covers and keeps the cap honest.
+    private static let trimInterval = 8 * 1024 * 1024
+    private var bytesSinceTrim = CoverCache.trimInterval
+
     func image(forKey key: String) -> UIImage? {
-        cache.object(forKey: key as NSString)
+        if let cached = memory.object(forKey: key as NSString) { return cached }
+
+        let file = fileURL(for: key)
+        guard let data = try? Data(contentsOf: file), let decoded = UIImage(data: data) else {
+            return nil
+        }
+        // Stamp the file as used, which is what makes the size trim a real
+        // least-recently-used eviction rather than "delete whatever was
+        // downloaded longest ago". Without this, a cover seen every day
+        // would be evicted ahead of one fetched last week and never
+        // looked at again.
+        try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: file.path)
+        memory.setObject(decoded, forKey: key as NSString)
+        return decoded
     }
 
-    func set(_ image: UIImage, forKey key: String) {
-        cache.setObject(image, forKey: key as NSString)
+    /// Stores the original bytes rather than re-encoding the decoded image:
+    /// the server already sent a compressed cover, and round tripping it
+    /// through `pngData()` would inflate it several times over.
+    func set(_ image: UIImage, data: Data, forKey key: String) {
+        memory.setObject(image, forKey: key as NSString)
+        try? data.write(to: fileURL(for: key), options: .atomic)
+        bytesSinceTrim += data.count
+        if bytesSinceTrim >= Self.trimInterval {
+            bytesSinceTrim = 0
+            trimIfNeeded()
+        }
+    }
+
+    /// Total bytes currently on disk, for the Cache screen.
+    func diskUsage() -> Int64 {
+        contents().reduce(0) { $0 + Int64($1.size) }
+    }
+
+    func clear() {
+        memory.removeAllObjects()
+        try? FileManager.default.removeItem(at: directory)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+
+    /// Trims to 80% of the cap rather than exactly to it, so a full cache
+    /// does not run a delete pass on every single write.
+    private func trimIfNeeded() {
+        var files = contents()
+        var total = files.reduce(0) { $0 + $1.size }
+        guard total > Self.maxBytes else { return }
+        let target = Self.maxBytes * 8 / 10
+
+        files.sort { $0.modified < $1.modified }
+        for file in files {
+            guard total > target else { break }
+            try? FileManager.default.removeItem(at: file.url)
+            total -= file.size
+        }
+    }
+
+    private func contents() -> [(url: URL, size: Int, modified: Date)] {
+        let keys: [URLResourceKey] = [.fileSizeKey, .contentModificationDateKey]
+        let urls = (try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: keys
+        )) ?? []
+        return urls.compactMap { url in
+            guard let values = try? url.resourceValues(forKeys: Set(keys)),
+                let size = values.fileSize,
+                let modified = values.contentModificationDate
+            else { return nil }
+            return (url, size, modified)
+        }
+    }
+
+    /// A cover path is a URL path with slashes and a query string, so it
+    /// cannot be a filename as is. Hashing also keeps the name a fixed
+    /// length regardless of how long the original path was.
+    private func fileURL(for key: String) -> URL {
+        var hash: UInt64 = 5381
+        for byte in key.utf8 { hash = (hash &* 33) &+ UInt64(byte) }
+        return directory.appendingPathComponent(String(hash, radix: 16))
     }
 }
