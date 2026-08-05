@@ -355,6 +355,26 @@ actor RommClient {
         try await sendQuery("/api/states", [URLQueryItem(name: "rom_id", value: String(romId))])
     }
 
+    /// The raw bytes of one save state, confirmed real and standalone
+    /// (`/api/states/{id}/content`, `assets.read`) rather than assumed:
+    /// the launch screen used to seed a `state_id` into RomM's own
+    /// localStorage and trust its page to notice and load it, and nothing
+    /// ever confirmed that page actually did. It does not. This is the
+    /// same content-endpoint pattern as covers and firmware, fetched
+    /// directly and loaded through the emulator's own JavaScript API,
+    /// the one path already proven to work: the pause menu's Load button.
+    func stateContent(_ state: GameState) async throws -> Data {
+        let req = request(path: "/api/states/\(state.id)/content")
+        let (data, response) = try await session.data(for: req)
+        guard let http = response as? HTTPURLResponse else {
+            throw RommError.transport("The server sent a response the app could not read.")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw RommError(status: http.statusCode, body: data)
+        }
+        return data
+    }
+
     func firmware(platformId: Int) async throws -> [Firmware] {
         try await sendQuery(
             "/api/firmware", [URLQueryItem(name: "platform_id", value: String(platformId))]
@@ -416,9 +436,25 @@ actor RommClient {
     /// The request carries the token so this works whether or not the
     /// instance protects its assets.
     func coverData(path: String) async throws -> Data {
+        do {
+            return try await assetData(path: path)
+        } catch {
+            #if DEBUG
+            print("COVER_MISS \(error) path=\(path)")
+            #endif
+            throw RommError.notFound
+        }
+    }
+
+    /// Shared by every asset fetched through a raw relative path rather
+    /// than a `/content` endpoint: percent-encode (the timestamp query
+    /// RomM's cover paths carry has a literal space in it), resolve
+    /// against the base URL, attach the bearer token so this works whether
+    /// or not the instance protects its assets.
+    private func assetData(path: String) async throws -> Data {
         let encoded = path.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? path
         guard let url = URL(string: encoded, relativeTo: baseURL) else {
-            throw RommError.transport("The server sent a cover address the app could not read.")
+            throw RommError.transport("The server sent an asset address the app could not read.")
         }
         var req = URLRequest(url: url)
         if let accessToken {
@@ -427,13 +463,28 @@ actor RommClient {
 
         let (data, response) = try await session.data(for: req)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            #if DEBUG
-            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
-            print("COVER_MISS status=\(status) url=\(url.absoluteString)")
-            #endif
             throw RommError.notFound
         }
         return data
+    }
+
+    /// Deletes one or more states. `assets.write`, already required for
+    /// pairing, so no re-pair is needed for this.
+    func deleteStates(ids: [Int]) async throws {
+        try await deleteAssets(path: "/api/states/delete", key: "states", ids: ids)
+    }
+
+    /// Deletes one or more saves, the cartridge battery kind. Same
+    /// endpoint shape as states, a different resource entirely.
+    func deleteSaves(ids: [Int]) async throws {
+        try await deleteAssets(path: "/api/saves/delete", key: "saves", ids: ids)
+    }
+
+    private func deleteAssets(path: String, key: String, ids: [Int]) async throws {
+        var req = request(path: path, method: "POST")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: [key: ids])
+        _ = try await send(req, decoding: [Int].self)
     }
 
     /// An authenticated request for a file endpoint that is not JSON, ROM

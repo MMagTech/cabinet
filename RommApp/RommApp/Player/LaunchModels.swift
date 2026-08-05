@@ -17,7 +17,11 @@ struct GameSave: Decodable, Identifiable, Hashable {
 
 /// A save state, a snapshot of memory. Tied to the core that wrote it, which
 /// is why the launch screen greys out states from a different emulator rather
-/// than letting someone load one that cannot work.
+/// than letting someone load one that cannot work. Both carry a nullable
+/// screenshot on the server, deliberately not decoded: this app's own saves
+/// cannot capture one (the game is frozen before Save can be reached, and a
+/// paused WebGL canvas reads back blank), so the thumbnail and viewer built
+/// on that field were pulled rather than shipped half-working.
 struct GameState: Decodable, Identifiable, Hashable {
     let id: Int
     let fileName: String

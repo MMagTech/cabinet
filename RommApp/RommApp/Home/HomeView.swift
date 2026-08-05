@@ -32,6 +32,7 @@ struct HomeView: View {
         let rom: Rom
         let choices: LaunchChoices
         let resumeFromAutosave: Bool
+        let stateToLoad: PlayerView.StateToLoad?
     }
 
     var body: some View {
@@ -99,7 +100,8 @@ struct HomeView: View {
                 PlayerView(
                     rom: launch.rom,
                     launch: launch.choices,
-                    resumeFromAutosave: launch.resumeFromAutosave
+                    resumeFromAutosave: launch.resumeFromAutosave,
+                    stateToLoad: launch.stateToLoad
                 )
             }
             .onChange(of: resuming == nil) { _, playerClosed in
@@ -181,9 +183,21 @@ struct HomeView: View {
 
     // MARK: Pieces
 
+    /// The picture matches what Resume will actually do, not just whatever
+    /// was last on screen. An interrupted session resumes from the local
+    /// autosave, close to the final frame, so that frame is honest there.
+    /// A cleanly exited game resumes from the last *save*, which can be
+    /// well before the final frame: showing that frame advertised a moment
+    /// the save system never kept, which is exactly the mismatch this
+    /// fixes. So a clean exit shows the frame banked when the save was
+    /// made, and a game with no banked frame falls back to box art, the
+    /// same honesty as a fresh boot.
     @ViewBuilder
     private func heroArtwork(for rom: Rom, contentMode: ContentMode) -> some View {
-        if let frame = LastFrame.image(romId: rom.id) {
+        let frame = SessionMarker.offersResume(romId: rom.id)
+            ? LastFrame.image(romId: rom.id)
+            : LastFrame.savedImage(romId: rom.id)
+        if let frame {
             Image(uiImage: frame)
                 .resizable()
                 .aspectRatio(contentMode: contentMode)
@@ -305,6 +319,15 @@ struct HomeView: View {
     /// An interrupted session wins over a stored state, matching what the
     /// launch screen itself does: the local autosave is newer than
     /// anything uploaded, and it is the run that was actually cut short.
+    ///
+    /// Otherwise, this is what actually makes switching between desktop
+    /// and mobile transparent: the newest state is loaded regardless of
+    /// which device wrote it, by weight of its timestamp, not by trusting
+    /// whichever copy happens to be closest. The one exception is the
+    /// local pause menu slot outrunning the server, which happens when its
+    /// own upload failed, already reported in the game at the time; the
+    /// comparison catches it anyway rather than relying on remembering
+    /// that warning.
     private func beginResume(_ rom: Rom) async {
         preparingResume = true
         defer { preparingResume = false }
@@ -319,12 +342,11 @@ struct HomeView: View {
         let core = LaunchChoices.defaultCore(rom: rom, canonicalSlug: canonicalSlug, from: cores)
         let firmware = (try? await session.firmware(platformId: rom.platformId)) ?? []
         let firmwareId = LaunchChoices.defaultFirmware(platformId: rom.platformId, from: firmware)?.id
+        let choices = LaunchChoices(core: core, firmwareId: firmwareId, saveId: nil)
 
         if SessionMarker.offersResume(romId: rom.id) {
             directLaunch = DirectLaunch(
-                rom: rom,
-                choices: LaunchChoices(core: core, firmwareId: firmwareId, saveId: nil, stateId: nil),
-                resumeFromAutosave: true
+                rom: rom, choices: choices, resumeFromAutosave: true, stateToLoad: nil
             )
             return
         }
@@ -333,13 +355,53 @@ struct HomeView: View {
             resuming = rom
             return
         }
-        let newest = states.sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }.first
+        guard !states.isEmpty else {
+            // Genuinely no states: nothing to resume into, so the game
+            // just starts. Not a fallback to the launch screen, there is
+            // no real question left to ask.
+            directLaunch = DirectLaunch(
+                rom: rom, choices: choices, resumeFromAutosave: false, stateToLoad: nil
+            )
+            return
+        }
+        // Plain string comparison, matching the launch screen's own
+        // newest-first sort: RomM's `updated_at` is not documented as a
+        // specific format, only "string", in its own OpenAPI schema, and
+        // this comparison is already relied on elsewhere, so it stays
+        // format agnostic rather than risk a date parser silently
+        // rejecting a shape that was never actually confirmed.
+        let newest = states.max { ($0.updatedAt ?? "") < ($1.updatedAt ?? "") }!
+
+        // The one place an actual Date is unavoidable: weighing that
+        // newest server state against the local pause menu slot, which
+        // only ever carries a native timestamp. If the server's string
+        // cannot be parsed at all, that is not a "local wins" signal, it
+        // is a genuine unknown, and guessing either way risks the exact
+        // silent wrong load this whole change exists to fix. The launch
+        // screen is where an unknown gets a human rather than a guess.
+        guard let newestDate = RommDate.parse(newest.updatedAt) else {
+            resuming = rom
+            return
+        }
+        if let localDate = ManualSave.date(romId: rom.id), localDate > newestDate {
+            directLaunch = DirectLaunch(
+                rom: rom, choices: choices, resumeFromAutosave: false, stateToLoad: .local
+            )
+            return
+        }
+
+        guard let bytes = try? await session.stateContent(newest) else {
+            // A state exists and should be loaded, but fetching it failed:
+            // better to explain that on the launch screen than to guess and
+            // either start over or load something stale.
+            resuming = rom
+            return
+        }
         directLaunch = DirectLaunch(
-            rom: rom,
-            choices: LaunchChoices(core: core, firmwareId: firmwareId, saveId: nil, stateId: newest?.id),
-            resumeFromAutosave: false
+            rom: rom, choices: choices, resumeFromAutosave: false, stateToLoad: .remote(bytes)
         )
     }
+
 
     /// `seeAll` is the full list this rail is a preview of. Nil only
     /// transiently, before that destination has finished loading (the

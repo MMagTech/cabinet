@@ -16,12 +16,11 @@ struct LaunchChoices {
     let core: String?
     let firmwareId: Int?
     let saveId: Int?
-    let stateId: Int?
 
     /// Seeds nothing, for a player opened without a launch screen in front
     /// of it. RomM's page then applies its own defaults, exactly as it did
     /// before any of this existed.
-    static let none = LaunchChoices(core: nil, firmwareId: nil, saveId: nil, stateId: nil)
+    static let none = LaunchChoices(core: nil, firmwareId: nil, saveId: nil)
 
     /// The core to start on: what was used last, otherwise one that stands a
     /// chance of running the game.
@@ -112,14 +111,19 @@ struct LaunchChoices {
         writes += entry("player:\(rom.platformSlug):core", core)
         writes += entry("player:\(rom.platformSlug):bios_id", firmwareId.map(String.init))
         writes += entry("player:\(rom.platformSlug):save_id", saveId.map(String.init))
-        writes += entry("player:\(rom.platformSlug):state_id", stateId.map(String.init))
+        // Deliberately no `state_id` seed. That was tried here first: write
+        // the id, trust RomM's own page to notice it at boot and load the
+        // state itself. Confirmed on device that nothing does; the value
+        // lands in storage and nothing ever reads it back. A state now
+        // loads through `PlayerView.stateToLoad`, called directly against
+        // the emulator's own JavaScript API once the game has booted,
+        // rather than hoped for from outside it.
 
         // Clearing matters as much as writing: a save left selected from a
         // previous session would silently resume a game someone chose to
         // start fresh.
         var clears = ""
         if saveId == nil { clears += "drop(\(jsString("player:\(rom.platformSlug):save_id")));\n" }
-        if stateId == nil { clears += "drop(\(jsString("player:\(rom.platformSlug):state_id")));\n" }
         // A BIOS left over from a previous game on the same platform would
         // otherwise be applied to one that must not have it.
         if firmwareId == nil { clears += "drop(\(jsString("player:\(rom.platformSlug):bios_id")));\n" }

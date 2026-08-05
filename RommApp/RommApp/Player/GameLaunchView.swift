@@ -36,8 +36,23 @@ struct GameLaunchView: View {
     @State private var states: [GameState] = []
     @State private var selectedSave: GameSave?
     @State private var selectedState: GameState?
+    /// Only the three most recent states show without asking, since a
+    /// filename told nobody anything and a long list of them was the
+    /// actual reason this card needed thumbnails and dates at all.
+    @State private var showAllStates = false
+    @State private var deletingAssetIds: Set<Int> = []
+    @State private var pendingStateDelete: GameState?
+    @State private var pendingSaveDelete: GameSave?
     @State private var loading = true
     @State private var playing = false
+    /// Fetched before `playing` flips true, never after: `PlayerView` does
+    /// not fetch its own state, callers resolve one first, so what it
+    /// loads is decided in one place instead of chosen deep inside the
+    /// player. Nil whenever no state is selected or continuing an
+    /// interrupted run, in which case the game just boots normally.
+    @State private var stateToLoad: PlayerView.StateToLoad?
+    @State private var preparingPlay = false
+    @State private var playError: String?
     /// Set when the last session of this game died without a clean exit and
     /// a fresh local autosave exists: iOS took the game, so getting back to
     /// that exact moment is offered, preselected, and declinable.
@@ -185,7 +200,17 @@ struct GameLaunchView: View {
         }
         .task { await load() }
         .fullScreenCover(isPresented: $playing) {
-            PlayerView(rom: rom, launch: launchChoices, resumeFromAutosave: continueRun)
+            PlayerView(
+                rom: rom, launch: launchChoices, resumeFromAutosave: continueRun, stateToLoad: stateToLoad
+            )
+        }
+        .alert(
+            "Couldn't load that state",
+            isPresented: Binding(get: { playError != nil }, set: { if !$0 { playError = nil } })
+        ) {
+            Button("OK") { playError = nil }
+        } message: {
+            Text(playError ?? "")
         }
         // Coming back from a session the person closed themselves, the
         // interruption is spent: leaving the card up would offer to rewind
@@ -466,15 +491,42 @@ struct GameLaunchView: View {
         Button {
             // Remembering itself already happened the moment the choice was
             // made, see the onChange handlers above.
-            playing = true
+            Task { await beginPlay() }
         } label: {
-            Label(playLabel, systemImage: isComputerPlatform ? "keyboard" : "play.fill")
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 15)
+            if preparingPlay {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 15)
+            } else {
+                Label(playLabel, systemImage: isComputerPlatform ? "keyboard" : "play.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 15)
+            }
         }
         .buttonStyle(.borderedProminent)
-        .disabled(loading || !isPlatformSupported)
+        .disabled(loading || !isPlatformSupported || preparingPlay)
+    }
+
+    /// Resolves `stateToLoad` before presenting the player, since a state
+    /// someone explicitly picked deserves an explanation if it cannot be
+    /// fetched, not a silent boot into the wrong moment. An interrupted
+    /// run's own local recovery is untouched: that path never goes near
+    /// the server at all, by design, see `PlayerView.resumeFromAutosave`.
+    private func beginPlay() async {
+        guard !continueRun, let selectedState else {
+            stateToLoad = nil
+            playing = true
+            return
+        }
+        preparingPlay = true
+        defer { preparingPlay = false }
+        guard let bytes = try? await session.stateContent(selectedState) else {
+            playError = "Couldn't reach the server to load that state."
+            return
+        }
+        stateToLoad = .remote(bytes)
+        playing = true
     }
 
     private var playLabel: String {
@@ -805,6 +857,12 @@ struct GameLaunchView: View {
         }
     }
 
+    private var visibleStates: [GameState] {
+        // Already newest first, see `load()`, so this is exactly the
+        // recent handful the card promises.
+        showAllStates ? states : Array(states.prefix(3))
+    }
+
     private var resumeCard: some View {
         LaunchCard(title: "Resume from", systemImage: "clock.arrow.circlepath") {
             // States are greyed out when written by a different core, because
@@ -814,32 +872,161 @@ struct GameLaunchView: View {
             // made through the web player, this app's included, all say
             // "emulatorjs", and greying those out disabled every state the
             // pause menu ever saved.
-            ForEach(states) { state in
-                choiceRow(
-                    label: state.fileName,
-                    detail: state.emulator.map { "state, \($0)" } ?? "state",
-                    selected: selectedState?.id == state.id,
-                    enabled: state.emulator == nil
-                        || state.emulator == selectedCore
-                        || state.emulator == "emulatorjs"
-                ) {
-                    selectedState = selectedState?.id == state.id ? nil : state
-                    selectedSave = nil
-                    if selectedState != nil { continueRun = false }
-                }
+            ForEach(visibleStates) { state in
+                stateRow(state)
+            }
+            if states.count > 3, !showAllStates {
+                Button("Show all \(states.count) states") { showAllStates = true }
+                    .font(.footnote)
+                    .padding(.leading, 30)
             }
             ForEach(saves) { save in
-                choiceRow(
-                    label: save.fileName,
-                    detail: "save",
-                    selected: selectedSave?.id == save.id,
-                    enabled: true
-                ) {
-                    selectedSave = selectedSave?.id == save.id ? nil : save
-                    selectedState = nil
-                    if selectedSave != nil { continueRun = false }
-                }
+                saveRow(save)
             }
+        }
+        .confirmationDialog(
+            "Delete this state?",
+            isPresented: Binding(
+                get: { pendingStateDelete != nil }, set: { if !$0 { pendingStateDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let state = pendingStateDelete { Task { await deleteState(state) } }
+            }
+        } message: {
+            // The one real consequence, spelled out, rather than a generic
+            // warning: deleting the newest state changes what Resume does
+            // next time, every other one is just cleanup.
+            Text(
+                pendingStateDelete?.id == states.first?.id
+                    ? "This is what Resume currently loads. Deleting it means Resume will use your next most recent save instead."
+                    : "This can't be undone."
+            )
+        }
+        .confirmationDialog(
+            "Delete this save?",
+            isPresented: Binding(
+                get: { pendingSaveDelete != nil }, set: { if !$0 { pendingSaveDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let save = pendingSaveDelete { Task { await deleteSave(save) } }
+            }
+        } message: {
+            Text("This can't be undone.")
+        }
+    }
+
+    private func stateEnabled(_ state: GameState) -> Bool {
+        state.emulator == nil || state.emulator == selectedCore || state.emulator == "emulatorjs"
+    }
+
+    private func stateRow(_ state: GameState) -> some View {
+        let enabled = stateEnabled(state)
+        return HStack(spacing: 10) {
+            Button {
+                selectedState = selectedState?.id == state.id ? nil : state
+                selectedSave = nil
+                if selectedState != nil { continueRun = false }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: selectedState?.id == state.id ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(
+                            selectedState?.id == state.id ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary)
+                        )
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(RommDate.relativeLabel(state.updatedAt)).lineLimit(1)
+                        Text(state.emulator.map { "state, \($0)" } ?? "state")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .disabled(!enabled)
+            .opacity(enabled ? 1 : 0.4)
+            rowMenu { pendingStateDelete = state }
+        }
+        .opacity(deletingAssetIds.contains(state.id) ? 0.4 : 1)
+    }
+
+    private func saveRow(_ save: GameSave) -> some View {
+        HStack(spacing: 10) {
+            Button {
+                selectedSave = selectedSave?.id == save.id ? nil : save
+                selectedState = nil
+                if selectedSave != nil { continueRun = false }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: selectedSave?.id == save.id ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(
+                            selectedSave?.id == save.id ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary)
+                        )
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(RommDate.relativeLabel(save.updatedAt)).lineLimit(1)
+                        Text("save").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            rowMenu { pendingSaveDelete = save }
+        }
+        .opacity(deletingAssetIds.contains(save.id) ? 0.4 : 1)
+    }
+
+    /// A menu button, not `.swipeActions`: this card is a plain stack, not
+    /// a `List`, and swipe actions only exist inside one, the pattern iOS
+    /// itself reserves for genuine lists of comparable rows, Mail and
+    /// Messages among them, not a form of distinct configuration cards like
+    /// this screen. A menu is the native answer for a form row, matching
+    /// how Settings itself handles a destructive action inline.
+    ///
+    /// Delete alone, no screenshot viewer. Thumbnails and an on-demand
+    /// viewer were both built and both pulled: this app's own saves have
+    /// no usable screenshot (the game is frozen before Save can be
+    /// reached, and a paused WebGL canvas reads back blank), and a
+    /// feature that can only ever show other devices' saves promises more
+    /// than it delivers. The dates are what actually tell rows apart.
+    private func rowMenu(delete: @escaping () -> Void) -> some View {
+        Menu {
+            Button("Delete", systemImage: "trash", role: .destructive, action: delete)
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .foregroundStyle(.secondary)
+                .frame(width: 30, height: 30)
+        }
+    }
+
+    private func deleteState(_ state: GameState) async {
+        deletingAssetIds.insert(state.id)
+        defer { deletingAssetIds.remove(state.id) }
+        do {
+            try await session.deleteStates(ids: [state.id])
+            states.removeAll { $0.id == state.id }
+            if selectedState?.id == state.id { selectedState = nil }
+        } catch {
+            DiagnosticsLog.record(
+                context: "Delete state", message: error.localizedDescription, romVersion: session.serverVersion
+            )
+        }
+    }
+
+    private func deleteSave(_ save: GameSave) async {
+        deletingAssetIds.insert(save.id)
+        defer { deletingAssetIds.remove(save.id) }
+        do {
+            try await session.deleteSaves(ids: [save.id])
+            saves.removeAll { $0.id == save.id }
+            if selectedSave?.id == save.id { selectedSave = nil }
+        } catch {
+            DiagnosticsLog.record(
+                context: "Delete save", message: error.localizedDescription, romVersion: session.serverVersion
+            )
         }
     }
 
@@ -871,9 +1058,8 @@ struct GameLaunchView: View {
             firmwareId: selectedFirmware?.id,
             // Continuing an interrupted run supersedes any server side
             // choice: the autosave loads over whatever the page booted,
-            // so seeding a state as well would just boot into it twice.
-            saveId: continueRun ? nil : selectedSave?.id,
-            stateId: continueRun ? nil : selectedState?.id
+            // so choosing a state as well would just boot into it twice.
+            saveId: continueRun ? nil : selectedSave?.id
         )
     }
 

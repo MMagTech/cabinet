@@ -49,4 +49,33 @@ enum LastFrame {
     static func image(romId: Int) -> UIImage? {
         UIImage(contentsOfFile: url(romId: romId).path)
     }
+
+    // MARK: The frame behind the last save
+
+    /// A copy of the newest frame, banked the moment a state is saved from
+    /// the pause menu.
+    ///
+    /// Exists because the hero card and the Resume button made different
+    /// promises: the card showed the last frame of the session, up to the
+    /// moment of quitting, while Resume loads the last *save*, which can be
+    /// well before that. Someone plays past their save, quits, and the card
+    /// advertises a moment the save system never kept. The frame captured
+    /// just before the pause that saved is the closest picture of the saved
+    /// moment this app can have, since capturing at the pause itself reads
+    /// back blank (see the save screenshot dead end in PlayerView).
+    private static func savedURL(romId: Int) -> URL {
+        directory.appendingPathComponent("\(romId)-saved.jpg")
+    }
+
+    static func bankSavedFrame(romId: Int) {
+        let current = url(romId: romId)
+        guard FileManager.default.fileExists(atPath: current.path) else { return }
+        let destination = savedURL(romId: romId)
+        try? FileManager.default.removeItem(at: destination)
+        try? FileManager.default.copyItem(at: current, to: destination)
+    }
+
+    static func savedImage(romId: Int) -> UIImage? {
+        UIImage(contentsOfFile: savedURL(romId: romId).path)
+    }
 }

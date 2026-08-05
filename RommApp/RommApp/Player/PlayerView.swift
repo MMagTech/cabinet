@@ -19,6 +19,26 @@ struct PlayerView: View {
     /// session and the person took it: once the game starts, the local
     /// autosave is loaded over it, the same path crash recovery uses.
     var resumeFromAutosave: Bool = false
+    /// A specific save state to load once the game has booted, resolved
+    /// before this view was ever created. Not seeded through RomM's
+    /// localStorage configuration the way core and BIOS are: that path
+    /// was tried for states too and does nothing, confirmed on device,
+    /// nothing in RomM's own page ever consumes a seeded `state_id`. This
+    /// is loaded directly through the emulator's own JavaScript API
+    /// instead, the same call the pause menu's own Load button already
+    /// uses successfully.
+    var stateToLoad: StateToLoad?
+
+    /// Where the bytes to load after boot come from. `local` reuses the
+    /// pause menu's own last-saved slot with no network involved, `remote`
+    /// carries bytes already downloaded from RomM. Callers decide which
+    /// before presenting this view; nothing here fetches on its own,
+    /// keeping the state actually loaded rehearsed and predictable rather
+    /// than chosen deep inside the player.
+    enum StateToLoad {
+        case local
+        case remote(Data)
+    }
 
     @EnvironmentObject private var session: Session
     @Environment(\.dismiss) private var dismiss
@@ -91,6 +111,7 @@ struct PlayerView: View {
                     rom: rom,
                     pad: padConfiguration(isLandscape: isLandscape),
                     resumeFromAutosave: resumeFromAutosave,
+                    stateToLoad: stateToLoad,
                     canonicalPlatformSlug: canonicalSlug,
                     padSystem: controlLayout?.system ?? "",
                     overlayVisible: $overlayVisible,
@@ -543,6 +564,7 @@ struct PlayerWebView: UIViewRepresentable {
     let rom: Rom
     let pad: PadConfiguration
     var resumeFromAutosave: Bool = false
+    var stateToLoad: PlayerView.StateToLoad?
     /// The short name EmulatorJS's core catalogue indexes by, resolved once
     /// in `PlayerView` and passed down here rather than recomputed: this
     /// view has no `Session` of its own to read the live folder mapping
@@ -565,6 +587,11 @@ struct PlayerWebView: UIViewRepresentable {
         /// person explicitly asked to continue. Never set by a plain launch,
         /// which must respect the launch screen's choices.
         private var pendingRecovery: Bool
+        /// Consumed once, the same way `pendingRecovery` is: set from the
+        /// resolved choice this view was created with, cleared the instant
+        /// it is acted on so a later reload of this same webview (crash
+        /// recovery reloads it in place) never loads it a second time.
+        private var pendingStateToLoad: PlayerView.StateToLoad?
         /// How old an autosave the restore may use. Crash recovery keeps it
         /// tight, because there the person chose nothing and a wrong restore
         /// is a surprise. An accepted continue offer widens it to the same
@@ -587,6 +614,7 @@ struct PlayerWebView: UIViewRepresentable {
             self.parent = parent
             pendingRecovery = parent.resumeFromAutosave
             if parent.resumeFromAutosave { recoveryWindowMs = 43_200_000 }
+            pendingStateToLoad = parent.stateToLoad
         }
 
         func userContentController(
@@ -607,6 +635,7 @@ struct PlayerWebView: UIViewRepresentable {
                     parent.gameStarted = true
                     SessionMarker.recordGameRunning(romId: parent.rom.id)
                     resumeAfterRecovery(in: message.webView)
+                    loadPendingState(in: message.webView)
                     if !pendingRecovery {
                         // Nothing is going to be restored, so last
                         // session's state is dead weight in this origin's
@@ -628,6 +657,12 @@ struct PlayerWebView: UIViewRepresentable {
             // this answers with the status code it got.
             case "manualSave":
                 ManualSave.record(romId: parent.rom.id)
+                // The newest timer frame is from live play seconds to a
+                // couple of minutes before the pause that saved: the
+                // closest picture of the saved moment that exists. Banked
+                // now so Home's hero can show what Resume will actually
+                // load, not the last thing on screen before quitting.
+                LastFrame.bankSavedFrame(romId: parent.rom.id)
             case "vitals":
                 if let line = message.body as? String {
                     EmulationInfo.recordVitals(line)
@@ -719,6 +754,35 @@ struct PlayerWebView: UIViewRepresentable {
                 }
             }
         }
+
+        /// A short settle delay, the same reasoning as recovery above: the
+        /// core needs a beat after booting before a full state lands
+        /// cleanly, FBNeo especially.
+        private func loadPendingState(in webView: WKWebView?) {
+            guard let toLoad = pendingStateToLoad else { return }
+            pendingStateToLoad = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                switch toLoad {
+                case .local:
+                    webView?.evaluateJavaScript(
+                        "window.__cabinetLoadManual && __cabinetLoadManual();"
+                    )
+                case .remote(let data):
+                    let base64 = data.base64EncodedString()
+                    let literal = self?.jsStringLiteral(base64) ?? "\"\""
+                    webView?.evaluateJavaScript(
+                        "window.__cabinetLoadStateBytes && __cabinetLoadStateBytes(\(literal));"
+                    )
+                }
+            }
+        }
+
+        private func jsStringLiteral(_ value: String) -> String {
+            guard let data = try? JSONEncoder().encode(value),
+                let literal = String(data: data, encoding: .utf8)
+            else { return "\"\"" }
+            return literal
+        }
     }
 
     func makeUIView(context: Context) -> PlayerContainerView {
@@ -775,7 +839,8 @@ struct PlayerWebView: UIViewRepresentable {
         config.userContentController.addUserScript(
             WKUserScript(
                 source: Self.recoveryInjection(
-                    romId: rom.id, autosaveEnabled: PlayerAutosave.isEnabled
+                    romId: rom.id, stateBaseName: rom.fsNameNoExt,
+                    autosaveEnabled: PlayerAutosave.isEnabled
                 ),
                 injectionTime: .atDocumentStart,
                 forMainFrameOnly: true
@@ -935,11 +1000,14 @@ struct PlayerWebView: UIViewRepresentable {
     /// The five minute freshness guard is for the one gap the native flag
     /// cannot see: a kill that lands before the first autosave of a new
     /// session, where the store still holds a state from a previous day.
-    static func recoveryInjection(romId: Int, autosaveEnabled: Bool) -> String {
-        """
+    static func recoveryInjection(romId: Int, stateBaseName: String, autosaveEnabled: Bool) -> String {
+        let escapedBase = (try? JSONEncoder().encode(stateBaseName))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "\"state\""
+        return """
         (function () {
           const KEY = "cabinet.autosave.\(romId)";
           const MANUAL_KEY = "cabinet.manual.\(romId)";
+          const STATE_BASE = \(escapedBase);
           const START = Date.now();
 
           // Puts back the last state banked from the pause menu. Separate
@@ -954,6 +1022,25 @@ struct PlayerWebView: UIViewRepresentable {
                 e.gameManager.loadState(new Uint8Array(rec.data));
                 e.displayMessage("BACK AT YOUR SAVED MOMENT");
               }).catch(function () {});
+            } catch (x) {}
+          };
+
+          // The counterpart for a state fetched from RomM rather than read
+          // out of this device's own storage: same load call, bytes handed
+          // in instead of read from IndexedDB. This is the real mechanism
+          // behind picking a state on the launch screen, or Home's Resume
+          // button; seeding a state id into RomM's own localStorage
+          // configuration was tried first and does nothing, nothing in
+          // RomM's page ever reads it back to actually load a state.
+          window.__cabinetLoadStateBytes = function (base64) {
+            try {
+              const e = window.EJS_emulator;
+              if (!e || !e.started || !e.gameManager) return;
+              const binary = atob(base64);
+              const bytes = new Uint8Array(binary.length);
+              for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+              e.gameManager.loadState(bytes);
+              e.displayMessage("BACK AT YOUR SAVED MOMENT");
             } catch (x) {}
           };
 
@@ -1135,37 +1222,49 @@ struct PlayerWebView: UIViewRepresentable {
                   window.webkit.messageHandlers.manualSave.postMessage(true);
                 }
               } catch (x) {}
-              const upload = function (shot) {
-                try {
-                  const fd = new FormData();
-                  fd.append("stateFile", new Blob([state]), "state.save");
-                  fd.append("screenshotFile", shot || new Blob([]), "screenshot.png");
-                  const m = document.cookie.match(/romm_csrftoken=([^;]+)/);
-                  fetch("/api/states?rom_id=\(romId)&emulator=emulatorjs", {
-                    method: "POST",
-                    headers: m ? { "x-csrftoken": m[1] } : {},
-                    body: fd
-                  }).then(function (r) {
-                    if (r.ok) { e.displayMessage("STATE SAVED TO YOUR SERVER"); }
-                    else if (r.status === 413) { e.displayMessage("STATE TOO LARGE FOR THE SERVER"); }
-                    else { e.displayMessage("STATE SAVE FAILED (" + r.status + ")"); }
-                    try { window.webkit.messageHandlers.saveResult.postMessage("http " + r.status); }
-                    catch (x) {}
-                  }).catch(function (err) {
-                    e.displayMessage("STATE SAVE FAILED, CHECK THE CONNECTION");
-                    try { window.webkit.messageHandlers.saveResult.postMessage("network " + err); }
-                    catch (x) {}
-                  });
-                } catch (x) {}
-              };
-              // The canvas source, not retroarch's: the retroarch path waits
-              // for the core to process a screenshot command, and a paused
-              // core processes nothing, so the save would never happen.
+              // The name and the emulator tag both mirror RomM's own
+              // player exactly (frontend `buildStateName` and
+              // `saveState`, views/Player/EmulatorJS/utils.ts at tag
+              // 5.1.0): the rom's short name plus an ISO timestamp with
+              // separators dashed, and the actual core rather than the
+              // literal "emulatorjs". Every save used to upload as the
+              // same constant "state.save", indistinguishable in any
+              // list, ours or RomM's own web UI; and the core tag is
+              // what lets the launch screen's compatibility greying
+              // mean something for states made here.
+              //
+              // No screenshot, deliberately, where RomM's player sends
+              // one. Its save button captures while the game still
+              // renders; this menu freezes the game on the tap that
+              // opens it, before Save can be reached, and a paused WebGL
+              // canvas reads back blank (no preserveDrawingBuffer).
+              // Every capture attempted here shipped an empty image, so
+              // the field is omitted, which the API allows, rather than
+              // pretending.
               try {
-                e.takeScreenshot("canvas", "png", 1).then(function (s) {
-                  upload(s && (s.blob || s.screenshot));
-                }).catch(function () { upload(null); });
-              } catch (x) { upload(null); }
+                const stamp = new Date().toISOString()
+                  .replace(/[:.]/g, "-").replace("T", " ").replace("Z", "");
+                const fd = new FormData();
+                fd.append("stateFile", new Blob([state]), STATE_BASE + " [" + stamp + "].state");
+                const core = (typeof window.EJS_core === "string" && window.EJS_core)
+                  ? window.EJS_core : "emulatorjs";
+                const m = document.cookie.match(/romm_csrftoken=([^;]+)/);
+                fetch("/api/states?rom_id=\(romId)&emulator=" + encodeURIComponent(core), {
+                  method: "POST",
+                  headers: m ? { "x-csrftoken": m[1] } : {},
+                  body: fd
+                }).then(function (r) {
+                  if (r.ok) { e.displayMessage("STATE SAVED TO YOUR SERVER"); }
+                  else if (r.status === 413) { e.displayMessage("STATE TOO LARGE FOR THE SERVER"); }
+                  else { e.displayMessage("STATE SAVE FAILED (" + r.status + ")"); }
+                  try { window.webkit.messageHandlers.saveResult.postMessage("http " + r.status); }
+                  catch (x) {}
+                }).catch(function (err) {
+                  e.displayMessage("STATE SAVE FAILED, CHECK THE CONNECTION");
+                  try { window.webkit.messageHandlers.saveResult.postMessage("network " + err); }
+                  catch (x) {}
+                });
+              } catch (x) {}
             } catch (x) {}
           };
 

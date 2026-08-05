@@ -288,6 +288,21 @@ final class Session: ObservableObject {
         return try await client.states(romId: romId)
     }
 
+    func stateContent(_ state: GameState) async throws -> Data {
+        guard let client else { throw RommError.transport("No server selected.") }
+        return try await client.stateContent(state)
+    }
+
+    func deleteStates(ids: [Int]) async throws {
+        guard let client else { throw RommError.transport("No server selected.") }
+        try await client.deleteStates(ids: ids)
+    }
+
+    func deleteSaves(ids: [Int]) async throws {
+        guard let client else { throw RommError.transport("No server selected.") }
+        try await client.deleteSaves(ids: ids)
+    }
+
     func firmware(platformId: Int) async throws -> [Firmware] {
         guard let client else { throw RommError.transport("No server selected.") }
         return try await client.firmware(platformId: platformId)

@@ -131,6 +131,31 @@ struct SettingsView: View {
             }
 
             Section {
+                Link(destination: URL(string: "https://github.com/rommapp/romm")!) {
+                    LabeledContent {
+                        Image(systemName: "arrow.up.right")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    } label: {
+                        Text("RomM")
+                    }
+                }
+                Link(destination: URL(string: "https://github.com/ilyas-hallak/romm-ios-app")!) {
+                    LabeledContent {
+                        Image(systemName: "arrow.up.right")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    } label: {
+                        Text("romm-ios-app")
+                    }
+                }
+            } header: {
+                Text("Credits")
+            } footer: {
+                Text("Cabinet talks to your RomM server, built by the RomM project and team. It was inspired by romm-ios-app, an earlier native client for RomM.")
+            }
+
+            Section {
                 Button("Unpair this device", role: .destructive) {
                     confirmingUnpair = true
                 }
