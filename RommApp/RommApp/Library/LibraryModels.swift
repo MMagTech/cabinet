@@ -1,11 +1,30 @@
 import Foundation
 
+/// One file inside a multi-file ROM, fetchable individually through
+/// `/api/roms/{id}/files/content/{file_name}`. Used for export instead of
+/// the single-file content endpoint whenever `Rom.hasMultipleFiles` is
+/// true, and instead of the zip endpoint, which the scope doc's Open items
+/// flags as broken through the reverse proxy.
+struct RomFile: Decodable, Identifiable, Hashable {
+    let id: Int
+    let fileName: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case fileName = "file_name"
+    }
+}
+
 /// One game, decoding only what the library screens use. The server sends far
 /// more; everything unlisted is ignored on purpose so RomM version bumps that
 /// add or rename unrelated fields cannot break decoding.
 struct Rom: Decodable, Identifiable, Hashable {
     let id: Int
     let name: String?
+    /// The actual filename on disk, extension included. What
+    /// `/api/roms/{id}/content/{file_name}` expects as its last path
+    /// component.
+    let fsName: String
     let fsNameNoTags: String
     /// For arcade this is the romset shortname, the join key into the
     /// bundled MAME control profile map.
@@ -30,6 +49,7 @@ struct Rom: Decodable, Identifiable, Hashable {
     let pathCoverSmall: String?
     let pathCoverLarge: String?
     let fsSizeBytes: Int64
+    let hasMultipleFiles: Bool
 
     var displayName: String {
         if let name, !name.isEmpty { return name }
@@ -38,6 +58,7 @@ struct Rom: Decodable, Identifiable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, summary
+        case fsName = "fs_name"
         case fsNameNoTags = "fs_name_no_tags"
         case fsNameNoExt = "fs_name_no_ext"
         case platformId = "platform_id"
@@ -47,6 +68,7 @@ struct Rom: Decodable, Identifiable, Hashable {
         case pathCoverSmall = "path_cover_small"
         case pathCoverLarge = "path_cover_large"
         case fsSizeBytes = "fs_size_bytes"
+        case hasMultipleFiles = "has_multiple_files"
     }
 
     /// RomM's ARCADE_SYSTEMS: platforms whose games run on MAME or FBNeo

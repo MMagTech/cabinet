@@ -293,6 +293,33 @@ final class Session: ObservableObject {
         return try await client.firmware(platformId: platformId)
     }
 
+    // MARK: Export
+
+    func romContentRequest(_ rom: Rom) async throws -> URLRequest {
+        guard let client else { throw RommError.transport("No server selected.") }
+        return await client.fileRequest(path: "/api/roms/\(rom.id)/content/\(rom.fsName)")
+    }
+
+    func romFiles(romId: Int) async throws -> [RomFile] {
+        guard let client else { throw RommError.transport("No server selected.") }
+        return try await client.romFiles(romId: romId)
+    }
+
+    func romFileContentRequest(romId: Int, file: RomFile) async throws -> URLRequest {
+        guard let client else { throw RommError.transport("No server selected.") }
+        return await client.fileRequest(path: "/api/roms/\(romId)/files/content/\(file.fileName)")
+    }
+
+    func firmwareContentRequest(_ firmware: Firmware) async throws -> URLRequest {
+        guard let client else { throw RommError.transport("No server selected.") }
+        return await client.fileRequest(path: "/api/firmware/\(firmware.id)/content/\(firmware.fileName)")
+    }
+
+    func cacheLimitBytes() async throws -> Int64? {
+        guard let client else { throw RommError.transport("No server selected.") }
+        return try await client.cacheLimitBytes()
+    }
+
     // MARK: Player
 
     /// Everything the player webview needs: where to go and how to prove who

@@ -632,6 +632,10 @@ struct PlayerWebView: UIViewRepresentable {
                 if let line = message.body as? String {
                     EmulationInfo.recordVitals(line)
                 }
+            case "playerNetwork":
+                if let url = message.body as? String {
+                    PlayerNetworkLog.append(url)
+                }
             case "saveResult":
                 UserDefaults.standard.set(
                     "\(String(describing: message.body)) rom \(parent.rom.id)",
@@ -733,6 +737,17 @@ struct PlayerWebView: UIViewRepresentable {
             injectionTime: .atDocumentStart,
             forMainFrameOnly: false
         )
+        #if DEBUG
+        // One-off diagnostic: dumps every entry actually sitting in
+        // EmulatorJS-roms from this page's own execution context, before
+        // EmulatorJS runs. Isolates whether a Data Saver write is visible
+        // to the real player at all, versus a logic difference inside
+        // EmulatorJS's own cache-hit check. Remove once Data Saver's
+        // read side is confirmed working.
+        config.userContentController.addUserScript(
+            WKUserScript(source: Self.cacheProbeScript, injectionTime: .atDocumentStart, forMainFrameOnly: false)
+        )
+        #endif
         config.userContentController.addUserScript(script)
 
         // Seed RomM's own storage with what the launch screen chose, before
@@ -776,9 +791,23 @@ struct PlayerWebView: UIViewRepresentable {
         config.userContentController.add(context.coordinator, name: "saveResult")
         config.userContentController.add(context.coordinator, name: "manualSave")
         config.userContentController.add(context.coordinator, name: "vitals")
+        #if DEBUG
+        config.userContentController.add(context.coordinator, name: "playerNetwork")
+        PlayerNetworkLog.startNewSession(romName: rom.displayName)
+        #endif
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
+        #if DEBUG
+        // Reachable from Safari on the Mac this device is paired with:
+        // Develop menu > device name > this page. Lets Data Saver's real
+        // effect be watched directly in the Network tab, whether the
+        // ROM's own content request fires on a later Play, rather than
+        // inferred from timing on a throttled connection. The
+        // playerNetwork log above is the same proof without needing
+        // Safari open at all: check Debug > Copy diagnostics after Play.
+        if #available(iOS 16.4, *) { webView.isInspectable = true }
+        #endif
         input.webView = webView
         webView.isOpaque = false
         webView.backgroundColor = .black
@@ -1156,6 +1185,53 @@ struct PlayerWebView: UIViewRepresentable {
         """
     }
 
+    #if DEBUG
+    static let cacheProbeScript = """
+        (function () {
+            try {
+                window.webkit.messageHandlers.playerNetwork.postMessage("[cache-probe] script started");
+            } catch (e) {}
+            function post(msg) {
+                try {
+                    if (window.webkit && window.webkit.messageHandlers.playerNetwork) {
+                        window.webkit.messageHandlers.playerNetwork.postMessage("[cache-probe] " + msg);
+                    }
+                } catch (e) {}
+            }
+            try {
+                var open = indexedDB.open("EmulatorJS-roms", 1);
+                open.onerror = function () { post("open failed: " + open.error); };
+                open.onblocked = function () {
+                    post("BLOCKED, another connection is still open somewhere");
+                };
+                open.onupgradeneeded = function () {
+                    var db = open.result;
+                    if (!db.objectStoreNames.contains("rom")) db.createObjectStore("rom");
+                };
+                open.onsuccess = function (event) {
+                    var db = event.target.result;
+                    post("stores: " + Array.from(db.objectStoreNames));
+                    if (!db.objectStoreNames.contains("rom")) { post("no rom store"); return; }
+                    var store = db.transaction("rom", "readonly").objectStore("rom");
+                    var keysReq = store.get("?EJS_KEYS!");
+                    keysReq.onsuccess = function () {
+                        var keys = keysReq.result || [];
+                        post("tracked keys: " + JSON.stringify(keys));
+                        keys.forEach(function (k) {
+                            var r = store.get(k);
+                            r.onsuccess = function () {
+                                var v = r.result;
+                                if (v) post("entry " + k + ": content-length=" + v["content-length"] + " type=" + (v.type || "rom") + " bytes=" + (v.data ? v.data.byteLength : "none"));
+                            };
+                        });
+                    };
+                    keysReq.onerror = function () { post("key index read failed"); };
+                };
+            } catch (e) { post("exception " + e); }
+        })();
+        """
+    #endif
+
     static func authInjection(token: String) -> String {
         """
         (function () {
@@ -1165,10 +1241,26 @@ struct PlayerWebView: UIViewRepresentable {
             catch { return false; }
           };
 
+          // Method included because EmulatorJS's cache-hit path still
+          // sends one HEAD for the ROM URL on every launch: a lone
+          // "HEAD .../content/..." line is a cache hit, HEAD followed by
+          // GET on the same URL is a miss.
+          const logRequest = (url, method) => {
+            try {
+              if (window.webkit && window.webkit.messageHandlers.playerNetwork) {
+                window.webkit.messageHandlers.playerNetwork.postMessage(
+                  (method ? method + " " : "") + String(url)
+                );
+              }
+            } catch (e) {}
+          };
+
           const origFetch = window.fetch;
           window.fetch = function (input, init) {
             try {
               const url = typeof input === "string" ? input : input && input.url;
+              const method = (init && init.method) || (input instanceof Request && input.method) || "GET";
+              logRequest(url, method);
               if (sameOrigin(url)) {
                 init = init || {};
                 const headers = new Headers(
@@ -1186,6 +1278,7 @@ struct PlayerWebView: UIViewRepresentable {
           const origOpen = XMLHttpRequest.prototype.open;
           const origSend = XMLHttpRequest.prototype.send;
           XMLHttpRequest.prototype.open = function (method, url) {
+            logRequest(url, method);
             this.__rommSameOrigin = sameOrigin(url);
             this.__rommUrl = String(url);
             return origOpen.apply(this, arguments);

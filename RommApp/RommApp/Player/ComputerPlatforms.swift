@@ -31,3 +31,18 @@ enum ComputerPlatforms {
         slugs.contains(canonicalSlug)
     }
 }
+
+/// Whether this app can actually put a game on screen: a real gamepad
+/// platform with at least one EmulatorJS core, everything else, keyboard
+/// machines and zero-core platforms like Dreamcast or Flash alike, is
+/// unsupported and offered a download instead of a dead Play button.
+///
+/// The single source of truth for that split, shared by the library's
+/// Supported/Unsupported sections and the launch screen's own Play guard,
+/// so the two can never disagree about which games this covers.
+enum PlatformSupport {
+    static func isSupported(canonicalSlug: String) -> Bool {
+        guard !ComputerPlatforms.contains(canonicalSlug) else { return false }
+        return !CoreCatalog.cores(for: canonicalSlug).isEmpty
+    }
+}

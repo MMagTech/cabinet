@@ -43,19 +43,6 @@ struct GameLaunchView: View {
     /// that exact moment is offered, preselected, and declinable.
     @State private var interruptedAt: Date?
     @State private var continueRun = false
-    /// True once someone actually picks a core on this screen.
-    ///
-    /// Every launch used to record whichever core was selected, which
-    /// conflated "what I chose" with "what happened to be default". That
-    /// mattered the moment a better default existed: a game launched once
-    /// on the general arcade core would keep being sent there forever,
-    /// outranking the recommendation for its own board. Only a deliberate
-    /// pick is worth remembering.
-    @State private var coreWasChosen = false
-    /// Same reasoning as `coreWasChosen`, for firmware: only a deliberate
-    /// pick is worth remembering, not whatever the remembered default
-    /// itself happened to preselect.
-    @State private var firmwareWasChosen = false
     /// The short name EmulatorJS's core catalogue actually indexes by,
     /// resolved once here and threaded to everything downstream that needs
     /// it, rather than recomputed piecemeal. See `Rom.canonicalPlatformSlug`.
@@ -70,11 +57,53 @@ struct GameLaunchView: View {
     @State private var arcadeWays = "8"
     @State private var togglingFavorite = false
     @State private var favoriteError: String?
+    @StateObject private var exporter = RomExporter()
+    @State private var showingExportSheet = false
+    /// Whatever export was last attempted, so Retry repeats the same one
+    /// (ROM alone, ROM and BIOS, or BIOS alone) rather than only ever
+    /// retrying the plain ROM case.
+    @State private var retryExport: (() -> Void)?
+
+    /// Data Saver: pre-loads the ROM into EmulatorJS's own on-device cache
+    /// so a later weak-signal Play skips re-fetching it. The hidden bridge
+    /// webview only mounts once this is actually used, not on every visit
+    /// to this screen.
+    @StateObject private var cachePreloader = CachePreloader()
+    @StateObject private var cacheBridge = EmulatorCacheBridge()
+    @State private var showingCacheBridge = false
+    @State private var dataSaverPhase: DataSaverPhase = .idle
+    @State private var showingDataSaverTip = false
+    private static let dataSaverTipShownKey = "romm.dataSaverTipShown"
+
+    enum DataSaverPhase: Equatable {
+        case idle
+        case downloading(fraction: Double, receivedBytes: Int64, totalBytes: Int64)
+        case writingToCache
+        case done
+        case failed(String)
+    }
+
+    /// Whether the scroll content is resting at its top, the only moment a
+    /// downward drag should be read as "dismiss" rather than "scroll".
+    @State private var isScrolledToTop = true
+    /// How far the whole screen has been dragged down, for the
+    /// hand-rolled swipe-to-dismiss below: `fullScreenCover`, unlike
+    /// `sheet`, has no interactive dismiss gesture of its own.
+    @State private var dragOffset: CGFloat = 0
+
+    private static let dismissThreshold: CGFloat = 120
 
     var body: some View {
         GeometryReader { geometry in
             let landscape = geometry.size.width > geometry.size.height
             ScrollView {
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: ScrollOffsetKey.self, value: proxy.frame(in: .named("gameLaunchScroll")).minY
+                    )
+                }
+                .frame(height: 0)
+
                 if landscape {
                     // A short wide screen has width to spare and almost no
                     // height, so the option cards sit side by side rather
@@ -109,6 +138,8 @@ struct GameLaunchView: View {
                             playButton
 
                             if isComputerPlatform { computerPlatformCard }
+                            downloadStatusCard
+                            dataSaverStatusCard
                             if interruptedAt != nil { continueCard }
                             compatibilityCard
                             if arcadeBase != nil { arcadeControlsCard }
@@ -127,15 +158,29 @@ struct GameLaunchView: View {
                     .padding(20)
                 }
             }
+            .coordinateSpace(name: "gameLaunchScroll")
+            .onPreferenceChange(ScrollOffsetKey.self) { isScrolledToTop = $0 >= -1 }
+            .offset(y: dragOffset)
+            .simultaneousGesture(dismissDragGesture)
         }
         .background(Color(.systemGroupedBackground))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
+                downloadButton
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 favoriteButton
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Close") { dismiss() }
+            }
+        }
+        .sheet(isPresented: Binding(
+            get: { exporter.exportURLs != nil }, set: { if !$0 { exporter.finishExport() } }
+        )) {
+            if let urls = exporter.exportURLs {
+                DocumentExporter(urls: urls) { exporter.finishExport() }
             }
         }
         .task { await load() }
@@ -150,12 +195,20 @@ struct GameLaunchView: View {
             if !isPlaying { refreshResumeOffer() }
         }
         // Only changes made after the screen has settled are the person's;
-        // the ones during load are this view choosing a default.
+        // the ones during load are this view choosing a default, and every
+        // launch recording whichever core or BIOS happened to be that
+        // default would conflate "what I chose" with "what I was shown",
+        // outranking a better recommendation the next time a default
+        // exists. Remembered as soon as a deliberate pick happens, not
+        // deferred to Play: leaving the screen any other way, Close among
+        // them, must not silently drop it.
         .onChange(of: selectedCore) { _, _ in
-            if !loading { coreWasChosen = true }
+            guard !loading else { return }
+            LaunchChoices.remember(core: selectedCore, canonicalSlug: canonicalSlug, for: rom)
         }
         .onChange(of: selectedFirmware) { _, _ in
-            if !loading { firmwareWasChosen = true }
+            guard !loading, !rom.isArcade else { return }
+            LaunchChoices.remember(firmwareId: selectedFirmware?.id, platformId: rom.platformId)
         }
     }
 
@@ -192,6 +245,203 @@ struct GameLaunchView: View {
         }
     }
 
+    /// The single source of truth for whether this app can put the game on
+    /// screen at all: `PlatformSupport.isSupported`, the same check that
+    /// decides the library's Supported/Unsupported split. Reused here so
+    /// Play cannot stay live for a platform the library already calls
+    /// unsupported, the zero-core dead end this download feature replaces.
+    private var isPlatformSupported: Bool {
+        !isComputerPlatform && !cores.isEmpty
+    }
+
+    private var downloadButton: some View {
+        Button {
+            showingExportSheet = true
+        } label: {
+            Image(systemName: "square.and.arrow.down")
+        }
+        // Attached here, not at the screen root: a confirmationDialog
+        // anchors its arrow to whatever view carries this modifier, so it
+        // has to sit on the actual toolbar button, not the whole screen,
+        // or the arrow points at the wrong place.
+        .confirmationDialog("Download", isPresented: $showingExportSheet, titleVisibility: .visible) {
+            if !firmware.isEmpty {
+                Button("Export ROM and BIOS") { startExport(includeFirmware: true) }
+                // Always offered on its own, not just folded into the
+                // combined button above: if a previously exported BIOS
+                // file gets deleted or moved outside this app, this is the
+                // only way back to it, since the app has no visibility
+                // into Files once a file has been handed over.
+                Button("Export BIOS") { startFirmwareOnlyExport() }
+            }
+            Button("Export ROM") { startExport(includeFirmware: false) }
+            // Supported platforms only: this warms EmulatorJS's own cache
+            // ahead of a real Play, an unsupported platform has no in-app
+            // Play to warm anything for.
+            if isPlatformSupported, !rom.hasMultipleFiles {
+                Button("Data Saver") { tapDataSaver() }
+            }
+        }
+        .background {
+            if showingCacheBridge, let serverURL = session.serverURL {
+                EmulatorCacheWebView(url: serverURL, bridge: cacheBridge)
+                    .frame(width: 0, height: 0)
+                    .opacity(0)
+                    .accessibilityHidden(true)
+            }
+        }
+        .alert("About Data Saver", isPresented: $showingDataSaverTip) {
+            Button("OK") { startDataSaver() }
+        } message: {
+            Text("Saves this game on your phone so playing it skips the big download. Starting a game still needs a small connection to the server.")
+        }
+        .onChange(of: cacheBridge.isReady) { _, ready in
+            if ready { Task { await runDataSaverFetch() } }
+        }
+        .onChange(of: cachePreloader.state) { _, state in
+            switch state {
+            case .idle: break
+            case .downloading(let fraction, let received, let total):
+                dataSaverPhase = .downloading(fraction: fraction, receivedBytes: received, totalBytes: total)
+            case .failed(let message):
+                dataSaverPhase = .failed(message)
+            }
+        }
+        .onChange(of: dataSaverPhase) { _, phase in
+            if case .failed(let message) = phase {
+                DiagnosticsLog.record(context: "Data Saver", message: message, romVersion: session.serverVersion)
+            }
+        }
+        .onChange(of: exporter.state) { _, state in
+            if case .failed(let message) = state {
+                DiagnosticsLog.record(context: "Export", message: message, romVersion: session.serverVersion)
+            }
+        }
+    }
+
+    /// The first tap ever, on any game, shows a one-time explanation of
+    /// what caching does and doesn't buy (the launch still makes one
+    /// small HEAD request, so it isn't fully offline) before starting.
+    /// Never shown again after.
+    private func tapDataSaver() {
+        if UserDefaults.standard.bool(forKey: Self.dataSaverTipShownKey) {
+            startDataSaver()
+        } else {
+            UserDefaults.standard.set(true, forKey: Self.dataSaverTipShownKey)
+            showingDataSaverTip = true
+        }
+    }
+
+    /// Not offered for multi-file ROMs: EmulatorJS's cache keys one
+    /// downloaded file per entry, matching how it downloads a single-file
+    /// ROM. Multi-track games go through Export instead, which already
+    /// has its own per-file, folder-based path.
+    private func startDataSaver() {
+        dataSaverPhase = .downloading(fraction: 0, receivedBytes: 0, totalBytes: 0)
+        showingCacheBridge = true
+        if cacheBridge.isReady {
+            Task { await runDataSaverFetch() }
+        }
+    }
+
+    /// The `url` this writes has to be byte-identical to what RomM's real
+    /// player sets as `EJS_gameUrl`: EmulatorJS 4.2.3's cache key is that
+    /// URL's last path segment, query string included. Confirmed broken
+    /// on device before this fix: `Player.vue` always passes a `file_ids`
+    /// query parameter, `fileIDs: props.disc ? [props.disc] : []`, even
+    /// for a single-file ROM, RomM's console view still selects a "disc"
+    /// (the ROM's one file entry), so the real request was
+    /// `/api/roms/{id}/content/{name}?file_ids={fileId}`, not the plain
+    /// path this originally wrote. A captured player network log showed
+    /// the ROM re-fetching from the server on every Play despite a
+    /// successful, correctly-shaped cache write, because that mismatch
+    /// made every lookup a miss. `file_ids` is per-file, not per-ROM,
+    /// hence fetching `/api/roms/{id}/files` first even for a
+    /// single-file game.
+    private func runDataSaverFetch() async {
+        guard case .downloading = dataSaverPhase else { return }
+        do {
+            let request = try await session.romContentRequest(rom)
+            guard let data = await cachePreloader.fetch(request) else { return }
+            dataSaverPhase = .writingToCache
+            let files = try await session.romFiles(romId: rom.id)
+            guard let file = files.first else {
+                dataSaverPhase = .failed("Couldn't find this ROM's file ID.")
+                cachePreloader.reset()
+                return
+            }
+            let encodedName = Self.jsEncodeURIComponent(file.fileName)
+            let relativeURL = "/api/roms/\(rom.id)/content/\(encodedName)?file_ids=\(file.id)"
+            let result = await cacheBridge.put(
+                url: relativeURL, type: "rom",
+                contentLength: cachePreloader.contentLengthHeader, data: data
+            )
+            dataSaverPhase = result.success ? .done : .failed(result.error ?? "Couldn't save it to the cache.")
+        } catch {
+            dataSaverPhase = .failed("Couldn't reach the server: \(error.localizedDescription)")
+        }
+        cachePreloader.reset()
+    }
+
+    /// Matches JavaScript's `encodeURIComponent` exactly, the unreserved
+    /// set it leaves untouched (`A-Za-z0-9-_.!~*'()`) is narrower than any
+    /// single built-in `CharacterSet`, and RomM's own `getDownloadPath`
+    /// runs the real filename through `encodeURIComponent` before this
+    /// app's cache entry has to match it byte-for-byte.
+    private static func jsEncodeURIComponent(_ string: String) -> String {
+        let unreserved = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()")
+        return string.addingPercentEncoding(withAllowedCharacters: unreserved) ?? string
+    }
+
+    private func startExport(includeFirmware: Bool) {
+        retryExport = { [self] in startExport(includeFirmware: includeFirmware) }
+        Task {
+            do {
+                var files: [(request: URLRequest, suggestedName: String)] = []
+                var folderName: String?
+
+                if rom.hasMultipleFiles {
+                    // RomM's own zip endpoint is broken through the reverse
+                    // proxy (scope doc, Open items), so each file is fetched
+                    // on its own and exported as a folder instead.
+                    let romFiles = try await session.romFiles(romId: rom.id)
+                    for file in romFiles {
+                        let fileRequest = try await session.romFileContentRequest(romId: rom.id, file: file)
+                        files.append((fileRequest, file.fileName))
+                    }
+                    folderName = rom.fsName
+                } else {
+                    let romRequest = try await session.romContentRequest(rom)
+                    files.append((romRequest, rom.fsName))
+                }
+
+                if includeFirmware, let bios = firmware.first {
+                    let firmwareRequest = try await session.firmwareContentRequest(bios)
+                    files.append((firmwareRequest, bios.fileName))
+                }
+                exporter.start(files: files, folderName: folderName)
+            } catch {
+                exporter.fail("Couldn't reach the server.")
+            }
+        }
+    }
+
+    /// The BIOS on its own, reachable any time regardless of whether it was
+    /// bundled with a ROM before: the app cannot see whether a file handed
+    /// to Files earlier is still there.
+    private func startFirmwareOnlyExport() {
+        guard let bios = firmware.first else { return }
+        retryExport = { [self] in startFirmwareOnlyExport() }
+        Task {
+            do {
+                let firmwareRequest = try await session.firmwareContentRequest(bios)
+                exporter.start(files: [(firmwareRequest, bios.fileName)])
+            } catch {
+                exporter.fail("Couldn't reach the server.")
+            }
+        }
+    }
+
     private func cover(maxWidth: CGFloat) -> some View {
         CoverImage(path: rom.pathCoverLarge ?? rom.pathCoverSmall, title: rom.displayName)
             .aspectRatio(3.0 / 4.0, contentMode: .fit)
@@ -214,14 +464,8 @@ struct GameLaunchView: View {
 
     private var playButton: some View {
         Button {
-            // Remember the choice, so the next launch of this game, and the
-            // next game on this platform, starts where this one left off.
-            if coreWasChosen {
-                LaunchChoices.remember(core: selectedCore, canonicalSlug: canonicalSlug, for: rom)
-            }
-            if firmwareWasChosen, !rom.isArcade {
-                LaunchChoices.remember(firmwareId: selectedFirmware?.id, platformId: rom.platformId)
-            }
+            // Remembering itself already happened the moment the choice was
+            // made, see the onChange handlers above.
             playing = true
         } label: {
             Label(playLabel, systemImage: isComputerPlatform ? "keyboard" : "play.fill")
@@ -230,11 +474,11 @@ struct GameLaunchView: View {
                 .padding(.vertical, 15)
         }
         .buttonStyle(.borderedProminent)
-        .disabled(loading || isComputerPlatform)
+        .disabled(loading || !isPlatformSupported)
     }
 
     private var playLabel: String {
-        if isComputerPlatform { return "Not playable here yet" }
+        if !loading && !isPlatformSupported { return "Unsupported" }
         if continueRun { return "Continue" }
         return selectedState != nil || selectedSave != nil ? "Resume" : "Play"
     }
@@ -250,6 +494,90 @@ struct GameLaunchView: View {
             Text("This platform is controlled with a keyboard, not a game pad, and this app does not offer that yet. A future version may let you download the ROM to play it in another emulator.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var downloadStatusCard: some View {
+        switch exporter.state {
+        case .idle:
+            EmptyView()
+        case .downloading(let fraction, let received, let total):
+            LaunchCard(title: "Exporting ROM", systemImage: "square.and.arrow.down") {
+                VStack(alignment: .leading, spacing: 8) {
+                    if total > 0 {
+                        Text("\(byteCount(received)) of \(byteCount(total))")
+                            .font(.caption).foregroundStyle(.secondary)
+                        ProgressView(value: fraction)
+                    } else {
+                        ProgressView()
+                    }
+                    Button("Cancel", role: .destructive) { exporter.cancel() }
+                        .font(.callout)
+                }
+            }
+        case .failed(let message):
+            LaunchCard(title: "Couldn't export the ROM", systemImage: "exclamationmark.triangle") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(message).font(.caption).foregroundStyle(.secondary)
+                    HStack {
+                        Button("Dismiss") { exporter.cancel() }
+                        Spacer()
+                        Button("Retry") { retryExport?() }
+                    }
+                    .font(.callout)
+                }
+            }
+        }
+    }
+
+    private func byteCount(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+
+    @ViewBuilder
+    private var dataSaverStatusCard: some View {
+        switch dataSaverPhase {
+        case .idle:
+            EmptyView()
+        case .downloading(let fraction, let received, let total):
+            LaunchCard(title: "Data Saver", systemImage: "arrow.down.circle") {
+                VStack(alignment: .leading, spacing: 8) {
+                    if total > 0 {
+                        Text("\(byteCount(received)) of \(byteCount(total))")
+                            .font(.caption).foregroundStyle(.secondary)
+                        ProgressView(value: fraction)
+                    } else {
+                        ProgressView()
+                    }
+                }
+            }
+        case .writingToCache:
+            LaunchCard(title: "Data Saver", systemImage: "arrow.down.circle") {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("Saving for later").foregroundStyle(.secondary)
+                }
+                .font(.caption)
+            }
+        case .done:
+            LaunchCard(title: "Data Saver", systemImage: "checkmark.circle") {
+                Text("Ready. Play won't re-download the ROM.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        case .failed(let message):
+            LaunchCard(title: "Data Saver", systemImage: "exclamationmark.triangle") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(message).font(.caption).foregroundStyle(.secondary)
+                    HStack {
+                        Button("Dismiss") { dataSaverPhase = .idle }
+                        Spacer()
+                        Button("Retry") { startDataSaver() }
+                    }
+                    .font(.callout)
+                }
+            }
         }
     }
 
@@ -300,6 +628,8 @@ struct GameLaunchView: View {
                 spacing: 12
             ) {
                 if isComputerPlatform { computerPlatformCard }
+                downloadStatusCard
+                dataSaverStatusCard
                 if interruptedAt != nil { continueCard }
                 if cores.count > 1 { coreCard }
                 if showsFirmwareCard { firmwareCard }
@@ -320,6 +650,8 @@ struct GameLaunchView: View {
         } else {
             VStack(spacing: 14) {
                 if isComputerPlatform { computerPlatformCard }
+                downloadStatusCard
+                dataSaverStatusCard
                 if interruptedAt != nil { continueCard }
                 if cores.count > 1 { coreCard }
                 if showsFirmwareCard { firmwareCard }
@@ -590,6 +922,36 @@ struct GameLaunchView: View {
         // way a core choice is.
         selectedFirmware = rom.isArcade ? nil : LaunchChoices.defaultFirmware(platformId: rom.platformId, from: firmware)
         loading = false
+    }
+
+    /// Hand-rolled swipe-to-dismiss: `fullScreenCover`, unlike `sheet`, has
+    /// no interactive dismiss gesture built in. Only reads a downward drag
+    /// as "dismiss" while the scroll content is already at its top, so it
+    /// cannot fight normal scrolling further down the screen.
+    private var dismissDragGesture: some Gesture {
+        DragGesture(minimumDistance: 20, coordinateSpace: .local)
+            .onChanged { value in
+                guard isScrolledToTop, value.translation.height > 0 else { return }
+                dragOffset = value.translation.height
+            }
+            .onEnded { value in
+                guard isScrolledToTop, value.translation.height > 0 else {
+                    withAnimation(.spring) { dragOffset = 0 }
+                    return
+                }
+                if value.translation.height > Self.dismissThreshold {
+                    dismiss()
+                } else {
+                    withAnimation(.spring) { dragOffset = 0 }
+                }
+            }
+    }
+}
+
+private struct ScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 

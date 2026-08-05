@@ -75,7 +75,7 @@ struct SettingsView: View {
             } header: {
                 Text("Controls")
             } footer: {
-                Text("How strongly the on screen controls show over the game. They respond to touch at any visibility.")
+                Text("On screen controls respond to touch at any visibility.")
             }
 
             Section {
@@ -90,24 +90,6 @@ struct SettingsView: View {
             }
 
             Section {
-                Text(EmulationInfo.summary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if EmulationInfo.recoveries > 0 {
-                    LabeledContent("Player reloads survived", value: "\(EmulationInfo.recoveries)")
-                }
-                if let vitals = EmulationInfo.vitalsAtDeath {
-                    Text("Last reload happened at: \(vitals)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            } header: {
-                Text("Emulation")
-            } footer: {
-                Text("Recorded from the last game you played.")
-            }
-
-            Section {
                 Picker("Platform names", selection: $platformLabelSourceRaw) {
                     ForEach(PlatformLabelSource.allCases, id: \.self) { source in
                         Text(source.label).tag(source.rawValue)
@@ -116,7 +98,7 @@ struct SettingsView: View {
             } header: {
                 Text("Library")
             } footer: {
-                Text("A server's metadata name and the folder a platform was scanned from can each be wrong in ways the other is not. Switch here if a platform looks strange.")
+                Text("If a platform's name looks wrong, switching the source here usually fixes it.")
             }
 
             Section {
@@ -126,6 +108,26 @@ struct SettingsView: View {
                 }
             } header: {
                 Text("Connection")
+            }
+
+            Section {
+                NavigationLink {
+                    CacheView()
+                } label: {
+                    Label("Cache", systemImage: "internaldrive")
+                }
+            } footer: {
+                Text("Games saved on this device so playing them skips the download.")
+            }
+
+            Section {
+                NavigationLink {
+                    DebugView()
+                } label: {
+                    Label("Debug", systemImage: "ladybug")
+                }
+            } footer: {
+                Text("Diagnostics for reporting a problem.")
             }
 
             Section {

@@ -305,6 +305,20 @@ the network, so playing offline would mean serving EmulatorJS from inside the
 app, which contradicts "load RomM's own player, do not reimplement it". That
 trade is not worth reopening for this.
 
+Refined 2026-08-04, worth keeping since the value here is easy to overstate:
+this is purely informational, not functional. Nothing offline can actually be
+acted on, not just Play: downloads and Data Saver both need a live fetch of
+real ROM bytes, and favoriting or marking compatibility both write to RomM's
+API. So the honest design is a read-only snapshot, not a crippled version of
+the live app pretending to be full featured. A soft, non-blocking banner
+("Offline. Showing your last synced library.") rather than a hard error
+state, and every disabled action, Play, download, favorite, stays visible
+but visibly disabled rather than hidden, so it is clear why, not just
+missing. A game whose cover art was never synced shows a placeholder, not a
+blank tile. Ranked below save state thumbnails: that item pays off every
+time the resume card is opened, this one only pays off in the specific
+moment of having no signal and wanting to browse anyway.
+
 **2. Save states you can see.** The launch screen's resume card is a list of
 identical filenames, which is useless for choosing. RomM stores a screenshot
 alongside every state and the app already uploads them, so the data is sitting

@@ -166,6 +166,28 @@ actor RommClient {
         }
     }
 
+    /// The ceiling EmulatorJS applies to its own on-device cache writes
+    /// (`EmulatorJS-roms`, an IndexedDB database inside the player
+    /// webview's origin), in bytes. Server config (`emulatorjs.cache_limit`
+    /// in RomM's `config.yml`), not a RomM UI toggle. In EmulatorJS 4.2.3,
+    /// the version RomM 5.1.0 pins, this is a per-file write threshold:
+    /// a file whose `content-length` is at or over the limit still plays
+    /// but is never cached; there is no whole-cache total and no eviction.
+    /// `nil` when unset, in which case EmulatorJS falls back to its own
+    /// hardcoded 1 GiB (1073741824 byte) default rather than any value
+    /// RomM chose.
+    func cacheLimitBytes() async throws -> Int64? {
+        let req = request(path: "/api/config")
+        return try await send(req, decoding: CacheLimitResponse.self).cacheLimitBytes
+    }
+
+    private struct CacheLimitResponse: Decodable {
+        let cacheLimitBytes: Int64?
+        enum CodingKeys: String, CodingKey {
+            case cacheLimitBytes = "EJS_CACHE_LIMIT"
+        }
+    }
+
     /// The games with play history, most recent first. Same query RomM's own
     /// home screen makes (frontend getRecentPlayedRoms), so this app's Home
     /// agrees with the web UI about what you were last playing.
@@ -329,6 +351,35 @@ actor RommClient {
         )
     }
 
+    /// The individual files behind a ROM, each with its own flat
+    /// `file_name` fetchable through `/api/roms/{id}/files/content/{file_name}`.
+    /// Export uses this instead of the single-file content endpoint
+    /// whenever `rom.hasMultipleFiles` is true, and instead of
+    /// `/api/roms/download` (the zip endpoint), which the scope doc's
+    /// Open items flags as broken through the reverse proxy. Data Saver
+    /// uses it too, for a single-file ROM's own file ID, needed to match
+    /// the `file_ids` query parameter RomM's real player attaches.
+    ///
+    /// `/api/roms/{id}/files` is a real endpoint, confirmed from RomM's
+    /// own OpenAPI spec, but it is NOT a list: its `id` is a *file's own*
+    /// internal id, not the rom's, and it returns one `RomFileSchema`,
+    /// not an array, `GET /api/roms/{id}/files/{id}` would have been the
+    /// honest read of that path. The actual list lives on the rom's own
+    /// detail response, confirmed via `DetailedRomSchema.files`, an
+    /// `[RomFileSchema]` array included when fetching the rom itself.
+    /// Found on device: the wrong assumption first shipped as a decode
+    /// failure ("does not look like a RomM server"), not a network error,
+    /// this app's own `Rom` model deliberately ignores unlisted fields
+    /// (see its doc comment), so decoding the wrong shape as `[RomFile]`
+    /// failed outright rather than silently returning nothing.
+    func romFiles(romId: Int) async throws -> [RomFile] {
+        try await send(request(path: "/api/roms/\(romId)"), decoding: RomFilesResponse.self).files
+    }
+
+    private struct RomFilesResponse: Decodable {
+        let files: [RomFile]
+    }
+
     private func sendQuery<T: Decodable>(_ path: String, _ query: [URLQueryItem]) async throws -> T {
         var components = URLComponents(
             url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false
@@ -373,6 +424,14 @@ actor RommClient {
             throw RommError.notFound
         }
         return data
+    }
+
+    /// An authenticated request for a file endpoint that is not JSON, ROM
+    /// and firmware content in particular. The caller drives the actual
+    /// transfer, this only builds the request, since a real download needs
+    /// a delegate for progress that does not belong on this actor.
+    func fileRequest(path: String) -> URLRequest {
+        request(path: path)
     }
 
     // MARK: Plumbing

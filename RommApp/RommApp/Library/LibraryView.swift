@@ -115,8 +115,7 @@ struct LibraryScreen: View {
     /// different reason, no core exists at all rather than no touch input.
     private func isSupported(_ platform: Platform) -> Bool {
         let canonicalSlug = (session.platformsVersions[platform.fsSlug] ?? platform.fsSlug).lowercased()
-        guard !ComputerPlatforms.contains(canonicalSlug) else { return false }
-        return !CoreCatalog.cores(for: canonicalSlug).isEmpty
+        return PlatformSupport.isSupported(canonicalSlug: canonicalSlug)
     }
 
     private var supportedPlatforms: [Platform] { platforms.filter(isSupported) }
@@ -130,6 +129,9 @@ struct LibraryScreen: View {
                 .sorted { platformLabel(for: $0) < platformLabel(for: $1) }
         } catch {
             platformsError = error.localizedDescription
+            DiagnosticsLog.record(
+                context: "Library load", message: error.localizedDescription, romVersion: session.serverVersion
+            )
         }
         loadingPlatforms = false
     }
