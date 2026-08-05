@@ -295,29 +295,23 @@ RomM forces `save-state-location: browser` and exposes `EJS_onSaveState` and
 Agreed 2026-08-02, in this order. Each was cut from v0.1 and has earned its
 way back for a stated reason, not because the list looked short.
 
-**1. Offline library browsing.** No network currently means no app at all:
-Home is empty, the library is empty, and you cannot even see what you own.
-That is a thin client feeling on a device that spends real time on planes and
-subways. Cache the game list, the platforms and the cover art, and say plainly
-in the UI that starting a game still needs a connection. Deliberately not
-offline *play*: RomM serves the player page as `no-cache` and its page needs
-the network, so playing offline would mean serving EmulatorJS from inside the
-app, which contradicts "load RomM's own player, do not reimplement it". That
-trade is not worth reopening for this.
+**Declined, 2026-08-05: offline library browsing.** Cut after asking what it
+would actually be worth. Nothing offline can be acted on: Play, downloads,
+Data Saver, favoriting and compatibility marking all need the server, so what
+survives is a catalogue of games you cannot do anything with. Marcus put it
+plainly, that browsing a list you cannot act on is not what the app is for and
+is "another layer to remember". The cost was never the build, it was a
+permanent second data path through every list screen plus staleness questions
+("why is this game missing?" because it was added after the last sync) to
+debug forever.
 
-Refined 2026-08-04, worth keeping since the value here is easy to overstate:
-this is purely informational, not functional. Nothing offline can actually be
-acted on, not just Play: downloads and Data Saver both need a live fetch of
-real ROM bytes, and favoriting or marking compatibility both write to RomM's
-API. So the honest design is a read-only snapshot, not a crippled version of
-the live app pretending to be full featured. A soft, non-blocking banner
-("Offline. Showing your last synced library.") rather than a hard error
-state, and every disabled action, Play, download, favorite, stays visible
-but visibly disabled rather than hidden, so it is clear why, not just
-missing. A game whose cover art was never synced shows a placeholder, not a
-blank tile. Ranked below save state thumbnails: that item pays off every
-time the resume card is opened, this one only pays off in the specific
-moment of having no signal and wanting to browse anyway.
+What did get built instead, 2026-08-05, is the part that was a bug rather than
+a feature. With no signal the app used to sit on an empty screen and then show
+a raw error string; it now fails fast, says it is offline, and offers a retry,
+identically on Home, the library and any game list. Cover art also gained a
+disk cache, invisible and self managing, which is a speed and data win every
+launch rather than an offline one. Do not reopen offline browsing without a
+concrete new reason; the reasoning above is the decision, not a placeholder.
 
 **2. Save states you can see.** The launch screen's resume card is a list of
 identical filenames, which is useless for choosing. RomM stores a screenshot
@@ -370,10 +364,22 @@ genre or franchise, the thing that actually solves 1,200 arcade games
 having no grouping beyond A to Z) or smart collections (rule based, the
 least likely thing anyone running a personal instance has actually set
 up): user collections were the same shape as the Favourites collection
-this app already reads, so shipped first; the other two remain real,
-unscheduled work, not abandoned.
+this app already reads, so shipped first.
 
-**3. Download for platforms this app cannot run.** Settled 2026-08-03. Not
+**Declined, 2026-08-05: virtual and smart collections.** Marcus turned auto
+collections on at the instance and found the volume itself is the problem:
+surfacing a hundred generated groupings trades one kind of overwhelm for
+another, and does not solve finding a game among 1,200 arcade titles. What
+solved that is the search tab shipped the same day, one thumb tap and a few
+letters from anywhere in the app. Browsing structure only helps the different
+case of not knowing what you want, and Favorites and Recent already serve that
+better than a genre grouping would. Recorded rather than deleted so it is not
+re-proposed as an obvious win later.
+
+**Done, 2026-08-05: download for platforms this app cannot run.** Shipped as
+Export ROM and BIOS to Files, plus Data Saver for supported platforms, which
+warms EmulatorJS's own cache so a later launch skips the transfer. Settled
+2026-08-03. Not
 every platform RomM lists is playable in a browser at all: Dreamcast is
 absent from RomM's own core map entirely, and Flash runs through Ruffle, an
 engine this player does not integrate with. Neither is a bug; both are limits
