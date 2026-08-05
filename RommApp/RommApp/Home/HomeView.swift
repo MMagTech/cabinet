@@ -21,6 +21,18 @@ struct HomeView: View {
     @State private var loaded = false
     @State private var offline = false
     @State private var resuming: Rom?
+    @State private var directLaunch: DirectLaunch?
+    @State private var preparingResume = false
+
+    /// Everything the player needs to start without the launch screen in
+    /// front of it. Identifiable so it can drive a `fullScreenCover` the
+    /// same way `resuming` does.
+    private struct DirectLaunch: Identifiable {
+        let id = UUID()
+        let rom: Rom
+        let choices: LaunchChoices
+        let resumeFromAutosave: Bool
+    }
 
     var body: some View {
         NavigationStack {
@@ -35,6 +47,13 @@ struct HomeView: View {
                         OfflineNotice { await load() }
                             .frame(minHeight: geometry.size.height * 0.8)
                     }
+                } else if !loaded, recent.isEmpty, favorites.isEmpty {
+                    // Something, anything, while the first load runs. This
+                    // screen used to render nothing at all until the answer
+                    // arrived, so a slow or failing connection looked like a
+                    // hung app rather than one waiting on a server.
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if landscape {
                     // Landscape does not scroll as a page. The hero and its
                     // Resume button hold the left side still while only the
@@ -76,7 +95,17 @@ struct HomeView: View {
             .fullScreenCover(item: $resuming) { rom in
                 NavigationStack { GameLaunchView(rom: rom) }
             }
+            .fullScreenCover(item: $directLaunch) { launch in
+                PlayerView(
+                    rom: launch.rom,
+                    launch: launch.choices,
+                    resumeFromAutosave: launch.resumeFromAutosave
+                )
+            }
             .onChange(of: resuming == nil) { _, playerClosed in
+                if playerClosed { Task { await load() } }
+            }
+            .onChange(of: directLaunch == nil) { _, playerClosed in
                 if playerClosed { Task { await load() } }
             }
         }
@@ -231,19 +260,85 @@ struct HomeView: View {
                     .frame(maxWidth: .infinity)
                     .background(.regularMaterial)
                 }
-                .overlay(alignment: .topTrailing) {
-                    Label("Resume", systemImage: "play.fill")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(.ultraThinMaterial, in: .capsule)
-                        .padding(12)
-                }
                 .clipShape(.rect(cornerRadius: 18))
                 .shadow(radius: 10, y: 5)
         }
         .buttonStyle(.plain)
+        // A second, real button rather than decoration inside the first.
+        // Resume means resume: it goes straight back into the game with
+        // the choices already remembered for it, since the scope doc's
+        // Home promises one tap into the last game and stopping at a
+        // screen with a Play button on it is two. Tapping the artwork
+        // still opens that screen, which is where you go to pick a
+        // different state, change the core, or export.
+        .overlay(alignment: .topTrailing) {
+            Button {
+                Task { await beginResume(rom) }
+            } label: {
+                Group {
+                    if preparingResume {
+                        ProgressView().tint(.white)
+                    } else {
+                        Label("Resume", systemImage: "play.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white)
+                    }
+                }
+                .frame(minWidth: 92)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(.ultraThinMaterial, in: .capsule)
+            }
+            .buttonStyle(.plain)
+            .disabled(preparingResume)
+            .padding(12)
+        }
+    }
+
+    /// Starts the last game without the launch screen in between.
+    ///
+    /// Falls back to that screen whenever there is a real question to
+    /// answer: no core for the platform means nothing to launch, and any
+    /// failure reaching the server is better spent on a screen that can
+    /// explain itself than on a player that would just fail later.
+    ///
+    /// An interrupted session wins over a stored state, matching what the
+    /// launch screen itself does: the local autosave is newer than
+    /// anything uploaded, and it is the run that was actually cut short.
+    private func beginResume(_ rom: Rom) async {
+        preparingResume = true
+        defer { preparingResume = false }
+
+        let canonicalSlug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
+        let cores = CoreCatalog.cores(for: canonicalSlug)
+        guard PlatformSupport.isSupported(canonicalSlug: canonicalSlug), !cores.isEmpty else {
+            resuming = rom
+            return
+        }
+
+        let core = LaunchChoices.defaultCore(rom: rom, canonicalSlug: canonicalSlug, from: cores)
+        let firmware = (try? await session.firmware(platformId: rom.platformId)) ?? []
+        let firmwareId = LaunchChoices.defaultFirmware(platformId: rom.platformId, from: firmware)?.id
+
+        if SessionMarker.offersResume(romId: rom.id) {
+            directLaunch = DirectLaunch(
+                rom: rom,
+                choices: LaunchChoices(core: core, firmwareId: firmwareId, saveId: nil, stateId: nil),
+                resumeFromAutosave: true
+            )
+            return
+        }
+
+        guard let states = try? await session.states(romId: rom.id) else {
+            resuming = rom
+            return
+        }
+        let newest = states.sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }.first
+        directLaunch = DirectLaunch(
+            rom: rom,
+            choices: LaunchChoices(core: core, firmwareId: firmwareId, saveId: nil, stateId: newest?.id),
+            resumeFromAutosave: false
+        )
     }
 
     /// `seeAll` is the full list this rail is a preview of. Nil only
@@ -340,15 +435,22 @@ struct HomeView: View {
     /// a server side error and the library screen will explain it properly
     /// the moment they go looking.
     private func load() async {
+        // Concurrently, not one after the other. Sequentially, a slow or
+        // dead connection paid the timeout twice before this screen could
+        // say anything, which doubled the wait for the answer that matters
+        // least.
+        async let recentTask = session.recentlyPlayed()
+        async let favoritesTask = session.favoriteRoms()
+
         do {
-            recent = try await session.recentlyPlayed().items
+            recent = try await recentTask.items
             offline = false
         } catch RommError.offline {
             offline = true
         } catch {
             // Left as is on purpose, see above.
         }
-        if let favs = try? await session.favoriteRoms() {
+        if let favs = try? await favoritesTask {
             favorites = favs
         }
         loaded = true
