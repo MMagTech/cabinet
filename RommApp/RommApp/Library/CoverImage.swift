@@ -9,6 +9,10 @@ import SwiftUI
 struct CoverImage: View {
     let path: String?
     let title: String
+    /// Fill for grids and rails, where every tile has to be the same shape.
+    /// Fit for the Home hero, which shows the whole image rather than a
+    /// crop of it.
+    var contentMode: ContentMode = .fill
 
     @EnvironmentObject private var session: Session
     @State private var image: UIImage?
@@ -19,7 +23,7 @@ struct CoverImage: View {
             if let image {
                 Image(uiImage: image)
                     .resizable()
-                    .aspectRatio(contentMode: .fill)
+                    .aspectRatio(contentMode: contentMode)
             } else {
                 // Arcade sets often have no art at all. A titled placeholder
                 // keeps the tile identifiable instead of a gray void.
