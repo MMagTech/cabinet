@@ -19,23 +19,46 @@ import SwiftUI
 /// principle is untouched. That rule is about what Home shows, not about
 /// how many taps deep the library sits.
 struct MainTabView: View {
+    enum AppTab: Hashable { case home, library, search }
+
+    @State private var selection: AppTab = .home
+    @ObservedObject private var quickActions = QuickActionRouter.shared
+
     var body: some View {
-        TabView {
-            Tab("Home", systemImage: "house") {
+        TabView(selection: $selection) {
+            Tab("Home", systemImage: "house", value: AppTab.home) {
                 HomeView()
             }
-            Tab("Library", systemImage: "square.grid.2x2") {
+            Tab("Library", systemImage: "square.grid.2x2", value: AppTab.library) {
                 NavigationStack { LibraryScreen() }
             }
             // The dedicated search role, not just a third ordinary tab:
             // the system draws it apart from the others, matching Music
             // and Photos, and it is why search stops being something you
             // find inside the library.
-            Tab(role: .search) {
+            Tab(value: AppTab.search, role: .search) {
                 SearchScreen()
             }
         }
         .tabBarMinimized()
+        // This layer's share of a quick action is only choosing the tab.
+        // Search is fully done at that point, its screen focuses its own
+        // field on appear, so the action is consumed here; the Home bound
+        // ones stay pending for HomeView to finish, since resume needs the
+        // recents fetch and the lists need a loaded favorites collection.
+        .onChange(of: quickActions.pending) { _, action in route(action) }
+        .onAppear { route(quickActions.pending) }
+    }
+
+    private func route(_ action: QuickAction?) {
+        guard let action else { return }
+        switch action {
+        case .search:
+            selection = .search
+            quickActions.pending = nil
+        case .resume, .favorites, .recents:
+            selection = .home
+        }
     }
 }
 

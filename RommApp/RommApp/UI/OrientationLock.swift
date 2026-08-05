@@ -55,4 +55,27 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> UIInterfaceOrientationMask {
         OrientationLock.mask
     }
+
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        QuickAction.register()
+        return true
+    }
+
+    /// Names the scene delegate that receives quick action taps; SwiftUI
+    /// keeps driving the scene's content exactly as before, this only adds
+    /// the delegate alongside it.
+    func application(
+        _ application: UIApplication,
+        configurationForConnecting connectingSceneSession: UISceneSession,
+        options: UIScene.ConnectionOptions
+    ) -> UISceneConfiguration {
+        let config = UISceneConfiguration(
+            name: nil, sessionRole: connectingSceneSession.role
+        )
+        config.delegateClass = QuickActionSceneDelegate.self
+        return config
+    }
 }
