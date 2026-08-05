@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// The library: platforms to browse into, and search across everything.
+/// The library: platforms and collections to browse into.
 ///
-/// Pushed from Home, which owns the navigation stack and the destinations.
-/// Search is server side and debounced, so typing does not fire a request per
-/// keystroke and results match what the RomM web UI would find.
+/// A tab of its own, reached from the bar rather than pushed from Home.
+/// Searching every game lives in `SearchScreen`, its own tab, so this
+/// screen is purely about browsing structure.
 struct LibraryScreen: View {
     @EnvironmentObject private var session: Session
     @AppStorage(PlatformLabelSource.key) private var labelSourceRaw = PlatformLabelSource.platformName.rawValue
@@ -14,7 +14,7 @@ struct LibraryScreen: View {
 
     @State private var platforms: [Platform] = []
     @State private var loadingPlatforms = true
-    @State private var platformsError: String?
+    @State private var platformsError: LoadFailure?
 
     @State private var collections: [Collection] = []
     @State private var loadingCollections = true
@@ -22,9 +22,6 @@ struct LibraryScreen: View {
 
     @State private var browsing: Browsing = .platforms
 
-    @State private var searchText = ""
-    @State private var searchResults: [Rom] = []
-    @State private var searching = false
     @State private var playing: Rom?
 
     enum Browsing: String, CaseIterable {
@@ -33,27 +30,34 @@ struct LibraryScreen: View {
 
     var body: some View {
         Group {
-            if !searchText.isEmpty {
-                searchList
-            } else {
-                VStack(spacing: 0) {
-                    Picker("Browse by", selection: $browsing) {
-                        ForEach(Browsing.allCases, id: \.self) { Text($0.rawValue) }
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal)
-                    .padding(.top, 8)
-
-                    switch browsing {
-                    case .platforms: platformList
-                    case .collections: collectionList
-                    }
-                }
+            switch browsing {
+            case .platforms: platformList
+            case .collections: collectionList
             }
         }
+        // The switcher belongs to the bar, not the page. Sitting in the
+        // content it was a chrome shaped control marooned in a content
+        // shaped place, which read as leftover layout once there were real
+        // floating bars above and below it. In the bar it picks up the
+        // system's own material and the list scrolls cleanly underneath.
+        //
+        // The title goes inline and gives its slot to the switcher rather
+        // than stacking both: the tab bar already says Library, so a large
+        // title would only repeat it while pushing the list further down.
         .navigationTitle("Library")
-        .searchable(text: $searchText, prompt: "Search all games")
-        .task(id: searchText) { await runSearch() }
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Picker("Browse by", selection: $browsing) {
+                    ForEach(Browsing.allCases, id: \.self) { Text($0.rawValue) }
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 260)
+            }
+        }
+        // No search field here any more: searching every game is its own
+        // tab, so a second entry point would be two ways to do one thing,
+        // each with its own state.
         .task { await loadPlatforms() }
         .task { await loadCollections() }
         .fullScreenCover(item: $playing) { rom in
@@ -71,8 +75,11 @@ struct LibraryScreen: View {
                     Text("Loading your library")
                         .foregroundStyle(.secondary)
                 }
+            } else if platformsError == .offline {
+                OfflineNotice { await loadPlatforms() }
+                    .listRowBackground(Color.clear)
             } else if let platformsError {
-                Text(platformsError).foregroundStyle(.red)
+                Text(platformsError.message).foregroundStyle(.red)
                 Button("Try again") { Task { await loadPlatforms() } }
             } else {
                 if !supportedPlatforms.isEmpty {
@@ -91,6 +98,9 @@ struct LibraryScreen: View {
                 }
             }
         }
+        // Inset rows read as cards floating under the bars, where the full
+        // width plain style ran straight into them.
+        .listStyle(.insetGrouped)
         .refreshable { await loadPlatforms() }
     }
 
@@ -128,7 +138,7 @@ struct LibraryScreen: View {
             platforms = try await session.platforms()
                 .sorted { platformLabel(for: $0) < platformLabel(for: $1) }
         } catch {
-            platformsError = error.localizedDescription
+            platformsError = LoadFailure(error)
             DiagnosticsLog.record(
                 context: "Library load", message: error.localizedDescription, romVersion: session.serverVersion
             )
@@ -168,6 +178,7 @@ struct LibraryScreen: View {
                 }
             }
         }
+        .listStyle(.insetGrouped)
         .refreshable { await loadCollections() }
     }
 
@@ -193,59 +204,5 @@ struct LibraryScreen: View {
         case .platformName: return metadataName ?? folderName ?? platform.slug
         case .folderName: return folderName ?? metadataName ?? platform.slug
         }
-    }
-
-    // MARK: Search
-
-    private var searchList: some View {
-        List {
-            if searching {
-                HStack(spacing: 10) {
-                    ProgressView()
-                    Text("Searching")
-                        .foregroundStyle(.secondary)
-                }
-            } else if searchResults.isEmpty {
-                Text("Nothing matched.")
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(searchResults) { rom in
-                    Button {
-                        playing = rom
-                    } label: {
-                        HStack(spacing: 12) {
-                            CoverImage(path: rom.pathCoverSmall, title: rom.displayName)
-                                .frame(width: 40, height: 53)
-                                .clipShape(.rect(cornerRadius: 6))
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(rom.displayName)
-                                    .lineLimit(1)
-                                Text(rom.platformLabel(source: labelSource, platformNames: session.platformNames))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        .listStyle(.plain)
-    }
-
-    private func runSearch() async {
-        guard !searchText.isEmpty else {
-            searchResults = []
-            return
-        }
-
-        // The debounce. Typing again cancels this task and restarts the clock.
-        try? await Task.sleep(nanoseconds: 300_000_000)
-        guard !Task.isCancelled else { return }
-
-        searching = true
-        if let page = try? await session.roms(searchTerm: searchText) {
-            searchResults = page.items
-        }
-        searching = false
     }
 }
