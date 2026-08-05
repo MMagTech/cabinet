@@ -26,7 +26,11 @@ actor RommClient {
         // "you're offline" and offer a retry while the person still has
         // the patience to use it.
         config.waitsForConnectivity = false
-        config.timeoutIntervalForRequest = 30
+        // Fifteen, not thirty. This is the ceiling on how long someone
+        // stares at a screen before being told anything is wrong, and no
+        // list request here is slow enough to need more: a server that has
+        // not answered a page of games in fifteen seconds is not about to.
+        config.timeoutIntervalForRequest = 15
         self.session = URLSession(configuration: config)
     }
 
