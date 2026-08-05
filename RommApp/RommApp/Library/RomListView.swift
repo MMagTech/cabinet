@@ -107,11 +107,22 @@ struct RomListView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Picker("View", selection: $viewMode) {
-                    Image(systemName: "square.grid.3x3").tag(ViewMode.grid)
-                    Image(systemName: "list.bullet").tag(ViewMode.list)
+                // A menu, not a segmented picker. iOS 26 wraps every
+                // toolbar item in its own glass container, and a segmented
+                // control carries a background of its own, so the two
+                // nested: a grey selection pill inside a white capsule,
+                // with the selection spilling past the container's edge.
+                // Pinning the width only squeezed it harder. A menu is one
+                // button, so there is nothing to nest, and it has room for
+                // sorting later if that ever earns its place.
+                Menu {
+                    Picker("View", selection: $viewMode) {
+                        Label("Grid", systemImage: "square.grid.3x3").tag(ViewMode.grid)
+                        Label("List", systemImage: "list.bullet").tag(ViewMode.list)
+                    }
+                } label: {
+                    Image(systemName: viewMode == .grid ? "square.grid.3x3" : "list.bullet")
                 }
-                .pickerStyle(.segmented)
             }
         }
         .onChange(of: viewMode) { _, mode in
