@@ -22,7 +22,25 @@ See [docs/scope-v0.1.md](docs/scope-v0.1.md) for the full design.
 
 ## Status
 
-Pre-release. Nothing works yet.
+Pre-release. Under active development, not yet feature complete.
+
+## Requirements
+
+- Xcode 16 or later
+- iOS 17+ device or simulator
+- A running RomM instance to connect to (see [romm.app](https://romm.app))
+
+## Building
+
+1. Clone the repo and open `RommApp/RommApp.xcodeproj` in Xcode.
+2. Select the `RommApp` target, then in Signing & Capabilities switch the team
+   to your own Apple ID or developer account. The project ships with the
+   maintainer's team ID, which won't work for anyone else.
+3. Build and run on a simulator, or on a physical device if you want a real
+   dynamic-code-signing JIT (the simulator doesn't need the entitlement).
+4. On first launch, enter your RomM server URL and complete the device
+   authorization flow. No credentials are stored in the app; auth is handled
+   entirely by RomM's own device flow.
 
 ## Tools
 

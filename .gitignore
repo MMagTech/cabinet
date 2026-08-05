@@ -36,3 +36,4 @@ tools/profiles.json
 
 # macOS
 .DS_Store
+.claude/
