@@ -335,6 +335,29 @@ already leaves uncovered. Moving the controls, a real editor since layouts
 are already normalised 0 to 1 data, is the natural follow on now that the
 shapes themselves are correct, but is not on this list yet.
 
+Where that editor would live was settled 2026-08-05, before any of it was
+built. **Settings, not in game.** A list of the bundled layouts, each
+opening the real control pad drawn over a mock backdrop in both
+orientations, which is faithful rather than approximate because layouts are
+already normalised data and the pad renders itself from them. Platforms in
+the library first, the rest below. Edits save as a per platform copy in the
+app's own storage, consulted ahead of the bundled file, so reset is just
+deleting it. Per platform, not per game, matching how BIOS is remembered; a
+per game override only earns its place if a specific game genuinely wants
+different controls.
+
+Rejected: editing inside the running game, which was the first suggestion
+here. Marcus's reasoning, and it is better: the fifteen shapes are the data
+model, so a list of them is the honest browse surface, and you can fix a
+layout before you next play rather than discovering it mid game. It is also
+the safer build, since an in game editor would put drag handling inside
+`PlayerView`, the one performance sensitive path in the app that nothing
+else touches. The only thing it would buy is immediate feel, recoverable
+later with a pause menu shortcut into the same screen if it is ever wanted.
+Arcade is the open question, since one platform covers boards with nothing
+in common and its controls resolve through a chain rather than a lookup: an
+edit there needs a decided link to attach to, and that is unresolved.
+
 A second pass the same week fixed two more real gaps, both found by
 playing, not by auditing: twin-stick arcade games (Smash TV, Robotron)
 were missing an entire required input, since `ArcadeProfile` only ever
