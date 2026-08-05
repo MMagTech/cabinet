@@ -1,3 +1,4 @@
+import SafariServices
 import SwiftUI
 
 /// Second screen. The app asks the server to start a pairing, shows the short
@@ -13,11 +14,11 @@ import SwiftUI
 /// them, and the whole thing scrolls if it still does not fit.
 struct PairingView: View {
     @EnvironmentObject private var session: Session
-    @Environment(\.openURL) private var openURL
 
     @State private var start: DeviceAuthInit?
     @State private var error: String?
     @State private var waiting = false
+    @State private var showingApproval = false
     @State private var pollTask: Task<Void, Never>?
 
     var body: some View {
@@ -46,6 +47,20 @@ struct PairingView: View {
         }
         .onAppear { begin() }
         .onDisappear { pollTask?.cancel() }
+        // An in-app Safari sheet instead of handing off to the real Safari
+        // app: the device flow has no redirect to pull anyone back, so
+        // leaving the app stranded people wondering whether to return by
+        // hand. With the sheet, the app stays visibly underneath, and the
+        // pairing poll dismisses it the moment approval lands. Note this
+        // sheet does not share cookies with real Safari, so an existing
+        // web session there does not carry over; a passkey login (Pocket
+        // ID and the like) works inside it regardless.
+        .sheet(isPresented: $showingApproval) {
+            if let start, let url = session.approvalURL(for: start) {
+                SafariView(url: url)
+                    .ignoresSafeArea()
+            }
+        }
     }
 
     // MARK: Pieces
@@ -93,7 +108,7 @@ struct PairingView: View {
 
             if let start {
                 Button {
-                    if let url = session.approvalURL(for: start) { openURL(url) }
+                    showingApproval = true
                 } label: {
                     Text("Open RomM to approve")
                         .fontWeight(.semibold)
@@ -111,7 +126,7 @@ struct PairingView: View {
                     .font(.callout)
                 }
 
-                Text("Sign in to RomM in the browser if you are not already, then approve the code. This screen continues on its own.")
+                Text("Sign in if asked, then approve the code. This closes on its own once approved.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -147,12 +162,32 @@ struct PairingView: View {
                 start = started
                 waiting = true
                 try await session.completePairing(started)
+                // Approval landed while the Safari sheet was still up:
+                // dismiss it explicitly rather than relying on this whole
+                // view being swapped out from under an active sheet.
+                showingApproval = false
             } catch is CancellationError {
                 return
             } catch {
                 self.error = error.localizedDescription
                 waiting = false
+                showingApproval = false
             }
         }
     }
+}
+
+/// `SFSafariViewController` for the approval page. Real Safari under the
+/// hood, so passkey prompts work, which a plain `WKWebView` would need a
+/// special entitlement for.
+private struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        let controller = SFSafariViewController(url: url)
+        controller.dismissButtonStyle = .cancel
+        return controller
+    }
+
+    func updateUIViewController(_ controller: SFSafariViewController, context: Context) {}
 }
