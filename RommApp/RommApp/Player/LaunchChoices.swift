@@ -71,6 +71,36 @@ struct LaunchChoices {
         UserDefaults.standard.set(core, forKey: "romm.core.canonicalPlatform.\(canonicalSlug)")
     }
 
+    /// Which player runs the game: the webview (RomM's EmulatorJS page,
+    /// the default and the only choice for anything that needs a JIT) or
+    /// the natively compiled core. Native is offered for arcade only,
+    /// matching the one core that exists natively today.
+    enum PlayerBackend: String {
+        case webview
+        case native
+    }
+
+    /// Per game, not per platform: "arcade" is one platform covering
+    /// boards with nothing in common, and one board leaking in the
+    /// webview says nothing about another. A stored choice always wins;
+    /// with none, a game the webview has repeatedly crashed on defaults
+    /// native, since three dead sessions are a stronger signal than any
+    /// general preference for the familiar player.
+    @MainActor
+    static func defaultBackend(rom: Rom) -> PlayerBackend {
+        guard rom.isArcade else { return .webview }
+        if let stored = UserDefaults.standard.string(forKey: "romm.backend.rom.\(rom.id)"),
+           let backend = PlayerBackend(rawValue: stored) {
+            return backend
+        }
+        if Compatibility.shared.crashes(romId: rom.id) >= 3 { return .native }
+        return .webview
+    }
+
+    static func remember(backend: PlayerBackend, for rom: Rom) {
+        UserDefaults.standard.set(backend.rawValue, forKey: "romm.backend.rom.\(rom.id)")
+    }
+
     /// The BIOS to preselect: whatever was picked last on this platform, if
     /// the server still has it. A platform, not a per-game choice, unlike
     /// core: a machine either needs its BIOS or it does not, and every game

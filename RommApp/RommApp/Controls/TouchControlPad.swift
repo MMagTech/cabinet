@@ -24,6 +24,10 @@ struct TouchControlPad: UIViewRepresentable {
     /// x-positive/x-negative/y-positive/y-negative order, and the current
     /// x/y each from -1 to 1. Defaults to a no-op for layouts with no stick.
     var sendStick: (_ ids: [Int], _ x: Double, _ y: Double) -> Void = { _, _, _ in }
+    /// The layout's system, for theme colours. The webview player sets
+    /// this on its pad directly; this wrapper carries it for hosts that
+    /// use the SwiftUI view, so both players draw the same controls.
+    var system: String = ""
 
     func makeUIView(context: Context) -> ControlPadView {
         let view = ControlPadView(items: items, send: send, sendStick: sendStick)
@@ -34,6 +38,8 @@ struct TouchControlPad: UIViewRepresentable {
 
     func updateUIView(_ view: ControlPadView, context: Context) {
         view.items = items
+        view.system = system
+        view.theme = ControlTheme.current
     }
 }
 

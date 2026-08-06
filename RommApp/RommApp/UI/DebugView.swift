@@ -126,13 +126,13 @@ struct DebugView: View {
                         systemImage: fbneoAPIVersion == nil ? "questionmark.circle" : "checkmark"
                     )
                 }
-                ForEach(NativeSpike.TestGame.allCases, id: \.self) { game in
+                ForEach(NativeLauncher.TestGame.allCases, id: \.self) { game in
                     Button {
                         spikeLoading = true
                         spikeResult = nil
                         Task {
                             do {
-                                spikeRom = try await NativeSpike.load(game, session: session)
+                                spikeRom = try await NativeLauncher.load(game, session: session)
                                 spikeResult = "Loaded"
                                 showingNativePlayer = true
                             } catch {

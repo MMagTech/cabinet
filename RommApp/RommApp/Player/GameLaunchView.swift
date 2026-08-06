@@ -25,6 +25,9 @@ struct GameLaunchView: View {
 
     @State private var cores: [String] = []
     @State private var selectedCore: String?
+    @State private var selectedBackend: LaunchChoices.PlayerBackend = .webview
+    @State private var playingNative = false
+    @State private var nativeInitialState: Data?
     @State private var firmware: [Firmware] = []
     /// Firmware the server knows about but cannot actually serve: the entry
     /// exists, the file behind it is gone. Silently hiding these looked
@@ -147,15 +150,23 @@ struct GameLaunchView: View {
                             // Equal halves. Both cards carry a label and a
                             // picker and nothing else, so they match without
                             // being forced to.
-                            HStack(alignment: .top, spacing: 12) {
-                                if cores.count > 1 {
-                                    coreCard.frame(maxWidth: .infinity)
+                            // The emulator and BIOS cards configure the web
+                            // player's page; the native player is always its
+                            // own core and fetches firmware itself, so with
+                            // native selected they would only mislead.
+                            if selectedBackend == .webview {
+                                HStack(alignment: .top, spacing: 12) {
+                                    if cores.count > 1 {
+                                        coreCard.frame(maxWidth: .infinity)
+                                    }
+                                    if showsFirmwareCard {
+                                        firmwareCard.frame(maxWidth: .infinity)
+                                    }
                                 }
-                                if showsFirmwareCard {
-                                    firmwareCard.frame(maxWidth: .infinity)
-                                }
+                                .fixedSize(horizontal: false, vertical: true)
                             }
-                            .fixedSize(horizontal: false, vertical: true)
+
+                            if rom.isArcade { playerCard }
 
                             playButton
 
@@ -211,6 +222,9 @@ struct GameLaunchView: View {
                 rom: rom, launch: launchChoices, resumeFromAutosave: continueRun, stateToLoad: stateToLoad
             )
         }
+        .fullScreenCover(isPresented: $playingNative) {
+            NativePlayerView(rom: rom, initialState: nativeInitialState)
+        }
         .alert(
             "Couldn't load that state",
             isPresented: Binding(get: { playError != nil }, set: { if !$0 { playError = nil } })
@@ -256,6 +270,14 @@ struct GameLaunchView: View {
         .onChange(of: selectedFirmware) { _, _ in
             guard !loading, !rom.isArcade else { return }
             LaunchChoices.remember(firmwareId: selectedFirmware?.id, platformId: rom.platformId)
+        }
+        .onChange(of: selectedBackend) { _, _ in
+            guard !loading else { return }
+            LaunchChoices.remember(backend: selectedBackend, for: rom)
+            // A state picked for one player cannot load in the other, so a
+            // backend switch clears the selection rather than carrying a
+            // promise the boot cannot keep.
+            selectedState = nil
         }
     }
 
@@ -559,6 +581,10 @@ struct GameLaunchView: View {
     /// run's own local recovery is untouched: that path never goes near
     /// the server at all, by design, see `PlayerView.resumeFromAutosave`.
     private func beginPlay() async {
+        if selectedBackend == .native {
+            await beginNativePlay()
+            return
+        }
         guard !continueRun, let selectedState else {
             stateToLoad = nil
             playing = true
@@ -572,6 +598,29 @@ struct GameLaunchView: View {
         }
         stateToLoad = .remote(bytes)
         playing = true
+    }
+
+    /// The native path downloads before presenting rather than behind a
+    /// boot curtain, so a failure surfaces here as an alert instead of a
+    /// black screen with no explanation.
+    private func beginNativePlay() async {
+        preparingPlay = true
+        defer { preparingPlay = false }
+        do {
+            try await NativeLauncher.prepare(rom: rom, session: session)
+            if let selectedState {
+                guard let bytes = try? await session.stateContent(selectedState) else {
+                    playError = "Couldn't reach the server to load that state."
+                    return
+                }
+                nativeInitialState = bytes
+            } else {
+                nativeInitialState = nil
+            }
+            playingNative = true
+        } catch {
+            playError = error.localizedDescription
+        }
     }
 
     private var playLabel: String {
@@ -728,8 +777,9 @@ struct GameLaunchView: View {
                 downloadStatusCard
                 dataSaverStatusCard
                 if interruptedAt != nil { continueCard }
-                if cores.count > 1 { coreCard }
-                if showsFirmwareCard { firmwareCard }
+                if selectedBackend == .webview, cores.count > 1 { coreCard }
+                if selectedBackend == .webview, showsFirmwareCard { firmwareCard }
+                if rom.isArcade { playerCard }
                 if arcadeBase != nil { arcadeControlsCard }
                 if !states.isEmpty || !saves.isEmpty { resumeCard }
             }
@@ -750,8 +800,9 @@ struct GameLaunchView: View {
                 downloadStatusCard
                 dataSaverStatusCard
                 if interruptedAt != nil { continueCard }
-                if cores.count > 1 { coreCard }
-                if showsFirmwareCard { firmwareCard }
+                if selectedBackend == .webview, cores.count > 1 { coreCard }
+                if selectedBackend == .webview, showsFirmwareCard { firmwareCard }
+                if rom.isArcade { playerCard }
                 if arcadeBase != nil { arcadeControlsCard }
                 if !states.isEmpty || !saves.isEmpty { resumeCard }
             }
@@ -871,6 +922,30 @@ struct GameLaunchView: View {
         }
     }
 
+    /// Web player or the natively compiled core, arcade only for now.
+    /// Save states do not cross the boundary (each player's core build
+    /// has its own state format), so the caption says so up front rather
+    /// than letting someone discover it after losing a run.
+    private var playerCard: some View {
+        LaunchCard(title: "Player", systemImage: "play.rectangle.on.rectangle") {
+            Picker("Player", selection: $selectedBackend) {
+                Text("Web player").tag(LaunchChoices.PlayerBackend.webview)
+                Text("Native (beta)").tag(LaunchChoices.PlayerBackend.native)
+            }
+            .pickerStyle(.segmented)
+
+            if selectedBackend == .native {
+                Text("Runs the game in a natively compiled core instead of the web player. Faster and steadier for games the web player struggles with. Save states stay separate per player.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if Compatibility.shared.crashes(romId: rom.id) >= 3 {
+                Text("The web player has crashed repeatedly on this game. The native player may hold up better.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
     private var showsFirmwareCard: Bool {
         !firmware.isEmpty || !missingFirmware.isEmpty
     }
@@ -965,7 +1040,14 @@ struct GameLaunchView: View {
     }
 
     private func stateEnabled(_ state: GameState) -> Bool {
-        state.emulator == nil || state.emulator == selectedCore || state.emulator == "emulatorjs"
+        // Each player can only restore states its own core build wrote,
+        // so the list follows the backend choice: native states for the
+        // native player, everything the webview's cores wrote otherwise.
+        if selectedBackend == .native {
+            return state.emulator == NativePlayerView.emulatorTag
+        }
+        guard state.emulator != NativePlayerView.emulatorTag else { return false }
+        return state.emulator == nil || state.emulator == selectedCore || state.emulator == "emulatorjs"
     }
 
     private func stateRow(_ state: GameState) -> some View {
@@ -1135,6 +1217,7 @@ struct GameLaunchView: View {
         isComputerPlatform = ComputerPlatforms.contains(canonicalSlug)
         cores = CoreCatalog.cores(for: canonicalSlug)
         selectedCore = LaunchChoices.defaultCore(rom: rom, canonicalSlug: canonicalSlug, from: cores)
+        selectedBackend = LaunchChoices.defaultBackend(rom: rom)
 
         if rom.isArcade {
             let base = ArcadeProfileStore.shared.resolve(shortname: rom.fsNameNoExt)

@@ -13,6 +13,8 @@ import AVFoundation
 /// a general frontend without splitting it up first.
 struct NativePlayerView: View {
     let rom: Rom
+    /// A state picked on the launch screen, restored shortly after boot.
+    var initialState: Data?
 
     @EnvironmentObject private var session: Session
     @Environment(\.dismiss) private var dismiss
@@ -23,6 +25,8 @@ struct NativePlayerView: View {
     @State private var menuVisible = false
     @State private var menuStatus: String?
     @State private var menuBusy = false
+    /// The same visibility slider the webview player honors.
+    @AppStorage("com.mmagtech.RommApp.controlOpacity") private var controlOpacity = 0.7
 
     /// The emulator tag uploaded states carry. Tested 2026-08-06 and the
     /// answer is no: the webview's WASM FBNeo (the build frozen inside
@@ -31,14 +35,18 @@ struct NativePlayerView: View {
     /// formats are core-build-specific, so the two players' states are
     /// distinct on purpose: a separate tag keeps each player's launch UI
     /// from offering states it cannot actually restore.
-    private static let emulatorTag = "fbneo-native"
+    static let emulatorTag = "fbneo-native"
 
     private var profile: ArcadeProfile {
         ArcadeProfileStore.shared.resolve(romId: rom.id, shortname: rom.fsNameNoExt)
     }
 
+    private var controlLayout: ControlLayout {
+        ArcadeLayout.build(for: profile)
+    }
+
     private func layoutItems(landscape: Bool) -> [ControlLayout.Item] {
-        ArcadeLayout.build(for: profile).items(landscape: landscape)
+        controlLayout.items(landscape: landscape)
     }
 
     /// Matches PlayerView.controlStripHeight: vertical games trade some
@@ -79,7 +87,8 @@ struct NativePlayerView: View {
                     ZStack {
                         MetalGameView(renderer: renderer)
                         if showsControls {
-                            TouchControlPad(items: layoutItems(landscape: true), send: handleInput)
+                            TouchControlPad(items: layoutItems(landscape: true), send: handleInput, system: controlLayout.system)
+                                .opacity(controlOpacity)
                         }
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
@@ -88,15 +97,17 @@ struct NativePlayerView: View {
                     // Portrait: the pad's items are normalised against a bottom
                     // strip, not the full screen, so the canvas and pad split
                     // the screen rather than overlap. Matches PlayerView's
-                    // .bottomStrip case exactly, same strip height.
+                    // .bottomStrip case exactly, same strip height. The canvas
+                    // stays below the top safe area so the island never eats
+                    // the picture; only the strip runs to the screen's edge.
                     VStack(spacing: 0) {
                         MetalGameView(renderer: renderer)
                             .frame(height: max(geometry.size.height - controlStripHeight, 0))
-                        TouchControlPad(items: layoutItems(landscape: false), send: handleInput)
+                        TouchControlPad(items: layoutItems(landscape: false), send: handleInput, system: controlLayout.system)
+                            .opacity(controlOpacity)
                             .frame(height: controlStripHeight)
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
-                    .background(Color.black)
                 }
 
                 if menuVisible {
@@ -104,7 +115,7 @@ struct NativePlayerView: View {
                 }
             }
         }
-        .ignoresSafeArea()
+        .background(Color.black.ignoresSafeArea())
         .onAppear {
             previousControllerSend = GameControllerManager.shared.send
             previousControllerMenu = GameControllerManager.shared.onMenu
@@ -112,6 +123,7 @@ struct NativePlayerView: View {
                 renderer?.setButton(id, down: down)
             }
             GameControllerManager.shared.onMenu = { openMenu() }
+            renderer.pendingState = initialState
         }
         .onDisappear {
             GameControllerManager.shared.send = previousControllerSend
@@ -293,11 +305,23 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     /// in progress, and both happen on the main thread this loop runs on.
     var paused = false
 
+    /// A launch-screen state waiting to be restored. Applied a second into
+    /// the run rather than immediately: FBNeo needs a beat after booting
+    /// before a full machine state takes, the same settle delay the
+    /// webview player learned the hard way.
+    var pendingState: Data?
+    private var framesRun = 0
+
     func draw(in view: MTKView) {
         if !paused {
             let mask = heldButtons.reduce(into: UInt32(0)) { $0 |= (1 << $1) }
             FBNeoBridge.setButtonMask(mask)
             FBNeoBridge.runFrame()
+            framesRun += 1
+            if let state = pendingState, framesRun > 60 {
+                pendingState = nil
+                FBNeoBridge.unserializeState(state)
+            }
 
             if let audioData = FBNeoBridge.drainAudio() {
                 audio.enqueue(audioData)
@@ -316,7 +340,8 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
 
         let vertices = aspectFitVertices(
             textureSize: CGSize(width: textureWidth, height: textureHeight),
-            viewSize: view.drawableSize
+            viewSize: view.drawableSize,
+            rotation: Int(FBNeoBridge.rotation())
         )
 
         guard let commandBuffer = commandQueue.makeCommandBuffer(),
@@ -369,8 +394,16 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         }
     }
 
-    private func aspectFitVertices(textureSize: CGSize, viewSize: CGSize) -> [Vertex] {
-        guard textureSize.width > 0, textureSize.height > 0, viewSize.width > 0, viewSize.height > 0 else {
+    private func aspectFitVertices(textureSize: CGSize, viewSize: CGSize, rotation: Int) -> [Vertex] {
+        // Vertical (TATE) boards render sideways and request rotation in
+        // 90-degree counter-clockwise steps; an odd rotation swaps which
+        // way the picture is tall for aspect-fit purposes.
+        let rotated = rotation % 2 == 1
+        let effectiveSize = rotated
+            ? CGSize(width: textureSize.height, height: textureSize.width)
+            : textureSize
+
+        guard effectiveSize.width > 0, effectiveSize.height > 0, viewSize.width > 0, viewSize.height > 0 else {
             return [
                 Vertex(position: [-1, -1], texCoord: [0, 1]),
                 Vertex(position: [1, -1], texCoord: [1, 1]),
@@ -379,7 +412,7 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
             ]
         }
 
-        let textureAspect = textureSize.width / textureSize.height
+        let textureAspect = effectiveSize.width / effectiveSize.height
         let viewAspect = viewSize.width / viewSize.height
 
         var scaleX: Float = 1
@@ -390,11 +423,20 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
             scaleX = Float(textureAspect / viewAspect)
         }
 
+        // Screen corners stay put; the texture coordinates walk around the
+        // quad corner by corner, one step per 90 degrees of rotation.
+        // Order matches the triangle strip: bottom-left, bottom-right,
+        // top-left, top-right.
+        var coords: [SIMD2<Float>] = [[0, 1], [1, 1], [0, 0], [1, 0]]
+        for _ in 0..<(rotation % 4) {
+            coords = coords.map { SIMD2<Float>(1 - $0.y, $0.x) }
+        }
+
         return [
-            Vertex(position: [-scaleX, -scaleY], texCoord: [0, 1]),
-            Vertex(position: [scaleX, -scaleY], texCoord: [1, 1]),
-            Vertex(position: [-scaleX, scaleY], texCoord: [0, 0]),
-            Vertex(position: [scaleX, scaleY], texCoord: [1, 0]),
+            Vertex(position: [-scaleX, -scaleY], texCoord: coords[0]),
+            Vertex(position: [scaleX, -scaleY], texCoord: coords[1]),
+            Vertex(position: [-scaleX, scaleY], texCoord: coords[2]),
+            Vertex(position: [scaleX, scaleY], texCoord: coords[3]),
         ]
     }
 }

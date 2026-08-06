@@ -51,6 +51,12 @@ typedef NS_ENUM(uint32_t, FBNeoPixelFormat) {
 // this spike has no player-index concept to plumb through.
 + (void)setButtonMask:(uint32_t)mask;
 
+// Display rotation the core requested, in 90-degree counter-clockwise
+// steps (0-3). Vertical arcade boards render sideways and rely on the
+// frontend applying this; drawing the framebuffer unrotated shows a
+// TATE game on its side.
++ (uint32_t)rotation;
+
 // Full machine state via the core's retro_serialize, the same call the
 // webview's WASM core answers when EmulatorJS saves a state. Returns nil
 // if the core has no game loaded or serialization fails. Call these on

@@ -91,6 +91,7 @@ size_t audioSampleBatch(const int16_t *data, size_t frames) {
 }
 
 std::atomic<uint32_t> gButtonMask{0};
+std::atomic<uint32_t> gRotation{0};
 
 void inputPoll(void) {}
 
@@ -113,6 +114,12 @@ bool environmentCallback(unsigned cmd, void *data) {
             gPixelFormat = (FBNeoPixelFormat)*(const enum retro_pixel_format *)data;
             return true;
         case RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME:
+            return true;
+        case RETRO_ENVIRONMENT_SET_ROTATION:
+            // Vertical (TATE) boards render sideways in the framebuffer
+            // and ask the frontend to rotate the picture. Value is in
+            // 90-degree counter-clockwise steps.
+            gRotation.store(*(const unsigned *)data, std::memory_order_relaxed);
             return true;
         default:
             return false;
@@ -200,6 +207,10 @@ bool environmentCallback(unsigned cmd, void *data) {
 
 + (void)setButtonMask:(uint32_t)mask {
     gButtonMask.store(mask, std::memory_order_relaxed);
+}
+
++ (uint32_t)rotation {
+    return gRotation.load(std::memory_order_relaxed);
 }
 
 + (nullable NSData *)serializeState {
