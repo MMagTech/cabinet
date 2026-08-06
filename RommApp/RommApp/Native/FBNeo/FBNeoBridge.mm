@@ -17,6 +17,9 @@ extern "C" {
     bool retro_load_game(const struct retro_game_info *);
     void retro_run(void);
     void retro_get_system_av_info(struct retro_system_av_info *);
+    size_t retro_serialize_size(void);
+    bool retro_serialize(void *, size_t);
+    bool retro_unserialize(const void *, size_t);
 }
 
 @implementation FBNeoFrame
@@ -197,6 +200,28 @@ bool environmentCallback(unsigned cmd, void *data) {
 
 + (void)setButtonMask:(uint32_t)mask {
     gButtonMask.store(mask, std::memory_order_relaxed);
+}
+
++ (nullable NSData *)serializeState {
+    if (!gInitialized) {
+        return nil;
+    }
+    size_t size = retro_serialize_size();
+    if (size == 0) {
+        return nil;
+    }
+    NSMutableData *data = [NSMutableData dataWithLength:size];
+    if (!retro_serialize(data.mutableBytes, size)) {
+        return nil;
+    }
+    return data;
+}
+
++ (BOOL)unserializeState:(NSData *)state {
+    if (!gInitialized || state.length == 0) {
+        return NO;
+    }
+    return retro_unserialize(state.bytes, state.length);
 }
 
 @end

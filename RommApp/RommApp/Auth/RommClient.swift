@@ -347,6 +347,65 @@ actor RommClient {
 
     /// Saves, states and firmware for the launch screen. Each is a plain
     /// list the server already models, so nothing here reinterprets RomM.
+    /// Uploads a save state the same way the webview player's injected
+    /// JavaScript does (POST /api/states?rom_id=&emulator=, multipart with
+    /// a `stateFile` part and an optional `screenshotFile`), but natively
+    /// with bearer auth instead of riding the webview's cookies. The bytes
+    /// are opaque to RomM; what matters for later loads is the `emulator`
+    /// tag, which the launch screen uses to grey out states that the
+    /// running core cannot restore.
+    func uploadState(
+        romId: Int,
+        emulator: String,
+        fileName: String,
+        stateData: Data,
+        screenshotName: String? = nil,
+        screenshotData: Data? = nil
+    ) async throws {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("/api/states"), resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [
+            URLQueryItem(name: "rom_id", value: String(romId)),
+            URLQueryItem(name: "emulator", value: emulator),
+        ]
+        guard let url = components?.url else {
+            throw RommError.transport("Could not build the request address.")
+        }
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        if let accessToken {
+            req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"stateFile\"; filename=\"\(fileName)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: application/octet-stream\r\n\r\n".data(using: .utf8)!)
+        body.append(stateData)
+        body.append("\r\n".data(using: .utf8)!)
+        if let screenshotName, let screenshotData {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"screenshotFile\"; filename=\"\(screenshotName)\"\r\n".data(using: .utf8)!)
+            body.append("Content-Type: image/png\r\n\r\n".data(using: .utf8)!)
+            body.append(screenshotData)
+            body.append("\r\n".data(using: .utf8)!)
+        }
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        req.httpBody = body
+
+        let (data, response) = try await session.data(for: req)
+        guard let http = response as? HTTPURLResponse else {
+            throw RommError.transport("The server sent a response the app could not read.")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw RommError(status: http.statusCode, body: data)
+        }
+    }
+
     func saves(romId: Int) async throws -> [GameSave] {
         try await sendQuery("/api/saves", [URLQueryItem(name: "rom_id", value: String(romId))])
     }

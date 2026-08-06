@@ -14,9 +14,24 @@ import AVFoundation
 struct NativePlayerView: View {
     let rom: Rom
 
+    @EnvironmentObject private var session: Session
+    @Environment(\.dismiss) private var dismiss
     @StateObject private var renderer = NativePlayerRenderer()
     @ObservedObject private var controllers = GameControllerManager.shared
     @State private var previousControllerSend: ((Int, Bool) -> Void)?
+    @State private var previousControllerMenu: (() -> Void)?
+    @State private var menuVisible = false
+    @State private var menuStatus: String?
+    @State private var menuBusy = false
+
+    /// The emulator tag uploaded states carry. Tested 2026-08-06 and the
+    /// answer is no: the webview's WASM FBNeo (the build frozen inside
+    /// EmulatorJS 4.2.3) cannot restore states written by this native
+    /// FBNeo build, it fails silently and boots fresh. libretro state
+    /// formats are core-build-specific, so the two players' states are
+    /// distinct on purpose: a separate tag keeps each player's launch UI
+    /// from offering states it cannot actually restore.
+    private static let emulatorTag = "fbneo-native"
 
     private var profile: ArcadeProfile {
         ArcadeProfileStore.shared.resolve(romId: rom.id, shortname: rom.fsNameNoExt)
@@ -33,50 +48,168 @@ struct NativePlayerView: View {
         profile.vertical ? 280 : 330
     }
 
+    private func handleInput(_ id: Int, down: Bool) {
+        if id == RetroPad.overlay {
+            if down { openMenu() }
+            return
+        }
+        renderer.setButton(id, down: down)
+    }
+
+    private func openMenu() {
+        renderer.paused = true
+        menuStatus = nil
+        menuVisible = true
+    }
+
+    private func closeMenu() {
+        menuVisible = false
+        renderer.paused = false
+    }
+
     var body: some View {
         GeometryReader { geometry in
             let isLandscape = geometry.size.width > geometry.size.height
             let showsControls = !controllers.isConnected
 
-            if isLandscape || !showsControls {
-                // Full screen canvas, pad in the gutters (or hidden with a
-                // controller connected), matching PlayerView's .overlay case.
-                ZStack {
-                    MetalGameView(renderer: renderer)
-                    if showsControls {
-                        TouchControlPad(items: layoutItems(landscape: true), send: { id, down in
-                            renderer.setButton(id, down: down)
-                        })
+            ZStack {
+                if isLandscape || !showsControls {
+                    // Full screen canvas, pad in the gutters (or hidden with a
+                    // controller connected), matching PlayerView's .overlay case.
+                    ZStack {
+                        MetalGameView(renderer: renderer)
+                        if showsControls {
+                            TouchControlPad(items: layoutItems(landscape: true), send: handleInput)
+                        }
                     }
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .background(Color.black)
+                } else {
+                    // Portrait: the pad's items are normalised against a bottom
+                    // strip, not the full screen, so the canvas and pad split
+                    // the screen rather than overlap. Matches PlayerView's
+                    // .bottomStrip case exactly, same strip height.
+                    VStack(spacing: 0) {
+                        MetalGameView(renderer: renderer)
+                            .frame(height: max(geometry.size.height - controlStripHeight, 0))
+                        TouchControlPad(items: layoutItems(landscape: false), send: handleInput)
+                            .frame(height: controlStripHeight)
+                    }
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .background(Color.black)
                 }
-                .frame(width: geometry.size.width, height: geometry.size.height)
-                .background(Color.black)
-            } else {
-                // Portrait: the pad's items are normalised against a bottom
-                // strip, not the full screen, so the canvas and pad split
-                // the screen rather than overlap. Matches PlayerView's
-                // .bottomStrip case exactly, same strip height.
-                VStack(spacing: 0) {
-                    MetalGameView(renderer: renderer)
-                        .frame(height: max(geometry.size.height - controlStripHeight, 0))
-                    TouchControlPad(items: layoutItems(landscape: false), send: { id, down in
-                        renderer.setButton(id, down: down)
-                    })
-                    .frame(height: controlStripHeight)
+
+                if menuVisible {
+                    pauseMenu
                 }
-                .frame(width: geometry.size.width, height: geometry.size.height)
-                .background(Color.black)
             }
         }
         .ignoresSafeArea()
         .onAppear {
             previousControllerSend = GameControllerManager.shared.send
+            previousControllerMenu = GameControllerManager.shared.onMenu
             GameControllerManager.shared.send = { [weak renderer] id, down in
                 renderer?.setButton(id, down: down)
             }
+            GameControllerManager.shared.onMenu = { openMenu() }
         }
         .onDisappear {
             GameControllerManager.shared.send = previousControllerSend
+            GameControllerManager.shared.onMenu = previousControllerMenu
+        }
+    }
+
+    private var pauseMenu: some View {
+        ZStack {
+            Color.black.opacity(0.7).ignoresSafeArea()
+            VStack(spacing: 16) {
+                Text(rom.displayName)
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                if let menuStatus {
+                    Text(menuStatus)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Button("Resume") { closeMenu() }
+                    .buttonStyle(.borderedProminent)
+                Button("Save state") { saveState() }
+                    .buttonStyle(.bordered)
+                Button("Load latest state") { loadLatestState() }
+                    .buttonStyle(.bordered)
+                Button("Exit game", role: .destructive) { dismiss() }
+                    .buttonStyle(.bordered)
+            }
+            .padding(32)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+            .disabled(menuBusy)
+        }
+    }
+
+    /// Mirrors the webview player's naming exactly (RomM 5.1.0's own
+    /// buildStateName): the rom's short name plus an ISO timestamp with
+    /// colons and dots flattened to dashes, T to a space, Z dropped.
+    private func stateFileName() -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let stamp = formatter.string(from: Date())
+            .replacingOccurrences(of: ":", with: "-")
+            .replacingOccurrences(of: ".", with: "-")
+            .replacingOccurrences(of: "T", with: " ")
+            .replacingOccurrences(of: "Z", with: "")
+        return "\(rom.fsNameNoExt) [\(stamp)].state"
+    }
+
+    private func saveState() {
+        guard let state = FBNeoBridge.serializeState() else {
+            menuStatus = "The core produced no state to save."
+            return
+        }
+        menuBusy = true
+        menuStatus = "Uploading\u{2026}"
+        let name = stateFileName()
+        Task {
+            do {
+                try await session.uploadState(
+                    romId: rom.id,
+                    emulator: Self.emulatorTag,
+                    fileName: name,
+                    stateData: state
+                )
+                menuStatus = "Saved to RomM."
+            } catch {
+                menuStatus = error.localizedDescription
+            }
+            menuBusy = false
+        }
+    }
+
+    private func loadLatestState() {
+        menuBusy = true
+        menuStatus = "Fetching\u{2026}"
+        Task {
+            do {
+                let states = try await session.states(romId: rom.id)
+                    .filter { $0.emulator == Self.emulatorTag }
+                    .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
+                guard let latest = states.first else {
+                    menuStatus = "No states for this core on the server."
+                    menuBusy = false
+                    return
+                }
+                let bytes = try await session.stateContent(latest)
+                if FBNeoBridge.unserializeState(bytes) {
+                    menuStatus = nil
+                    menuBusy = false
+                    closeMenu()
+                } else {
+                    menuStatus = "The core rejected that state. It was likely written by a different core build."
+                    menuBusy = false
+                }
+            } catch {
+                menuStatus = error.localizedDescription
+                menuBusy = false
+            }
         }
     }
 }
@@ -153,17 +286,26 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
 
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 
+    /// While true the draw loop keeps presenting the last frame but stops
+    /// advancing the core, so the pause menu freezes the game rather than
+    /// letting it run silently behind the overlay. Serialize/unserialize
+    /// are only safe while this is set: they must never race a retro_run
+    /// in progress, and both happen on the main thread this loop runs on.
+    var paused = false
+
     func draw(in view: MTKView) {
-        let mask = heldButtons.reduce(into: UInt32(0)) { $0 |= (1 << $1) }
-        FBNeoBridge.setButtonMask(mask)
-        FBNeoBridge.runFrame()
+        if !paused {
+            let mask = heldButtons.reduce(into: UInt32(0)) { $0 |= (1 << $1) }
+            FBNeoBridge.setButtonMask(mask)
+            FBNeoBridge.runFrame()
 
-        if let audioData = FBNeoBridge.drainAudio() {
-            audio.enqueue(audioData)
-        }
+            if let audioData = FBNeoBridge.drainAudio() {
+                audio.enqueue(audioData)
+            }
 
-        if let frame = FBNeoBridge.latestFrame() {
-            updateTexture(from: frame)
+            if let frame = FBNeoBridge.latestFrame() {
+                updateTexture(from: frame)
+            }
         }
 
         guard let texture,

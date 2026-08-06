@@ -51,6 +51,19 @@ typedef NS_ENUM(uint32_t, FBNeoPixelFormat) {
 // this spike has no player-index concept to plumb through.
 + (void)setButtonMask:(uint32_t)mask;
 
+// Full machine state via the core's retro_serialize, the same call the
+// webview's WASM core answers when EmulatorJS saves a state. Returns nil
+// if the core has no game loaded or serialization fails. Call these on
+// the same thread that drives runFrame; libretro cores are not
+// re-entrant and a snapshot taken mid-retro_run is corrupt by definition.
++ (nullable NSData *)serializeState;
+
+// Restores a state previously produced by serializeState (or, if the
+// formats turn out to match, by the webview core's own save). Returns NO
+// if the core rejects the bytes, which is the expected failure mode for
+// a state written by a different core build rather than an error here.
++ (BOOL)unserializeState:(NSData *)state;
+
 @end
 
 NS_ASSUME_NONNULL_END

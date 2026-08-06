@@ -293,6 +293,25 @@ final class Session: ObservableObject {
         return try await client.stateContent(state)
     }
 
+    func uploadState(
+        romId: Int,
+        emulator: String,
+        fileName: String,
+        stateData: Data,
+        screenshotName: String? = nil,
+        screenshotData: Data? = nil
+    ) async throws {
+        guard let client else { throw RommError.transport("No server selected.") }
+        try await client.uploadState(
+            romId: romId,
+            emulator: emulator,
+            fileName: fileName,
+            stateData: stateData,
+            screenshotName: screenshotName,
+            screenshotData: screenshotData
+        )
+    }
+
     func screenshotData(path: String) async throws -> Data {
         guard let client else { throw RommError.transport("No server selected.") }
         return try await client.screenshotData(path: path)
