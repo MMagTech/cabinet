@@ -25,6 +25,11 @@ struct DebugView: View {
     /// nothing here for anyone to act on. The number is still worth
     /// carrying in a bug report.
     @State private var artworkBytes: Int64 = 0
+    @State private var fbneoAPIVersion: UInt32?
+    @State private var spikeLoading = false
+    @State private var spikeResult: String?
+    @State private var showingNativePlayer = false
+    @State private var spikeRom: Rom?
 
     // TODO: this repo is not final. Update once the real one is settled,
     // this one is just where development has lived so far.
@@ -114,6 +119,55 @@ struct DebugView: View {
 
             Section {
                 Button {
+                    fbneoAPIVersion = FBNeoBridge.coreAPIVersion()
+                } label: {
+                    Label(
+                        fbneoAPIVersion.map { "FBNeo linked, API v\($0)" } ?? "Check FBNeo static link",
+                        systemImage: fbneoAPIVersion == nil ? "questionmark.circle" : "checkmark"
+                    )
+                }
+                ForEach(NativeSpike.TestGame.allCases, id: \.self) { game in
+                    Button {
+                        spikeLoading = true
+                        spikeResult = nil
+                        Task {
+                            do {
+                                spikeRom = try await NativeSpike.load(game, session: session)
+                                spikeResult = "Loaded"
+                                showingNativePlayer = true
+                            } catch {
+                                spikeResult = error.localizedDescription
+                            }
+                            spikeLoading = false
+                        }
+                    } label: {
+                        if spikeLoading {
+                            HStack(spacing: 10) {
+                                ProgressView()
+                                Text("Loading \(game.displayName)")
+                            }
+                        } else {
+                            Label(
+                                "Load \(game.displayName) (spike)",
+                                systemImage: "play.circle"
+                            )
+                        }
+                    }
+                    .disabled(spikeLoading)
+                }
+                if let spikeResult {
+                    Text(spikeResult)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Native player spike")
+            } footer: {
+                Text("Confirms the statically linked FBNeo core is reachable from Swift, then downloads the game and its BIOS and hands them to retro_load_game.")
+            }
+
+            Section {
+                Button {
                     showingRepairBridge = true
                     repairing = true
                 } label: {
@@ -172,6 +226,11 @@ struct DebugView: View {
         .navigationTitle("Debug")
         .navigationBarTitleDisplayMode(.inline)
         .task { artworkBytes = await CoverCache.shared.diskUsage() }
+        .fullScreenCover(isPresented: $showingNativePlayer) {
+            if let spikeRom {
+                NativePlayerView(rom: spikeRom)
+            }
+        }
     }
 
     private var diagnosticsText: String {

@@ -71,6 +71,38 @@ stop and reassess rather than grind. The webview player still works
 today at one-minute intervals; the native path must earn its keep
 quickly or wait.
 
+## Result
+
+Status: succeeded, closed 2026-08-06. The spike's success bar was met and
+then exceeded across three games instead of one.
+
+Metal Slug booted from RomM into a natively compiled FBNeo core, held ten
+clean minutes, and responded to both touch and a physical controller.
+Shock Troopers 2nd Squad, also Neo Geo, ran natively well past the point
+where the webview's memory leak used to kill it, direct evidence on a
+second title that the native path fixes the specific leak this spike
+exists to address. Deathsmiles, a Cave CV1000 title that was slow in the
+webview without leaking, ran at full speed natively, which is a different
+kind of evidence: it shows the native path also removes plain CPU and
+rendering overhead the webview and WASM were paying, not only the leak.
+
+The frontend ended up almost one file as scoped: an Objective-C++ bridge
+(`FBNeoBridge.h`/`.mm`) around FBNeo's libretro entry points, a Metal
+video pipeline and CoreAudio ring buffer in `NativePlayerView.swift`, and
+input merged from `GameControllerManager` and a `TouchControlPad` overlay
+into a bitmask FBNeo polls each frame. FBNeo itself is linked in as its
+full unscoped driver set (not a hand-curated per-game subset), a deliberate
+choice for this exploratory phase so testing another title never requires
+a build-system change, revisited once specific hardware families are
+confirmed for a real shipped feature.
+
+Known rough edge, deliberately deferred rather than left silent: the touch
+control layout is hardcoded to landscape and does not match the webview
+player's layout in portrait, and the video does not center correctly in
+portrait either. This is UI polish on what was always a debug-only test
+harness, not a gap in what the spike needed to prove, and it belongs in
+the real feature work below, not blocking this result.
+
 ## What full integration would add later, listed so nobody scopes it
 into the spike by accident
 

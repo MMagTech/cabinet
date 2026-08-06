@@ -34,6 +34,9 @@ Secrets.plist
 tools/*.xml
 tools/profiles.json
 
+# Vendored third party source, not ours to commit
+spikes/FBNeoStatic/FBNeo/
+
 # macOS
 .DS_Store
 .claude/
