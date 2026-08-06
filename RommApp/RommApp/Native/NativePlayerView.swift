@@ -161,7 +161,7 @@ struct NativePlayerView: View {
     /// Mirrors the webview player's naming exactly (RomM 5.1.0's own
     /// buildStateName): the rom's short name plus an ISO timestamp with
     /// colons and dots flattened to dashes, T to a space, Z dropped.
-    private func stateFileName() -> String {
+    private func stateFileStem() -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let stamp = formatter.string(from: Date())
@@ -169,7 +169,7 @@ struct NativePlayerView: View {
             .replacingOccurrences(of: ".", with: "-")
             .replacingOccurrences(of: "T", with: " ")
             .replacingOccurrences(of: "Z", with: "")
-        return "\(rom.fsNameNoExt) [\(stamp)].state"
+        return "\(rom.fsNameNoExt) [\(stamp)]"
     }
 
     private func saveState() {
@@ -177,16 +177,22 @@ struct NativePlayerView: View {
             menuStatus = "The core produced no state to save."
             return
         }
+        // Captured before the upload starts, while the pause menu still
+        // holds the exact frame being saved. The webview player does the
+        // same one frame before its pause for the same reason.
+        let screenshot = renderer.screenshotPNG()
         menuBusy = true
         menuStatus = "Uploading\u{2026}"
-        let name = stateFileName()
+        let stem = stateFileStem()
         Task {
             do {
                 try await session.uploadState(
                     romId: rom.id,
                     emulator: Self.emulatorTag,
-                    fileName: name,
-                    stateData: state
+                    fileName: "\(stem).state",
+                    stateData: state,
+                    screenshotName: screenshot != nil ? "\(stem).png" : nil,
+                    screenshotData: screenshot
                 )
                 menuStatus = "Saved to RomM."
             } catch {
@@ -382,6 +388,65 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
                 withBytes: base,
                 bytesPerRow: Int(frame.bytesPerRow)
             )
+        }
+    }
+
+    /// The current frame as a PNG for the state list's thumbnail, read
+    /// back from the game texture rather than the drawable so it carries
+    /// no letterboxing. TATE rotation gets baked into the pixels here:
+    /// PNG has no orientation metadata, so a merely-tagged rotation would
+    /// arrive sideways on every other client that shows it.
+    func screenshotPNG() -> Data? {
+        guard let texture else { return nil }
+        let width = texture.width
+        let height = texture.height
+        let bytesPerRow = width * 4
+        var bgra = [UInt8](repeating: 0, count: bytesPerRow * height)
+
+        switch texture.pixelFormat {
+        case .bgra8Unorm:
+            texture.getBytes(&bgra, bytesPerRow: bytesPerRow, from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
+        case .b5g6r5Unorm, .bgr5A1Unorm:
+            var raw = [UInt16](repeating: 0, count: width * height)
+            texture.getBytes(&raw, bytesPerRow: width * 2, from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
+            let is565 = texture.pixelFormat == .b5g6r5Unorm
+            for i in 0..<(width * height) {
+                let p = raw[i]
+                let r, g, b: UInt8
+                if is565 {
+                    r = UInt8((p >> 11) & 0x1F) << 3
+                    g = UInt8((p >> 5) & 0x3F) << 2
+                    b = UInt8(p & 0x1F) << 3
+                } else {
+                    r = UInt8((p >> 10) & 0x1F) << 3
+                    g = UInt8((p >> 5) & 0x1F) << 3
+                    b = UInt8(p & 0x1F) << 3
+                }
+                bgra[i * 4] = b
+                bgra[i * 4 + 1] = g
+                bgra[i * 4 + 2] = r
+                bgra[i * 4 + 3] = 255
+            }
+        default:
+            return nil
+        }
+
+        guard let context = CGContext(
+            data: &bgra, width: width, height: height, bitsPerComponent: 8, bytesPerRow: bytesPerRow,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.noneSkipFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+        ), let cgImage = context.makeImage() else { return nil }
+
+        let rotation = Int(FBNeoBridge.rotation()) % 4
+        let orientation: UIImage.Orientation = [.up, .left, .down, .right][rotation]
+        let oriented = UIImage(cgImage: cgImage, scale: 1, orientation: orientation)
+        let outputSize = rotation % 2 == 1
+            ? CGSize(width: height, height: width)
+            : CGSize(width: width, height: height)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: outputSize, format: format).pngData { _ in
+            oriented.draw(in: CGRect(origin: .zero, size: outputSize))
         }
     }
 
