@@ -93,7 +93,13 @@ struct LaunchChoices {
            let backend = PlayerBackend(rawValue: stored) {
             return backend
         }
-        if Compatibility.shared.crashes(romId: rom.id) >= 3 { return .native }
+        // Webview deaths argue for native, but only while native itself
+        // holds up: a game that kills both players defaults back to the
+        // webview, whose crash costs one process instead of the whole app.
+        if Compatibility.shared.crashes(romId: rom.id) >= 3,
+           Compatibility.shared.nativeCrashes(romId: rom.id) < 2 {
+            return .native
+        }
         return .webview
     }
 

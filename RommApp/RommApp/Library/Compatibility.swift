@@ -56,6 +56,24 @@ final class Compatibility: ObservableObject {
     func shouldSuggestMark(romId: Int) -> Bool {
         !isMarked(romId) && crashes(romId: romId) >= 3
     }
+
+    // MARK: Native player crashes
+
+    /// Counted separately from webview crashes on purpose: webview counts
+    /// push a game's default toward the native player, so a native core
+    /// that also dies on that game must be able to push back, or a bad
+    /// game gets locked into whichever player failed second.
+    private func nativeCrashKey(_ romId: Int) -> String {
+        "com.mmagtech.RommApp.nativeCrashes.\(romId)"
+    }
+
+    func recordNativeCrash(romId: Int) {
+        UserDefaults.standard.set(nativeCrashes(romId: romId) + 1, forKey: nativeCrashKey(romId))
+    }
+
+    func nativeCrashes(romId: Int) -> Int {
+        UserDefaults.standard.integer(forKey: nativeCrashKey(romId))
+    }
 }
 
 /// Dims a cover and badges it when the game is marked.

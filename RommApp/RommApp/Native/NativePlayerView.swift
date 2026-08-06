@@ -27,6 +27,7 @@ struct NativePlayerView: View {
     @State private var menuBusy = false
     /// The same visibility slider the webview player honors.
     @AppStorage("com.mmagtech.RommApp.controlOpacity") private var controlOpacity = 0.7
+    @Environment(\.scenePhase) private var scenePhase
 
     /// The emulator tag uploaded states carry. Tested 2026-08-06 and the
     /// answer is no: the webview's WASM FBNeo (the build frozen inside
@@ -124,10 +125,23 @@ struct NativePlayerView: View {
             }
             GameControllerManager.shared.onMenu = { openMenu() }
             renderer.pendingState = initialState
+            NativeSessionMarker.recordGameRunning(romId: rom.id)
         }
         .onDisappear {
             GameControllerManager.shared.send = previousControllerSend
             GameControllerManager.shared.onMenu = previousControllerMenu
+            NativeSessionMarker.recordCleanExit()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Eviction while backgrounded is iOS housekeeping, not a core
+            // crash; the marker notes the difference so launch-time
+            // settling only counts foreground deaths against the game.
+            if phase == .background {
+                NativeSessionMarker.recordBackgrounded()
+                renderer.paused = true
+            } else if phase == .active && !menuVisible {
+                renderer.paused = false
+            }
         }
     }
 

@@ -9,6 +9,11 @@ struct RommApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(session)
+                .task {
+                    // A native core crash takes the whole app, so the only
+                    // moment it can be counted is the next launch.
+                    NativeSessionMarker.settleAtLaunch()
+                }
         }
     }
 }
