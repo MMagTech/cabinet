@@ -189,9 +189,9 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev;
 				PRODUCT_NAME = Cabinet;
-				INFOPLIST_KEY_CFBundleDisplayName = Cabinet;
+				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet Dev";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -217,9 +217,9 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev;
 				PRODUCT_NAME = Cabinet;
-				INFOPLIST_KEY_CFBundleDisplayName = Cabinet;
+				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet Dev";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
