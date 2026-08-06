@@ -122,6 +122,16 @@ struct SettingsView: View {
 
             Section {
                 NavigationLink {
+                    LicensesView()
+                } label: {
+                    Label("Licenses", systemImage: "doc.text")
+                }
+            } footer: {
+                Text("The software this app is built from, and the terms it ships under.")
+            }
+
+            Section {
+                NavigationLink {
                     DebugView()
                 } label: {
                     Label("Debug", systemImage: "ladybug")
