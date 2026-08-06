@@ -11,14 +11,14 @@ struct VertexOut {
     float2 texCoord;
 };
 
-vertex VertexOut fbneo_vertex(const device VertexIn *vertices [[buffer(0)]], uint vid [[vertex_id]]) {
+vertex VertexOut libretro_vertex(const device VertexIn *vertices [[buffer(0)]], uint vid [[vertex_id]]) {
     VertexOut out;
     out.position = float4(vertices[vid].position, 0.0, 1.0);
     out.texCoord = vertices[vid].texCoord;
     return out;
 }
 
-fragment float4 fbneo_fragment(VertexOut in [[stage_in]],
+fragment float4 libretro_fragment(VertexOut in [[stage_in]],
                                 texture2d<float> tex [[texture(0)]],
                                 sampler samp [[sampler(0)]]) {
     return tex.sample(samp, in.texCoord);

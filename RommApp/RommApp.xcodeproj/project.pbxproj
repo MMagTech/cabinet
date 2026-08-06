@@ -180,7 +180,10 @@
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/RommApp/Native/FBNeo";
+				HEADER_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/RommApp/Native/Libretro",
+					"$(PROJECT_DIR)/RommApp/Native/FBNeo",
+				);
 				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet Dev";
 				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -219,7 +222,10 @@
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/RommApp/Native/FBNeo";
+				HEADER_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/RommApp/Native/Libretro",
+					"$(PROJECT_DIR)/RommApp/Native/FBNeo",
+				);
 				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet Dev";
 				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

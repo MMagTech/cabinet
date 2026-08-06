@@ -223,7 +223,9 @@ struct GameLaunchView: View {
             )
         }
         .fullScreenCover(isPresented: $playingNative) {
-            NativePlayerView(rom: rom, initialState: nativeInitialState)
+            if let core = NativeCore.core(for: rom) {
+                NativePlayerView(rom: rom, core: core, initialState: nativeInitialState)
+            }
         }
         .alert(
             "Couldn't load that state",
@@ -1043,10 +1045,11 @@ struct GameLaunchView: View {
         // Each player can only restore states its own core build wrote,
         // so the list follows the backend choice: native states for the
         // native player, everything the webview's cores wrote otherwise.
+        let nativeTag = NativeCore.core(for: rom)?.emulatorTag
         if selectedBackend == .native {
-            return state.emulator == NativePlayerView.emulatorTag
+            return nativeTag != nil && state.emulator == nativeTag
         }
-        guard state.emulator != NativePlayerView.emulatorTag else { return false }
+        if let nativeTag, state.emulator == nativeTag { return false }
         return state.emulator == nil || state.emulator == selectedCore || state.emulator == "emulatorjs"
     }
 

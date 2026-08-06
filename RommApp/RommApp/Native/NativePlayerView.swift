@@ -2,17 +2,15 @@ import SwiftUI
 import MetalKit
 import AVFoundation
 
-/// Fullscreen native-player screen for the FBNeo spike. Drives retro_run
-/// off MTKView's own display-link-backed draw loop, uploads each frame
-/// into a Metal texture aspect-fit with no shaders/filters, and feeds
-/// FBNeo's audio batches into an AVAudioEngine source node.
-///
-/// Spike-only: one file owning video, audio, and (eventually) input for
-/// exactly one core. See docs/scope-native-player-spike.md and
-/// [[native-player-frontend-architecture]] in memory, don't grow this into
-/// a general frontend without splitting it up first.
+/// Fullscreen native-player screen, core-agnostic. Drives retro_run off
+/// MTKView's own display-link-backed draw loop through LibretroFrontend,
+/// uploads each frame into a Metal texture aspect-fit with no
+/// shaders/filters, and feeds the core's audio batches into an
+/// AVAudioEngine source node. The caller (NativeLauncher) has already
+/// activated the right core and loaded the game before this appears.
 struct NativePlayerView: View {
     let rom: Rom
+    let core: NativeCore
     /// A state picked on the launch screen, restored shortly after boot.
     var initialState: Data?
 
@@ -28,15 +26,6 @@ struct NativePlayerView: View {
     /// The same visibility slider the webview player honors.
     @AppStorage("com.mmagtech.RommApp.controlOpacity") private var controlOpacity = 0.7
     @Environment(\.scenePhase) private var scenePhase
-
-    /// The emulator tag uploaded states carry. Tested 2026-08-06 and the
-    /// answer is no: the webview's WASM FBNeo (the build frozen inside
-    /// EmulatorJS 4.2.3) cannot restore states written by this native
-    /// FBNeo build, it fails silently and boots fresh. libretro state
-    /// formats are core-build-specific, so the two players' states are
-    /// distinct on purpose: a separate tag keeps each player's launch UI
-    /// from offering states it cannot actually restore.
-    static let emulatorTag = "fbneo-native"
 
     private var profile: ArcadeProfile {
         ArcadeProfileStore.shared.resolve(romId: rom.id, shortname: rom.fsNameNoExt)
@@ -187,7 +176,7 @@ struct NativePlayerView: View {
     }
 
     private func saveState() {
-        guard let state = FBNeoBridge.serializeState() else {
+        guard let state = LibretroFrontend.shared.serializeState() else {
             menuStatus = "The core produced no state to save."
             return
         }
@@ -202,7 +191,7 @@ struct NativePlayerView: View {
             do {
                 try await session.uploadState(
                     romId: rom.id,
-                    emulator: Self.emulatorTag,
+                    emulator: core.emulatorTag,
                     fileName: "\(stem).state",
                     stateData: state,
                     screenshotName: screenshot != nil ? "\(stem).png" : nil,
@@ -222,7 +211,7 @@ struct NativePlayerView: View {
         Task {
             do {
                 let states = try await session.states(romId: rom.id)
-                    .filter { $0.emulator == Self.emulatorTag }
+                    .filter { $0.emulator == core.emulatorTag }
                     .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
                 guard let latest = states.first else {
                     menuStatus = "No states for this core on the server."
@@ -230,7 +219,7 @@ struct NativePlayerView: View {
                     return
                 }
                 let bytes = try await session.stateContent(latest)
-                if FBNeoBridge.unserializeState(bytes) {
+                if LibretroFrontend.shared.unserializeState(bytes) {
                     menuStatus = nil
                     menuBusy = false
                     closeMenu()
@@ -269,6 +258,7 @@ private struct Vertex {
 }
 
 final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
+    private let frontend = LibretroFrontend.shared
     private var device: MTLDevice!
     private var commandQueue: MTLCommandQueue!
     private var pipelineState: MTLRenderPipelineState!
@@ -299,8 +289,8 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         commandQueue = device.makeCommandQueue()
 
         let library = try? device.makeDefaultLibrary(bundle: .main)
-        let vertexFn = library?.makeFunction(name: "fbneo_vertex")
-        let fragmentFn = library?.makeFunction(name: "fbneo_fragment")
+        let vertexFn = library?.makeFunction(name: "libretro_vertex")
+        let fragmentFn = library?.makeFunction(name: "libretro_fragment")
 
         let descriptor = MTLRenderPipelineDescriptor()
         descriptor.vertexFunction = vertexFn
@@ -326,7 +316,7 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     var paused = false
 
     /// A launch-screen state waiting to be restored. Applied a second into
-    /// the run rather than immediately: FBNeo needs a beat after booting
+    /// the run rather than immediately: cores need a beat after booting
     /// before a full machine state takes, the same settle delay the
     /// webview player learned the hard way.
     var pendingState: Data?
@@ -335,19 +325,19 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     func draw(in view: MTKView) {
         if !paused {
             let mask = heldButtons.reduce(into: UInt32(0)) { $0 |= (1 << $1) }
-            FBNeoBridge.setButtonMask(mask)
-            FBNeoBridge.runFrame()
+            frontend.setButtonMask(mask)
+            frontend.runFrame()
             framesRun += 1
             if let state = pendingState, framesRun > 60 {
                 pendingState = nil
-                FBNeoBridge.unserializeState(state)
+                frontend.unserializeState(state)
             }
 
-            if let audioData = FBNeoBridge.drainAudio() {
+            if let audioData = frontend.drainAudio() {
                 audio.enqueue(audioData)
             }
 
-            if let frame = FBNeoBridge.latestFrame() {
+            if let frame = frontend.latestFrame() {
                 updateTexture(from: frame)
             }
         }
@@ -361,7 +351,7 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         let vertices = aspectFitVertices(
             textureSize: CGSize(width: textureWidth, height: textureHeight),
             viewSize: view.drawableSize,
-            rotation: Int(FBNeoBridge.rotation())
+            rotation: Int(frontend.rotation())
         )
 
         guard let commandBuffer = commandQueue.makeCommandBuffer(),
@@ -379,7 +369,7 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         commandBuffer.commit()
     }
 
-    private func updateTexture(from frame: FBNeoFrame) {
+    private func updateTexture(from frame: LibretroFrame) {
         let width = Int(frame.width)
         let height = Int(frame.height)
         let pixelFormat = metalPixelFormat(for: frame.pixelFormat)
@@ -451,7 +441,7 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
             bitmapInfo: CGImageAlphaInfo.noneSkipFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
         ), let cgImage = context.makeImage() else { return nil }
 
-        let rotation = Int(FBNeoBridge.rotation()) % 4
+        let rotation = Int(frontend.rotation()) % 4
         let orientation: UIImage.Orientation = [.up, .left, .down, .right][rotation]
         let oriented = UIImage(cgImage: cgImage, scale: 1, orientation: orientation)
         let outputSize = rotation % 2 == 1
@@ -464,7 +454,7 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         }
     }
 
-    private func metalPixelFormat(for format: FBNeoPixelFormat) -> MTLPixelFormat {
+    private func metalPixelFormat(for format: LibretroPixelFormat) -> MTLPixelFormat {
         switch format {
         case .XRGB8888: return .bgra8Unorm
         case .RGB565: return .b5g6r5Unorm
@@ -520,9 +510,9 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     }
 }
 
-/// Feeds FBNeo's audio batches into CoreAudio through a small ring buffer,
-/// decoupling the core's variable per-frame sample count from the fixed
-/// render callback AVAudioEngine expects.
+/// Feeds the core's audio batches into CoreAudio through a small ring
+/// buffer, decoupling the core's variable per-frame sample count from the
+/// fixed render callback AVAudioEngine expects.
 private final class NativePlayerAudio {
     private let engine = AVAudioEngine()
     private var ringBuffer: [Int16] = []
@@ -533,7 +523,7 @@ private final class NativePlayerAudio {
         guard !started else { return }
         started = true
 
-        let sampleRate = FBNeoBridge.audioSampleRate()
+        let sampleRate = LibretroFrontend.shared.audioSampleRate()
         guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2) else { return }
 
         let sourceNode = AVAudioSourceNode { [weak self] _, _, frameCount, audioBufferList -> OSStatus in

@@ -1,17 +1,20 @@
 import Foundation
 
 /// Downloads a game (and whatever firmware its platform carries) through
-/// the same request-building code the webview player uses, then hands the
-/// files to `FBNeoBridge`. This is the native player's launch path; the
-/// `TestGame` list and its Debug-screen buttons remain as the quick smoke
-/// test they were during the spike.
+/// the same request-building code the webview player uses, then activates
+/// the rom's native core and hands the files to `LibretroFrontend`. This
+/// is the native player's launch path; the `TestGame` list and its
+/// Debug-screen buttons remain as the quick smoke test they were during
+/// the spike.
 enum NativeLauncher {
     enum LaunchError: LocalizedError {
         case romNotFound(String)
+        case noNativeCore
 
         var errorDescription: String? {
             switch self {
             case .romNotFound(let name): return "No \"\(name)\" ROM found in the library"
+            case .noNativeCore: return "No native core exists for this platform"
             }
         }
     }
@@ -22,7 +25,11 @@ enum NativeLauncher {
     /// system directory, ignores what it does not need, and boards like
     /// CV1000 need none at all, so extra files are harmless and missing
     /// ones are the only failure that matters.
-    static func prepare(rom: Rom, session: Session) async throws {
+    @discardableResult
+    static func prepare(rom: Rom, session: Session) async throws -> NativeCore {
+        guard let core = NativeCore.core(for: rom) else {
+            throw LaunchError.noNativeCore
+        }
         let workDir = FileManager.default.temporaryDirectory.appendingPathComponent(
             "native-player-\(UUID().uuidString)", isDirectory: true
         )
@@ -38,9 +45,11 @@ enum NativeLauncher {
             }
         }
 
-        if let failure = FBNeoBridge.loadGame(romURL.path, systemDirectory: workDir.path) {
+        LibretroFrontend.shared.activateCore(core.coreID)
+        if let failure = LibretroFrontend.shared.loadGame(romURL.path, systemDirectory: workDir.path) {
             throw NSError(domain: "NativeLauncher", code: 1, userInfo: [NSLocalizedDescriptionKey: failure])
         }
+        return core
     }
 
     /// FBNeo/MAME short names for the spike's original test titles, kept

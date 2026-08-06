@@ -119,7 +119,7 @@ struct DebugView: View {
 
             Section {
                 Button {
-                    fbneoAPIVersion = FBNeoBridge.coreAPIVersion()
+                    fbneoAPIVersion = LibretroFrontend.shared.apiVersion(forCore: .fbneo)
                 } label: {
                     Label(
                         fbneoAPIVersion.map { "FBNeo linked, API v\($0)" } ?? "Check FBNeo static link",
@@ -227,8 +227,8 @@ struct DebugView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { artworkBytes = await CoverCache.shared.diskUsage() }
         .fullScreenCover(isPresented: $showingNativePlayer) {
-            if let spikeRom {
-                NativePlayerView(rom: spikeRom)
+            if let spikeRom, let core = NativeCore.core(for: spikeRom) {
+                NativePlayerView(rom: spikeRom, core: core)
             }
         }
     }
