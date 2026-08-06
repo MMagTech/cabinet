@@ -23,8 +23,11 @@ final class GameControllerManager: ObservableObject {
     @Published private(set) var isConnected = false
     /// The attached controller's name, for showing which pad is in charge.
     @Published private(set) var controllerName: String?
-    /// Inputs currently held, so a test screen can show what the app sees.
-    @Published private(set) var pressedInputs: Set<Int> = []
+    /// Inputs currently held, so disconnect can release them. Deliberately
+    /// not @Published: it changes on every button edge, and publishing it
+    /// re-rendered PlayerView on every press mid game. Nothing displays it
+    /// since the controller test screen was removed.
+    private var pressedInputs: Set<Int> = []
     /// Every button this controller reports, by element name, so a remap
     /// screen can show what actually exists rather than what was assumed.
     @Published private(set) var availableButtons: [String] = []
@@ -73,12 +76,6 @@ final class GameControllerManager: ObservableObject {
         }
     }
 
-    func stop() {
-        observers.forEach(NotificationCenter.default.removeObserver)
-        observers.removeAll()
-        releaseAll()
-    }
-
     /// Rebuilds handlers after the remap screen changes a binding.
     func reloadBindings() {
         guard let controller = GCController.controllers().first else { return }
@@ -125,8 +122,14 @@ final class GameControllerManager: ObservableObject {
         gamepad.dpad.down.pressedChangedHandler = direction(RetroPad.down)
         gamepad.dpad.left.pressedChangedHandler = direction(RetroPad.left)
         gamepad.dpad.right.pressedChangedHandler = direction(RetroPad.right)
+        // Handlers fire on the main queue (GCController's default
+        // handlerQueue), so they call straight through. An earlier version
+        // wrapped every edge, and every 120Hz stick sample, in its own
+        // Task hop to the next main-actor scheduling point: a fresh
+        // allocation and a runloop deferral per input, pure added latency
+        // on the path where latency matters most.
         gamepad.leftThumbstick.valueChangedHandler = { [weak self] _, x, y in
-            Task { @MainActor in self?.stick(x: x, y: y) }
+            MainActor.assumeIsolated { self?.stick(x: x, y: y) }
         }
 
         // Bind the standard buttons by their canonical names. The elements
@@ -167,11 +170,11 @@ final class GameControllerManager: ObservableObject {
             // assuming, since some pads report pressure on face buttons.
             if button.isAnalog {
                 button.valueChangedHandler = { [weak self] _, value, _ in
-                    Task { @MainActor in self?.analog(name, value: value) }
+                    MainActor.assumeIsolated { self?.analog(name, value: value) }
                 }
             } else {
                 button.pressedChangedHandler = { [weak self] _, _, pressed in
-                    Task { @MainActor in self?.button(name, pressed: pressed) }
+                    MainActor.assumeIsolated { self?.button(name, pressed: pressed) }
                 }
             }
         }
@@ -208,7 +211,7 @@ final class GameControllerManager: ObservableObject {
 
     private func direction(_ id: Int) -> GCControllerButtonValueChangedHandler {
         { [weak self] _, _, pressed in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 guard self?.captureHandler == nil else { return }
                 self?.emit(id, pressed)
             }
@@ -224,9 +227,16 @@ final class GameControllerManager: ObservableObject {
         emit(RetroPad.up, y > threshold)
     }
 
-    /// Routes an input to the game and to anything watching for diagnostics.
+    /// Routes an input to the game, edges only: the stick handler above
+    /// fires per sample, up to 120 a second, and most samples change no
+    /// direction. Sending only on change keeps a held stick from
+    /// streaming identical evaluateJavaScript calls into the webview.
     private func emit(_ id: Int, _ down: Bool) {
-        if down { pressedInputs.insert(id) } else { pressedInputs.remove(id) }
+        if down {
+            guard pressedInputs.insert(id).inserted else { return }
+        } else {
+            guard pressedInputs.remove(id) != nil else { return }
+        }
         send?(id, down)
     }
 

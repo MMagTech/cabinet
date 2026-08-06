@@ -83,10 +83,6 @@ enum ControllerBindings {
     static func reset(for controller: String) {
         UserDefaults.standard.removeObject(forKey: key(for: controller))
     }
-
-    static func hasCustomBindings(for controller: String) -> Bool {
-        UserDefaults.standard.dictionary(forKey: key(for: controller)) != nil
-    }
 }
 
 /// RetroPad ids, confirmed against the EmulatorJS 4.2.3 bundle and the

@@ -227,7 +227,19 @@ struct GameLaunchView: View {
         // a deliberate exit. Re-ask the marker, which the clean exit
         // cleared.
         .onChange(of: playing) { _, isPlaying in
-            if !isPlaying { refreshResumeOffer() }
+            if !isPlaying {
+                refreshResumeOffer()
+            } else {
+                // A remote state can run past 100MB, and the player's
+                // coordinator copies it out the moment the cover builds.
+                // Holding this view's copy for the whole session doubles a
+                // buffer that was only needed at boot. Released after a
+                // beat, so the cover has provably built first.
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(5))
+                    stateToLoad = nil
+                }
+            }
         }
         // Only changes made after the screen has settled are the person's;
         // the ones during load are this view choosing a default, and every
@@ -346,6 +358,17 @@ struct GameLaunchView: View {
             if case .failed(let message) = phase {
                 DiagnosticsLog.record(context: "Data Saver", message: message, romVersion: session.serverVersion)
             }
+            // The bridge webview is a second WebContent process holding
+            // RomM's whole SPA; left mounted it survives into gameplay and
+            // competes with the emulator's memory. Torn down the moment
+            // the write settles, either way. Retry recreates it.
+            switch phase {
+            case .done, .failed:
+                showingCacheBridge = false
+                cacheBridge.detach()
+            default:
+                break
+            }
         }
         .onChange(of: exporter.state) { _, state in
             if case .failed(let message) = state {
@@ -358,6 +381,13 @@ struct GameLaunchView: View {
     /// what caching does and doesn't buy (the launch still makes one
     /// small HEAD request, so it isn't fully offline) before starting.
     /// Never shown again after.
+    private var dataSaverBusy: Bool {
+        switch dataSaverPhase {
+        case .downloading, .writingToCache: return true
+        case .idle, .done, .failed: return false
+        }
+    }
+
     private func tapDataSaver() {
         if UserDefaults.standard.bool(forKey: Self.dataSaverTipShownKey) {
             startDataSaver()
@@ -515,7 +545,12 @@ struct GameLaunchView: View {
             }
         }
         .buttonStyle(.borderedProminent)
-        .disabled(loading || !isPlatformSupported || preparingPlay)
+        // Blocked while Data Saver runs: letting the game boot mid-cache
+        // put a whole ROM's worth of buffering next to the emulator's own
+        // memory, on a device-wide budget. The status card explains the
+        // wait, and these downloads are short on any connection worth
+        // caching over.
+        .disabled(loading || !isPlatformSupported || preparingPlay || dataSaverBusy)
     }
 
     /// Resolves `stateToLoad` before presenting the player, since a state

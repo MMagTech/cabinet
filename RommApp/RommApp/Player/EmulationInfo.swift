@@ -51,13 +51,13 @@ enum EmulationInfo {
         UserDefaults.standard.string(forKey: key)
     }
 
-    /// The core file the page fetched, without the packaging noise.
+    /// The core the page reported. Reports carry plain core names like
+    /// "fbneo" since the emulation reporter switched to getCore(); the
+    /// filename suffixes an earlier version had to strip no longer occur.
     static var coreName: String? {
         guard let raw, let field = raw.split(separator: " ").dropFirst().first
         else { return nil }
         return String(field)
-            .replacingOccurrences(of: "-wasm.data", with: "")
-            .replacingOccurrences(of: ".data", with: "")
     }
 
     /// True when the core that loaded was the multi threaded build.

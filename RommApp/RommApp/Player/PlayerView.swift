@@ -599,14 +599,6 @@ final class PlayerInputBridge: ObservableObject {
         """)
     }
 
-    /// Reveals the overlay from native code, for controllers with no screen
-    /// to tap. The page then reports visibility back the usual way.
-    func wakeOverlay() {
-        webView?.evaluateJavaScript(
-            "window.__rommWakeOverlay && window.__rommWakeOverlay();"
-        )
-    }
-
     /// Pauses the running game: the pause menu opening, or a controller
     /// disconnecting mid play.
     ///
@@ -795,23 +787,22 @@ struct PlayerWebView: UIViewRepresentable {
                         )
                     }
                 }
+                // "stopped" is deliberately ignored. It looks like the
+                // missing half of this handler, but the page derives it
+                // from the menu toggle's visibility, which EmulatorJS
+                // flickers mid-session (the pause menu is enough), and
+                // resetting gameStarted here re-arms the boot watchdog
+                // against a boot that finished minutes ago: its progress
+                // clock is long stale, so it "repairs" storage and
+                // reloads a healthy running game within seconds. Tried
+                // once, shipped, and it did exactly that on device.
             case "autosave":
                 SessionMarker.recordAutosave(romId: parent.rom.id)
-            case "frame":
-                if let dataURL = message.body as? String {
-                    LastFrame.save(dataURL: dataURL, romId: parent.rom.id)
-                }
             // The outcome of the last menu save, kept because a phone in a
             // hand has no console: when someone says saving did nothing,
             // this answers with the status code it got.
             case "manualSave":
                 ManualSave.record(romId: parent.rom.id)
-                // The newest timer frame is from live play seconds to a
-                // couple of minutes before the pause that saved: the
-                // closest picture of the saved moment that exists. Banked
-                // now so Home's hero can show what Resume will actually
-                // load, not the last thing on screen before quitting.
-                LastFrame.bankSavedFrame(romId: parent.rom.id)
             case "vitals":
                 if let line = message.body as? String {
                     EmulationInfo.recordVitals(line)
@@ -820,11 +811,6 @@ struct PlayerWebView: UIViewRepresentable {
                 if let url = message.body as? String {
                     PlayerNetworkLog.append(url)
                 }
-            case "saveResult":
-                UserDefaults.standard.set(
-                    "\(String(describing: message.body)) rom \(parent.rom.id)",
-                    forKey: "com.mmagtech.RommApp.lastStateSave"
-                )
             case "diag":
                 // Recorded rather than logged, because a console cannot be
                 // attached to a phone someone is actually holding and using.
@@ -1001,8 +987,6 @@ struct PlayerWebView: UIViewRepresentable {
         config.userContentController.add(context.coordinator, name: "gameState")
         config.userContentController.add(context.coordinator, name: "diag")
         config.userContentController.add(context.coordinator, name: "autosave")
-        config.userContentController.add(context.coordinator, name: "frame")
-        config.userContentController.add(context.coordinator, name: "saveResult")
         config.userContentController.add(context.coordinator, name: "manualSave")
         config.userContentController.add(context.coordinator, name: "vitals")
         #if DEBUG
@@ -1010,6 +994,23 @@ struct PlayerWebView: UIViewRepresentable {
         PlayerNetworkLog.startNewSession(romName: rom.displayName)
         #endif
 
+        // The crash-to-curtain investigation's conclusion, so nobody
+        // reopens it without new evidence. The WebContent process loses
+        // a fixed-size chunk of compositor memory per frame presented
+        // until iOS kills it at its hard 2GB cap, roughly a minute of
+        // continuous play. Eliminated by on-device experiment: page
+        // settings and shaders, canvas resolution (9x smaller changed
+        // nothing), the webview's own layer size (scaled-down view plus
+        // transform changed nothing), every private WebKit feature flag
+        // in all three lists (the GPU-process switches do not exist on
+        // iOS 26), opacity, zoom, autosave, observers, and all injected
+        // work. Present rate is the only variable that moved survival.
+        // Safari on the same phone runs the same page indefinitely; the
+        // leak is Apple's, in the embedded-webview compositor path, and
+        // is reported via Feedback with jetsam evidence. Mitigations
+        // live elsewhere: crash recovery restores within seconds, and
+        // the pause menu is the natural place for a preemptive process
+        // recycle if one is ever added.
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
         #if DEBUG
@@ -1023,15 +1024,27 @@ struct PlayerWebView: UIViewRepresentable {
         if #available(iOS 16.4, *) { webView.isInspectable = true }
         #endif
         input.webView = webView
-        webView.isOpaque = false
+        // Opaque, deliberately. A non-opaque webview composites its WebGL
+        // canvas through extra blending surfaces, and the WebContent
+        // process pays for every one of them: this app's crash-to-curtain
+        // hunt found the process ballooning to the 2GB jetsam cap on
+        // memory invisible to the page, the exact signature of the
+        // IOSurface accumulation WebKit is known for in embedded webviews
+        // (FB16462982). The page's own background is black anyway.
+        webView.isOpaque = true
         webView.backgroundColor = .black
         webView.scrollView.backgroundColor = .black
 
-        // No bounce, no zoom. Scrolling stays on for RomM's pre play page,
-        // whose core and firmware pickers sit below the fold, and switches
-        // off in updateUIView once the game starts and the page becomes a
-        // canvas.
+        // No bounce, no zoom, and the zoom scale pinned hard: zoom and
+        // relayout traffic drives the same remote-layer surface path as
+        // above. Scrolling stays on for RomM's pre play page, whose core
+        // and firmware pickers sit below the fold, and switches off in
+        // updateUIView once the game starts and the page becomes a canvas.
         webView.scrollView.bounces = false
+        webView.scrollView.bouncesZoom = false
+        webView.scrollView.minimumZoomScale = 1
+        webView.scrollView.maximumZoomScale = 1
+        webView.allowsBackForwardNavigationGestures = false
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.scrollView.pinchGestureRecognizer?.isEnabled = false
 
@@ -1183,6 +1196,10 @@ struct PlayerWebView: UIViewRepresentable {
                 if (done) return;
                 done = true;
                 try { if (!e.paused) e.pause(); } catch (x) {}
+                // Big-state games have no timer autosave, so the pause
+                // menu is their protection point. Deferred so the state
+                // copy never delays the pause itself.
+                setTimeout(function () { try { save(true); } catch (x) {} }, 0);
               };
               requestAnimationFrame(function () {
                 try {
@@ -1312,10 +1329,14 @@ struct PlayerWebView: UIViewRepresentable {
             timer = setInterval(save, period);
           };
 
-          function save() {
+          // `force` marks an event save: pause, backgrounding, rotation.
+          // Those moments may arrive with the game already paused, and the
+          // paused guard only exists to stop the timer churning while
+          // someone sits in a menu.
+          function save(force) {
             try {
               const e = window.EJS_emulator;
-              if (!e || !e.started || e.paused) return;
+              if (!e || !e.started || (!force && e.paused)) return;
               if (!e.gameManager || !e.storage || !e.storage.states) return;
               const data = e.gameManager.getState();
               if (!data || !data.length) return;
@@ -1326,18 +1347,25 @@ struct PlayerWebView: UIViewRepresentable {
               try { window.webkit.messageHandlers.autosave.postMessage(true); }
               catch (x) {}
 
-              // A CV1000 state is over a hundred megabytes. Copying that
-              // every thirty seconds is its own memory emergency, and the
-              // games with the biggest states are exactly the ones with the
-              // least headroom left. Back off in proportion.
-              // Cheap states are saved often, because the interval is
-              // exactly how much play a kill costs, and the kills are not
-              // going to stop. Progear's state is 0.3MB: writing that every
-              // ten seconds is nothing, and it turns a death into losing a
-              // few seconds rather than half a minute. Only the genuinely
-              // huge states have to be rationed.
+              // The acceptance test for anything running during play is
+              // Safari: the same page in Safari survives games this app
+              // was reloading, and the difference is what this script does
+              // while the game runs. Copying a multi-megabyte state on a
+              // timer is the biggest such cost, and the games with the
+              // biggest states are exactly the ones with the least
+              // headroom. So past 8MB the timer retires entirely: those
+              // games are protected at the moments that are already free,
+              // pause, backgrounding, rotation, exit, and during actual
+              // play the page runs as close to bare as Safari's.
+              // Cheap states keep the timer, because the interval is
+              // exactly how much play a kill costs. Progear's state is
+              // 0.3MB: writing that every ten seconds is nothing.
               const mb = data.length / 1048576;
-              schedule(mb > 32 ? 180000 : mb > 8 ? 90000 : mb > 2 ? 30000 : 10000);
+              if (mb > 8) {
+                if (timer) { clearInterval(timer); timer = null; }
+              } else {
+                schedule(mb > 2 ? 30000 : 10000);
+              }
 
               // Vitals, so that when the process dies there is evidence
               // rather than another theory. A phone in a hand has no
@@ -1352,49 +1380,6 @@ struct PlayerWebView: UIViewRepresentable {
               } catch (x) {}
             } catch (x) {}
           }
-
-          // The Home hero's frame, on a slow timer of its own.
-          //
-          // It cannot ride the pause: the core writes its screenshot on the
-          // next emulated frame, and pausing stops frames, so a capture
-          // fired alongside a pause returns a correctly sized black
-          // rectangle. Delaying the pause to let it through would defeat
-          // the one thing the pause menu is for. A lazy timer sidesteps
-          // that entirely, and the hero being a couple of minutes stale is
-          // invisible: it is a picture of your game, not a clock.
-          //
-          // Downscaled to a small jpeg before crossing the bridge, because
-          // the bridge takes a base64 string and a full resolution png
-          // becomes megabytes of it.
-          window.__cabinetCaptureFrame = function () {
-            try {
-              const e = window.EJS_emulator;
-              if (!e || !e.started || e.paused) return;
-              // The core's own screenshot path, not the canvas: the canvas
-              // is WebGL and reads back empty once a frame is presented,
-              // which yields a perfectly sized black rectangle. Safe here
-              // only because this is always called while the game is still
-              // running, never after the pause has landed.
-              e.takeScreenshot(undefined, "png", 1).then(function (shot) {
-                const blob = shot && (shot.blob || shot.screenshot);
-                if (!blob) return;
-                return createImageBitmap(blob).then(function (bitmap) {
-                  const w = Math.min(bitmap.width, 480);
-                  const h = Math.max(1, Math.round(bitmap.height * (w / bitmap.width)));
-                  const off = document.createElement("canvas");
-                  off.width = w;
-                  off.height = h;
-                  off.getContext("2d").drawImage(bitmap, 0, 0, w, h);
-                  bitmap.close();
-                  const url = off.toDataURL("image/jpeg", 0.6);
-                  off.width = 0;
-                  off.height = 0;
-                  try { window.webkit.messageHandlers.frame.postMessage(url); }
-                  catch (x) {}
-                });
-              }).catch(function () {});
-            } catch (x) {}
-          };
 
           // Autosaves were never deleted, so every game ever played left
           // its largest state in this origin's storage permanently: a
@@ -1414,9 +1399,8 @@ struct PlayerWebView: UIViewRepresentable {
 
           if (\(autosaveEnabled ? "true" : "false")) {
             schedule(30000);
-            setInterval(window.__cabinetCaptureFrame, 120000);
           }
-          window.__cabinetAutosaveNow = save;
+          window.__cabinetAutosaveNow = function () { save(true); };
 
           // The upload goes through fetch directly rather than RomM's
           // EJS_onSaveState, which swallows failures into the console and
@@ -1474,20 +1458,8 @@ struct PlayerWebView: UIViewRepresentable {
                 const shot = window.__cabinetHeldShot;
                 if (shot) {
                   fd.append("screenshotFile", shot, STATE_BASE + " [" + stamp + "].png");
-                  // The same image becomes Home's hero frame for this
-                  // save, replacing the timer frame that could trail the
-                  // saved moment by minutes. Sent before manualSave fires
-                  // on the native side so the banked copy is this one.
-                  try {
-                    const reader = new FileReader();
-                    reader.onload = function () {
-                      try { window.webkit.messageHandlers.frame.postMessage(reader.result); }
-                      catch (x) {}
-                      try { window.webkit.messageHandlers.manualSave.postMessage(true); }
-                      catch (x) {}
-                    };
-                    reader.readAsDataURL(shot);
-                  } catch (x) {}
+                  try { window.webkit.messageHandlers.manualSave.postMessage(true); }
+                  catch (x) {}
                 }
                 const core = (typeof window.EJS_core === "string" && window.EJS_core)
                   ? window.EJS_core : "emulatorjs";
@@ -1500,12 +1472,8 @@ struct PlayerWebView: UIViewRepresentable {
                   if (r.ok) { e.displayMessage("STATE SAVED TO YOUR SERVER"); }
                   else if (r.status === 413) { e.displayMessage("STATE TOO LARGE FOR THE SERVER"); }
                   else { e.displayMessage("STATE SAVE FAILED (" + r.status + ")"); }
-                  try { window.webkit.messageHandlers.saveResult.postMessage("http " + r.status); }
-                  catch (x) {}
                 }).catch(function (err) {
                   e.displayMessage("STATE SAVE FAILED, CHECK THE CONNECTION");
-                  try { window.webkit.messageHandlers.saveResult.postMessage("network " + err); }
-                  catch (x) {}
                 });
               } catch (x) {}
             } catch (x) {}
@@ -1555,17 +1523,20 @@ struct PlayerWebView: UIViewRepresentable {
                     post("stores: " + Array.from(db.objectStoreNames));
                     if (!db.objectStoreNames.contains("rom")) { post("no rom store"); return; }
                     var store = db.transaction("rom", "readonly").objectStore("rom");
+                    // Keys only, never the values. An earlier version did
+                    // store.get() on every entry to report byte sizes, and
+                    // each get materializes the entry's full ROM bytes in
+                    // this process: with a couple of gigabytes cached, one
+                    // boot of this probe put the content process under
+                    // memory pressure before the game even started, made
+                    // play sluggish, and got the process killed mid game.
+                    // The whole point of this app is that the player runs
+                    // the same page Safari does; a diagnostic that ruins
+                    // that is worse than no diagnostic.
                     var keysReq = store.get("?EJS_KEYS!");
                     keysReq.onsuccess = function () {
                         var keys = keysReq.result || [];
-                        post("tracked keys: " + JSON.stringify(keys));
-                        keys.forEach(function (k) {
-                            var r = store.get(k);
-                            r.onsuccess = function () {
-                                var v = r.result;
-                                if (v) post("entry " + k + ": content-length=" + v["content-length"] + " type=" + (v.type || "rom") + " bytes=" + (v.data ? v.data.byteLength : "none"));
-                            };
-                        });
+                        post("tracked keys (" + keys.length + "): " + JSON.stringify(keys));
                     };
                     keysReq.onerror = function () { post("key index read failed"); };
                 };
@@ -1575,27 +1546,50 @@ struct PlayerWebView: UIViewRepresentable {
     #endif
 
     static func authInjection(token: String) -> String {
-        """
+        // The request log only exists in debug builds (its handler is
+        // registered under #if DEBUG), so release pages get a no-op
+        // instead of building a string and probing for a listener on
+        // every fetch and XHR the emulator makes.
+        #if DEBUG
+        let logRequestJS = """
+              // Method included because EmulatorJS's cache-hit path still
+              // sends one HEAD for the ROM URL on every launch: a lone
+              // "HEAD .../content/..." line is a cache hit, HEAD followed by
+              // GET on the same URL is a miss.
+              const logRequest = (url, method) => {
+                try {
+                  if (window.webkit && window.webkit.messageHandlers.playerNetwork) {
+                    window.webkit.messageHandlers.playerNetwork.postMessage(
+                      (method ? method + " " : "") + String(url)
+                    );
+                  }
+                } catch (e) {}
+              };
+            """
+        #else
+        let logRequestJS = "const logRequest = function () {};"
+        #endif
+        return """
         (function () {
+          // Note from the crash investigation: a devicePixelRatio
+          // override was tried here (canvas shrank 9x, verified) and
+          // survival did not move, while a slower-rendering game lasted
+          // proportionally longer. The leak is per frame PRESENTED at a
+          // size the page cannot influence, so no in-page lever helps.
           const TOKEN = \(tokenLiteral(token));
+
+          // A property trap once lived here forcing FBNeo's
+          // allow-depth-32 option off, testing whether 32-bit frames
+          // drove the webview leak. Verified applied through the
+          // player's own settings screen, and the leak did not move, so
+          // the override was removed rather than shipped: it would have
+          // silently denied 32-bit color to everyone for no benefit.
           const sameOrigin = (url) => {
             try { return new URL(url, location.href).origin === location.origin; }
             catch { return false; }
           };
 
-          // Method included because EmulatorJS's cache-hit path still
-          // sends one HEAD for the ROM URL on every launch: a lone
-          // "HEAD .../content/..." line is a cache hit, HEAD followed by
-          // GET on the same URL is a miss.
-          const logRequest = (url, method) => {
-            try {
-              if (window.webkit && window.webkit.messageHandlers.playerNetwork) {
-                window.webkit.messageHandlers.playerNetwork.postMessage(
-                  (method ? method + " " : "") + String(url)
-                );
-              }
-            } catch (e) {}
-          };
+          \(logRequestJS)
 
           const origFetch = window.fetch;
           window.fetch = function (input, init) {
@@ -1734,8 +1728,29 @@ struct PlayerWebView: UIViewRepresentable {
           };
           postGameState("stopped");
 
+          // Resize traffic counter only. Earlier revisions also wrapped
+          // the canvas's width/height setters (first to swallow
+          // same-value sets, then to scale sizes down, chasing the
+          // WebGL buffer leak): both variants blanked the picture on
+          // device, RetroArch does not tolerate the canvas disagreeing
+          // with the size it believes it set. Do not reintroduce
+          // property interception on the game canvas.
+          let resizeEvents = 0;
+          window.addEventListener("resize", () => { resizeEvents += 1; }, true);
+
+          // Animation heartbeat counter, measurement only. An earlier
+          // revision also wrapped requestAnimationFrame to cap delivery
+          // near 60; it shipped alongside the canvas interception that
+          // blanked the picture, so both were pulled to get back to a
+          // page that behaves exactly like the stock one. (Research
+          // says the embedded webview is capped near 60 anyway.)
+          let rafRaw = 0;
+          const rafNative = window.requestAnimationFrame.bind(window);
+          (function count(t) { rafRaw += 1; rafNative(count); })(0);
           let gameOn = false;
+          let obsHits = 0;
           const gameObserver = new MutationObserver(() => {
+            obsHits += 1;
             const toggle = document.querySelector(".ejs_virtualGamepad_open");
             const on = !!toggle && toggle.style.display !== "none";
             if (on !== gameOn) {
@@ -1744,6 +1759,20 @@ struct PlayerWebView: UIViewRepresentable {
               if (on && window.__rommReportEmulation) {
                 setTimeout(window.__rommReportEmulation, 400);
               }
+              // The boot status observer's element is gone once the game
+              // is up, but watching characterData across the whole
+              // document keeps firing on every DOM tick EmulatorJS makes
+              // during play. Off while a game runs, back on when it
+              // stops, in case a next boot happens without a page load.
+              // (Safe to reference here: observer callbacks are
+              // asynchronous, so statusObserver below exists by the time
+              // this runs.)
+              try {
+                if (on) statusObserver.disconnect();
+                else statusObserver.observe(document.documentElement, {
+                  subtree: true, childList: true, characterData: true,
+                });
+              } catch (e) {}
             }
           });
           gameObserver.observe(document.documentElement, {
@@ -1752,6 +1781,91 @@ struct PlayerWebView: UIViewRepresentable {
             attributes: true,
             attributeFilter: ["style"],
           });
+
+          // Memory probe, debug builds only (logRequest is a no-op in
+          // release). Jetsam reports show this process reaching its 2GB
+          // cap within about a minute of arcade play, roughly 30MB/s of
+          // growth a 30MB game cannot justify. Every ten seconds this
+          // logs the numbers the page can actually see: the wasm heap's
+          // size (the core's own memory), the DOM node count, and how
+          // often the game observer fired, so one run says whether the
+          // growth is the core's heap or the page around it.
+          setInterval(() => {
+            try {
+              const e = window.EJS_emulator;
+              if (!e || !e.started) return;
+              // The wasm heap hides in different spots depending on the
+              // build; try each and report which one answered.
+              let heap = "?";
+              const mods = [
+                ["gm.Module", () => e.gameManager.Module],
+                ["e.Module", () => e.Module],
+                ["win.Module", () => window.Module],
+                ["gm.wasm", () => e.gameManager],
+              ];
+              for (const [tag, get] of mods) {
+                try {
+                  const m = get();
+                  const buf = m && (m.HEAP8 ? m.HEAP8.buffer
+                    : m.HEAPU8 ? m.HEAPU8.buffer
+                    : m.wasmMemory ? m.wasmMemory.buffer : null);
+                  if (buf && buf.byteLength) {
+                    heap = tag + ":" + Math.round(buf.byteLength / 1048576) + "MB";
+                    break;
+                  }
+                } catch (x) {}
+              }
+              // Canvas backing stores: a runaway canvas size would cost
+              // real memory per composited frame.
+              let canv = "";
+              try {
+                const all = document.querySelectorAll("canvas");
+                canv = all.length + "x[";
+                all.forEach((c) => { canv += c.width + "*" + c.height + " "; });
+                canv += "]";
+              } catch (x) {}
+              // Whether the injected 16-bit override actually reached the
+              // core. Three sources, so the answer is definitive: what
+              // the defaultOptions trap holds, what EmulatorJS resolved
+              // into its settings, and what the core's option catalog
+              // lists (choices only, no current value).
+              let depth = "";
+              try {
+                depth += "trap:" + ((window.EJS_defaultOptions || {})["fbneo-allow-depth-32"] || "unset");
+              } catch (x) {}
+              try {
+                const s = e.settings || (e.config && e.config.defaultOptions) || {};
+                depth += ",settings:" + (JSON.stringify(s).match(/depth-32[^,}]*/) || ["absent"])[0];
+              } catch (x) {}
+              try {
+                const opts = String(e.gameManager.getCoreOptions());
+                depth += ",core:" + ((opts.match(/fbneo-allow-depth-32[^\\n]*/) || ["absent"])[0]).slice(0, 60);
+              } catch (x) {}
+              // Audio: a suspended or interrupted context that keeps
+              // getting buffers queued into it is a classic growth path.
+              let audio = "?";
+              try {
+                const ctx = (e.gameManager && e.gameManager.audioContext)
+                  || e.audioContext || window.AL && window.AL.currentCtx
+                    && window.AL.currentCtx.audioCtx;
+                if (ctx) audio = ctx.state + "@" + ctx.sampleRate;
+              } catch (x) {}
+              logRequest(
+                "[memprobe] heap=" + heap
+                  + " depth=" + depth
+                  + " canvas=" + canv
+                  + " resize=" + resizeEvents
+                  + " raf=" + Math.round(rafRaw / 10) + "Hz"
+                  + " audio=" + audio
+                  + " nodes=" + document.getElementsByTagName("*").length
+                  + " obs=" + obsHits + "/10s"
+                  + " t=" + Math.round(performance.now() / 1000) + "s"
+              );
+              obsHits = 0;
+              resizeEvents = 0;
+              rafRaw = 0;
+            } catch (x) {}
+          }, 10000);
 
           // EmulatorJS's own boot status, mirrored verbatim so the native
           // curtain can show real progress instead of a black flash while
@@ -1801,12 +1915,6 @@ struct PlayerWebView: UIViewRepresentable {
             const touch = event.touches && event.touches[0];
             if (touch && touch.clientY < window.innerHeight * 0.55) wake();
           }, { passive: true, capture: true });
-
-          // A physical controller has no screen to tap, so native code calls
-          // this to reveal the overlay. Going through the same wake keeps one
-          // source of truth: EmulatorJS's menu button and the app's close
-          // button appear and fade together rather than drifting apart.
-          window.__rommWakeOverlay = wake;
 
           wake();
         })();

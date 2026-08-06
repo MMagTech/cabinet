@@ -156,6 +156,13 @@ final class ControlPadView: UIView {
         let angle = atan2(dy, dx)
         let x = magnitude == 0 ? 0 : cos(angle) * magnitude
         let y = magnitude == 0 ? 0 : sin(angle) * magnitude
+        // touchesMoved arrives per display refresh, up to 120Hz, and a
+        // thumb held "still" jitters by fractions of a point. Below 1.5%
+        // of full deflection the game cannot tell the difference, so skip
+        // the JS call and the redraw both, or a held stick streams
+        // identical messages into the webview for as long as it is held.
+        let previous = stickPosition
+        guard abs(x - previous.x) > 0.015 || abs(y - previous.y) > 0.015 else { return }
         stickPosition = CGPoint(x: x, y: y)
         // No sign flip: EmulatorJS's own y-positive slot is confirmed to
         // mean "down", not "up", by N64's C-buttons, whose analog indices
@@ -164,7 +171,10 @@ final class ControlPadView: UIView {
         // screen y, which already grows downward, so the raw touch delta is
         // exactly the value to send, no conversion needed.
         sendStick(ids, Double(x), Double(y))
-        setNeedsDisplay()
+        // Only the stick's own frame needs repainting, not every control
+        // on the pad: in landscape this view spans the whole screen, and
+        // a full-view redraw per touch sample repainted all of it.
+        setNeedsDisplay(stick.frame.resolved(in: bounds.size).insetBy(dx: -20, dy: -20))
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {

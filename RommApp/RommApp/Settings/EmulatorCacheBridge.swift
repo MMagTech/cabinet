@@ -86,6 +86,15 @@ final class EmulatorCacheBridge: NSObject, ObservableObject {
         self.webView = webView
     }
 
+    /// Forgets a webview that has been unmounted. Without this, `isReady`
+    /// stays true after the bridge view is torn down, and the next Data
+    /// Saver would fire its fetch into a dead webview instead of waiting
+    /// for the fresh one to load.
+    func detach() {
+        webView = nil
+        isReady = false
+    }
+
     func handleReady() {
         isReady = true
     }
@@ -304,25 +313,35 @@ final class EmulatorCacheBridge: NSObject, ObservableObject {
             keysReq.onsuccess = function () {
                 var keys = keysReq.result || [];
                 if (keys.length === 0) { finish([]); return; }
+                // One entry at a time, strictly. store.get() materializes
+                // the whole record, ROM bytes included, no matter which
+                // field gets read; firing sixty gets in a burst put an
+                // entire multi-gigabyte cache in this process's memory at
+                // once, the same bug the player's debug probe had. Chained
+                // sequentially, each record can be collected before the
+                // next one loads, so the peak is the single largest entry.
+                // The size reported is the stored content-length header,
+                // which EmulatorJS writes on every put.
                 var items = [];
-                var remaining = keys.length;
-                keys.forEach(function (key) {
+                var index = 0;
+                (function next() {
+                    if (index >= keys.length) { finish(items); return; }
+                    var key = keys[index];
+                    index += 1;
                     var req = store.get(key);
                     req.onsuccess = function () {
                         var v = req.result;
-                        if (v && v.data && typeof v.data.byteLength === "number") {
+                        if (v) {
+                            var size = parseInt(v["content-length"], 10);
                             items.push({
-                                key: key, type: v.type || "rom", fileSize: v.data.byteLength
+                                key: key, type: v.type || "rom",
+                                fileSize: isNaN(size) ? 0 : size
                             });
                         }
-                        remaining -= 1;
-                        if (remaining === 0) finish(items);
+                        next();
                     };
-                    req.onerror = function () {
-                        remaining -= 1;
-                        if (remaining === 0) finish(items);
-                    };
-                });
+                    req.onerror = function () { next(); };
+                })();
             };
         }, function () { post([]); });
     })();

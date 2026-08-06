@@ -203,31 +203,19 @@ struct HomeView: View {
 
     // MARK: Pieces
 
-    /// The picture matches what Resume will actually do, not just whatever
-    /// was last on screen. An interrupted session resumes from the local
-    /// autosave, close to the final frame, so that frame is honest there.
-    /// A cleanly exited game resumes from the last *save*, which can be
-    /// well before the final frame: showing that frame advertised a moment
-    /// the save system never kept, which is exactly the mismatch this
-    /// fixes. So a clean exit shows the frame banked when the save was
-    /// made, and a game with no banked frame falls back to box art, the
-    /// same honesty as a fresh boot.
-    @ViewBuilder
+    /// Box art, always, the same visual language as every other card in
+    /// the app. The hero used to show a captured game frame when one
+    /// existed, which meant Home mixed two art styles depending on how the
+    /// last session ended, and keeping those frames honest required a
+    /// periodic in-game screenshot, standing work inside a process with
+    /// no headroom to spare. Save screenshots still exist where they
+    /// belong: attached to the save states themselves.
     private func heroArtwork(for rom: Rom, contentMode: ContentMode) -> some View {
-        let frame = SessionMarker.offersResume(romId: rom.id)
-            ? LastFrame.image(romId: rom.id)
-            : LastFrame.savedImage(romId: rom.id)
-        if let frame {
-            Image(uiImage: frame)
-                .resizable()
-                .aspectRatio(contentMode: contentMode)
-        } else {
-            CoverImage(
-                path: rom.pathCoverLarge ?? rom.pathCoverSmall,
-                title: rom.displayName,
-                contentMode: contentMode
-            )
-        }
+        CoverImage(
+            path: rom.pathCoverLarge ?? rom.pathCoverSmall,
+            title: rom.displayName,
+            contentMode: contentMode
+        )
     }
 
     /// Portrait's hero takes a share of the screen rather than a fixed 360
@@ -244,18 +232,11 @@ struct HomeView: View {
         Button {
             resuming = rom
         } label: {
-            // The frame you left on, when the player has recorded one, per
-            // the scope doc's Home. Box art is the fallback, not the point:
-            // the hero is your game mid-moment, inviting you back into it.
-            //
             // Fitted over a blurred copy of itself rather than cropped to
-            // fill. A captured frame is wide and box art is tall, so any
-            // single card shape has to butcher one of them: filling this
-            // one sliced a 4:3 game frame down to a narrow vertical strip
-            // of its middle, which is the opposite of showing someone the
-            // moment they left. Fitting shows all of it, and the blurred
-            // backdrop fills the leftovers with the game's own colours
-            // instead of letterbox bars.
+            // fill: box art is tall and the hero card is wide, so filling
+            // would slice the art to a strip of its middle. Fitting shows
+            // all of it, and the blurred backdrop fills the leftovers with
+            // the art's own colours instead of letterbox bars.
             heroArtwork(for: rom, contentMode: .fit)
                 .frame(maxWidth: .infinity)
                 .frame(height: height)
