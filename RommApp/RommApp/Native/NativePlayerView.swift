@@ -15,19 +15,58 @@ struct NativePlayerView: View {
     let rom: Rom
 
     @StateObject private var renderer = NativePlayerRenderer()
+    @ObservedObject private var controllers = GameControllerManager.shared
     @State private var previousControllerSend: ((Int, Bool) -> Void)?
 
-    private var layoutItems: [ControlLayout.Item] {
-        let profile = ArcadeProfileStore.shared.resolve(romId: rom.id, shortname: rom.fsNameNoExt)
-        return ArcadeLayout.build(for: profile).items(landscape: true)
+    private var profile: ArcadeProfile {
+        ArcadeProfileStore.shared.resolve(romId: rom.id, shortname: rom.fsNameNoExt)
+    }
+
+    private func layoutItems(landscape: Bool) -> [ControlLayout.Item] {
+        ArcadeLayout.build(for: profile).items(landscape: landscape)
+    }
+
+    /// Matches PlayerView.controlStripHeight: vertical games trade some
+    /// control height for canvas, since every point matters for a taller
+    /// picture and their genres need fewer, simpler inputs.
+    private var controlStripHeight: CGFloat {
+        profile.vertical ? 280 : 330
     }
 
     var body: some View {
-        ZStack {
-            MetalGameView(renderer: renderer)
-            TouchControlPad(items: layoutItems, send: { id, down in
-                renderer.setButton(id, down: down)
-            })
+        GeometryReader { geometry in
+            let isLandscape = geometry.size.width > geometry.size.height
+            let showsControls = !controllers.isConnected
+
+            if isLandscape || !showsControls {
+                // Full screen canvas, pad in the gutters (or hidden with a
+                // controller connected), matching PlayerView's .overlay case.
+                ZStack {
+                    MetalGameView(renderer: renderer)
+                    if showsControls {
+                        TouchControlPad(items: layoutItems(landscape: true), send: { id, down in
+                            renderer.setButton(id, down: down)
+                        })
+                    }
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .background(Color.black)
+            } else {
+                // Portrait: the pad's items are normalised against a bottom
+                // strip, not the full screen, so the canvas and pad split
+                // the screen rather than overlap. Matches PlayerView's
+                // .bottomStrip case exactly, same strip height.
+                VStack(spacing: 0) {
+                    MetalGameView(renderer: renderer)
+                        .frame(height: max(geometry.size.height - controlStripHeight, 0))
+                    TouchControlPad(items: layoutItems(landscape: false), send: { id, down in
+                        renderer.setButton(id, down: down)
+                    })
+                    .frame(height: controlStripHeight)
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .background(Color.black)
+            }
         }
         .ignoresSafeArea()
         .onAppear {
