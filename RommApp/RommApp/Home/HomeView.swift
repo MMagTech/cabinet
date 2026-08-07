@@ -11,6 +11,7 @@ import SwiftUI
 struct HomeView: View {
     @EnvironmentObject private var session: Session
     @ObservedObject private var compatibility = Compatibility.shared
+    @ObservedObject private var networkMonitor = NetworkMonitor.shared
     @AppStorage(PlatformLabelSource.key) private var labelSourceRaw = PlatformLabelSource.platformName.rawValue
     private var labelSource: PlatformLabelSource {
         PlatformLabelSource(rawValue: labelSourceRaw) ?? .platformName
@@ -105,6 +106,15 @@ struct HomeView: View {
             // every time navigation brings Home back into view, favoriting
             // included.
             .onAppear { Task { await load() } }
+            // Live, not just at the next natural reload: load() already
+            // leaves recent/favorites untouched on a failed fetch (see
+            // its own catch below), so re-running it the instant
+            // connectivity changes can only correct the offline flag and
+            // reveal the kept-games list sooner, never discard content
+            // already on screen. Closes the gap where going offline
+            // needed a manual re-navigation to notice (Marcus,
+            // 2026-08-07).
+            .onChange(of: networkMonitor.isConnected) { _, _ in Task { await load() } }
             .fullScreenCover(item: $resuming) { rom in
                 NavigationStack { GameLaunchView(rom: rom) }
             }

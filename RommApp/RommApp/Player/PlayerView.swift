@@ -364,7 +364,7 @@ struct PlayerView: View {
                 // an unrelated reason and would otherwise mislabel a
                 // plain connectivity problem as a storage one on the
                 // second stall too.
-                guard await NetworkMonitor.shared.isConnected else {
+                guard NetworkMonitor.shared.isConnected else {
                     bootFailure = .offline
                     DiagnosticsLog.record(
                         context: "Boot watchdog",

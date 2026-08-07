@@ -7,6 +7,7 @@ import SwiftUI
 /// screen is purely about browsing structure.
 struct LibraryScreen: View {
     @EnvironmentObject private var session: Session
+    @ObservedObject private var networkMonitor = NetworkMonitor.shared
     @AppStorage(PlatformLabelSource.key) private var labelSourceRaw = PlatformLabelSource.platformName.rawValue
     private var labelSource: PlatformLabelSource {
         PlatformLabelSource(rawValue: labelSourceRaw) ?? .platformName
@@ -60,6 +61,12 @@ struct LibraryScreen: View {
         // each with its own state.
         .task { await loadPlatforms() }
         .task { await loadCollections() }
+        // Live, not just at the next pull-to-refresh: closes the same gap
+        // as Home's own onChange below. loadPlatforms()'s branching was
+        // fixed alongside this so a failed live refresh can never hide a
+        // platform list already sitting on screen, only correct or add to
+        // it once a connection returns.
+        .onChange(of: networkMonitor.isConnected) { _, _ in Task { await loadPlatforms() } }
         .fullScreenCover(item: $playing) { rom in
             NavigationStack { GameLaunchView(rom: rom) }
         }
@@ -69,16 +76,24 @@ struct LibraryScreen: View {
 
     private var platformList: some View {
         List {
-            if loadingPlatforms {
+            // Every one of these branches is gated on `platforms.isEmpty`
+            // too, not just its own flag: a live connectivity change now
+            // re-runs `loadPlatforms()` on its own (see the onChange
+            // above), and a list that already loaded successfully must
+            // never vanish behind a loading spinner or an offline banner
+            // just because the latest background refresh failed. Nothing
+            // here discards good data, only a launch with nothing loaded
+            // yet falls through to these.
+            if loadingPlatforms, platforms.isEmpty {
                 HStack(spacing: 10) {
                     ProgressView()
                     Text("Loading your library")
                         .foregroundStyle(.secondary)
                 }
-            } else if platformsError == .offline {
+            } else if platformsError == .offline, platforms.isEmpty {
                 OfflineNotice { await loadPlatforms() }
                     .listRowBackground(Color.clear)
-            } else if let platformsError {
+            } else if let platformsError, platforms.isEmpty {
                 Text(platformsError.message).foregroundStyle(.red)
                 Button("Try again") { Task { await loadPlatforms() } }
             } else {
