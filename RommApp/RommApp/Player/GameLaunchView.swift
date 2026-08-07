@@ -149,11 +149,11 @@ struct GameLaunchView: View {
                             // Equal halves. Both cards carry a label and a
                             // picker and nothing else, so they match without
                             // being forced to.
-                            // The emulator and BIOS cards configure the web
-                            // player's page; the native player is always its
-                            // own core and fetches firmware itself, so with
-                            // native selected they would only mislead.
-                            if selectedBackend == .webview {
+                            // Arcade games configure the web player inside
+                            // the Player card instead, so a backend switch
+                            // never restructures the stack; these standalone
+                            // cards serve the games with no picker at all.
+                            if !rom.isArcade, selectedBackend == .webview {
                                 HStack(alignment: .top, spacing: 12) {
                                     if cores.count > 1 {
                                         coreCard.frame(maxWidth: .infinity)
@@ -741,8 +741,8 @@ struct GameLaunchView: View {
                 if isComputerPlatform { computerPlatformCard }
                 downloadStatusCard
                 if interruptedAt != nil { continueCard }
-                if selectedBackend == .webview, cores.count > 1 { coreCard }
-                if selectedBackend == .webview, showsFirmwareCard { firmwareCard }
+                if !rom.isArcade, selectedBackend == .webview, cores.count > 1 { coreCard }
+                if !rom.isArcade, selectedBackend == .webview, showsFirmwareCard { firmwareCard }
                 if rom.isArcade { playerCard }
                 if showsKeepCard { keepCard }
                 if arcadeBase != nil { arcadeControlsCard }
@@ -764,8 +764,8 @@ struct GameLaunchView: View {
                 if isComputerPlatform { computerPlatformCard }
                 downloadStatusCard
                 if interruptedAt != nil { continueCard }
-                if selectedBackend == .webview, cores.count > 1 { coreCard }
-                if selectedBackend == .webview, showsFirmwareCard { firmwareCard }
+                if !rom.isArcade, selectedBackend == .webview, cores.count > 1 { coreCard }
+                if !rom.isArcade, selectedBackend == .webview, showsFirmwareCard { firmwareCard }
                 if rom.isArcade { playerCard }
                 if showsKeepCard { keepCard }
                 if arcadeBase != nil { arcadeControlsCard }
@@ -898,6 +898,16 @@ struct GameLaunchView: View {
     /// Save states do not cross the boundary (each player's core build
     /// has its own state format), so the caption says so up front rather
     /// than letting someone discover it after losing a run.
+    /// The web player's own configuration (emulator core, BIOS) lives
+    /// inside this card, revealed under the segment when Web player is
+    /// selected, rather than as sibling cards inserted into the stack.
+    /// Structural, not cosmetic: a segmented control that adds and
+    /// removes whole cards around itself reflows the entire screen with
+    /// springy layout animation, the bounce Marcus flagged, and iOS
+    /// segments swap content inside a stable region, they do not
+    /// restructure the page. One card changes height, everything else
+    /// holds still, and the choices that only configure the web player
+    /// now visibly belong to it.
     private var playerCard: some View {
         LaunchCard(title: "Player", systemImage: "play.rectangle.on.rectangle") {
             Picker("Player", selection: $selectedBackend) {
@@ -915,7 +925,58 @@ struct GameLaunchView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            if selectedBackend == .webview {
+                if cores.count > 1 {
+                    Divider()
+                    LabeledContent {
+                        Picker("Emulator", selection: $selectedCore) {
+                            ForEach(cores, id: \.self) { core in
+                                Text(CoreCatalog.displayName(core)).tag(Optional(core))
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                    } label: {
+                        Text("Emulator")
+                    }
+                    if LaunchChoices.isRecommended(core: selectedCore, rom: rom, available: cores) {
+                        Text("Recommended for this game's board. The general arcade core runs it too, but not reliably.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if showsFirmwareCard {
+                    Divider()
+                    if !firmware.isEmpty {
+                        LabeledContent {
+                            Picker("BIOS", selection: $selectedFirmware) {
+                                Text("None").tag(Optional<Firmware>.none)
+                                ForEach(firmware) { item in
+                                    Text(item.fileName).tag(Optional(item))
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .labelsHidden()
+                        } label: {
+                            Text("BIOS")
+                        }
+                    }
+                    if !missingFirmware.isEmpty {
+                        Label {
+                            Text("Missing from the server: \(missingFirmware.map(\.fileName).joined(separator: ", "))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } icon: {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                                .font(.caption)
+                        }
+                    }
+                }
+            }
         }
+        .animation(.snappy(duration: 0.22), value: selectedBackend)
     }
 
     /// One keep toggle for every playable game; only the promise in the
