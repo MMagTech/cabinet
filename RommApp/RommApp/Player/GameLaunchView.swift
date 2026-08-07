@@ -199,7 +199,7 @@ struct GameLaunchView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                downloadButton
+                exportButton
             }
             ToolbarItem(placement: .topBarTrailing) {
                 favoriteButton
@@ -324,17 +324,23 @@ struct GameLaunchView: View {
         !isComputerPlatform && !cores.isEmpty
     }
 
-    private var downloadButton: some View {
+    private var exportButton: some View {
         Button {
             showingExportSheet = true
         } label: {
-            Image(systemName: "square.and.arrow.down")
+            // The share arrow, up and out, never the download arrow:
+            // everything behind this button sends bytes away from the
+            // app, and the one action that brings bytes in, Keep, is a
+            // toggle on the screen itself. The old "Download" title on
+            // this menu read as "onto my phone" sitting next to that
+            // toggle, which is exactly the confusion it caused.
+            Image(systemName: "square.and.arrow.up")
         }
         // Attached here, not at the screen root: a confirmationDialog
         // anchors its arrow to whatever view carries this modifier, so it
         // has to sit on the actual toolbar button, not the whole screen,
         // or the arrow points at the wrong place.
-        .confirmationDialog("Download", isPresented: $showingExportSheet, titleVisibility: .visible) {
+        .confirmationDialog("Export", isPresented: $showingExportSheet, titleVisibility: .visible) {
             if !firmware.isEmpty {
                 Button("Export ROM and BIOS") { startExport(includeFirmware: true) }
                 // Always offered on its own, not just folded into the
@@ -639,7 +645,7 @@ struct GameLaunchView: View {
         case .idle:
             EmptyView()
         case .downloading(let fraction, let received, let total):
-            LaunchCard(title: "Exporting ROM", systemImage: "square.and.arrow.down") {
+            LaunchCard(title: "Exporting ROM", systemImage: "square.and.arrow.up") {
                 VStack(alignment: .leading, spacing: 8) {
                     if total > 0 {
                         Text("\(byteCount(received)) of \(byteCount(total))")
