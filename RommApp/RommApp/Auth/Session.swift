@@ -213,6 +213,29 @@ final class Session: ObservableObject {
         await client?.reportPlaySession(romId: romId, start: start, end: end)
     }
 
+    /// The in-flight end-of-session report, if any. The player fires its
+    /// report the moment it closes and Home refetches recents the moment
+    /// the launch screen closes; those two race, and when the fetch wins
+    /// the game just played sorts under the one before it. Home awaits
+    /// this before asking, which settles the race deterministically for
+    /// every exit route in both players.
+    private(set) var pendingPlayReport: Task<Void, Never>?
+
+    /// Records a finished session as a task Home can wait on, rather than
+    /// a fire-and-forget the recents fetch can outrun.
+    func reportPlaySessionEnded(romId: Int, start: Date, end: Date) {
+        pendingPlayReport = Task {
+            await reportPlaySession(romId: romId, start: start, end: end)
+        }
+    }
+
+    /// Blocks until any just-ended session has reached the server, then
+    /// clears the marker. Returns immediately when nothing is pending.
+    func waitForPendingPlayReport() async {
+        await pendingPlayReport?.value
+        pendingPlayReport = nil
+    }
+
     func roms(
         platformId: Int? = nil,
         collectionId: Int? = nil,

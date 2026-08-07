@@ -146,13 +146,11 @@ struct NativePlayerView: View {
             GameControllerManager.shared.send = previousControllerSend
             GameControllerManager.shared.onMenu = previousControllerMenu
             GameControllerManager.shared.onDisconnect = previousControllerDisconnect
-            // Report the finished session on a task of its own rather than
-            // the view's, which is being torn down. The session POST is
-            // what stamps last played; the heartbeat alone is not history.
+            // The session POST is what stamps last played; the heartbeat
+            // alone is not history. Handed to Session as a trackable task
+            // so Home's refresh can wait for it instead of racing it.
             if let startedAt {
-                let session = session
-                let romId = rom.id
-                Task { await session.reportPlaySession(romId: romId, start: startedAt, end: Date()) }
+                session.reportPlaySessionEnded(romId: rom.id, start: startedAt, end: Date())
             }
             NativeSessionMarker.recordCleanExit()
         }

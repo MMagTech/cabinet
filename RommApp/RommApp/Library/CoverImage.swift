@@ -45,14 +45,24 @@ struct CoverImage: View {
         .task(id: path) { await load() }
     }
 
+    /// Runs on appear and again whenever `path` changes, via task(id:).
+    /// The change case matters: SwiftUI reuses this view when the rom in
+    /// a slot changes (Home's hero card after a play reorders recents),
+    /// and an early-out on the already-loaded image kept the previous
+    /// game's art under the new game's title.
     private func load() async {
-        guard image == nil, !failed, let path else { return }
+        guard let path else {
+            image = nil
+            return
+        }
 
         if let cached = await CoverCache.shared.image(forKey: path) {
             image = cached
             return
         }
 
+        image = nil
+        failed = false
         do {
             let data = try await session.coverData(path: path)
             guard let decoded = UIImage(data: data) else {
@@ -62,7 +72,9 @@ struct CoverImage: View {
             await CoverCache.shared.set(decoded, data: data, forKey: path)
             image = decoded
         } catch {
-            failed = true
+            // A cancelled fetch is the view moving on to a newer path,
+            // not a failure of this one.
+            if !Task.isCancelled { failed = true }
         }
     }
 }

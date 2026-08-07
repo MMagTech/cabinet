@@ -523,6 +523,10 @@ struct HomeView: View {
     /// a server side error and the library screen will explain it properly
     /// the moment they go looking.
     private func load() async {
+        // A session that just ended must reach the server before recents
+        // are asked for, or the game played a moment ago sorts under the
+        // one before it. No-op when nothing is pending.
+        await session.waitForPendingPlayReport()
         // Concurrently, not one after the other. Sequentially, a slow or
         // dead connection paid the timeout twice before this screen could
         // say anything, which doubled the wait for the answer that matters

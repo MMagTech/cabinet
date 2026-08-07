@@ -451,13 +451,11 @@ struct PlayerView: View {
             }
         }
         .onDisappear {
-            // Report the finished session on a task of its own rather than
-            // the view's, which is being torn down: a .task here would be
-            // cancelled before the request left.
+            // Report the finished session through Session rather than a
+            // loose task: a .task here would be cancelled before the
+            // request left, and a detached one races Home's refresh.
             if let startedAt {
-                let session = session
-                let romId = rom.id
-                Task { await session.reportPlaySession(romId: romId, start: startedAt, end: Date()) }
+                session.reportPlaySessionEnded(romId: rom.id, start: startedAt, end: Date())
             }
             // The one deliberate way out. An evicted app never runs this,
             // which is exactly how the next launch can tell the difference.
