@@ -150,7 +150,13 @@ final class KeptGameStore: ObservableObject {
                 // person toggled this off, no message is owed regardless
                 // of which error the teardown produced.
                 if !(error is CancellationError), !Task.isCancelled {
-                    self?.errors[rom.id] = error.localizedDescription
+                    // The person sees the remedy, not the diagnosis: the
+                    // raw system text ("The network connection was
+                    // lost.") reads as a scolding and names no next
+                    // step, while the retry is the very toggle this
+                    // caption sits under. The real error still goes to
+                    // diagnostics for debugging.
+                    self?.errors[rom.id] = "The download didn't finish. Turn Download on again to retry."
                     DiagnosticsLog.record(
                         context: "Download for offline", message: error.localizedDescription,
                         romVersion: session.serverVersion
