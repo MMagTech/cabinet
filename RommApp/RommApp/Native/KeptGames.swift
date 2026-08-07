@@ -158,7 +158,7 @@ final class KeptGameStore: ObservableObject {
         tasks[romId]?.cancel()
         errors[romId] = nil
         if let game = kept(romId: romId) {
-            removeLink(for: game)
+            removeLinks(for: game)
         }
         try? FileManager.default.removeItem(at: directory(for: romId))
         try? FileManager.default.removeItem(at: stagingDirectory(for: romId))
@@ -206,32 +206,59 @@ final class KeptGameStore: ObservableObject {
             .replacingOccurrences(of: ":", with: "-")
     }
 
-    private func createLink(for game: KeptGame) {
-        let source = storeFileURL(for: game)
-        guard let sourceInode = inode(of: source) else { return }
-        guard filesFolderInodes()[sourceInode] == nil else { return }
-
+    private func platformFolder(for game: KeptGame) -> URL {
         // RomM's own layout: <platform folder>/<server filename>. No
         // collision handling because the server's directory already
         // guarantees uniqueness within a platform folder; a manifest
         // from before this field existed just lands at the root.
-        var folder = filesFolder
-        if let slug = game.platformFsSlug, !slug.isEmpty {
-            folder = filesFolder.appendingPathComponent(Self.safeComponent(slug), isDirectory: true)
-            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        }
-        let target = folder.appendingPathComponent(Self.safeComponent(game.fsName))
-        try? FileManager.default.linkItem(at: source, to: target)
-        Self.excludeFromBackup(target)
+        guard let slug = game.platformFsSlug, !slug.isEmpty else { return filesFolder }
+        return filesFolder.appendingPathComponent(Self.safeComponent(slug), isDirectory: true)
     }
 
-    private func removeLink(for game: KeptGame) {
-        guard let sourceInode = inode(of: storeFileURL(for: game)) else { return }
-        for (id, url) in filesFolderInodes() where id == sourceInode {
-            try? FileManager.default.removeItem(at: url)
+    /// Every file a kept game brought down, ROM and firmware alike,
+    /// linked into its platform folder. Firmware included on purpose:
+    /// the BIOS is the file another emulator needs alongside the game,
+    /// this is how the server's own library carries it, and putting it
+    /// here is what lets playable games have no export button at all.
+    /// Idempotent, called at keep time and every reconcile: the ROM is
+    /// matched by inode so renames don't spawn duplicates, and a
+    /// firmware name already present is left alone, whichever kept game
+    /// originally provided it.
+    private func ensureLinks(for game: KeptGame) {
+        let folder = platformFolder(for: game)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let existing = filesFolderInodes()
+
+        guard let storeFiles = try? FileManager.default.contentsOfDirectory(
+            at: directory(for: game.romId), includingPropertiesForKeys: nil
+        ) else { return }
+        for file in storeFiles where file.lastPathComponent != "manifest.json" {
+            guard let fileInode = inode(of: file), existing[fileInode] == nil else { continue }
+            let target = folder.appendingPathComponent(Self.safeComponent(file.lastPathComponent))
+            guard !FileManager.default.fileExists(atPath: target.path) else { continue }
+            try? FileManager.default.linkItem(at: file, to: target)
+            Self.excludeFromBackup(target)
+        }
+    }
+
+    private func removeLinks(for game: KeptGame) {
+        // Firmware stays while any other kept game on the platform still
+        // wants it; the last one out takes it along.
+        let platformStillKept = games.contains {
+            $0.romId != game.romId && $0.platformFsSlug == game.platformFsSlug
+        }
+        guard let storeFiles = try? FileManager.default.contentsOfDirectory(
+            at: directory(for: game.romId), includingPropertiesForKeys: nil
+        ) else { return }
+        let folder = filesFolderInodes()
+        for file in storeFiles where file.lastPathComponent != "manifest.json" {
+            let isROM = file.lastPathComponent == game.fsName
+            if !isROM && platformStillKept { continue }
+            guard let fileInode = inode(of: file), let link = folder[fileInode] else { continue }
+            try? FileManager.default.removeItem(at: link)
             // A platform folder that just emptied out goes too, so the
             // mirror never accumulates husks of removed platforms.
-            let parent = url.deletingLastPathComponent()
+            let parent = link.deletingLastPathComponent()
             if parent != filesFolder,
                let remaining = try? FileManager.default.contentsOfDirectory(atPath: parent.path),
                remaining.isEmpty {
@@ -260,13 +287,15 @@ final class KeptGameStore: ObservableObject {
                 remove(romId: game.romId)
                 continue
             }
-            if folder[storeInode] == nil {
-                if migrated {
-                    remove(romId: game.romId)
-                } else {
-                    createLink(for: game)
-                }
+            if folder[storeInode] == nil, migrated {
+                remove(romId: game.romId)
             }
+        }
+        // Whoever survived gets any missing links restored, firmware
+        // included: only deleting the ROM itself reads as intent, a
+        // deleted BIOS file is platform infrastructure and comes back.
+        for game in games {
+            ensureLinks(for: game)
         }
         UserDefaults.standard.set(true, forKey: Self.linksMigratedKey)
     }
@@ -330,7 +359,7 @@ final class KeptGameStore: ObservableObject {
             try FileManager.default.moveItem(at: staging, to: final)
             games.append(manifest)
             games.sort { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
-            createLink(for: manifest)
+            ensureLinks(for: manifest)
         } catch {
             try? FileManager.default.removeItem(at: staging)
             throw error

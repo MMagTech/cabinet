@@ -117,16 +117,17 @@ earlier ones are useful without the later ones.
   Support stays canonical and unexposed, so the public shape never
   needs to change as later phases grow the private side (this dissolves
   the layout-becomes-API objection that had deferred the idea).
-  Deleting a file there un-keeps the game, store copy included, at the
+  Deleting the ROM there un-keeps the game, store copy included, at the
   next reconcile; renames and moves within the folder are survived by
-  matching inodes, not names or locations. Games only; firmware stays
-  behind Export BIOS. Export ended the day reduced to the places Keep
-  cannot reach: playable games show the keep toggle and at most a
-  BIOS-only export, while the full ROM export menu survives only on
-  unsupported platforms, keyboard machines and multi-file games, where
-  no toggle can exist and Export is the only way to the file. One
-  visible action wherever Keep works; Marcus held the line on this and
-  was right.
+  matching inodes, not names or locations. Firmware links in alongside
+  the ROMs, shared across a platform's kept games and removed with the
+  last of them; deleting a BIOS file in Files is not read as intent,
+  it's platform infrastructure and reconcile restores it. Export ended
+  the day reduced to the only places Keep cannot exist: unsupported
+  platforms, keyboard machines and multi-file games, where no toggle
+  can exist and Export is the only way to the file. Playable games
+  show one visible action, the toggle, and nothing else; Marcus held
+  the line on this through two of my hedges and was right both times.
 - Save states remain per-core, per the state-format finding in the
   native player work: an offline save from the native player syncs up
   tagged fbneo-native, same as an online one.

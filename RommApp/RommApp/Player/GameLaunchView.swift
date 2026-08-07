@@ -339,25 +339,25 @@ struct GameLaunchView: View {
         !isComputerPlatform && !cores.isEmpty
     }
 
-    /// One visible action wherever Keep works: on a game with the keep
-    /// toggle, this button either offers only the BIOS (the one file
-    /// deliberately not in the Files app's Games folder) or does not
-    /// appear at all. The full ROM export menu survives only where Keep
-    /// cannot exist, unsupported platforms, keyboard machines,
-    /// multi-file games, because there it is the only way to the file.
-    /// Keeping both on the same screen was the last remnant of the
-    /// three-eras accretion this whole redesign removed, and it kept
-    /// reading as two ways to do one thing because that is what it was.
+    /// One visible action, no exceptions: a game with the keep toggle
+    /// shows no export button at all. The kept files, firmware included,
+    /// are all in the Files app's Games folder, so there is nothing left
+    /// for an export menu to offer that the folder does not already
+    /// hold. This menu survives only where Keep cannot exist,
+    /// unsupported platforms, keyboard machines, multi-file games,
+    /// because there it is the only way to the file. Its earlier
+    /// BIOS-only remnant on playable games was the last hedge of the
+    /// three-eras accretion this redesign removed, and Marcus caught it
+    /// within the hour.
     @ViewBuilder
     private var exportButton: some View {
-        if !loading, !showsKeepCard || !firmware.isEmpty {
+        if !loading, !showsKeepCard {
             Button {
                 showingExportSheet = true
             } label: {
                 // The share arrow, up and out, never the download arrow:
                 // everything behind this button sends bytes away from
-                // the app; the one action that brings bytes in, Keep, is
-                // a toggle on the screen itself.
+                // the app.
                 Image(systemName: "square.and.arrow.up")
             }
             // Attached here, not at the screen root: a confirmationDialog
@@ -365,23 +365,17 @@ struct GameLaunchView: View {
             // it has to sit on the actual toolbar button, not the whole
             // screen, or the arrow points at the wrong place.
             .confirmationDialog("Export", isPresented: $showingExportSheet, titleVisibility: .visible) {
-                if showsKeepCard {
-                    // Keep covers the ROM (the file is in Files, under
-                    // Games); only the BIOS needs a door here.
+                if !firmware.isEmpty {
+                    Button("Export ROM and BIOS") { startExport(includeFirmware: true) }
+                    // Always offered on its own, not just folded into
+                    // the combined button above: if a previously
+                    // exported BIOS file gets deleted or moved outside
+                    // this app, this is the only way back to it, since
+                    // the app has no visibility into Files once a file
+                    // has been handed over.
                     Button("Export BIOS") { startFirmwareOnlyExport() }
-                } else {
-                    if !firmware.isEmpty {
-                        Button("Export ROM and BIOS") { startExport(includeFirmware: true) }
-                        // Always offered on its own, not just folded into
-                        // the combined button above: if a previously
-                        // exported BIOS file gets deleted or moved outside
-                        // this app, this is the only way back to it, since
-                        // the app has no visibility into Files once a file
-                        // has been handed over.
-                        Button("Export BIOS") { startFirmwareOnlyExport() }
-                    }
-                    Button("Export ROM") { startExport(includeFirmware: false) }
                 }
+                Button("Export ROM") { startExport(includeFirmware: false) }
             }
             .onChange(of: exporter.state) { _, state in
                 if case .failed(let message) = state {
@@ -1010,7 +1004,7 @@ struct GameLaunchView: View {
         let kept = keptStore.kept(romId: rom.id)
         let size = kept.map { byteCount($0.totalBytes) } ?? ""
         if NativeCore.core(for: rom) != nil {
-            var caption = "Kept, \(size). The native player runs this game without a connection, and the file is in the Files app under Cabinet."
+            var caption = "Kept, \(size). The native player runs this game without a connection, and its files, BIOS included, are in the Files app under Cabinet."
             if seedPhase == .failed {
                 caption += " The web player's copy couldn't be prepared; it will download once there instead."
             }
