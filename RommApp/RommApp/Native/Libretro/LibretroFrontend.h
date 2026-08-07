@@ -32,10 +32,6 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 
 @property (class, readonly) LibretroFrontend *shared;
 
-// The core's claimed libretro API version, without initializing it.
-// Debug-screen material: proves the static link is alive.
-- (uint32_t)apiVersionForCore:(LibretroCoreID)coreID;
-
 // Makes this core the one every later call drives. Switching away from a
 // core with a game loaded unloads and deinitializes it first; activating
 // the already-active core changes nothing, so callers can activate

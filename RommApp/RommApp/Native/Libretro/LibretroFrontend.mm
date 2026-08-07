@@ -207,10 +207,6 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     return instance;
 }
 
-- (uint32_t)apiVersionForCore:(LibretroCoreID)coreID {
-    return coreAPI(coreID)->api_version();
-}
-
 - (void)activateCore:(LibretroCoreID)coreID {
     if (gCore && gCoreID == coreID) {
         return;

@@ -3,18 +3,17 @@ import Foundation
 /// Downloads a game (and whatever firmware its platform carries) through
 /// the same request-building code the webview player uses, then activates
 /// the rom's native core and hands the files to `LibretroFrontend`. This
-/// is the native player's launch path; the `TestGame` list and its
-/// Debug-screen buttons remain as the quick smoke test they were during
-/// the spike.
+/// is the native player's launch path, reached from the normal launch
+/// screen; the Debug-screen smoke tests that predated it (a hardcoded
+/// FBNeo test title list, a free-text Saturn search box) are gone, their
+/// job done once the real flow existed to test instead.
 enum NativeLauncher {
     enum LaunchError: LocalizedError {
-        case romNotFound(String)
         case noNativeCore
         case unsupportedFormat(String)
 
         var errorDescription: String? {
             switch self {
-            case .romNotFound(let name): return "No \"\(name)\" ROM found in the library"
             case .noNativeCore: return "No native core exists for this platform"
             case .unsupportedFormat(let detail): return detail
             }
@@ -99,52 +98,6 @@ enum NativeLauncher {
             throw NSError(domain: "NativeLauncher", code: 1, userInfo: [NSLocalizedDescriptionKey: failure])
         }
         return core
-    }
-
-    /// FBNeo/MAME short names for the spike's original test titles, kept
-    /// as Debug-screen smoke tests.
-    enum TestGame: String, CaseIterable {
-        case metalSlug = "mslug"
-        case shockTroopers2ndSquad = "shocktr2"
-        case deathsmiles = "deathsml"
-
-        var displayName: String {
-            switch self {
-            case .metalSlug: return "Metal Slug"
-            case .shockTroopers2ndSquad: return "Shock Troopers 2nd Squad"
-            case .deathsmiles: return "Deathsmiles"
-            }
-        }
-    }
-
-    @discardableResult
-    static func load(_ game: TestGame, session: Session) async throws -> Rom {
-        let page = try await session.roms(searchTerm: game.displayName)
-        // Match on the exact FBNeo/MAME short name, not a substring of the
-        // display name, so "Metal Slug" doesn't grab Metal Slug 2/X/3/5 and
-        // "Shock Troopers" doesn't grab the first game in that series.
-        guard let rom = page.items.first(where: { $0.fsNameNoExt.lowercased() == game.rawValue }) else {
-            throw LaunchError.romNotFound(game.displayName)
-        }
-        try await prepare(rom: rom, session: session)
-        return rom
-    }
-
-    /// The Saturn go/no-go's loader: there is no fixed test title the way
-    /// FBNeo's TestGame has one, because that requires knowing what is
-    /// actually in a given library ahead of time. This searches by name
-    /// and takes the first Saturn result instead, crude on purpose, per
-    /// docs/scope-native-saturn.md's "hidden Debug button, hardcoded
-    /// game, no polish". The picking of which two titles (2D then 3D) is
-    /// still a human call made once at the Debug screen, not code.
-    @discardableResult
-    static func loadSaturnGame(named name: String, session: Session) async throws -> Rom {
-        let page = try await session.roms(searchTerm: name)
-        guard let rom = page.items.first(where: { $0.platformSlug == "saturn" }) else {
-            throw LaunchError.romNotFound(name)
-        }
-        try await prepare(rom: rom, session: session)
-        return rom
     }
 
     private static func download(_ request: URLRequest, to url: URL) async throws {

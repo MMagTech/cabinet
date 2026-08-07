@@ -25,16 +25,6 @@ struct DebugView: View {
     /// nothing here for anyone to act on. The number is still worth
     /// carrying in a bug report.
     @State private var artworkBytes: Int64 = 0
-    @State private var fbneoAPIVersion: UInt32?
-    @State private var spikeLoading = false
-    @State private var spikeResult: String?
-    @State private var showingNativePlayer = false
-    @State private var spikeRom: Rom?
-    @State private var saturnAPIVersion: UInt32?
-    @State private var saturnSearchTerm = ""
-    @State private var saturnLoading = false
-    @State private var saturnResult: String?
-
     // TODO: this repo is not final. Update once the real one is settled,
     // this one is just where development has lived so far.
     private static let repo = "MMagTech/romm-ios"
@@ -123,101 +113,6 @@ struct DebugView: View {
 
             Section {
                 Button {
-                    fbneoAPIVersion = LibretroFrontend.shared.apiVersion(forCore: .fbneo)
-                } label: {
-                    Label(
-                        fbneoAPIVersion.map { "FBNeo linked, API v\($0)" } ?? "Check FBNeo static link",
-                        systemImage: fbneoAPIVersion == nil ? "questionmark.circle" : "checkmark"
-                    )
-                }
-                ForEach(NativeLauncher.TestGame.allCases, id: \.self) { game in
-                    Button {
-                        spikeLoading = true
-                        spikeResult = nil
-                        Task {
-                            do {
-                                spikeRom = try await NativeLauncher.load(game, session: session)
-                                spikeResult = "Loaded"
-                                showingNativePlayer = true
-                            } catch {
-                                spikeResult = error.localizedDescription
-                            }
-                            spikeLoading = false
-                        }
-                    } label: {
-                        if spikeLoading {
-                            HStack(spacing: 10) {
-                                ProgressView()
-                                Text("Loading \(game.displayName)")
-                            }
-                        } else {
-                            Label(
-                                "Load \(game.displayName) (spike)",
-                                systemImage: "play.circle"
-                            )
-                        }
-                    }
-                    .disabled(spikeLoading)
-                }
-                if let spikeResult {
-                    Text(spikeResult)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            } header: {
-                Text("Native player spike")
-            } footer: {
-                Text("Confirms the statically linked FBNeo core is reachable from Swift, then downloads the game and its BIOS and hands them to retro_load_game.")
-            }
-
-            Section {
-                Button {
-                    saturnAPIVersion = LibretroFrontend.shared.apiVersion(forCore: .beetleSaturn)
-                } label: {
-                    Label(
-                        saturnAPIVersion.map { "Beetle Saturn linked, API v\($0)" } ?? "Check Beetle Saturn static link",
-                        systemImage: saturnAPIVersion == nil ? "questionmark.circle" : "checkmark"
-                    )
-                }
-                TextField("Game name from your library", text: $saturnSearchTerm)
-                    .textInputAutocapitalization(.words)
-                Button {
-                    saturnLoading = true
-                    saturnResult = nil
-                    Task {
-                        do {
-                            spikeRom = try await NativeLauncher.loadSaturnGame(named: saturnSearchTerm, session: session)
-                            saturnResult = "Loaded"
-                            showingNativePlayer = true
-                        } catch {
-                            saturnResult = error.localizedDescription
-                        }
-                        saturnLoading = false
-                    }
-                } label: {
-                    if saturnLoading {
-                        HStack(spacing: 10) {
-                            ProgressView()
-                            Text("Loading")
-                        }
-                    } else {
-                        Label("Load", systemImage: "play.circle")
-                    }
-                }
-                .disabled(saturnLoading || saturnSearchTerm.isEmpty)
-                if let saturnResult {
-                    Text(saturnResult)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            } header: {
-                Text("Saturn go/no-go")
-            } footer: {
-                Text("Ten clean minutes, full speed and clean audio, on a 2D-leaning title first and then a 3D one, is success. Anything short of that after honest effort on the core's speed options is a written-down no. See docs/scope-native-saturn.md.")
-            }
-
-            Section {
-                Button {
                     showingRepairBridge = true
                     repairing = true
                 } label: {
@@ -276,11 +171,6 @@ struct DebugView: View {
         .navigationTitle("Debug")
         .navigationBarTitleDisplayMode(.inline)
         .task { artworkBytes = await CoverCache.shared.diskUsage() }
-        .fullScreenCover(isPresented: $showingNativePlayer) {
-            if let spikeRom, let core = NativeCore.core(for: spikeRom) {
-                NativePlayerView(rom: spikeRom, core: core)
-            }
-        }
     }
 
     private var diagnosticsText: String {
