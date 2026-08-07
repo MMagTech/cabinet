@@ -635,6 +635,12 @@ enum RommError: LocalizedError, Equatable {
     /// fix themselves by moving somewhere with signal, so the UI answers
     /// it with a retry rather than an explanation.
     case offline
+    /// A reverse proxy in front of RomM rejecting an oversized request
+    /// body, most often a save state. The webview player's injected JS
+    /// already catches this on its own upload path; this is the same
+    /// case for RommClient.uploadState's native path, which had no
+    /// specific handling and fell through to the generic HTTP message.
+    case stateTooLarge
     case http(Int)
     case transport(String)
     case decoding(String)
@@ -675,6 +681,7 @@ enum RommError: LocalizedError, Equatable {
         case (403, .some): self = .forbidden
         case (403, .none): self = .blocked
         case (404, _): self = .notFound
+        case (413, _): self = .stateTooLarge
         default: self = .http(status)
         }
     }
@@ -695,6 +702,8 @@ enum RommError: LocalizedError, Equatable {
             return "That address answered, but it does not look like a RomM server."
         case .offline:
             return "No connection to your server."
+        case .stateTooLarge:
+            return "That save state is too large for the server to accept. Saturn states run big; check your server's upload size limit."
         case .http(let code): return "The server returned an error. Code \(code)."
         case .transport(let message): return message
         case .decoding(let type):
