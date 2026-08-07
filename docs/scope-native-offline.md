@@ -1,6 +1,6 @@
 # Offline play through the native player, scope
 
-Status: phase 1 built 2026-08-07. Follows from the native player work on the
+Status: phases 1 and 2 built 2026-08-07. Follows from the native player work on the
 `native-player-spike` branch (see scope-native-player-spike.md, whose
 spike succeeded and whose integration landed 2026-08-06).
 
@@ -43,14 +43,42 @@ earlier ones are useful without the later ones.
 - Temp directories from un-kept native launches get cleaned up on exit
   rather than left for iOS to purge.
 
-### Phase 2: Offline launch
+### Phase 2: Offline launch (built 2026-08-07)
 
-- A kept game launches natively with zero network: no state-list fetch,
-  no auth round trip, straight into the core.
-- The launch screen degrades honestly offline: kept games show as
-  playable, everything else says why it is not, rather than spinning.
-- Home's resume-first flow should keep working offline for a kept game,
-  which means the launch path cannot assume the session is connected.
+- A kept game launches natively with zero network: `GameLaunchView`
+  checks `NetworkMonitor` up front and skips the firmware/saves/states
+  fetches entirely when offline, rather than waiting out three doomed
+  timeouts, exactly the spinner this phase was scoped to remove.
+- Keep now also downloads the newest save state for a kept, native-
+  capable game, and keeps it current for free on every ordinary online
+  visit to that game's launch screen afterward. A locally cached state
+  populates the Resume-from list with zero network, so a kept game
+  resumes real progress offline rather than always booting fresh, and
+  is preferred over a network fetch even online whenever it is the
+  state actually selected, since a round trip for a state already on
+  the phone only slows things down. States stay internal, never linked
+  into the Files mirror: RomM's own library has no states folder, and a
+  state blob is core-format-specific, no use to another app the way a
+  ROM is. Confirmed with Marcus before building.
+- Reached at length before any of this was built: a state cached at
+  keep time and refreshed opportunistically whenever there is a
+  connection is the right shape, not a queue, because Cabinet already
+  does a live fetch every time it is online, so it is never stale while
+  it has signal; the only real gap was the narrow window between the
+  last live check and actually losing signal, closed by refreshing on
+  ordinary use rather than needing a background job. Multi-device
+  staleness (a save made on another client while Cabinet is offline)
+  does not need solving on this read side either, it is exactly what
+  phase 3's already-scoped append-only upload queue exists for.
+- `Rom` gained `Encodable` so `KeptGame`'s manifest can embed the whole
+  rom a game was kept from, not a hand-picked subset. That is what
+  makes offline navigation possible: Home now shows every kept,
+  native-capable game as its offline resume-first answer (not just the
+  single most recent one, which nothing local persisted before this),
+  each with real cover art and platform label, reached the same way any
+  other game is. Webview-only kept games are deliberately left off that
+  list: their player still needs the server to start, so listing them
+  would set up a tap that fails.
 
 ### Phase 3: Saves written locally, synced when connectivity returns
 

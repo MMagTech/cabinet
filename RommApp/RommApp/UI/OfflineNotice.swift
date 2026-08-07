@@ -9,10 +9,11 @@ import SwiftUI
 /// `localizedDescription` or, on Home, an empty state implying you owned
 /// no games at all.
 ///
-/// There is nothing to browse offline on purpose: the library lives on
-/// the server and this app deliberately keeps no snapshot of it, so the
-/// honest answer is to say so and offer a retry rather than to imply
-/// some of the app still works.
+/// The library itself stays server-only on purpose, no snapshot of it
+/// kept locally, so this is still the honest answer for browsing. Kept
+/// games are the one deliberate exception: Home shows those directly
+/// instead of this notice when any exist, since they genuinely do play
+/// with no connection.
 struct OfflineNotice: View {
     var retry: () async -> Void
 

@@ -2,12 +2,18 @@ import Foundation
 
 /// One game deliberately stored on this phone for offline, native play.
 /// Not a cache entry: nothing evicts it, and it exists because someone
-/// asked for it by name. The manifest carries what the Cache screen's
-/// kept section needs to show without a server round trip.
+/// asked for it by name. The manifest carries what the Storage screen's
+/// kept section and offline navigation both need without a server round
+/// trip.
+///
+/// Embeds the whole `Rom` it was kept from, captured once at keep time,
+/// rather than a hand-picked subset of fields. Offline navigation (a
+/// kept game reached from Home with no connection) needs everything a
+/// live library fetch would have given it, cover paths and platform
+/// identifiers included, and re-deriving a partial, patched-together
+/// `Rom` later would only invite the fields to drift apart.
 struct KeptGame: Codable, Identifiable {
-    let romId: Int
-    let displayName: String
-    let fsName: String
+    let rom: Rom
     let totalBytes: Int64
     let keptAt: Date
     /// What feeding the web player's cache needs, captured at keep time
@@ -22,13 +28,21 @@ struct KeptGame: Codable, Identifiable {
     let fileId: Int?
     let webFileName: String?
     let contentLength: String?
-    /// The platform's folder name on the server's filesystem, so the
-    /// Files app mirror can reproduce RomM's own directory layout:
-    /// Games/<platform folder>/<server filename>, the same structure
-    /// someone browsing the server's roms directory on a PC sees.
-    let platformFsSlug: String?
+    /// The newest save state downloaded for this game, native only:
+    /// states are core-build-specific and states belong to RomM's
+    /// database, not its filesystem layout, so unlike the ROM and BIOS
+    /// they stay internal, never linked into the Files mirror, in
+    /// keeping with this app modeling itself on RomM's own library
+    /// shape. Nil means either nothing has ever been saved for this
+    /// game, or the platform has no native core to write a state for.
+    let stateId: Int?
+    let stateUpdatedAt: String?
 
-    var id: Int { romId }
+    var id: Int { rom.id }
+    var romId: Int { rom.id }
+    var displayName: String { rom.displayName }
+    var fsName: String { rom.fsName }
+    var platformFsSlug: String { rom.platformFsSlug }
 }
 
 /// Permanent on-device storage for kept games: the ROM plus every
@@ -72,6 +86,15 @@ final class KeptGameStore: ObservableObject {
     /// game.
     private let documentsRoot: URL
     private static let linksMigratedKey = "romm.keptGames.linksMigrated"
+    /// The locally cached state's fixed filename inside a kept game's
+    /// private directory. Fixed, not per-state-id, since only the
+    /// newest state is ever kept locally and a refresh simply
+    /// overwrites it.
+    private static let stateFileName = "state.dat"
+    /// Files inside a kept game's private directory that never become a
+    /// Files app link: the manifest is bookkeeping, and the cached state
+    /// stays internal per the platform-shape decision above.
+    private static let internalOnly: Set<String> = ["manifest.json", stateFileName]
 
     var totalBytes: Int64 {
         games.reduce(0) { $0 + $1.totalBytes }
@@ -126,6 +149,49 @@ final class KeptGameStore: ObservableObject {
         guard kept(romId: romId) != nil else { return nil }
         let url = directory(for: romId).appendingPathComponent(fileName)
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    /// The newest state downloaded for this kept game, read straight off
+    /// disk: no network, whether asked offline or simply to skip a round
+    /// trip online for the one state Keep already has. Nil when nothing
+    /// has ever been cached, the ordinary case for a game never saved.
+    func localState(for romId: Int) -> (stateId: Int, updatedAt: String?, data: Data)? {
+        guard let game = kept(romId: romId), let stateId = game.stateId else { return nil }
+        let url = directory(for: romId).appendingPathComponent(Self.stateFileName)
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return (stateId, game.stateUpdatedAt, data)
+    }
+
+    /// Keeps a kept game's local state current for free, whenever the
+    /// app already has a live states list in hand from an ordinary
+    /// online visit to this game's launch screen. Nothing waits on
+    /// this: it only means the next time this game plays with no
+    /// connection, Resume reflects whatever was newest the last time
+    /// Cabinet had a chance to look, not whatever was newest back when
+    /// it was first kept.
+    func refreshCachedState(rom: Rom, liveStates: [GameState], session: Session) {
+        guard let core = NativeCore.core(for: rom), let game = kept(romId: rom.id) else { return }
+        let newest = liveStates
+            .filter { $0.emulator == core.emulatorTag }
+            .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
+            .first
+        guard let newest, newest.id != game.stateId else { return }
+        Task { [weak self] in
+            guard let self, let bytes = try? await session.stateContent(newest) else { return }
+            guard let index = self.games.firstIndex(where: { $0.romId == rom.id }) else { return }
+            let dir = self.directory(for: rom.id)
+            guard (try? bytes.write(to: dir.appendingPathComponent(Self.stateFileName))) != nil else { return }
+            let old = self.games[index]
+            let updated = KeptGame(
+                rom: old.rom, totalBytes: Self.directorySize(dir), keptAt: old.keptAt,
+                fileId: old.fileId, webFileName: old.webFileName, contentLength: old.contentLength,
+                stateId: newest.id, stateUpdatedAt: newest.updatedAt
+            )
+            self.games[index] = updated
+            if let manifestData = try? JSONEncoder().encode(updated) {
+                try? manifestData.write(to: dir.appendingPathComponent("manifest.json"))
+            }
+        }
     }
 
     /// Downloads the ROM and its platform's firmware into permanent
@@ -236,7 +302,7 @@ final class KeptGameStore: ObservableObject {
     /// uniqueness within a platform; a manifest from before the slug
     /// field existed lands under "unknown".
     private func mirrorFolder(for game: KeptGame, kind: String) -> URL {
-        let slug = game.platformFsSlug.flatMap { $0.isEmpty ? nil : $0 } ?? "unknown"
+        let slug = game.platformFsSlug.isEmpty ? "unknown" : game.platformFsSlug
         return documentsRoot
             .appendingPathComponent(Self.safeComponent(slug), isDirectory: true)
             .appendingPathComponent(kind, isDirectory: true)
@@ -256,7 +322,7 @@ final class KeptGameStore: ObservableObject {
             at: directory(for: game.romId), includingPropertiesForKeys: nil
         ) else { return }
         let existing = filesFolderInodes()
-        for file in storeFiles where file.lastPathComponent != "manifest.json" {
+        for file in storeFiles where !Self.internalOnly.contains(file.lastPathComponent) {
             guard let fileInode = inode(of: file), existing[fileInode] == nil else { continue }
             let isROM = file.lastPathComponent == game.fsName
             let folder = mirrorFolder(for: game, kind: isROM ? "roms" : "bios")
@@ -373,11 +439,30 @@ final class KeptGameStore: ObservableObject {
             // downloading once, organically.
             let webFile = try? await session.romFiles(romId: rom.id).first
 
+            // The newest state, so a kept game can resume real progress
+            // with zero network rather than only booting fresh. Native
+            // only, and entirely tolerant of failure: a game that has
+            // never been saved has nothing to cache here, which is the
+            // ordinary case, not an error.
+            var cachedStateId: Int?
+            var cachedStateUpdatedAt: String?
+            if let core = NativeCore.core(for: rom),
+               let liveStates = try? await session.states(romId: rom.id) {
+                let newest = liveStates
+                    .filter { $0.emulator == core.emulatorTag }
+                    .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
+                    .first
+                if let newest, let bytes = try? await session.stateContent(newest) {
+                    try? bytes.write(to: staging.appendingPathComponent(Self.stateFileName))
+                    cachedStateId = newest.id
+                    cachedStateUpdatedAt = newest.updatedAt
+                }
+            }
+
             let manifest = KeptGame(
-                romId: rom.id, displayName: rom.displayName, fsName: rom.fsName,
-                totalBytes: Self.directorySize(staging), keptAt: Date(),
+                rom: rom, totalBytes: Self.directorySize(staging), keptAt: Date(),
                 fileId: webFile?.id, webFileName: webFile?.fileName, contentLength: contentLength,
-                platformFsSlug: rom.platformFsSlug
+                stateId: cachedStateId, stateUpdatedAt: cachedStateUpdatedAt
             )
             let data = try JSONEncoder().encode(manifest)
             try data.write(to: staging.appendingPathComponent("manifest.json"))
@@ -411,7 +496,18 @@ final class KeptGameStore: ObservableObject {
                     }
                     return nil
                 }
-                return try? decoder.decode(KeptGame.self, from: data)
+                if let game = try? decoder.decode(KeptGame.self, from: data) {
+                    return game
+                }
+                // A manifest that exists but no longer decodes is from
+                // before `KeptGame` embedded the full `Rom` (this build's
+                // structural change, not a format this app can migrate
+                // in place, since the fields a Rom needs are not
+                // reconstructable from the old flat manifest alone).
+                // Wiped rather than left as untracked storage; re-keeping
+                // is one tap.
+                try? FileManager.default.removeItem(at: entry)
+                return nil
             }
             .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
     }

@@ -63,6 +63,23 @@ struct GameState: Decodable, Identifiable, Hashable {
         emulator = try container.decodeIfPresent(String.self, forKey: .emulator)
         screenshotPath = try container.decodeIfPresent(AssetScreenshot.self, forKey: .screenshot)?.downloadPath
     }
+
+    /// A state that exists on this screen because `KeptGameStore`
+    /// downloaded it, not because the server was just asked. Built
+    /// straight from the kept game's manifest so the Resume-from list
+    /// carries a real, selectable row with zero network, whether that is
+    /// the only state available (offline) or one already covered by a
+    /// fresher live fetch (online, where it is filtered out instead, see
+    /// `GameLaunchView.load`). No filename or screenshot: nothing local
+    /// stores either, and the row degrades to a plain date-only entry
+    /// with no Screenshot option, which the row menu already handles.
+    init(localStateId: Int, updatedAt: String?, emulator: String) {
+        id = localStateId
+        fileName = ""
+        self.updatedAt = updatedAt
+        self.emulator = emulator
+        screenshotPath = nil
+    }
 }
 
 /// A BIOS file the platform may require. The app never manages these, it only

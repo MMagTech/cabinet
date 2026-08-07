@@ -47,9 +47,18 @@ struct HomeView: View {
                 // it. Kept in a ScrollView so pull to refresh still works
                 // as a second way to retry.
                 if offline, recent.isEmpty, favorites.isEmpty {
-                    ScrollView {
-                        OfflineNotice { await load() }
-                            .frame(minHeight: geometry.size.height * 0.8)
+                    // Nothing cached to show above a banner, same as
+                    // before, but there may be something better: any
+                    // kept, native-capable game plays with zero
+                    // connection, so resume-first still has an honest
+                    // answer offline whenever one exists.
+                    if !offlineKeptGames.isEmpty {
+                        offlineKeptList
+                    } else {
+                        ScrollView {
+                            OfflineNotice { await load() }
+                                .frame(minHeight: geometry.size.height * 0.8)
+                        }
                     }
                 } else if !loaded, recent.isEmpty, favorites.isEmpty {
                     // Something, anything, while the first load runs. This
@@ -202,6 +211,79 @@ struct HomeView: View {
     }
 
     // MARK: Pieces
+
+    /// Every kept game that can actually play with no connection.
+    /// Webview-only kept games are left out on purpose: their player is
+    /// a page from the server, so listing them here would set up a tap
+    /// that fails, the exact silent-spinner problem this pass exists to
+    /// remove, just relocated to Home.
+    private var offlineKeptGames: [Rom] {
+        KeptGameStore.shared.games
+            .filter { NativeCore.core(for: $0.rom) != nil }
+            .map(\.rom)
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
+
+    /// Offline's version of resume-first: not one tile for whichever
+    /// game happened to be recent the last time there was a signal, but
+    /// every kept game, since any of them can genuinely play right now.
+    /// A quiet label instead of the full `OfflineNotice`, which is built
+    /// for the moment there is nothing else on screen; here there is,
+    /// and the heavier treatment would only compete with it.
+    private var offlineKeptList: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 4) {
+                Label("No connection", systemImage: "wifi.slash")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Text("Kept games")
+                    .font(.title2.bold())
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(spacing: 0) {
+                ForEach(Array(offlineKeptGames.enumerated()), id: \.element.id) { index, rom in
+                    Button {
+                        resuming = rom
+                    } label: {
+                        HStack(spacing: 12) {
+                            CoverImage(path: rom.pathCoverSmall, title: rom.displayName)
+                                .aspectRatio(3.0 / 4.0, contentMode: .fill)
+                                .frame(width: 46, height: 61)
+                                .clipShape(.rect(cornerRadius: 6))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(rom.displayName)
+                                    .font(.body)
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
+                                Text(rom.platformLabel(source: labelSource, platformNames: session.platformNames))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    if index < offlineKeptGames.count - 1 {
+                        Divider().padding(.leading, 78)
+                    }
+                }
+            }
+            .padding(.vertical, 8)
+            .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 14))
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 20)
+        }
+    }
 
     /// Box art, always, the same visual language as every other card in
     /// the app. The hero used to show a captured game frame when one

@@ -18,7 +18,14 @@ struct RomFile: Decodable, Identifiable, Hashable {
 /// One game, decoding only what the library screens use. The server sends far
 /// more; everything unlisted is ignored on purpose so RomM version bumps that
 /// add or rename unrelated fields cannot break decoding.
-struct Rom: Decodable, Identifiable, Hashable {
+///
+/// Encodable too, purely for `KeptGameStore`: a kept game's manifest embeds
+/// the full `Rom` it was kept from, captured once at keep time, so offline
+/// navigation (Home's resume list, cover art, arcade control resolution)
+/// has everything a live library fetch would have given it, with no new
+/// round trip. Round-tripping through this app's own local JSON only; never
+/// sent back to the server, so reusing the snake_case CodingKeys is harmless.
+struct Rom: Codable, Identifiable, Hashable {
     let id: Int
     let name: String?
     /// The actual filename on disk, extension included. What

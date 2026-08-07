@@ -627,11 +627,21 @@ struct GameLaunchView: View {
         do {
             try await NativeLauncher.prepare(rom: rom, session: session)
             if let selectedState {
-                guard let bytes = try? await session.stateContent(selectedState) else {
-                    playError = "Couldn't reach the server to load that state."
-                    return
+                // The local copy first, not as an offline fallback but
+                // as the normal path: when it is the same state, reading
+                // it costs nothing and a network round trip would only
+                // slow down a game that is already sitting on the phone.
+                // A network fetch only happens for a state Keep never
+                // cached, which needs a connection either way.
+                if let local = keptStore.localState(for: rom.id), local.stateId == selectedState.id {
+                    nativeInitialState = local.data
+                } else {
+                    guard let bytes = try? await session.stateContent(selectedState) else {
+                        playError = "Couldn't reach the server to load that state."
+                        return
+                    }
+                    nativeInitialState = bytes
                 }
-                nativeInitialState = bytes
             } else {
                 nativeInitialState = nil
             }
@@ -1409,15 +1419,49 @@ struct GameLaunchView: View {
 
         refreshResumeOffer()
 
-        async let firmwareTask = try? session.firmware(platformId: rom.platformId)
-        async let savesTask = try? session.saves(romId: rom.id)
-        async let statesTask = try? session.states(romId: rom.id)
+        // Offline, these three would only ever run out the clock on a
+        // timeout: NetworkMonitor already knows the answer without
+        // waiting to be told. A kept game still gets a Resume-from row
+        // either way, synthesized below from what Keep already
+        // downloaded, so skipping the fetch costs it nothing.
+        if await NetworkMonitor.shared.isConnected {
+            async let firmwareTask = try? session.firmware(platformId: rom.platformId)
+            async let savesTask = try? session.saves(romId: rom.id)
+            async let statesTask = try? session.states(romId: rom.id)
 
-        let allFirmware = await firmwareTask ?? []
-        firmware = allFirmware.filter { !$0.missingFromFS }
-        missingFirmware = allFirmware.filter { $0.missingFromFS }
-        saves = await savesTask ?? []
-        states = (await statesTask ?? []).sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
+            let allFirmware = await firmwareTask ?? []
+            firmware = allFirmware.filter { !$0.missingFromFS }
+            missingFirmware = allFirmware.filter { $0.missingFromFS }
+            saves = await savesTask ?? []
+            states = (await statesTask ?? []).sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
+
+            // Free, quiet upkeep: this game's local snapshot, if it has
+            // one, stays current whenever there happens to be a
+            // connection, so an offline session later reflects the
+            // newest state Cabinet has actually seen, not just whatever
+            // was newest back when the game was first kept.
+            if keptStore.kept(romId: rom.id) != nil {
+                keptStore.refreshCachedState(rom: rom, liveStates: states, session: session)
+            }
+        } else {
+            firmware = []
+            missingFirmware = []
+            saves = []
+            states = []
+        }
+
+        // A kept game's local state belongs in the list either way:
+        // offline it is the only thing there is to offer, online it is
+        // already present above unless the refresh just started
+        // replacing it with something the live fetch has not caught up
+        // to yet, in which case showing both would be the same state
+        // twice under two different labels.
+        if let core = NativeCore.core(for: rom),
+           let local = keptStore.localState(for: rom.id),
+           !states.contains(where: { $0.id == local.stateId }) {
+            states.append(GameState(localStateId: local.stateId, updatedAt: local.updatedAt, emulator: core.emulatorTag))
+            states.sort { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
+        }
 
         // Deliberately no BIOS by default on arcade. Every arcade game
         // shares one platform, so "first verified firmware" meant forcing
