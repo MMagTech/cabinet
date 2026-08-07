@@ -82,6 +82,7 @@ struct GameLaunchView: View {
     @State private var arcadeWays = "8"
     @State private var togglingFavorite = false
     @State private var favoriteError: String?
+    @ObservedObject private var keptStore = KeptGameStore.shared
     @StateObject private var exporter = RomExporter()
     @State private var showingExportSheet = false
     /// Whatever export was last attempted, so Retry repeats the same one
@@ -89,23 +90,21 @@ struct GameLaunchView: View {
     /// retrying the plain ROM case.
     @State private var retryExport: (() -> Void)?
 
-    /// Data Saver: pre-loads the ROM into EmulatorJS's own on-device cache
-    /// so a later weak-signal Play skips re-fetching it. The hidden bridge
-    /// webview only mounts once this is actually used, not on every visit
-    /// to this screen.
-    @StateObject private var cachePreloader = CachePreloader()
+    /// Feeds the web player's cache from a kept game's local file, so a
+    /// kept game skips the big download in either player. The hidden
+    /// bridge webview only mounts while a seed is actually running, not
+    /// on every visit to this screen. This is Data Saver's machinery with
+    /// the network taken out of it: the person-facing feature folded into
+    /// Keep, the injection path unchanged.
     @StateObject private var cacheBridge = EmulatorCacheBridge()
     @State private var showingCacheBridge = false
-    @State private var dataSaverPhase: DataSaverPhase = .idle
-    @State private var showingDataSaverTip = false
-    private static let dataSaverTipShownKey = "romm.dataSaverTipShown"
+    @State private var seedPhase: SeedPhase = .idle
 
-    enum DataSaverPhase: Equatable {
+    enum SeedPhase: Equatable {
         case idle
-        case downloading(fraction: Double, receivedBytes: Int64, totalBytes: Int64)
-        case writingToCache
-        case done
-        case failed(String)
+        case waitingForBridge
+        case writing
+        case failed
     }
 
     /// Whether the scroll content is resting at its top, the only moment a
@@ -167,12 +166,12 @@ struct GameLaunchView: View {
                             }
 
                             if rom.isArcade { playerCard }
+                            if showsKeepCard { keepCard }
 
                             playButton
 
                             if isComputerPlatform { computerPlatformCard }
                             downloadStatusCard
-                            dataSaverStatusCard
                             if interruptedAt != nil { continueCard }
                             compatibilityCard
                             if arcadeBase != nil { arcadeControlsCard }
@@ -346,12 +345,6 @@ struct GameLaunchView: View {
                 Button("Export BIOS") { startFirmwareOnlyExport() }
             }
             Button("Export ROM") { startExport(includeFirmware: false) }
-            // Supported platforms only: this warms EmulatorJS's own cache
-            // ahead of a real Play, an unsupported platform has no in-app
-            // Play to warm anything for.
-            if isPlatformSupported, !rom.hasMultipleFiles {
-                Button("Data Saver") { tapDataSaver() }
-            }
         }
         .background {
             if showingCacheBridge, let serverURL = session.serverURL {
@@ -361,38 +354,8 @@ struct GameLaunchView: View {
                     .accessibilityHidden(true)
             }
         }
-        .alert("About Data Saver", isPresented: $showingDataSaverTip) {
-            Button("OK") { startDataSaver() }
-        } message: {
-            Text("Saves this game on your phone so playing it skips the big download. Starting a game still needs a small connection to the server.")
-        }
         .onChange(of: cacheBridge.isReady) { _, ready in
-            if ready { Task { await runDataSaverFetch() } }
-        }
-        .onChange(of: cachePreloader.state) { _, state in
-            switch state {
-            case .idle: break
-            case .downloading(let fraction, let received, let total):
-                dataSaverPhase = .downloading(fraction: fraction, receivedBytes: received, totalBytes: total)
-            case .failed(let message):
-                dataSaverPhase = .failed(message)
-            }
-        }
-        .onChange(of: dataSaverPhase) { _, phase in
-            if case .failed(let message) = phase {
-                DiagnosticsLog.record(context: "Data Saver", message: message, romVersion: session.serverVersion)
-            }
-            // The bridge webview is a second WebContent process holding
-            // RomM's whole SPA; left mounted it survives into gameplay and
-            // competes with the emulator's memory. Torn down the moment
-            // the write settles, either way. Retry recreates it.
-            switch phase {
-            case .done, .failed:
-                showingCacheBridge = false
-                cacheBridge.detach()
-            default:
-                break
-            }
+            if ready, seedPhase == .waitingForBridge { Task { await runSeed() } }
         }
         .onChange(of: exporter.state) { _, state in
             if case .failed(let message) = state {
@@ -401,75 +364,76 @@ struct GameLaunchView: View {
         }
     }
 
-    /// The first tap ever, on any game, shows a one-time explanation of
-    /// what caching does and doesn't buy (the launch still makes one
-    /// small HEAD request, so it isn't fully offline) before starting.
-    /// Never shown again after.
-    private var dataSaverBusy: Bool {
-        switch dataSaverPhase {
-        case .downloading, .writingToCache: return true
-        case .idle, .done, .failed: return false
-        }
+    private var seedBusy: Bool {
+        seedPhase == .waitingForBridge || seedPhase == .writing
     }
 
-    private func tapDataSaver() {
-        if UserDefaults.standard.bool(forKey: Self.dataSaverTipShownKey) {
-            startDataSaver()
-        } else {
-            UserDefaults.standard.set(true, forKey: Self.dataSaverTipShownKey)
-            showingDataSaverTip = true
-        }
+    /// Whether keeping this game should also pre-fill the web player's
+    /// cache: only where a web launch is actually offered. Saturn is
+    /// routed native with no picker, so a seeded copy there would be
+    /// hundreds of duplicated megabytes nothing ever reads.
+    private var seedsWebCache: Bool {
+        guard isPlatformSupported, !rom.hasMultipleFiles else { return false }
+        return NativeCore.core(for: rom) == nil || rom.isArcade
     }
 
-    /// Not offered for multi-file ROMs: EmulatorJS's cache keys one
-    /// downloaded file per entry, matching how it downloads a single-file
-    /// ROM. Multi-track games go through Export instead, which already
-    /// has its own per-file, folder-based path.
-    private func startDataSaver() {
-        dataSaverPhase = .downloading(fraction: 0, receivedBytes: 0, totalBytes: 0)
+    private func startSeeding() {
+        seedPhase = .waitingForBridge
         showingCacheBridge = true
         if cacheBridge.isReady {
-            Task { await runDataSaverFetch() }
+            Task { await runSeed() }
         }
     }
 
     /// The `url` this writes has to be byte-identical to what RomM's real
     /// player sets as `EJS_gameUrl`: EmulatorJS 4.2.3's cache key is that
     /// URL's last path segment, query string included. Confirmed broken
-    /// on device before this fix: `Player.vue` always passes a `file_ids`
-    /// query parameter, `fileIDs: props.disc ? [props.disc] : []`, even
-    /// for a single-file ROM, RomM's console view still selects a "disc"
-    /// (the ROM's one file entry), so the real request was
+    /// on device before this fix (in this machinery's Data Saver era):
+    /// `Player.vue` always passes a `file_ids` query parameter,
+    /// `fileIDs: props.disc ? [props.disc] : []`, even for a single-file
+    /// ROM, RomM's console view still selects a "disc" (the ROM's one
+    /// file entry), so the real request is
     /// `/api/roms/{id}/content/{name}?file_ids={fileId}`, not the plain
-    /// path this originally wrote. A captured player network log showed
-    /// the ROM re-fetching from the server on every Play despite a
-    /// successful, correctly-shaped cache write, because that mismatch
-    /// made every lookup a miss. `file_ids` is per-file, not per-ROM,
-    /// hence fetching `/api/roms/{id}/files` first even for a
-    /// single-file game.
-    private func runDataSaverFetch() async {
-        guard case .downloading = dataSaverPhase else { return }
-        do {
-            let request = try await session.romContentRequest(rom)
-            guard let data = await cachePreloader.fetch(request) else { return }
-            dataSaverPhase = .writingToCache
-            let files = try await session.romFiles(romId: rom.id)
-            guard let file = files.first else {
-                dataSaverPhase = .failed("Couldn't find this ROM's file ID.")
-                cachePreloader.reset()
-                return
-            }
-            let encodedName = Self.jsEncodeURIComponent(file.fileName)
-            let relativeURL = "/api/roms/\(rom.id)/content/\(encodedName)?file_ids=\(file.id)"
-            let result = await cacheBridge.put(
-                url: relativeURL, type: "rom",
-                contentLength: cachePreloader.contentLengthHeader, data: data
-            )
-            dataSaverPhase = result.success ? .done : .failed(result.error ?? "Couldn't save it to the cache.")
-        } catch {
-            dataSaverPhase = .failed("Couldn't reach the server: \(error.localizedDescription)")
+    /// path. A captured player network log showed the ROM re-fetching on
+    /// every Play despite a successful, correctly-shaped cache write,
+    /// because that mismatch made every lookup a miss. The file id and
+    /// the exact Content-Length header both come from the manifest,
+    /// captured at keep time; the bytes come off local disk, no network.
+    ///
+    /// Failure here is deliberately soft: the kept copy is the promise,
+    /// the cache entry only saves the web player one organic download,
+    /// so a failed seed logs, shows a quiet caption, and never unkeeps.
+    private func runSeed() async {
+        guard seedPhase == .waitingForBridge else { return }
+        seedPhase = .writing
+        defer {
+            showingCacheBridge = false
+            cacheBridge.detach()
         }
-        cachePreloader.reset()
+        guard let kept = keptStore.kept(romId: rom.id),
+              let fileId = kept.fileId,
+              let fileName = kept.webFileName,
+              let romURL = keptStore.fileURL(romId: rom.id, fileName: kept.fsName),
+              let data = try? Data(contentsOf: romURL, options: .mappedIfSafe)
+        else {
+            seedPhase = .failed
+            return
+        }
+        let encodedName = Self.jsEncodeURIComponent(fileName)
+        let relativeURL = "/api/roms/\(rom.id)/content/\(encodedName)?file_ids=\(fileId)"
+        let result = await cacheBridge.put(
+            url: relativeURL, type: "rom", contentLength: kept.contentLength, data: data
+        )
+        if result.success {
+            seedPhase = .idle
+        } else {
+            seedPhase = .failed
+            DiagnosticsLog.record(
+                context: "Web player copy",
+                message: result.error ?? "Couldn't write the kept game into the web player's cache.",
+                romVersion: session.serverVersion
+            )
+        }
     }
 
     /// Matches JavaScript's `encodeURIComponent` exactly, the unreserved
@@ -482,8 +446,29 @@ struct GameLaunchView: View {
         return string.addingPercentEncoding(withAllowedCharacters: unreserved) ?? string
     }
 
+    /// The local files that can satisfy an export without touching the
+    /// network, or nil when any requested piece is not already on this
+    /// phone, in which case the whole export downloads as before rather
+    /// than mixing local and fetched halves.
+    private func keptExportURLs(includeFirmware: Bool) -> [URL]? {
+        guard !rom.hasMultipleFiles,
+              let romURL = keptStore.fileURL(romId: rom.id, fileName: rom.fsName)
+        else { return nil }
+        guard includeFirmware else { return [romURL] }
+        guard let bios = firmware.first,
+              let biosURL = keptStore.fileURL(romId: rom.id, fileName: bios.fileName)
+        else { return nil }
+        return [romURL, biosURL]
+    }
+
     private func startExport(includeFirmware: Bool) {
         retryExport = { [self] in startExport(includeFirmware: includeFirmware) }
+        // A kept game's files were downloaded by this app and verified at
+        // keep time; exporting them is a copy, not a second download.
+        if let urls = keptExportURLs(includeFirmware: includeFirmware) {
+            exporter.presentLocal(urls: urls)
+            return
+        }
         Task {
             do {
                 var files: [(request: URLRequest, suggestedName: String)] = []
@@ -521,6 +506,10 @@ struct GameLaunchView: View {
     private func startFirmwareOnlyExport() {
         guard let bios = firmware.first else { return }
         retryExport = { [self] in startFirmwareOnlyExport() }
+        if let biosURL = keptStore.fileURL(romId: rom.id, fileName: bios.fileName) {
+            exporter.presentLocal(urls: [biosURL])
+            return
+        }
         Task {
             do {
                 let firmwareRequest = try await session.firmwareContentRequest(bios)
@@ -569,12 +558,11 @@ struct GameLaunchView: View {
             }
         }
         .buttonStyle(.borderedProminent)
-        // Blocked while Data Saver runs: letting the game boot mid-cache
+        // Blocked while a seed runs: letting the game boot mid-write
         // put a whole ROM's worth of buffering next to the emulator's own
-        // memory, on a device-wide budget. The status card explains the
-        // wait, and these downloads are short on any connection worth
-        // caching over.
-        .disabled(loading || !isPlatformSupported || preparingPlay || dataSaverBusy)
+        // memory, on a device-wide budget. The keep card explains the
+        // wait, and a local copy is quick.
+        .disabled(loading || !isPlatformSupported || preparingPlay || seedBusy)
     }
 
     /// Resolves `stateToLoad` before presenting the player, since a state
@@ -683,52 +671,6 @@ struct GameLaunchView: View {
         ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 
-    @ViewBuilder
-    private var dataSaverStatusCard: some View {
-        switch dataSaverPhase {
-        case .idle:
-            EmptyView()
-        case .downloading(let fraction, let received, let total):
-            LaunchCard(title: "Data Saver", systemImage: "arrow.down.circle") {
-                VStack(alignment: .leading, spacing: 8) {
-                    if total > 0 {
-                        Text("\(byteCount(received)) of \(byteCount(total))")
-                            .font(.caption).foregroundStyle(.secondary)
-                        ProgressView(value: fraction)
-                    } else {
-                        ProgressView()
-                    }
-                }
-            }
-        case .writingToCache:
-            LaunchCard(title: "Data Saver", systemImage: "arrow.down.circle") {
-                HStack(spacing: 10) {
-                    ProgressView()
-                    Text("Saving for later").foregroundStyle(.secondary)
-                }
-                .font(.caption)
-            }
-        case .done:
-            LaunchCard(title: "Data Saver", systemImage: "checkmark.circle") {
-                Text("Ready. Play won't re-download the ROM.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        case .failed(let message):
-            LaunchCard(title: "Data Saver", systemImage: "exclamationmark.triangle") {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(message).font(.caption).foregroundStyle(.secondary)
-                    HStack {
-                        Button("Dismiss") { dataSaverPhase = .idle }
-                        Spacer()
-                        Button("Retry") { startDataSaver() }
-                    }
-                    .font(.callout)
-                }
-            }
-        }
-    }
-
     /// The offer to pick an interrupted run back up. A card like the others,
     /// preselected because iOS ending the game is the one case where "right
     /// where I was" is almost always the answer, and declinable because
@@ -777,11 +719,11 @@ struct GameLaunchView: View {
             ) {
                 if isComputerPlatform { computerPlatformCard }
                 downloadStatusCard
-                dataSaverStatusCard
                 if interruptedAt != nil { continueCard }
                 if selectedBackend == .webview, cores.count > 1 { coreCard }
                 if selectedBackend == .webview, showsFirmwareCard { firmwareCard }
                 if rom.isArcade { playerCard }
+                if showsKeepCard { keepCard }
                 if arcadeBase != nil { arcadeControlsCard }
                 if !states.isEmpty || !saves.isEmpty { resumeCard }
             }
@@ -800,11 +742,11 @@ struct GameLaunchView: View {
             VStack(spacing: 14) {
                 if isComputerPlatform { computerPlatformCard }
                 downloadStatusCard
-                dataSaverStatusCard
                 if interruptedAt != nil { continueCard }
                 if selectedBackend == .webview, cores.count > 1 { coreCard }
                 if selectedBackend == .webview, showsFirmwareCard { firmwareCard }
                 if rom.isArcade { playerCard }
+                if showsKeepCard { keepCard }
                 if arcadeBase != nil { arcadeControlsCard }
                 if !states.isEmpty || !saves.isEmpty { resumeCard }
             }
@@ -953,6 +895,112 @@ struct GameLaunchView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// One keep toggle for every playable game; only the promise in the
+    /// fine print varies. Native-capable games mirror
+    /// `NativeLauncher.prepare`'s own gates (a Saturn game that is not a
+    /// single-file chd gets no toggle rather than a kept copy nothing
+    /// can boot); webview games get the toggle wherever the web player
+    /// itself could use the copy, which excludes multi-file ROMs the
+    /// same way the cache's one-entry-per-file schema always has.
+    private var showsKeepCard: Bool {
+        if let core = NativeCore.core(for: rom) {
+            if core == .beetleSaturn {
+                return !rom.hasMultipleFiles && rom.fsName.lowercased().hasSuffix(".chd")
+            }
+            return true
+        }
+        return isPlatformSupported && !rom.hasMultipleFiles
+    }
+
+    private var keepBinding: Binding<Bool> {
+        Binding(
+            get: { keptStore.kept(romId: rom.id) != nil || keptStore.downloading[rom.id] != nil },
+            set: { wantKept in
+                seedPhase = .idle
+                if wantKept {
+                    keptStore.keep(rom: rom, session: session)
+                } else {
+                    keptStore.remove(romId: rom.id)
+                }
+            }
+        )
+    }
+
+    /// One toggle, one copy: keeping stores the ROM and firmware
+    /// permanently, the native player boots straight from it, the web
+    /// player's cache gets fed from it, Export copies from it. Removal
+    /// lives on the same toggle, and the Storage screen lists every kept
+    /// game in one place.
+    private var keepCard: some View {
+        LaunchCard(title: "Offline", systemImage: "internaldrive") {
+            Toggle("Keep on this phone", isOn: keepBinding)
+
+            if let progress = keptStore.downloading[rom.id] {
+                VStack(alignment: .leading, spacing: 8) {
+                    if progress.totalBytes > 0 {
+                        Text("\(byteCount(progress.receivedBytes)) of \(byteCount(progress.totalBytes))")
+                            .font(.caption).foregroundStyle(.secondary)
+                        ProgressView(value: min(progress.fraction, 1))
+                    } else {
+                        ProgressView()
+                    }
+                }
+            } else if seedBusy {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("Preparing the web player's copy").foregroundStyle(.secondary)
+                }
+                .font(.caption)
+            } else if keptStore.kept(romId: rom.id) != nil {
+                Text(keptCaption)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if let error = keptStore.errors[rom.id] {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(keepCaption)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .onChange(of: keptStore.downloading[rom.id]) { old, new in
+            // The moment a keep finishes is the one place the web
+            // player's cache copy gets made, from the file just written,
+            // no network involved. Removal mid-download lands here too
+            // (old non-nil, new nil, nothing kept), and seeds nothing.
+            guard old != nil, new == nil,
+                  keptStore.kept(romId: rom.id) != nil, seedsWebCache
+            else { return }
+            startSeeding()
+        }
+    }
+
+    private var keptCaption: String {
+        let kept = keptStore.kept(romId: rom.id)
+        let size = kept.map { byteCount($0.totalBytes) } ?? ""
+        if NativeCore.core(for: rom) != nil {
+            var caption = "Kept, \(size). The native player runs this game without a connection."
+            if seedPhase == .failed {
+                caption += " The web player's copy couldn't be prepared; it will download once there instead."
+            }
+            return caption
+        }
+        var caption = "Kept, \(size). Playing skips the big download, but starting still needs a small connection to the server."
+        if seedPhase == .failed {
+            caption = "Kept, \(size). The quick-start copy couldn't be prepared; the first play will download once, then it's quick."
+        }
+        return caption
+    }
+
+    private var keepCaption: String {
+        if NativeCore.core(for: rom) != nil {
+            return "Downloads the game and its BIOS, about \(byteCount(rom.fsSizeBytes)), so the native player can run it with no connection."
+        }
+        return "Downloads the game, about \(byteCount(rom.fsSizeBytes)), so playing skips the big download. Starting a game still needs a small connection to the server."
     }
 
     private var showsFirmwareCard: Bool {

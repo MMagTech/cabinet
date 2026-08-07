@@ -27,7 +27,11 @@ enum NativeLauncher {
     /// of two region BIOSes; FBNeo boards like CV1000 need none at all),
     /// so extra files are harmless and missing ones are the only failure
     /// that matters.
+    ///
+    /// A kept game skips all of that: its directory already holds the ROM
+    /// and firmware, so the core boots straight from it with zero network.
     @discardableResult
+    @MainActor
     static func prepare(rom: Rom, session: Session) async throws -> NativeCore {
         guard let core = NativeCore.core(for: rom) else {
             throw LaunchError.noNativeCore
@@ -49,6 +53,15 @@ enum NativeLauncher {
             }
         }
 
+        // Stale directories from earlier launches (crashes included, since
+        // an exit cleanup never runs for those) go first, so temp space
+        // holds at most the one game about to load.
+        cleanUpTempDirectories()
+
+        if let keptDir = KeptGameStore.shared.launchDirectory(romId: rom.id) {
+            return try activate(core: core, romURL: keptDir.appendingPathComponent(rom.fsName), workDir: keptDir)
+        }
+
         let workDir = FileManager.default.temporaryDirectory.appendingPathComponent(
             "native-player-\(UUID().uuidString)", isDirectory: true
         )
@@ -67,38 +80,66 @@ enum NativeLauncher {
             }
         }
 
-        // Beetle Saturn hardcodes the exact filename it looks for
-        // ("sega_101.bin" for Japan, "mpr-17933.bin" for NA/EU), no
-        // fallback, and RomM's own firmware filenames are whatever
-        // whoever uploaded them called the file. EmulatorJS's bundled
-        // Saturn core clearly does the equivalent of this under the
-        // hood, since the same file plays fine in the webview under
-        // any name; this is that adaptation for the native side.
-        // Copied under both region names rather than picked, since
-        // there is no reliable region signal in what the API reports
-        // (Firmware carries a filename, not a region) and the real
-        // check is the disc's own region at runtime, not the file's:
-        // both slots pointing at a same-sized BIOS lets whichever one
-        // the disc actually asks for resolve correctly.
         if core == .beetleSaturn {
-            for url in downloadedFirmwareURLs {
-                guard let size = try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int,
-                      size == 524_288
-                else { continue }
-                for name in ["sega_101.bin", "mpr-17933.bin"] {
-                    let target = workDir.appendingPathComponent(name)
-                    guard target != url, !FileManager.default.fileExists(atPath: target.path) else { continue }
-                    try? FileManager.default.copyItem(at: url, to: target)
-                }
-            }
+            stageSaturnBIOS(from: downloadedFirmwareURLs, in: workDir)
         }
 
+        return try activate(core: core, romURL: romURL, workDir: workDir)
+    }
+
+    private static func activate(core: NativeCore, romURL: URL, workDir: URL) throws -> NativeCore {
         LibretroFrontend.shared.activateCore(core.coreID)
         LibretroFrontend.shared.setCoreOptions(NativeCoreOptionsStore.dictionary(for: core))
         if let failure = LibretroFrontend.shared.loadGame(romURL.path, systemDirectory: workDir.path) {
             throw NSError(domain: "NativeLauncher", code: 1, userInfo: [NSLocalizedDescriptionKey: failure])
         }
         return core
+    }
+
+    /// Beetle Saturn hardcodes the exact filename it looks for
+    /// ("sega_101.bin" for Japan, "mpr-17933.bin" for NA/EU), no
+    /// fallback, and RomM's own firmware filenames are whatever
+    /// whoever uploaded them called the file. EmulatorJS's bundled
+    /// Saturn core clearly does the equivalent of this under the
+    /// hood, since the same file plays fine in the webview under
+    /// any name; this is that adaptation for the native side.
+    /// Copied under both region names rather than picked, since
+    /// there is no reliable region signal in what the API reports
+    /// (Firmware carries a filename, not a region) and the real
+    /// check is the disc's own region at runtime, not the file's:
+    /// both slots pointing at a same-sized BIOS lets whichever one
+    /// the disc actually asks for resolve correctly.
+    ///
+    /// Shared with `KeptGameStore`, which runs it once at keep time so a
+    /// kept Saturn game's directory is boot-ready with no work at launch.
+    static func stageSaturnBIOS(from firmwareURLs: [URL], in dir: URL) {
+        for url in firmwareURLs {
+            guard let size = try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int,
+                  size == 524_288
+            else { continue }
+            for name in ["sega_101.bin", "mpr-17933.bin"] {
+                let target = dir.appendingPathComponent(name)
+                guard target != url, !FileManager.default.fileExists(atPath: target.path) else { continue }
+                try? FileManager.default.copyItem(at: url, to: target)
+            }
+        }
+    }
+
+    /// Removes every temp directory a native launch ever created. Called
+    /// on the way into a new launch and on the way out of the player, so
+    /// an un-kept game's files live exactly as long as its session instead
+    /// of waiting for iOS to purge them. Kept games live elsewhere and are
+    /// never touched by this. Deleting under the still-active core is safe:
+    /// the file stays readable through its open handle until the core
+    /// unloads, POSIX semantics, only the directory entry goes now.
+    static func cleanUpTempDirectories() {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(
+            at: fm.temporaryDirectory, includingPropertiesForKeys: nil
+        ) else { return }
+        for entry in entries where entry.lastPathComponent.hasPrefix("native-player-") {
+            try? fm.removeItem(at: entry)
+        }
     }
 
     private static func download(_ request: URLRequest, to url: URL) async throws {

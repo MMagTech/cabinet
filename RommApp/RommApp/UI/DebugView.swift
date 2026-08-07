@@ -97,7 +97,7 @@ struct DebugView: View {
                 } header: {
                     Text("Cache bridge log")
                 } footer: {
-                    Text("\(BridgeConsoleLog.recent.count) lines from the last Cache or Data Saver use, included in Copy diagnostics.")
+                    Text("\(BridgeConsoleLog.recent.count) lines from the last Storage or keep use, included in Copy diagnostics.")
                 }
             }
 

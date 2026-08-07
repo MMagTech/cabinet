@@ -72,6 +72,14 @@ final class RomExporter: NSObject, ObservableObject {
         downloadNext()
     }
 
+    /// Hands files that are already on this phone straight to the picker,
+    /// no download and no temp copy: the picker exports `asCopy`, so the
+    /// originals, a kept game's among them, are read and left in place.
+    func presentLocal(urls: [URL]) {
+        guard case .idle = state else { return }
+        exportURLs = urls
+    }
+
     /// Reports a failure that happened before any network request could be
     /// started, building the request itself among them.
     func fail(_ message: String) {

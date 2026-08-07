@@ -1,6 +1,6 @@
 # Offline play through the native player, scope
 
-Status: proposed, not started. Follows from the native player work on the
+Status: phase 1 built 2026-08-07. Follows from the native player work on the
 `native-player-spike` branch (see scope-native-player-spike.md, whose
 spike succeeded and whose integration landed 2026-08-06).
 
@@ -72,9 +72,44 @@ earlier ones are useful without the later ones.
   to work offline and never will be; see the why above.
 - Kept ROMs are excluded from iOS backup. RomM is the source of truth
   and every kept file is re-downloadable from it; backing them up would
-  bloat iCloud backups to protect data that is not at risk. (Flagged for
-  Marcus's confirmation at session start, default stands unless he
-  objects.)
+  bloat iCloud backups to protect data that is not at risk. Confirmed by
+  Marcus 2026-08-07. No user-facing setting for this: a toggle whose
+  tradeoff needs two paragraphs to explain mostly generates support
+  questions, and it can be added later without migration pain if anyone
+  actually asks, since it is a per-file flag flip either way.
+- Keeping a game always downloads fresh from the server, even when a
+  copy already exists somewhere on the phone. An exported ROM is
+  invisible to the app once Files has it (iOS design, not ours), and
+  Data Saver's copy lives inside the webview's own cache serving the web
+  player; the overlap with native-capable games is arcade-only, where
+  ROMs are small. Plumbing bytes between three storage systems to save a
+  few megabytes of download would couple the native offline path to the
+  webview machinery it exists to escape. The reverse directions are
+  different and do ship, and together they became the unified storage
+  model (Marcus, 2026-08-07, "why isn't there just one copy?"): the kept
+  store is the single source of truth, and everything else references
+  it. The native player boots from it directly. The web player's cache
+  is seeded from it at keep time, locally through the existing bridge,
+  making that cache a disposable projection rather than a peer store.
+  Export copies from it instead of downloading again. Data Saver is gone
+  as a person-facing feature; its injection machinery became the seeding
+  plumbing. Every playable single-file game gets the one Keep toggle,
+  with fine print carrying the per-player promise: native-capable games
+  play fully offline, webview games skip the big download but still need
+  the server to start, which is the webview's physics and why offline
+  proper stays native-only. The Cache screen became Storage: kept games
+  in one section, the web player's cache in another, clearable without
+  ever touching a kept game.
+- Known soft edge, accepted: if the web player's cache evicts a kept
+  game's projection, nothing re-seeds it automatically until the game is
+  un-kept and re-kept; the web player just downloads organically that
+  once and re-caches itself. Phase 2 may revisit.
+- A user-visible Files browsing surface (exposing kept storage in the
+  Files app the way Delta does) is deferred until after phase 3: the
+  storage layout is still growing (offline saves queue, phase 2 state),
+  and whatever users can touch becomes public API. Export into another
+  emulator's Files folder already covers the concrete need, and serves
+  kept bytes locally.
 - Save states remain per-core, per the state-format finding in the
   native player work: an offline save from the native player syncs up
   tagged fbneo-native, same as an online one.

@@ -165,6 +165,9 @@ struct NativePlayerView: View {
                 session.reportPlaySessionEnded(romId: rom.id, start: startedAt, end: Date())
             }
             NativeSessionMarker.recordCleanExit()
+            // An un-kept game's downloaded files have no life after the
+            // session; a kept game's live elsewhere and survive this.
+            NativeLauncher.cleanUpTempDirectories()
         }
         .onChange(of: scenePhase) { _, phase in
             // Eviction while backgrounded is iOS housekeeping, not a core

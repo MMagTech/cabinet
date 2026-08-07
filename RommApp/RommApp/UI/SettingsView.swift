@@ -112,12 +112,12 @@ struct SettingsView: View {
 
             Section {
                 NavigationLink {
-                    CacheView()
+                    StorageView()
                 } label: {
-                    Label("Cache", systemImage: "internaldrive")
+                    Label("Storage", systemImage: "internaldrive")
                 }
             } footer: {
-                Text("Games saved on this device so playing them skips the download.")
+                Text("Games kept on this phone, and the web player's own cache.")
             }
 
             Section {

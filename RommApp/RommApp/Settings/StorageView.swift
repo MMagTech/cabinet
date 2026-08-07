@@ -1,11 +1,14 @@
 import SwiftUI
 
-/// What EmulatorJS itself has stored on this device, independent of RomM:
-/// every ROM and BIOS file the player has ever cached into
-/// `EmulatorJS-roms`, with a way to see how much room it's using and clear
-/// individual entries or all of them.
-struct CacheView: View {
+/// Everything this app has on disk, in one place: kept games (permanent,
+/// deliberate, the offline promise) and the web player's own cache
+/// (automatic, evictable, rebuildable). Formerly CacheView, renamed when
+/// kept games arrived: "Cache" stopped being an honest title the moment
+/// the screen held things that are explicitly not a cache, and Storage
+/// is what iOS itself calls this job.
+struct StorageView: View {
     @EnvironmentObject private var session: Session
+    @ObservedObject private var keptStore = KeptGameStore.shared
     @StateObject private var bridge = EmulatorCacheBridge()
     @State private var cacheLimitBytes: Int64?
     @State private var confirmingClearAll = false
@@ -25,6 +28,40 @@ struct CacheView: View {
 
     var body: some View {
         List {
+            // Kept games live in this app's own storage, not the webview
+            // cache below, so the section renders regardless of whether
+            // the bridge ever comes up. Same screen on purpose: storage
+            // lives in one place, but the semantics differ, caches serve
+            // speed, kept games serve a promise, hence no shared total
+            // and no shared clear-all.
+            if !keptStore.games.isEmpty {
+                Section {
+                    ForEach(keptStore.games) { game in
+                        HStack(spacing: 12) {
+                            Image(systemName: "internaldrive")
+                                .foregroundStyle(.secondary)
+                                .frame(width: 22)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(game.displayName)
+                                    .lineLimit(1)
+                                Text(byteCount(game.totalBytes))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .swipeActions {
+                            Button("Remove", role: .destructive) {
+                                keptStore.remove(romId: game.romId)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Kept games")
+                } footer: {
+                    Text("\(byteCount(keptStore.totalBytes)) kept. Nothing here clears on its own; remove a game with a swipe, or with its own Keep toggle.")
+                }
+            }
+
             if let error = bridge.loadError {
                 Section {
                     Text(error).font(.caption).foregroundStyle(.secondary)
@@ -50,13 +87,13 @@ struct CacheView: View {
                     .padding(.vertical, 4)
                 } footer: {
                     Text(
-                        "Games larger than the limit play fine but aren't kept for next time. Cached files stay until you remove them here."
+                        "The web player's own cache. Games larger than the limit play fine but aren't cached for next time. Cached files stay until you remove them here, and removing one never touches a kept game."
                     )
                 }
 
                 if bridge.files.isEmpty {
                     Section {
-                        Text("Nothing is cached yet. Games are added automatically when you play them, or with Data Saver in a game's download menu.")
+                        Text("Nothing is cached yet. The web player adds games automatically when you play them, and keeping a game copies it in so playing skips the download.")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     }
@@ -66,7 +103,7 @@ struct CacheView: View {
                             row(for: file)
                         }
                     } header: {
-                        Text("Cached files")
+                        Text("Web player cache")
                     }
 
                     Section {
@@ -86,13 +123,13 @@ struct CacheView: View {
                                 Task { await bridge.deleteAll() }
                             }
                         } message: {
-                            Text("Games will need to re-download their ROM the next time you play, even on a good connection.")
+                            Text("Web player games will re-download their ROM the next time you play. Kept games are not touched.")
                         }
                     }
                 }
             }
         }
-        .navigationTitle("Cache")
+        .navigationTitle("Storage")
         .navigationBarTitleDisplayMode(.inline)
         .background {
             if let serverURL = session.serverURL {

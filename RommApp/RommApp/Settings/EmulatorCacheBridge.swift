@@ -63,7 +63,8 @@ enum BridgeConsoleLog {
 }
 
 /// Reads, writes and deletes entries in EmulatorJS's on-device cache from
-/// outside the player, for the Settings cache screen and Data Saver.
+/// outside the player, for the Storage screen and for seeding a kept
+/// game's bytes into the cache so the web player skips its download.
 ///
 /// IndexedDB is scoped per origin, so this needs a real `WKWebView`
 /// actually loaded on RomM's own origin, not a detached one: browsers will
