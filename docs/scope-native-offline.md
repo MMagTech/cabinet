@@ -104,15 +104,17 @@ earlier ones are useful without the later ones.
   game's projection, nothing re-seeds it automatically until the game is
   un-kept and re-kept; the web player just downloads organically that
   once and re-caches itself. Phase 2 may revisit.
-- Kept games are visible in the Files app ("On My iPhone, Cabinet,
-  Games"), shipped 2026-08-07 after Marcus made the case that the file
-  someone kept is theirs to copy wherever they want without a per-game
-  Export ceremony. The layout mirrors RomM's own library directory,
-  Games/<platform folder>/<server filename>, his call: this app is a
-  RomM frontend, so browsing kept files should read like browsing the
-  server's roms directory on a PC, which also makes name collisions
-  impossible since the server's directories already guarantee
-  uniqueness. Implementation is a hard-link mirror: same physical bytes
+- Kept games are visible in the Files app under On My iPhone, Cabinet,
+  shipped 2026-08-07 after Marcus made the case that the file someone
+  kept is theirs to copy wherever they want without a per-game Export
+  ceremony. The layout mirrors his server's actual library structure,
+  system folder first: <platform folder>/roms/<server filename> and
+  <platform folder>/bios/<firmware filename>. RomM supports two
+  structures and the first cut assumed the other one blind, which he
+  caught; the app cannot ask the server which structure it uses, so
+  this matches his instance and stays until that matters for someone
+  else. Server filenames keep name collisions impossible, the server's
+  directories already guarantee uniqueness. Implementation is a hard-link mirror: same physical bytes
   as the store, zero extra space. The private store under Application
   Support stays canonical and unexposed, so the public shape never
   needs to change as later phases grow the private side (this dissolves
