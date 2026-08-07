@@ -45,11 +45,16 @@ hardcoded game, no polish.
   serves files; the launcher already downloads them. The work is
   matching what the core demands against what the server has and saying
   so clearly when they disagree.
-- **CD images.** Saturn games are cue/bin or chd, multi-file in ways
-  arcade zips were not. RomM serves multi-file roms through an existing
-  endpoint the app already knows (`romFileContentRequest`); the loader
-  grows real handling for it. chd is the preferred on-server format and
-  Beetle Saturn reads it directly.
+- **CD images, chd only.** Saturn games are cue/bin or chd; the native
+  loader supports chd only, matching RomM's own recommended format for
+  CD platforms and keeping the go/no-go's one question (does Beetle
+  Saturn hold full speed) free of a second variable. cue/bin's own
+  multi-file handling (a cue sheet plus per-track bins, downloaded
+  together, the core reading references between them) is real work with
+  its own failure modes that would be indistinguishable from a
+  performance failure if bundled in here. Out of scope for now, not
+  forever: revisit once the core itself is a known quantity and a
+  concrete library needs it.
 - **State sizes.** Saturn states will dwarf Neo Geo's. The existing
   per-core state tagging carries over unchanged (`saturn-native` or
   similar); the 413-too-large failure the webview already handles

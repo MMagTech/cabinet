@@ -10,11 +10,13 @@ enum NativeLauncher {
     enum LaunchError: LocalizedError {
         case romNotFound(String)
         case noNativeCore
+        case unsupportedFormat(String)
 
         var errorDescription: String? {
             switch self {
             case .romNotFound(let name): return "No \"\(name)\" ROM found in the library"
             case .noNativeCore: return "No native core exists for this platform"
+            case .unsupportedFormat(let detail): return detail
             }
         }
     }
@@ -31,28 +33,30 @@ enum NativeLauncher {
         guard let core = NativeCore.core(for: rom) else {
             throw LaunchError.noNativeCore
         }
+
+        // Saturn stays chd-only, deliberately, matching RomM's own
+        // recommended format for CD platforms. cue/bin is real work
+        // (a cue sheet plus per-track bins, multi-file download, the
+        // core reading references between them) that has nothing to do
+        // with the go/no-go's one question, whether Beetle Saturn holds
+        // full speed, and a cue/bin failure would be indistinguishable
+        // from a real performance failure. Revisit only if a concrete
+        // library needs it once the core itself is a known quantity.
+        if core == .beetleSaturn {
+            guard !rom.hasMultipleFiles, rom.fsName.lowercased().hasSuffix(".chd") else {
+                throw LaunchError.unsupportedFormat(
+                    "Only .chd is supported for Saturn right now, not \"\(rom.fsName)\". Re-rip or re-add the game as chd."
+                )
+            }
+        }
+
         let workDir = FileManager.default.temporaryDirectory.appendingPathComponent(
             "native-player-\(UUID().uuidString)", isDirectory: true
         )
         try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
 
-        // CD systems are multi-file in ways arcade zips never were: a chd
-        // is one file, but cue/bin is a cue sheet plus one bin per track,
-        // and the cue sheet's own text references the bin filenames it
-        // expects beside it. Downloading every listed file by its own
-        // name, into the same directory, is what keeps that reference
-        // valid; the single-file path below covers everything else,
-        // arcade zips included.
-        if rom.hasMultipleFiles {
-            let files = try await session.romFiles(romId: rom.id)
-            for file in files {
-                let url = workDir.appendingPathComponent(file.fileName)
-                try await download(session.romFileContentRequest(romId: rom.id, file: file), to: url)
-            }
-        } else {
-            let romURL = workDir.appendingPathComponent(rom.fsName)
-            try await download(session.romContentRequest(rom), to: romURL)
-        }
+        let romURL = workDir.appendingPathComponent(rom.fsName)
+        try await download(session.romContentRequest(rom), to: romURL)
 
         if let firmwareList = try? await session.firmware(platformId: rom.platformId) {
             for firmware in firmwareList where !firmware.missingFromFS {
@@ -61,14 +65,8 @@ enum NativeLauncher {
             }
         }
 
-        // The core reads whichever file it starts from: the cue sheet for
-        // cue/bin, the chd itself, or the rom's own single file. fsName
-        // is that entry point in every case, cue/bin included, since
-        // RomM's own fs_name for a multi-file CD rom is the cue file.
-        let entryPath = workDir.appendingPathComponent(rom.fsName).path
-
         LibretroFrontend.shared.activateCore(core.coreID)
-        if let failure = LibretroFrontend.shared.loadGame(entryPath, systemDirectory: workDir.path) {
+        if let failure = LibretroFrontend.shared.loadGame(romURL.path, systemDirectory: workDir.path) {
             throw NSError(domain: "NativeLauncher", code: 1, userInfo: [NSLocalizedDescriptionKey: failure])
         }
         return core
