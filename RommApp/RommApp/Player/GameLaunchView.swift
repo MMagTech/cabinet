@@ -989,13 +989,13 @@ struct GameLaunchView: View {
         let kept = keptStore.kept(romId: rom.id)
         let size = kept.map { byteCount($0.totalBytes) } ?? ""
         if NativeCore.core(for: rom) != nil {
-            var caption = "Kept, \(size). The native player runs this game without a connection."
+            var caption = "Kept, \(size). The native player runs this game without a connection, and the file is in the Files app under Cabinet."
             if seedPhase == .failed {
                 caption += " The web player's copy couldn't be prepared; it will download once there instead."
             }
             return caption
         }
-        var caption = "Kept, \(size). Playing skips the big download, but starting still needs a small connection to the server."
+        var caption = "Kept, \(size). Playing skips the big download, but starting still needs a small connection. The file is in the Files app under Cabinet."
         if seedPhase == .failed {
             caption = "Kept, \(size). The quick-start copy couldn't be prepared; the first play will download once, then it's quick."
         }
@@ -1277,6 +1277,7 @@ struct GameLaunchView: View {
     }
 
     private func load() async {
+        keptStore.reconcileFilesFolder()
         canonicalSlug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
         isComputerPlatform = ComputerPlatforms.contains(canonicalSlug)
         cores = CoreCatalog.cores(for: canonicalSlug)

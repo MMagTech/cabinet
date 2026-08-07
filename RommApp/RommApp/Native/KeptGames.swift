@@ -50,20 +50,40 @@ final class KeptGameStore: ObservableObject {
 
     private var tasks: [Int: Task<Void, Never>] = [:]
     private let root: URL
+    /// The person-facing mirror: "On My iPhone > Cabinet > Kept Games" in
+    /// the Files app, one human-named hard link per kept game. Same
+    /// physical bytes as the store, zero extra space; the private store
+    /// under Application Support stays canonical and unexposed, so the
+    /// public shape is just a flat folder of game files and never needs
+    /// to change as later phases grow the private side. Exists because
+    /// the file someone kept is theirs: copy it to another emulator,
+    /// AirDrop it, whatever, without asking Export's permission per game.
+    private let filesFolder: URL
+    private static let linksMigratedKey = "romm.keptGames.linksMigrated"
 
     var totalBytes: Int64 {
         games.reduce(0) { $0 + $1.totalBytes }
     }
 
     private init() {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let fm = FileManager.default
+        let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         root = support.appendingPathComponent("KeptGames", isDirectory: true)
-        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try? fm.createDirectory(at: root, withIntermediateDirectories: true)
+        Self.excludeFromBackup(root)
+        let documents = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        filesFolder = documents.appendingPathComponent("Kept Games", isDirectory: true)
+        try? fm.createDirectory(at: filesFolder, withIntermediateDirectories: true)
+        Self.excludeFromBackup(filesFolder)
+        games = Self.loadManifests(in: root)
+        reconcileFilesFolder()
+    }
+
+    private static func excludeFromBackup(_ url: URL) {
         var values = URLResourceValues()
         values.isExcludedFromBackup = true
-        var rootURL = root
-        try? rootURL.setResourceValues(values)
-        games = Self.loadManifests(in: root)
+        var target = url
+        try? target.setResourceValues(values)
     }
 
     func kept(romId: Int) -> KeptGame? {
@@ -128,9 +148,102 @@ final class KeptGameStore: ObservableObject {
     func remove(romId: Int) {
         tasks[romId]?.cancel()
         errors[romId] = nil
+        if let game = kept(romId: romId) {
+            removeLink(for: game)
+        }
         try? FileManager.default.removeItem(at: directory(for: romId))
         try? FileManager.default.removeItem(at: stagingDirectory(for: romId))
         games.removeAll { $0.romId == romId }
+    }
+
+    // MARK: Files app mirror
+
+    /// The inode, the identity that survives however many names a hard
+    /// link gives a file, and however the person renames it in Files.
+    private func inode(of url: URL) -> UInt64? {
+        guard let number = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.systemFileNumber] as? NSNumber
+        else { return nil }
+        return number.uint64Value
+    }
+
+    private func storeFileURL(for game: KeptGame) -> URL {
+        directory(for: game.romId).appendingPathComponent(game.fsName)
+    }
+
+    /// Everything currently in the visible folder, by inode. Foreign
+    /// files someone dropped in are carried here too and simply never
+    /// match a kept game, which is exactly the right amount of attention
+    /// to pay them: none.
+    private func filesFolderInodes() -> [UInt64: URL] {
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: filesFolder, includingPropertiesForKeys: nil
+        ) else { return [:] }
+        var map: [UInt64: URL] = [:]
+        for entry in entries {
+            if let id = inode(of: entry) { map[id] = entry }
+        }
+        return map
+    }
+
+    private func createLink(for game: KeptGame) {
+        let source = storeFileURL(for: game)
+        guard let sourceInode = inode(of: source) else { return }
+        let existing = filesFolderInodes()
+        guard existing[sourceInode] == nil else { return }
+
+        let ext = (game.fsName as NSString).pathExtension
+        // Files-app-hostile characters swapped, not stripped, so two
+        // games differing only in one keep distinct names.
+        let safeName = game.displayName
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+        var candidate = safeName
+        if FileManager.default.fileExists(
+            atPath: filesFolder.appendingPathComponent("\(candidate).\(ext)").path
+        ) {
+            candidate = "\(safeName) (\(game.romId))"
+        }
+        let target = filesFolder.appendingPathComponent("\(candidate).\(ext)")
+        try? FileManager.default.linkItem(at: source, to: target)
+        Self.excludeFromBackup(target)
+    }
+
+    private func removeLink(for game: KeptGame) {
+        guard let sourceInode = inode(of: storeFileURL(for: game)) else { return }
+        for (id, url) in filesFolderInodes() where id == sourceInode {
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
+    /// Makes the visible folder and the store agree, in the direction
+    /// the person's actions point. A kept game with no entry in the
+    /// folder means they deleted it in Files, and deleting the file is
+    /// removing the game: the store copy goes too, rather than lingering
+    /// as invisible storage the folder claims is gone. Renames don't
+    /// count as deletion, the inode survives them. The one exception is
+    /// the first run after this mirror shipped, when pre-mirror kept
+    /// games legitimately have no link yet and get one created instead.
+    /// Runs at init, and again whenever a screen that shows kept state
+    /// appears, since Files edits can happen any time this app is not
+    /// looking.
+    func reconcileFilesFolder() {
+        let migrated = UserDefaults.standard.bool(forKey: Self.linksMigratedKey)
+        let folder = filesFolderInodes()
+        for game in games {
+            guard let storeInode = inode(of: storeFileURL(for: game)) else {
+                // The store file itself is gone; nothing left to honor.
+                remove(romId: game.romId)
+                continue
+            }
+            if folder[storeInode] == nil {
+                if migrated {
+                    remove(romId: game.romId)
+                } else {
+                    createLink(for: game)
+                }
+            }
+        }
+        UserDefaults.standard.set(true, forKey: Self.linksMigratedKey)
     }
 
     // MARK: Internals
@@ -191,6 +304,7 @@ final class KeptGameStore: ObservableObject {
             try FileManager.default.moveItem(at: staging, to: final)
             games.append(manifest)
             games.sort { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+            createLink(for: manifest)
         } catch {
             try? FileManager.default.removeItem(at: staging)
             throw error

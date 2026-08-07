@@ -58,7 +58,7 @@ struct StorageView: View {
                 } header: {
                     Text("Kept games")
                 } footer: {
-                    Text("\(byteCount(keptStore.totalBytes)) kept. Nothing here clears on its own; remove a game with a swipe, or with its own Keep toggle.")
+                    Text("\(byteCount(keptStore.totalBytes)) kept. These files also appear in the Files app, under Cabinet, Kept Games, where you can copy them to other apps; deleting one there removes it here too. Nothing clears on its own.")
                 }
             }
 
@@ -140,6 +140,7 @@ struct StorageView: View {
             }
         }
         .task {
+            keptStore.reconcileFilesFolder()
             if let bytes = try? await session.cacheLimitBytes() {
                 cacheLimitBytes = bytes
             }

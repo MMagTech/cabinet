@@ -104,12 +104,20 @@ earlier ones are useful without the later ones.
   game's projection, nothing re-seeds it automatically until the game is
   un-kept and re-kept; the web player just downloads organically that
   once and re-caches itself. Phase 2 may revisit.
-- A user-visible Files browsing surface (exposing kept storage in the
-  Files app the way Delta does) is deferred until after phase 3: the
-  storage layout is still growing (offline saves queue, phase 2 state),
-  and whatever users can touch becomes public API. Export into another
-  emulator's Files folder already covers the concrete need, and serves
-  kept bytes locally.
+- Kept games are visible in the Files app ("On My iPhone, Cabinet,
+  Kept Games"), shipped 2026-08-07 after Marcus made the case that the
+  file someone kept is theirs to copy wherever they want without a
+  per-game Export ceremony. Implementation is a hard-link mirror: same
+  physical bytes as the store, zero extra space, human-named. The
+  private store under Application Support stays canonical and
+  unexposed, so the public shape is a flat folder of game files and
+  never needs to change as later phases grow the private side (this
+  dissolves the layout-becomes-API objection that had deferred the
+  idea). Deleting a file there un-keeps the game, store copy included,
+  at the next reconcile; renames are survived by matching inodes, not
+  names. Games only; firmware stays behind Export BIOS. Export itself
+  remains for what the folder cannot do: iCloud destinations, un-kept
+  games, BIOS-only.
 - Save states remain per-core, per the state-format finding in the
   native player work: an offline save from the native player syncs up
   tagged fbneo-native, same as an online one.
