@@ -13,6 +13,7 @@ typedef NS_ENUM(uint32_t, LibretroPixelFormat) {
 // re-entrant, and the app never runs two games at once.
 typedef NS_ENUM(NSInteger, LibretroCoreID) {
     LibretroCoreIDFBNeo NS_SWIFT_NAME(fbneo) = 0,
+    LibretroCoreIDBeetleSaturn NS_SWIFT_NAME(beetleSaturn) = 1,
 };
 
 @interface LibretroFrame : NSObject

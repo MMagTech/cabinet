@@ -183,6 +183,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/RommApp/Native/Libretro",
 					"$(PROJECT_DIR)/RommApp/Native/FBNeo",
+					"$(PROJECT_DIR)/RommApp/Native/Saturn",
 				);
 				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet Dev";
 				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
@@ -197,10 +198,12 @@
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/RommApp/Native/FBNeo",
+					"$(PROJECT_DIR)/RommApp/Native/Saturn",
 				);
 				MARKETING_VERSION = 0.1;
 				OTHER_LDFLAGS = (
 					"-lfbneo_libretro_ios",
+					"-lbeetle_saturn_ios",
 					"-lc++",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev;
@@ -225,6 +228,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/RommApp/Native/Libretro",
 					"$(PROJECT_DIR)/RommApp/Native/FBNeo",
+					"$(PROJECT_DIR)/RommApp/Native/Saturn",
 				);
 				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet Dev";
 				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
@@ -239,10 +243,12 @@
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/RommApp/Native/FBNeo",
+					"$(PROJECT_DIR)/RommApp/Native/Saturn",
 				);
 				MARKETING_VERSION = 0.1;
 				OTHER_LDFLAGS = (
 					"-lfbneo_libretro_ios",
+					"-lbeetle_saturn_ios",
 					"-lc++",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev;

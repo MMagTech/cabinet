@@ -5,11 +5,13 @@ import Foundation
 /// is RomM's, this one is ours.
 enum NativeCore {
     case fbneo
+    case beetleSaturn
 
     /// The frontend's identifier for the statically linked core.
     var coreID: LibretroCoreID {
         switch self {
         case .fbneo: return .fbneo
+        case .beetleSaturn: return .beetleSaturn
         }
     }
 
@@ -23,12 +25,17 @@ enum NativeCore {
     var emulatorTag: String {
         switch self {
         case .fbneo: return "fbneo-native"
+        case .beetleSaturn: return "saturn-native"
         }
     }
 
-    /// The native core that can run this rom, if any. Arcade means FBNeo;
-    /// everything else stays on the webview until a core for it exists.
+    /// The native core that can run this rom, if any. Arcade means FBNeo,
+    /// Saturn means Beetle Saturn (go/no-go in progress, Debug screen
+    /// only for now); everything else stays on the webview until a core
+    /// for it exists.
     static func core(for rom: Rom) -> NativeCore? {
-        rom.isArcade ? .fbneo : nil
+        if rom.isArcade { return .fbneo }
+        if rom.platformSlug == "saturn" { return .beetleSaturn }
+        return nil
     }
 }

@@ -1,6 +1,7 @@
 #import "LibretroFrontend.h"
 #include "LibretroCoreAPI.h"
 #import "FBNeoCore.h"
+#import "SaturnCore.h"
 #include <string>
 #include <vector>
 #include <mutex>
@@ -160,6 +161,8 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     switch (coreID) {
         case LibretroCoreIDFBNeo:
             return FBNeoCoreAPI();
+        case LibretroCoreIDBeetleSaturn:
+            return BeetleSaturnCoreAPI();
     }
     return FBNeoCoreAPI();
 }
