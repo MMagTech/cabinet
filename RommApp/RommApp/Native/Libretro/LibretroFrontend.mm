@@ -91,11 +91,32 @@ size_t audioSampleBatch(const int16_t *data, size_t frames) {
 
 void inputPoll(void) {}
 
-int16_t inputState(unsigned port, unsigned device, unsigned, unsigned id) {
-    if (port != 0 || device != RETRO_DEVICE_JOYPAD || id > 13) {
+int16_t inputState(unsigned port, unsigned device, unsigned index, unsigned id) {
+    if (port != 0) {
         return 0;
     }
-    return (gButtonMask.load(std::memory_order_relaxed) >> id) & 1;
+    uint32_t mask = gButtonMask.load(std::memory_order_relaxed);
+    if (device == RETRO_DEVICE_JOYPAD) {
+        return id <= 13 ? (mask >> id) & 1 : 0;
+    }
+    // A twin-stick arcade game's second joystick. FBNeo reads it as the
+    // analog right stick (confirmed against its own retro_input.cpp)
+    // even though the real cabinet's control is a plain 4-way joystick,
+    // not a true analog one: digital in, full deflection out, bits
+    // 20 (right) / 21 (left) / 22 (down) / 23 (up) in the same mask the
+    // ordinary joypad buttons live in. Y-positive is down, matching
+    // libretro's own convention and confirmed against the touch pad's
+    // identical stick, which already relies on it.
+    if (device == RETRO_DEVICE_ANALOG && index == RETRO_DEVICE_INDEX_ANALOG_RIGHT) {
+        if (id == RETRO_DEVICE_ID_ANALOG_X) {
+            if ((mask >> 20) & 1) return 0x7fff;
+            if ((mask >> 21) & 1) return -0x7fff;
+        } else if (id == RETRO_DEVICE_ID_ANALOG_Y) {
+            if ((mask >> 22) & 1) return 0x7fff;
+            if ((mask >> 23) & 1) return -0x7fff;
+        }
+    }
+    return 0;
 }
 
 void logCallback(enum retro_log_level level, const char *fmt, ...) {

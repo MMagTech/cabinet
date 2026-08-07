@@ -131,6 +131,16 @@ final class GameControllerManager: ObservableObject {
         gamepad.leftThumbstick.valueChangedHandler = { [weak self] _, x, y in
             MainActor.assumeIsolated { self?.stick(x: x, y: y) }
         }
+        // A twin-stick arcade game's second joystick, ids 20-23, the same
+        // ones the on-screen pad's own second stick already drives (see
+        // ArcadeLayout.secondStick). Digital in, full deflection out,
+        // matching every other source that reaches those ids: the real
+        // cabinet's second stick is a joystick, not a true analog stick,
+        // and both players' bridges treat it that way already. This was
+        // simply never wired: only the click button existed before.
+        gamepad.rightThumbstick.valueChangedHandler = { [weak self] _, x, y in
+            MainActor.assumeIsolated { self?.stick2(x: x, y: y) }
+        }
 
         // Bind the standard buttons by their canonical names. The elements
         // dictionary cannot be used for this: it keys every button under
@@ -225,6 +235,19 @@ final class GameControllerManager: ObservableObject {
         emit(RetroPad.right, x > threshold)
         emit(RetroPad.down, y < -threshold)
         emit(RetroPad.up, y > threshold)
+    }
+
+    /// Same digitizing as the left stick, ids 23/22/21/20 (up/down/left/
+    /// right) instead of the standard RetroPad directions: see
+    /// ArcadeLayout.secondStick for why those specific numbers and where
+    /// they lead downstream in each player.
+    private func stick2(x: Float, y: Float) {
+        guard captureHandler == nil else { return }
+        let threshold: Float = 0.5
+        emit(21, x < -threshold)
+        emit(20, x > threshold)
+        emit(22, y < -threshold)
+        emit(23, y > threshold)
     }
 
     /// Routes an input to the game, edges only: the stick handler above

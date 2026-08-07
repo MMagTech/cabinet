@@ -308,7 +308,13 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     private var heldButtons: Set<Int> = []
 
     func setButton(_ id: Int, down: Bool) {
-        guard id >= 0 && id <= 13 else { return } // RetroPad.overlay (-1) and analog axes aren't joypad buttons
+        // 0...13 is the standard joypad; 20...23 is the twin-stick second
+        // joystick's four directions (see ArcadeLayout.secondStick and
+        // GameControllerManager.stick2), which LibretroFrontend answers
+        // through RETRO_DEVICE_ANALOG rather than the joypad bitmask, but
+        // carries in the same mask this renderer builds either way.
+        // RetroPad.overlay (-1) isn't a game input at all.
+        guard (0...13).contains(id) || (20...23).contains(id) else { return }
         if down {
             heldButtons.insert(id)
         } else {
