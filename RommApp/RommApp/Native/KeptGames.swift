@@ -193,8 +193,14 @@ final class KeptGameStore: ObservableObject {
     /// game, which is exactly the right amount of attention to pay
     /// them: none.
     private func filesFolderInodes() -> [UInt64: URL] {
+        // Hidden entries skipped deliberately: deleting a file in the
+        // Files app moves it into a hidden .Trash still inside
+        // Documents, and counting trashed files as present made
+        // deletion invisible to reconciliation, the toggle stayed on
+        // after the person had thrown the game away.
         guard let enumerator = FileManager.default.enumerator(
-            at: documentsRoot, includingPropertiesForKeys: [.isRegularFileKey]
+            at: documentsRoot, includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
         ) else { return [:] }
         var map: [UInt64: URL] = [:]
         for case let entry as URL in enumerator {
