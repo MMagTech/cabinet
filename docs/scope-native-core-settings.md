@@ -45,9 +45,31 @@ comparison rather than a label to trust blind.
 **Core options.** In Settings, not in-game, because these are abstract
 toggles with nothing to visually compare. A new "Native cores" row in
 Settings lists every core with a native implementation (today: FinalBurn
-Neo, Beetle Saturn). Each core's own screen shows its options, only if it
-reports any: FBNeo has none today and its screen would show no options
-section at all, not an empty one.
+Neo, Beetle Saturn). Each core's own screen shows its options.
+
+Correction, 2026-08-06, checked against real source rather than assumed:
+FBNeo is not option-free. It calls `RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2`
+with over 30 keys (`retro_common.cpp`), `fbneo-cpu-speed-adjust` and the
+frameskip pair among them, genuinely relevant ones, alongside sixteen
+`fbneo-debug-dip-*`/`fbneo-debug-layer-*` diagnostic entries that plainly
+are not. FBNeo's screen needs the same hand-picked-subset treatment the
+shader list already gets, not a raw dump of everything the core reports;
+which keys make that cut is still an open decision, not yet made.
+
+Deeper gap the same check surfaced: `LibretroFrontend`'s environment
+callback answers `RETRO_ENVIRONMENT_GET_VARIABLE` (a core asking "what is
+this key set to") but never handles `SET_CORE_OPTIONS` /
+`SET_CORE_OPTIONS_V2` / `SET_VARIABLES` (a core announcing "here is my
+whole option list, with choices and defaults") at all, for either core.
+Beetle Saturn's options used here so far came from reading its
+`libretro_core_options.h` by hand, not from the running core telling the
+frontend what it has. That works, but only for the two cores someone
+has actually gone and read source for, and stays correct only as long as
+neither core's option set changes without a matching hand-update on this
+side. Capturing `SET_CORE_OPTIONS_V2` for real, so the frontend learns a
+core's options from the core itself, is worth doing before this becomes
+a per-core maintenance burden, not a blocker for a first version scoped
+to the two cores that exist today.
 
 Both are stored per core, not per game: a shader or option choice applies
 to every game that core runs, matching how core options are inherently
@@ -75,15 +97,14 @@ per-shader core tag; building that mechanism now, before a core exists
 that would need it, is exactly the speculative complexity this project
 avoids elsewhere.
 
-Before porting any of the nine from GLSL to Metal Shading Language,
-verify each one's actual pass count against real source, not the
-secondhand summary that shaped this list. Single-pass ports directly;
-`crt-geom` in particular is commonly multi-pass upstream in the wider
-libretro-shaders ecosystem, which costs a real intermediate render
-target, not just a fragment shader swap. A shader that turns out to be
-multi-pass is not disqualified, just costed differently, and that cost
-should be known before committing to porting all nine versus a smaller
-first cut.
+Verified, 2026-08-06, against the actual `.glslp` presets in
+`libretro/glsl-shaders` (the source EmulatorJS's bundle traces back to,
+not the secondhand summary that first shaped this list): all nine are
+single-pass, `shaders = 1`, one `shader0=` entry each. The earlier
+caution about `crt-geom` commonly being multi-pass turned out to apply
+to a different, more elaborate slang preset some other shader packs
+ship, not this GLSL one. No intermediate render target needed for any of
+the nine; every one ports as a plain fragment shader swap.
 
 ## Out of scope, explicitly
 
