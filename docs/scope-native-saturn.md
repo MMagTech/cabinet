@@ -1,8 +1,11 @@
 # Saturn through the native player, scope
 
-Status: proposed, not started. Follows the native player work on
-`native-player-spike` (scope-native-player-spike.md) and takes priority
-over the offline effort (scope-native-offline.md), which waits behind it.
+Status: go/no-go passed, 2026-08-06. The frontend refactor landed first
+against FBNeo, then Beetle Saturn was built and proved out: Sexy Parodius
+(2D) and Die Hard Arcade (3D) both held full speed with clean audio for
+ten continuous minutes on the iPhone Air, controls responding, on
+`native-player-spike`. Integration, BIOS polish, and the third UI tier
+are next, per this doc's own ordering.
 
 ## Why Saturn
 
@@ -10,8 +13,9 @@ Every platform in RomM's unsupported list (Dreamcast, GameCube, Switch,
 PS2 and the rest) depends on dynamic recompilation and sits permanently
 behind the JIT wall this app cannot cross. Saturn is the opposite case
 and the only member of its tier: RomM claims support because EmulatorJS
-ships a Saturn core, but that core is unplayably slow, so the support is
-nominal. The accurate Saturn core, Beetle Saturn, is a pure interpreter
+ships a Saturn core, but that core runs slowed down and crashes mid
+session in this app's own webview (confirmed firsthand, not assumed), so
+the support is nominal. The accurate Saturn core, Beetle Saturn, is a pure interpreter
 by design, no dynarec anywhere, which makes it the one 3D-era platform
 that is JIT-boundary-legal. If a modern iPhone's CPU can carry it, the
 native player turns a platform RomM pretends to support into one it
