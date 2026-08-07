@@ -22,6 +22,11 @@ struct KeptGame: Codable, Identifiable {
     let fileId: Int?
     let webFileName: String?
     let contentLength: String?
+    /// The platform's folder name on the server's filesystem, so the
+    /// Files app mirror can reproduce RomM's own directory layout:
+    /// Games/<platform folder>/<server filename>, the same structure
+    /// someone browsing the server's roms directory on a PC sees.
+    let platformFsSlug: String?
 
     var id: Int { romId }
 }
@@ -50,14 +55,18 @@ final class KeptGameStore: ObservableObject {
 
     private var tasks: [Int: Task<Void, Never>] = [:]
     private let root: URL
-    /// The person-facing mirror: "On My iPhone > Cabinet > Kept Games" in
-    /// the Files app, one human-named hard link per kept game. Same
-    /// physical bytes as the store, zero extra space; the private store
-    /// under Application Support stays canonical and unexposed, so the
-    /// public shape is just a flat folder of game files and never needs
-    /// to change as later phases grow the private side. Exists because
-    /// the file someone kept is theirs: copy it to another emulator,
-    /// AirDrop it, whatever, without asking Export's permission per game.
+    /// The person-facing mirror: "On My iPhone > Cabinet > Games" in the
+    /// Files app, one hard link per kept game, laid out exactly as
+    /// RomM's own library directory: Games/<platform folder>/<server
+    /// filename>. This app is a frontend to RomM, so browsing kept files
+    /// here reads like browsing the server's roms directory on a PC,
+    /// same folders, same names, Marcus's call. Same physical bytes as
+    /// the store, zero extra space; the private store under Application
+    /// Support stays canonical and unexposed, so the public shape never
+    /// needs to change as later phases grow the private side. Exists
+    /// because the file someone kept is theirs: copy it to another
+    /// emulator, AirDrop it, whatever, without asking Export's
+    /// permission per game.
     private let filesFolder: URL
     private static let linksMigratedKey = "romm.keptGames.linksMigrated"
 
@@ -72,7 +81,7 @@ final class KeptGameStore: ObservableObject {
         try? fm.createDirectory(at: root, withIntermediateDirectories: true)
         Self.excludeFromBackup(root)
         let documents = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        filesFolder = documents.appendingPathComponent("Kept Games", isDirectory: true)
+        filesFolder = documents.appendingPathComponent("Games", isDirectory: true)
         try? fm.createDirectory(at: filesFolder, withIntermediateDirectories: true)
         Self.excludeFromBackup(filesFolder)
         games = Self.loadManifests(in: root)
@@ -170,40 +179,48 @@ final class KeptGameStore: ObservableObject {
         directory(for: game.romId).appendingPathComponent(game.fsName)
     }
 
-    /// Everything currently in the visible folder, by inode. Foreign
-    /// files someone dropped in are carried here too and simply never
-    /// match a kept game, which is exactly the right amount of attention
-    /// to pay them: none.
+    /// Every file anywhere under the visible folder, by inode, platform
+    /// subfolders included: renames and moves between subfolders both
+    /// leave the inode alone, so a kept game is recognized wherever the
+    /// person dragged it. Foreign files someone dropped in are carried
+    /// here too and simply never match a kept game, which is exactly the
+    /// right amount of attention to pay them: none.
     private func filesFolderInodes() -> [UInt64: URL] {
-        guard let entries = try? FileManager.default.contentsOfDirectory(
-            at: filesFolder, includingPropertiesForKeys: nil
+        guard let enumerator = FileManager.default.enumerator(
+            at: filesFolder, includingPropertiesForKeys: [.isRegularFileKey]
         ) else { return [:] }
         var map: [UInt64: URL] = [:]
-        for entry in entries {
+        for case let entry as URL in enumerator {
+            guard (try? entry.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { continue }
             if let id = inode(of: entry) { map[id] = entry }
         }
         return map
     }
 
+    /// Files-app-hostile characters swapped, not stripped. Server names
+    /// are already filesystem names so this is nearly always a no-op;
+    /// the colon is the exception, legal on a Linux server and reserved
+    /// on Apple filesystems.
+    private static func safeComponent(_ name: String) -> String {
+        name.replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+    }
+
     private func createLink(for game: KeptGame) {
         let source = storeFileURL(for: game)
         guard let sourceInode = inode(of: source) else { return }
-        let existing = filesFolderInodes()
-        guard existing[sourceInode] == nil else { return }
+        guard filesFolderInodes()[sourceInode] == nil else { return }
 
-        let ext = (game.fsName as NSString).pathExtension
-        // Files-app-hostile characters swapped, not stripped, so two
-        // games differing only in one keep distinct names.
-        let safeName = game.displayName
-            .replacingOccurrences(of: "/", with: "-")
-            .replacingOccurrences(of: ":", with: "-")
-        var candidate = safeName
-        if FileManager.default.fileExists(
-            atPath: filesFolder.appendingPathComponent("\(candidate).\(ext)").path
-        ) {
-            candidate = "\(safeName) (\(game.romId))"
+        // RomM's own layout: <platform folder>/<server filename>. No
+        // collision handling because the server's directory already
+        // guarantees uniqueness within a platform folder; a manifest
+        // from before this field existed just lands at the root.
+        var folder = filesFolder
+        if let slug = game.platformFsSlug, !slug.isEmpty {
+            folder = filesFolder.appendingPathComponent(Self.safeComponent(slug), isDirectory: true)
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         }
-        let target = filesFolder.appendingPathComponent("\(candidate).\(ext)")
+        let target = folder.appendingPathComponent(Self.safeComponent(game.fsName))
         try? FileManager.default.linkItem(at: source, to: target)
         Self.excludeFromBackup(target)
     }
@@ -212,6 +229,14 @@ final class KeptGameStore: ObservableObject {
         guard let sourceInode = inode(of: storeFileURL(for: game)) else { return }
         for (id, url) in filesFolderInodes() where id == sourceInode {
             try? FileManager.default.removeItem(at: url)
+            // A platform folder that just emptied out goes too, so the
+            // mirror never accumulates husks of removed platforms.
+            let parent = url.deletingLastPathComponent()
+            if parent != filesFolder,
+               let remaining = try? FileManager.default.contentsOfDirectory(atPath: parent.path),
+               remaining.isEmpty {
+                try? FileManager.default.removeItem(at: parent)
+            }
         }
     }
 
@@ -293,7 +318,8 @@ final class KeptGameStore: ObservableObject {
             let manifest = KeptGame(
                 romId: rom.id, displayName: rom.displayName, fsName: rom.fsName,
                 totalBytes: Self.directorySize(staging), keptAt: Date(),
-                fileId: webFile?.id, webFileName: webFile?.fileName, contentLength: contentLength
+                fileId: webFile?.id, webFileName: webFile?.fileName, contentLength: contentLength,
+                platformFsSlug: rom.platformFsSlug
             )
             let data = try JSONEncoder().encode(manifest)
             try data.write(to: staging.appendingPathComponent("manifest.json"))

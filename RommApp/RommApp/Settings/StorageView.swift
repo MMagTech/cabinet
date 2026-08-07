@@ -58,7 +58,7 @@ struct StorageView: View {
                 } header: {
                     Text("Kept games")
                 } footer: {
-                    Text("\(byteCount(keptStore.totalBytes)) kept. These files also appear in the Files app, under Cabinet, Kept Games, where you can copy them to other apps; deleting one there removes it here too. Nothing clears on its own.")
+                    Text("\(byteCount(keptStore.totalBytes)) kept. These files also appear in the Files app, under Cabinet, Games, laid out like your RomM library; copy them to other apps from there. Deleting one there removes it here too. Nothing clears on its own.")
                 }
             }
 
