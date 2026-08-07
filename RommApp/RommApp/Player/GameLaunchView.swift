@@ -956,7 +956,7 @@ struct GameLaunchView: View {
     /// game in one place.
     private var keepCard: some View {
         LaunchCard(title: "Offline", systemImage: "internaldrive") {
-            Toggle("Keep on this phone", isOn: keepBinding)
+            Toggle("Download", isOn: keepBinding)
 
             if let progress = keptStore.downloading[rom.id] {
                 VStack(alignment: .leading, spacing: 8) {
@@ -1000,28 +1000,38 @@ struct GameLaunchView: View {
         }
     }
 
+    /// Three promises, each stated only where it is true. Saturn-class
+    /// games have no player choice, so no qualifier; arcade names the
+    /// native player because the picker sits right above this card and
+    /// offline belongs to native alone; web-only games get the honest
+    /// weaker deal. The BIOS is never mentioned, it comes along as
+    /// plumbing, and "Also in the Files app" is as precise as Files
+    /// itself makes useful.
     private var keptCaption: String {
-        let kept = keptStore.kept(romId: rom.id)
-        let size = kept.map { byteCount($0.totalBytes) } ?? ""
+        let size = keptStore.kept(romId: rom.id).map { byteCount($0.totalBytes) } ?? ""
         if NativeCore.core(for: rom) != nil {
-            var caption = "Kept, \(size). The native player runs this game without a connection, and its files, BIOS included, are in the Files app under Cabinet."
-            if seedPhase == .failed {
-                caption += " The web player's copy couldn't be prepared; it will download once there instead."
+            var caption = rom.isArcade
+                ? "\(size) on this iPhone. Plays offline in the native player."
+                : "\(size) on this iPhone. Plays without a connection."
+            if seedPhase == .failed, rom.isArcade {
+                caption += " The web player's copy couldn't be prepared; it will download once there."
             }
-            return caption
+            return caption + " Also in the Files app."
         }
-        var caption = "Kept, \(size). Playing skips the big download, but starting still needs a small connection. The file is in the Files app under Cabinet."
         if seedPhase == .failed {
-            caption = "Kept, \(size). The quick-start copy couldn't be prepared; the first play will download once, then it's quick."
+            return "\(size) on this iPhone. The quick-start copy couldn't be prepared; the first play will download once. Also in the Files app."
         }
-        return caption
+        return "\(size) on this iPhone. Starts faster; launching still needs your server. Also in the Files app."
     }
 
     private var keepCaption: String {
+        let size = byteCount(rom.fsSizeBytes)
         if NativeCore.core(for: rom) != nil {
-            return "Downloads the game and its BIOS, about \(byteCount(rom.fsSizeBytes)), so the native player can run it with no connection."
+            return rom.isArcade
+                ? "About \(size). Plays offline in the native player."
+                : "About \(size). Downloads once and plays without a connection."
         }
-        return "Downloads the game, about \(byteCount(rom.fsSizeBytes)), so playing skips the big download. Starting a game still needs a small connection to the server."
+        return "About \(size). Starts faster and saves data; launching still needs your server."
     }
 
     private var showsFirmwareCard: Bool {
