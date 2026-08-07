@@ -81,6 +81,10 @@ final class KeptGameStore: ObservableObject {
         try? fm.createDirectory(at: root, withIntermediateDirectories: true)
         Self.excludeFromBackup(root)
         let documents = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        // One build shipped the mirror under this name before the layout
+        // settled on Games; anything inside was only ever hard links, so
+        // deleting it loses no bytes.
+        try? fm.removeItem(at: documents.appendingPathComponent("Kept Games", isDirectory: true))
         filesFolder = documents.appendingPathComponent("Games", isDirectory: true)
         try? fm.createDirectory(at: filesFolder, withIntermediateDirectories: true)
         Self.excludeFromBackup(filesFolder)
