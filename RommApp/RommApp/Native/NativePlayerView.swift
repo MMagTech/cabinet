@@ -167,29 +167,69 @@ struct NativePlayerView: View {
         }
     }
 
+    /// Matches PlayerView's pause menu exactly: same card (regularMaterial,
+    /// 280pt wide, the same padding), same "Paused" subtitle, same icons,
+    /// and the same order for the reason given there. Quit leads, in the
+    /// spot a stray tap is cheapest; Resume trails, in the spot a reaching
+    /// thumb naturally lands. The two players used to disagree on both the
+    /// look and the order, which read as two different apps mid-session.
     private var pauseMenu: some View {
         ZStack {
-            Color.black.opacity(0.7).ignoresSafeArea()
-            VStack(spacing: 16) {
-                Text(rom.displayName)
-                    .font(.headline)
-                    .foregroundStyle(.white)
+            Color.black.opacity(0.55)
+                .ignoresSafeArea()
+            VStack(spacing: 18) {
+                VStack(spacing: 4) {
+                    Text(rom.displayName)
+                        .font(.headline)
+                        .lineLimit(1)
+                    Text("Paused")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 if let menuStatus {
                     Text(menuStatus)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Button("Resume") { closeMenu() }
+                VStack(spacing: 10) {
+                    Button(role: .destructive) {
+                        dismiss()
+                    } label: {
+                        Label("Quit", systemImage: "xmark")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.bordered)
+                    Button {
+                        saveState()
+                    } label: {
+                        Label("Save state", systemImage: "square.and.arrow.down")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.bordered)
+                    Button {
+                        loadLatestState()
+                    } label: {
+                        Label("Load latest state", systemImage: "arrow.uturn.backward")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.bordered)
+                    Button {
+                        closeMenu()
+                    } label: {
+                        Label("Resume", systemImage: "play.fill")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                    }
                     .buttonStyle(.borderedProminent)
-                Button("Save state") { saveState() }
-                    .buttonStyle(.bordered)
-                Button("Load latest state") { loadLatestState() }
-                    .buttonStyle(.bordered)
-                Button("Exit game", role: .destructive) { dismiss() }
-                    .buttonStyle(.bordered)
+                }
             }
-            .padding(32)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+            .frame(maxWidth: 280)
+            .padding(24)
+            .background(.regularMaterial, in: .rect(cornerRadius: 20))
+            .padding(40)
             .disabled(menuBusy)
         }
     }
