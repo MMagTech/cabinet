@@ -955,7 +955,12 @@ struct GameLaunchView: View {
     /// lives on the same toggle, and the Storage screen lists every kept
     /// game in one place.
     private var keepCard: some View {
-        LaunchCard(title: "Offline", systemImage: "internaldrive") {
+        // "Storage", not "Offline": the header has to be true for every
+        // class of game, and a downloaded web-only game still needs the
+        // server to launch. Neutral header, per-game promise in the
+        // caption, and the card now shares name and icon with
+        // Settings > Storage, two views of the same concept.
+        LaunchCard(title: "Storage", systemImage: "internaldrive") {
             Toggle("Download", isOn: keepBinding)
 
             if let progress = keptStore.downloading[rom.id] {
@@ -1000,7 +1005,8 @@ struct GameLaunchView: View {
         }
     }
 
-    /// Three promises, each stated only where it is true. Saturn-class
+    /// Three promises, each stated only where it is true, under a
+    /// header neutral enough to sit over all of them. Saturn-class
     /// games have no player choice, so no qualifier; arcade names the
     /// native player because the picker sits right above this card and
     /// offline belongs to native alone; web-only games get the honest
@@ -1030,7 +1036,7 @@ struct GameLaunchView: View {
         if NativeCore.core(for: rom) != nil {
             return rom.isArcade
                 ? "About \(size). Plays offline in the native player."
-                : "About \(size). Downloads once and plays without a connection."
+                : "About \(size). Plays without a connection."
         }
         return "About \(size). Starts faster and saves data; launching still needs your server."
     }
