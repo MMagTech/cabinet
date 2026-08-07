@@ -1,6 +1,12 @@
 # Native core settings: shaders and core options
 
-Status: proposed, not started. Decided ahead of the next native core, per
+Status: shipped 2026-08-07, with device-tested corrections recorded in
+each section below. The shader list shrank from nine to six on sight
+(see The shader list), the Shader row sits below Quit rather than
+above Resume, the default is labelled plain "None", and FBNeo's
+options ship with source-exact values after guessed ones broke games.
+
+Originally: proposed, not started. Decided ahead of the next native core, per
 Marcus's call on 2026-08-06: get this settled once rather than retrofit it
 onto a third core later.
 
@@ -77,6 +83,13 @@ core-scoped already and keeping this from growing a per-game surface on
 top of the per-game Player/Core/Firmware pickers that already exist.
 
 ## The shader list
+
+Correction, 2026-08-07, from looking at the real Metal ports on device:
+six shipped, not ten. Both ScaleHQ scalers and crt-geom looked bad
+enough that Marcus dropped them on sight. What remains: None (the
+default, the untouched passthrough), SABR, and the aperture, easymode,
+mattias, beam and caligari CRT variants. The paragraph below records
+the original selection reasoning for what the list was drawn from.
 
 Nine, the exact set RomM/EmulatorJS already bundles (`EJS_SHADERS` in its
 `shaders.js`), not independently curated: two ScaleHQ pixel scalers
