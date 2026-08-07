@@ -1005,8 +1005,9 @@ struct GameLaunchView: View {
     /// native player because the picker sits right above this card and
     /// offline belongs to native alone; web-only games get the honest
     /// weaker deal. The BIOS is never mentioned, it comes along as
-    /// plumbing, and "Also in the Files app" is as precise as Files
-    /// itself makes useful.
+    /// plumbing, and the Files app is not mentioned either: where the
+    /// file lives is a learn-once fact the Storage screen teaches, not
+    /// a promise worth repeating on every game.
     private var keptCaption: String {
         let size = keptStore.kept(romId: rom.id).map { byteCount($0.totalBytes) } ?? ""
         if NativeCore.core(for: rom) != nil {
@@ -1016,12 +1017,12 @@ struct GameLaunchView: View {
             if seedPhase == .failed, rom.isArcade {
                 caption += " The web player's copy couldn't be prepared; it will download once there."
             }
-            return caption + " Also in the Files app."
+            return caption
         }
         if seedPhase == .failed {
-            return "\(size) on this iPhone. The quick-start copy couldn't be prepared; the first play will download once. Also in the Files app."
+            return "\(size) on this iPhone. The quick-start copy couldn't be prepared; the first play will download once."
         }
-        return "\(size) on this iPhone. Starts faster; launching still needs your server. Also in the Files app."
+        return "\(size) on this iPhone. Starts faster; launching still needs your server."
     }
 
     private var keepCaption: String {
