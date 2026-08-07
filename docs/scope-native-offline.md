@@ -120,8 +120,13 @@ earlier ones are useful without the later ones.
   Deleting a file there un-keeps the game, store copy included, at the
   next reconcile; renames and moves within the folder are survived by
   matching inodes, not names or locations. Games only; firmware stays
-  behind Export BIOS. Export itself remains for what the folder cannot
-  do: iCloud destinations, un-kept games, BIOS-only.
+  behind Export BIOS. Export ended the day reduced to the places Keep
+  cannot reach: playable games show the keep toggle and at most a
+  BIOS-only export, while the full ROM export menu survives only on
+  unsupported platforms, keyboard machines and multi-file games, where
+  no toggle can exist and Export is the only way to the file. One
+  visible action wherever Keep works; Marcus held the line on this and
+  was right.
 - Save states remain per-core, per the state-format finding in the
   native player work: an offline save from the native player syncs up
   tagged fbneo-native, same as an online one.

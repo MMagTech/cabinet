@@ -196,6 +196,21 @@ struct GameLaunchView: View {
             .simultaneousGesture(dismissDragGesture)
         }
         .background(Color(.systemGroupedBackground))
+        // The seeding bridge lives at the screen root, not on the export
+        // button it once shared: the button is now hidden on exactly the
+        // games that seed, and a webview mounted under a hidden view
+        // never loads.
+        .background {
+            if showingCacheBridge, let serverURL = session.serverURL {
+                EmulatorCacheWebView(url: serverURL, bridge: cacheBridge)
+                    .frame(width: 0, height: 0)
+                    .opacity(0)
+                    .accessibilityHidden(true)
+            }
+        }
+        .onChange(of: cacheBridge.isReady) { _, ready in
+            if ready, seedPhase == .waitingForBridge { Task { await runSeed() } }
+        }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -324,48 +339,54 @@ struct GameLaunchView: View {
         !isComputerPlatform && !cores.isEmpty
     }
 
+    /// One visible action wherever Keep works: on a game with the keep
+    /// toggle, this button either offers only the BIOS (the one file
+    /// deliberately not in the Files app's Games folder) or does not
+    /// appear at all. The full ROM export menu survives only where Keep
+    /// cannot exist, unsupported platforms, keyboard machines,
+    /// multi-file games, because there it is the only way to the file.
+    /// Keeping both on the same screen was the last remnant of the
+    /// three-eras accretion this whole redesign removed, and it kept
+    /// reading as two ways to do one thing because that is what it was.
+    @ViewBuilder
     private var exportButton: some View {
-        Button {
-            showingExportSheet = true
-        } label: {
-            // The share arrow, up and out, never the download arrow:
-            // everything behind this button sends bytes away from the
-            // app, and the one action that brings bytes in, Keep, is a
-            // toggle on the screen itself. The old "Download" title on
-            // this menu read as "onto my phone" sitting next to that
-            // toggle, which is exactly the confusion it caused.
-            Image(systemName: "square.and.arrow.up")
-        }
-        // Attached here, not at the screen root: a confirmationDialog
-        // anchors its arrow to whatever view carries this modifier, so it
-        // has to sit on the actual toolbar button, not the whole screen,
-        // or the arrow points at the wrong place.
-        .confirmationDialog("Export", isPresented: $showingExportSheet, titleVisibility: .visible) {
-            if !firmware.isEmpty {
-                Button("Export ROM and BIOS") { startExport(includeFirmware: true) }
-                // Always offered on its own, not just folded into the
-                // combined button above: if a previously exported BIOS
-                // file gets deleted or moved outside this app, this is the
-                // only way back to it, since the app has no visibility
-                // into Files once a file has been handed over.
-                Button("Export BIOS") { startFirmwareOnlyExport() }
+        if !loading, !showsKeepCard || !firmware.isEmpty {
+            Button {
+                showingExportSheet = true
+            } label: {
+                // The share arrow, up and out, never the download arrow:
+                // everything behind this button sends bytes away from
+                // the app; the one action that brings bytes in, Keep, is
+                // a toggle on the screen itself.
+                Image(systemName: "square.and.arrow.up")
             }
-            Button("Export ROM") { startExport(includeFirmware: false) }
-        }
-        .background {
-            if showingCacheBridge, let serverURL = session.serverURL {
-                EmulatorCacheWebView(url: serverURL, bridge: cacheBridge)
-                    .frame(width: 0, height: 0)
-                    .opacity(0)
-                    .accessibilityHidden(true)
+            // Attached here, not at the screen root: a confirmationDialog
+            // anchors its arrow to whatever view carries this modifier, so
+            // it has to sit on the actual toolbar button, not the whole
+            // screen, or the arrow points at the wrong place.
+            .confirmationDialog("Export", isPresented: $showingExportSheet, titleVisibility: .visible) {
+                if showsKeepCard {
+                    // Keep covers the ROM (the file is in Files, under
+                    // Games); only the BIOS needs a door here.
+                    Button("Export BIOS") { startFirmwareOnlyExport() }
+                } else {
+                    if !firmware.isEmpty {
+                        Button("Export ROM and BIOS") { startExport(includeFirmware: true) }
+                        // Always offered on its own, not just folded into
+                        // the combined button above: if a previously
+                        // exported BIOS file gets deleted or moved outside
+                        // this app, this is the only way back to it, since
+                        // the app has no visibility into Files once a file
+                        // has been handed over.
+                        Button("Export BIOS") { startFirmwareOnlyExport() }
+                    }
+                    Button("Export ROM") { startExport(includeFirmware: false) }
+                }
             }
-        }
-        .onChange(of: cacheBridge.isReady) { _, ready in
-            if ready, seedPhase == .waitingForBridge { Task { await runSeed() } }
-        }
-        .onChange(of: exporter.state) { _, state in
-            if case .failed(let message) = state {
-                DiagnosticsLog.record(context: "Export", message: message, romVersion: session.serverVersion)
+            .onChange(of: exporter.state) { _, state in
+                if case .failed(let message) = state {
+                    DiagnosticsLog.record(context: "Export", message: message, romVersion: session.serverVersion)
+                }
             }
         }
     }
