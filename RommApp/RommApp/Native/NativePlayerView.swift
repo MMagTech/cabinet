@@ -26,6 +26,7 @@ struct NativePlayerView: View {
     /// The same visibility slider the webview player honors.
     @AppStorage("com.mmagtech.RommApp.controlOpacity") private var controlOpacity = 0.7
     @Environment(\.scenePhase) private var scenePhase
+    @State private var startedAt: Date?
 
     private var profile: ArcadeProfile {
         ArcadeProfileStore.shared.resolve(romId: rom.id, shortname: rom.fsNameNoExt)
@@ -106,6 +107,20 @@ struct NativePlayerView: View {
             }
         }
         .background(Color.black.ignoresSafeArea())
+        // Tell the server this game is being played, exactly as the webview
+        // player does: the heartbeat is presence, repeated as a liveness
+        // signal. Without it a natively played game never reached Home's
+        // resume list or RomM's own, since nothing else on the native path
+        // ever tells the server a session happened. Unlike the webview
+        // there is no gameStarted gate: by the time this screen exists the
+        // game is loaded and running.
+        .task {
+            if startedAt == nil { startedAt = Date() }
+            while !Task.isCancelled {
+                await session.reportPlaying(romId: rom.id)
+                try? await Task.sleep(for: .seconds(60))
+            }
+        }
         .onAppear {
             previousControllerSend = GameControllerManager.shared.send
             previousControllerMenu = GameControllerManager.shared.onMenu
@@ -119,6 +134,14 @@ struct NativePlayerView: View {
         .onDisappear {
             GameControllerManager.shared.send = previousControllerSend
             GameControllerManager.shared.onMenu = previousControllerMenu
+            // Report the finished session on a task of its own rather than
+            // the view's, which is being torn down. The session POST is
+            // what stamps last played; the heartbeat alone is not history.
+            if let startedAt {
+                let session = session
+                let romId = rom.id
+                Task { await session.reportPlaySession(romId: romId, start: startedAt, end: Date()) }
+            }
             NativeSessionMarker.recordCleanExit()
         }
         .onChange(of: scenePhase) { _, phase in
