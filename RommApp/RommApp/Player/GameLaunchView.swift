@@ -917,7 +917,7 @@ struct GameLaunchView: View {
             .pickerStyle(.segmented)
 
             if selectedBackend == .native {
-                Text("Runs the game in a natively compiled core instead of the web player. Faster and steadier for games the web player struggles with. Save states stay separate per player.")
+                Text("Runs the game in a natively compiled core instead of the web player. Save states stay separate per player.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else if Compatibility.shared.crashes(romId: rom.id) >= 3 {
