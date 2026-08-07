@@ -20,6 +20,7 @@ struct NativePlayerView: View {
     @ObservedObject private var controllers = GameControllerManager.shared
     @State private var previousControllerSend: ((Int, Bool) -> Void)?
     @State private var previousControllerMenu: (() -> Void)?
+    @State private var previousControllerDisconnect: (() -> Void)?
     @State private var menuVisible = false
     @State private var menuStatus: String?
     @State private var menuBusy = false
@@ -122,18 +123,29 @@ struct NativePlayerView: View {
             }
         }
         .onAppear {
+            // The manager is started here, not assumed started: before this
+            // call the only screens that started it were the webview player,
+            // Settings and the remap screen, so a fresh launch straight into
+            // a native game left every controller silent.
+            GameControllerManager.shared.start()
             previousControllerSend = GameControllerManager.shared.send
             previousControllerMenu = GameControllerManager.shared.onMenu
+            previousControllerDisconnect = GameControllerManager.shared.onDisconnect
             GameControllerManager.shared.send = { [weak renderer] id, down in
                 renderer?.setButton(id, down: down)
             }
             GameControllerManager.shared.onMenu = { openMenu() }
+            // Nobody is holding anything after a disconnect, so pause into
+            // the menu rather than letting the game run on unattended. Same
+            // reasoning as the webview player's pauseGame on disconnect.
+            GameControllerManager.shared.onDisconnect = { openMenu() }
             renderer.pendingState = initialState
             NativeSessionMarker.recordGameRunning(romId: rom.id)
         }
         .onDisappear {
             GameControllerManager.shared.send = previousControllerSend
             GameControllerManager.shared.onMenu = previousControllerMenu
+            GameControllerManager.shared.onDisconnect = previousControllerDisconnect
             // Report the finished session on a task of its own rather than
             // the view's, which is being torn down. The session POST is
             // what stamps last played; the heartbeat alone is not history.
