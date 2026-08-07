@@ -168,7 +168,14 @@ struct GameLaunchView: View {
                             if rom.isArcade { playerCard }
                             if showsKeepCard { keepCard }
 
-                            playButton
+                            // No dead button on unsupported systems: the
+                            // library section, the platform label and the
+                            // storage-only card already say everything a
+                            // permanently grey "Unsupported" restated.
+                            // Game-level states on supported systems
+                            // (marked not working, crash counts) keep the
+                            // live button, those are retryable.
+                            if loading || isPlayableHere { playButton }
 
                             if isComputerPlatform { computerPlatformCard }
                             downloadStatusCard
@@ -184,7 +191,7 @@ struct GameLaunchView: View {
                     VStack(spacing: 20) {
                         cover(maxWidth: 200)
                         titleBlock(centred: true)
-                        playButton
+                        if loading || isPlayableHere { playButton }
                         options
                     }
                     .padding(20)
