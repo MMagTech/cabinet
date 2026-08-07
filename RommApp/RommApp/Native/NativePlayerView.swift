@@ -33,19 +33,32 @@ struct NativePlayerView: View {
         ArcadeProfileStore.shared.resolve(romId: rom.id, shortname: rom.fsNameNoExt)
     }
 
+    private var canonicalSlug: String {
+        rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
+    }
+
+    /// Matches PlayerView.controlLayout exactly: arcade resolves per game
+    /// through the MAME profile map, everything else through the bundled
+    /// per-platform file. This used to be arcade-only unconditionally,
+    /// which was correct while FBNeo was the only native core, and wrong
+    /// the moment Saturn joined it: every Saturn game got FBNeo's fallback
+    /// arcade pad, Coin button included, since nothing here ever branched.
     private var controlLayout: ControlLayout {
-        ArcadeLayout.build(for: profile)
+        if rom.isArcade {
+            return ArcadeLayout.build(for: profile)
+        }
+        return ControlLayout.forPlatform(slug: canonicalSlug) ?? ArcadeLayout.build(for: .fallback)
     }
 
     private func layoutItems(landscape: Bool) -> [ControlLayout.Item] {
         controlLayout.items(landscape: landscape)
     }
 
-    /// Matches PlayerView.controlStripHeight: vertical games trade some
-    /// control height for canvas, since every point matters for a taller
-    /// picture and their genres need fewer, simpler inputs.
+    /// Matches PlayerView.controlStripHeight exactly: only arcade's vertical
+    /// boards trade control height for canvas, everything else gets the
+    /// flat height.
     private var controlStripHeight: CGFloat {
-        profile.vertical ? 280 : 330
+        rom.isArcade && profile.vertical ? 280 : 330
     }
 
     private func handleInput(_ id: Int, down: Bool) {
@@ -543,15 +556,7 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     }
 
     private func aspectFitVertices(textureSize: CGSize, viewSize: CGSize, rotation: Int) -> [Vertex] {
-        // Vertical (TATE) boards render sideways and request rotation in
-        // 90-degree counter-clockwise steps; an odd rotation swaps which
-        // way the picture is tall for aspect-fit purposes.
-        let rotated = rotation % 2 == 1
-        let effectiveSize = rotated
-            ? CGSize(width: textureSize.height, height: textureSize.width)
-            : textureSize
-
-        guard effectiveSize.width > 0, effectiveSize.height > 0, viewSize.width > 0, viewSize.height > 0 else {
+        guard textureSize.width > 0, textureSize.height > 0, viewSize.width > 0, viewSize.height > 0 else {
             return [
                 Vertex(position: [-1, -1], texCoord: [0, 1]),
                 Vertex(position: [1, -1], texCoord: [1, 1]),
@@ -560,8 +565,20 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
             ]
         }
 
-        let textureAspect = effectiveSize.width / effectiveSize.height
-        let viewAspect = viewSize.width / viewSize.height
+        // The core's own aspect ratio wins when it reports one; raw pixel
+        // dimensions are the fallback, which used to be the only source.
+        // Arcade boards are square-pixel, where the two always agree;
+        // Saturn commonly is not, and rendering its raw pixels stretched
+        // the picture until this existed.
+        let pixelAspect = frontend.aspectRatio()
+        let unrotatedAspect = pixelAspect > 0 ? pixelAspect : Double(textureSize.width / textureSize.height)
+
+        // Vertical (TATE) boards render sideways and request rotation in
+        // 90-degree counter-clockwise steps; an odd rotation swaps which
+        // way the picture is tall for aspect-fit purposes.
+        let rotated = rotation % 2 == 1
+        let textureAspect = rotated ? 1 / unrotatedAspect : unrotatedAspect
+        let viewAspect = Double(viewSize.width / viewSize.height)
 
         var scaleX: Float = 1
         var scaleY: Float = 1

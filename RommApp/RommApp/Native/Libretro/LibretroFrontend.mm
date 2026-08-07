@@ -48,6 +48,14 @@ std::mutex gAudioMutex;
 std::vector<int16_t> gAudioSamples; // interleaved stereo
 double gAudioSampleRate = 44100.0;
 
+// The core's own reported display aspect ratio, captured once at load
+// alongside the sample rate. 0 means the core left it unset, libretro's
+// documented signal to fall back to raw pixel width/height, which is
+// what every caller already did before this existed. Arcade boards are
+// square-pixel, so raw pixels and this always agreed and nobody noticed
+// the frontend never read it; Saturn commonly is not.
+std::atomic<double> gAspectRatio{0.0};
+
 // Core options for RETRO_ENVIRONMENT_GET_VARIABLE, keyed and valued as
 // the core spells them. Read from the core's thread, written from the
 // main thread before a load; copied under a lock to keep that honest.
@@ -273,6 +281,8 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
         std::lock_guard<std::mutex> lock(gAudioMutex);
         gAudioSampleRate = avInfo.timing.sample_rate > 0 ? avInfo.timing.sample_rate : 44100.0;
     }
+    gAspectRatio.store(avInfo.geometry.aspect_ratio > 0 ? avInfo.geometry.aspect_ratio : 0.0,
+                        std::memory_order_relaxed);
 
     return nil;
 }
@@ -310,6 +320,10 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
 - (double)audioSampleRate {
     std::lock_guard<std::mutex> lock(gAudioMutex);
     return gAudioSampleRate;
+}
+
+- (double)aspectRatio {
+    return gAspectRatio.load(std::memory_order_relaxed);
 }
 
 - (void)setButtonMask:(uint32_t)mask {

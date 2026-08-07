@@ -67,6 +67,14 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 - (nullable NSData *)drainAudio;
 - (double)audioSampleRate;
 
+// The core's own reported display aspect ratio (width/height), captured
+// once at load. 0 means the core left it unset, the frontend's own
+// signal to derive the ratio from the video frame's raw pixel
+// dimensions instead, which is what every caller did before this
+// existed. Most systems are square-pixel, where the two always agree;
+// some, Saturn included, are not.
+- (double)aspectRatio;
+
 // Bit N set means RetroPad button N (matching this codebase's existing
 // RetroPad id constants, which already line up with libretro's
 // RETRO_DEVICE_ID_JOYPAD_* ordering) is currently held. Call once per
