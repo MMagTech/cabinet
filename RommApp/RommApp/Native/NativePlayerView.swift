@@ -92,8 +92,7 @@ struct NativePlayerView: View {
                     ZStack {
                         MetalGameView(renderer: renderer)
                         if showsControls {
-                            TouchControlPad(items: layoutItems(landscape: true), send: handleInput, system: controlLayout.system)
-                                .opacity(controlOpacity)
+                            TouchControlPad(items: layoutItems(landscape: true), send: handleInput, system: controlLayout.system, opacity: controlOpacity)
                         }
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
@@ -108,8 +107,7 @@ struct NativePlayerView: View {
                     VStack(spacing: 0) {
                         MetalGameView(renderer: renderer)
                             .frame(height: max(geometry.size.height - controlStripHeight, 0))
-                        TouchControlPad(items: layoutItems(landscape: false), send: handleInput, system: controlLayout.system)
-                            .opacity(controlOpacity)
+                        TouchControlPad(items: layoutItems(landscape: false), send: handleInput, system: controlLayout.system, opacity: controlOpacity)
                             .frame(height: controlStripHeight)
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
@@ -153,6 +151,7 @@ struct NativePlayerView: View {
             // reasoning as the webview player's pauseGame on disconnect.
             GameControllerManager.shared.onDisconnect = { openMenu() }
             renderer.pendingState = initialState
+            renderer.shader = NativeShader.current(for: core)
             NativeSessionMarker.recordGameRunning(romId: rom.id)
         }
         .onDisappear {
@@ -209,6 +208,25 @@ struct NativePlayerView: View {
                         dismiss()
                     } label: {
                         Label("Quit", systemImage: "xmark")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.bordered)
+                    Menu {
+                        ForEach(NativeShader.allCases) { candidate in
+                            Button {
+                                renderer.shader = candidate
+                                NativeShader.setCurrent(candidate, for: core)
+                            } label: {
+                                if candidate == renderer.shader {
+                                    Label(candidate.label, systemImage: "checkmark")
+                                } else {
+                                    Text(candidate.label)
+                                }
+                            }
+                        }
+                    } label: {
+                        Label("Shader", systemImage: "camera.filters")
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 6)
                     }
@@ -347,12 +365,20 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     private let frontend = LibretroFrontend.shared
     private var device: MTLDevice!
     private var commandQueue: MTLCommandQueue!
-    private var pipelineState: MTLRenderPipelineState!
+    /// One pipeline per shader, built once at attach so picking a shader in
+    /// the pause menu is a dictionary lookup, not a recompile.
+    private var pipelines: [NativeShader: MTLRenderPipelineState] = [:]
     private var samplerState: MTLSamplerState!
     private var texture: MTLTexture?
     private var textureWidth: Int = 0
     private var textureHeight: Int = 0
     private let audio = NativePlayerAudio()
+
+    /// The active shader, set by the pause menu's Shader row. The next
+    /// `draw(in:)` picks it up immediately, which is what re-renders the
+    /// frozen frame live behind the still-open menu. Published so the
+    /// menu's checkmark tracks the pick without a separate state copy.
+    @Published var shader: NativeShader = .sharp
 
     /// Held RetroPad ids, merged from the touch overlay and any connected
     /// game controller. Both already speak the same id space (see
@@ -382,13 +408,17 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
 
         let library = try? device.makeDefaultLibrary(bundle: .main)
         let vertexFn = library?.makeFunction(name: "libretro_vertex")
-        let fragmentFn = library?.makeFunction(name: "libretro_fragment")
 
-        let descriptor = MTLRenderPipelineDescriptor()
-        descriptor.vertexFunction = vertexFn
-        descriptor.fragmentFunction = fragmentFn
-        descriptor.colorAttachments[0].pixelFormat = view.colorPixelFormat
-        pipelineState = try? device.makeRenderPipelineState(descriptor: descriptor)
+        for candidate in NativeShader.allCases {
+            guard let fragmentFn = library?.makeFunction(name: candidate.fragmentFunctionName) else { continue }
+            let descriptor = MTLRenderPipelineDescriptor()
+            descriptor.vertexFunction = vertexFn
+            descriptor.fragmentFunction = fragmentFn
+            descriptor.colorAttachments[0].pixelFormat = view.colorPixelFormat
+            if let pipeline = try? device.makeRenderPipelineState(descriptor: descriptor) {
+                pipelines[candidate] = pipeline
+            }
+        }
 
         let samplerDescriptor = MTLSamplerDescriptor()
         samplerDescriptor.minFilter = .nearest
@@ -437,7 +467,7 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         guard let texture,
               let drawable = view.currentDrawable,
               let passDescriptor = view.currentRenderPassDescriptor,
-              let pipelineState
+              let pipelineState = pipelines[shader] ?? pipelines[.sharp]
         else { return }
 
         let vertices = aspectFitVertices(
@@ -454,6 +484,8 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         encoder.setVertexBytes(vertices, length: MemoryLayout<Vertex>.stride * vertices.count, index: 0)
         encoder.setFragmentTexture(texture, index: 0)
         encoder.setFragmentSamplerState(samplerState, index: 0)
+        var texelSize = SIMD2<Float>(1.0 / Float(max(textureWidth, 1)), 1.0 / Float(max(textureHeight, 1)))
+        encoder.setFragmentBytes(&texelSize, length: MemoryLayout<SIMD2<Float>>.stride, index: 1)
         encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         encoder.endEncoding()
 
@@ -569,8 +601,13 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         // dimensions are the fallback, which used to be the only source.
         // Arcade boards are square-pixel, where the two always agree;
         // Saturn commonly is not, and rendering its raw pixels stretched
-        // the picture until this existed.
-        let pixelAspect = frontend.aspectRatio()
+        // the picture until this existed. Rotated (TATE) boards are the
+        // exception: FBNeo reports their aspect display-oriented, already
+        // accounting for the rotation this code applies itself below, so
+        // trusting it here rotated the correction on top of the rotation
+        // and stretched every vertical game. Saturn never rotates, so
+        // deriving rotated boards from raw pixels costs the fix nothing.
+        let pixelAspect = rotation % 2 == 1 ? 0 : frontend.aspectRatio()
         let unrotatedAspect = pixelAspect > 0 ? pixelAspect : Double(textureSize.width / textureSize.height)
 
         // Vertical (TATE) boards render sideways and request rotation in

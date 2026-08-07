@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 
+
 /// The native touch controls, drawn as vectors over the webview.
 ///
 /// The touch model follows DeltaCore's approach (the approach, not the code;
@@ -28,6 +29,15 @@ struct TouchControlPad: UIViewRepresentable {
     /// this on its pad directly; this wrapper carries it for hosts that
     /// use the SwiftUI view, so both players draw the same controls.
     var system: String = ""
+    /// The visibility slider's value, applied as UIKit alpha on the view
+    /// itself, exactly as the webview player's overlay does (`pad.alpha`).
+    /// Never apply SwiftUI `.opacity()` to this view instead: on iOS 26 a
+    /// partially transparent representable overlaying a Metal view gets
+    /// flattened into the composited layer and stops receiving touches,
+    /// which killed every landscape control in the native player while
+    /// portrait, whose pad overlays nothing, kept working. UIKit alpha
+    /// only stops touch delivery below 0.01, and the slider floors at 25%.
+    var opacity: Double = 1
 
     func makeUIView(context: Context) -> ControlPadView {
         let view = ControlPadView(items: items, send: send, sendStick: sendStick)
@@ -40,6 +50,7 @@ struct TouchControlPad: UIViewRepresentable {
         view.items = items
         view.system = system
         view.theme = ControlTheme.current
+        view.alpha = opacity
     }
 }
 
