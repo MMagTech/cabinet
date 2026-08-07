@@ -29,6 +29,24 @@ enum NativeCore {
         }
     }
 
+    /// A stable string identifier for this core, used to namespace
+    /// per-core UserDefaults keys (shader choice, core options).
+    var storageKey: String {
+        switch self {
+        case .fbneo: return "fbneo"
+        case .beetleSaturn: return "beetleSaturn"
+        }
+    }
+
+    /// The core's display name for the Settings "Native cores" list and
+    /// its own options screen title.
+    var displayName: String {
+        switch self {
+        case .fbneo: return "FinalBurn Neo"
+        case .beetleSaturn: return "Beetle Saturn"
+        }
+    }
+
     /// The native core that can run this rom, if any. Arcade means FBNeo,
     /// Saturn means Beetle Saturn (go/no-go in progress, Debug screen
     /// only for now); everything else stays on the webview until a core

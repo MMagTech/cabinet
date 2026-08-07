@@ -122,6 +122,16 @@ struct SettingsView: View {
 
             Section {
                 NavigationLink {
+                    NativeCoresView()
+                } label: {
+                    Label("Native cores", systemImage: "cpu")
+                }
+            } footer: {
+                Text("Speed and accuracy options for the cores that run natively instead of in the webview.")
+            }
+
+            Section {
+                NavigationLink {
                     LicensesView()
                 } label: {
                     Label("Licenses", systemImage: "doc.text")

@@ -94,6 +94,7 @@ enum NativeLauncher {
         }
 
         LibretroFrontend.shared.activateCore(core.coreID)
+        LibretroFrontend.shared.setCoreOptions(NativeCoreOptionsStore.dictionary(for: core))
         if let failure = LibretroFrontend.shared.loadGame(romURL.path, systemDirectory: workDir.path) {
             throw NSError(domain: "NativeLauncher", code: 1, userInfo: [NSLocalizedDescriptionKey: failure])
         }
