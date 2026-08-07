@@ -151,7 +151,20 @@ final class Session: ObservableObject {
     private func refreshPlatformConfig() {
         Task { [weak self] in
             guard let self, let client else { return }
-            self.platformsVersions = (try? await client.platformsVersions()) ?? [:]
+            // A failure never overwrites a value that already worked.
+            // Found on device (Marcus, 2026-08-07): this fetch runs once,
+            // at launch, and its old fallback was an empty mapping on any
+            // failure, network blip included. Empty means every platform
+            // falls back to its raw folder name, and for any platform
+            // whose folder name is not already cores.json's key, that
+            // reads as no core at all, the whole library looking
+            // Unsupported for the rest of the session with no retry. A
+            // launch that starts genuinely offline still gets nothing
+            // here, same as before, `loadPlatformConfigIfNeeded` below is
+            // what recovers that case once there is a connection.
+            if let versions = try? await client.platformsVersions() {
+                self.platformsVersions = versions
+            }
         }
         Task { [weak self] in
             guard let self, let client else { return }
@@ -168,6 +181,22 @@ final class Session: ObservableObject {
             guard let favorites = collections.first(where: { $0.isFavorite }) else { return }
             self.favoriteCollection = favorites
             self.favoriteRomIds = Set(favorites.romIds)
+        }
+    }
+
+    /// Retries the platform folder mapping if the app never managed to
+    /// get one, the recovery path for a launch that started with no
+    /// connection at all: `refreshPlatformConfig` only ever runs once,
+    /// at launch, so without this a session that began offline would
+    /// carry an empty mapping, and every platform whose folder name
+    /// does not already equal its canonical slug, misread as
+    /// Unsupported, for as long as the app stayed open. Called from the
+    /// library screen's own load and pull-to-refresh, no new machinery
+    /// needed: a no-op once a real mapping exists.
+    func loadPlatformConfigIfNeeded() async {
+        guard platformsVersions.isEmpty, let client else { return }
+        if let versions = try? await client.platformsVersions() {
+            platformsVersions = versions
         }
     }
 

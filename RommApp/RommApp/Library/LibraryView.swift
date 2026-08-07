@@ -134,6 +134,12 @@ struct LibraryScreen: View {
     private func loadPlatforms() async {
         loadingPlatforms = true
         platformsError = nil
+        // A no-op once a real mapping exists; the recovery path for a
+        // launch that started with no connection, so Supported and
+        // Unsupported settle correctly the first time this screen is
+        // visited or refreshed with a connection, rather than staying
+        // wrong for the rest of the session.
+        await session.loadPlatformConfigIfNeeded()
         do {
             platforms = try await session.platforms()
                 .sorted { platformLabel(for: $0) < platformLabel(for: $1) }
