@@ -401,7 +401,21 @@ final class KeptGameStore: ObservableObject {
                 remove(romId: game.romId)
                 continue
             }
-            if folder[storeInode] == nil, migrated {
+            // A game kept moments ago cannot have been deleted in Files
+            // yet, no matter how this check is answered: a person cannot
+            // act faster than the download that just finished. Found on
+            // device (Marcus, 2026-08-07): opening a game right after
+            // keeping it from the long-press menu could read this check
+            // before it was ready to answer, and un-kept a game that had
+            // never been touched in Files at all. The grace period
+            // removes the failure mode outright rather than chasing its
+            // exact cause; a real deletion is never this fresh.
+            let justKept = Date().timeIntervalSince(game.keptAt) < 30
+            if folder[storeInode] == nil, migrated, !justKept {
+                DiagnosticsLog.record(
+                    context: "Kept games", message: "Un-kept \(game.displayName) (rom \(game.romId)): its file wasn't found in the Files mirror.",
+                    romVersion: nil
+                )
                 remove(romId: game.romId)
             }
         }
