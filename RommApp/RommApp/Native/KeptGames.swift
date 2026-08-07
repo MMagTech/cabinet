@@ -142,15 +142,20 @@ final class KeptGameStore: ObservableObject {
         let task = Task { [weak self] in
             do {
                 try await self?.performKeep(rom: rom, session: session)
-            } catch is CancellationError {
-                // Cancelled by the person; the partial directory is
-                // already gone and no message is owed.
             } catch {
-                self?.errors[rom.id] = error.localizedDescription
-                DiagnosticsLog.record(
-                    context: "Keep on this phone", message: error.localizedDescription,
-                    romVersion: session.serverVersion
-                )
+                // Deliberate cancellation is judged by the task, not the
+                // error: tearing down a mid-transfer connection surfaces
+                // as whatever the network stack was feeling, "connection
+                // lost" included, not reliably as the cancel code. If the
+                // person toggled this off, no message is owed regardless
+                // of which error the teardown produced.
+                if !(error is CancellationError), !Task.isCancelled {
+                    self?.errors[rom.id] = error.localizedDescription
+                    DiagnosticsLog.record(
+                        context: "Download for offline", message: error.localizedDescription,
+                        romVersion: session.serverVersion
+                    )
+                }
             }
             self?.downloading[rom.id] = nil
             self?.tasks[rom.id] = nil
