@@ -979,13 +979,17 @@ struct GameLaunchView: View {
         .animation(.snappy(duration: 0.22), value: selectedBackend)
     }
 
-    /// One keep toggle for every playable game; only the promise in the
-    /// fine print varies. Native-capable games mirror
-    /// `NativeLauncher.prepare`'s own gates (a Saturn game that is not a
-    /// single-file chd gets no toggle rather than a kept copy nothing
-    /// can boot); webview games get the toggle wherever the web player
-    /// itself could use the copy, which excludes multi-file ROMs the
-    /// same way the cache's one-entry-per-file schema always has.
+    /// One storage toggle for every game, playable or not; only the
+    /// promise in the fine print varies. Unsupported systems included
+    /// on purpose: those are exactly the games whose files someone
+    /// wants for another emulator, and the toggle-into-Files flow
+    /// serves that better than an export picker. Native-capable games
+    /// mirror `NativeLauncher.prepare`'s own gates (a Saturn game that
+    /// is not a single-file chd gets no toggle rather than a kept copy
+    /// nothing can boot). The one true gate left is multi-file ROMs,
+    /// which the download machinery cannot fetch yet; they keep the
+    /// export menu until keep learns multi-file, a capability gap with
+    /// a named successor, not a design carve-out.
     private var showsKeepCard: Bool {
         if let core = NativeCore.core(for: rom) {
             if core == .beetleSaturn {
@@ -993,7 +997,13 @@ struct GameLaunchView: View {
             }
             return true
         }
-        return isPlatformSupported && !rom.hasMultipleFiles
+        return !rom.hasMultipleFiles
+    }
+
+    /// Whether this app can put the game on screen in any player, which
+    /// decides whether the storage captions may promise play at all.
+    private var isPlayableHere: Bool {
+        NativeCore.core(for: rom) != nil || isPlatformSupported
     }
 
     private var keepBinding: Binding<Bool> {
@@ -1086,6 +1096,10 @@ struct GameLaunchView: View {
             }
             return caption
         }
+        // Unsupported systems say nothing beyond the cost: the library
+        // already labeled them unsupported, the person downloading one
+        // knows why they want the file.
+        guard isPlayableHere else { return "\(size) on this iPhone." }
         if seedPhase == .failed {
             return "\(size) on this iPhone. The quick-start copy couldn't be prepared; the first play will download once."
         }
@@ -1099,6 +1113,7 @@ struct GameLaunchView: View {
                 ? "About \(size). Plays offline in the native player."
                 : "About \(size). Plays without a connection."
         }
+        guard isPlayableHere else { return "About \(size)." }
         return "About \(size). Starts faster and saves data; launching still needs your server."
     }
 

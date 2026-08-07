@@ -125,11 +125,16 @@ earlier ones are useful without the later ones.
   the ROMs, shared across a platform's kept games and removed with the
   last of them; deleting a BIOS file in Files is not read as intent,
   it's platform infrastructure and reconcile restores it. Export ended
-  the day reduced to the only places Keep cannot exist: unsupported
-  platforms, keyboard machines and multi-file games, where no toggle
-  can exist and Export is the only way to the file. Playable games
-  show one visible action, the toggle, and nothing else; Marcus held
-  the line on this through two of my hedges and was right both times.
+  the day reduced to a single remnant: multi-file ROMs, which the
+  download machinery cannot fetch yet, a capability gap with a named
+  successor (teach keep multi-file downloads, mirroring the server's
+  game folders) rather than a design carve-out. Every single-file
+  game, unsupported systems and keyboard machines included, shows one
+  visible action, the storage toggle. Unsupported games caption it
+  with nothing but the size: the library labels them unsupported, the
+  platform name is on the screen, and the folder in Files says the
+  rest. Marcus held the line on one-visible-action through three of
+  my hedges and was right every time.
 - Save states remain per-core, per the state-format finding in the
   native player work: an offline save from the native player syncs up
   tagged fbneo-native, same as an online one.
