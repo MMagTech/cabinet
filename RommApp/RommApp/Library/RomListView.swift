@@ -208,6 +208,15 @@ struct RomListView: View {
                                     compatibility.isMarked(rom.id) ? .secondary : .primary
                                 )
                             Spacer(minLength: 0)
+                            // Leftmost of the three, and before the star
+                            // rather than after it: transient status reads
+                            // first, the two settled badges follow in
+                            // their own established order.
+                            if keptStore.downloading[rom.id] != nil {
+                                ProgressView(value: min(keptStore.downloading[rom.id]?.fraction ?? 0, 1))
+                                    .progressViewStyle(.circular)
+                                    .controlSize(.mini)
+                            }
                             if session.isFavorite(romId: rom.id) {
                                 Image(systemName: "star.fill")
                                     .font(.caption)
@@ -217,17 +226,6 @@ struct RomListView: View {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .font(.caption)
                                     .foregroundStyle(.orange)
-                            }
-                            // A plain inline ring, not a corner badge: the
-                            // list row has no artwork to badge, only the
-                            // same trailing slot the star and triangle
-                            // already occupy, so the download indicator
-                            // matches their bare style rather than the
-                            // grid's material-circle one.
-                            if keptStore.downloading[rom.id] != nil {
-                                ProgressView(value: min(keptStore.downloading[rom.id]?.fraction ?? 0, 1))
-                                    .progressViewStyle(.circular)
-                                    .controlSize(.mini)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
