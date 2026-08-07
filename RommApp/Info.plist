@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Merged into the generated Info.plist. These two exist here, not
+	     as INFOPLIST_KEY_ build settings, because UIFileSharingEnabled
+	     has no such setting: set that way it silently vanishes from the
+	     built product, which shipped a build whose Games folder never
+	     appeared in the Files app. Both keys together are what expose
+	     Documents (the kept games mirror) in Files. -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+</dict>
+</plist>
