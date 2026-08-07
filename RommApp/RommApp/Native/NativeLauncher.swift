@@ -58,10 +58,39 @@ enum NativeLauncher {
         let romURL = workDir.appendingPathComponent(rom.fsName)
         try await download(session.romContentRequest(rom), to: romURL)
 
+        var downloadedFirmwareURLs: [URL] = []
         if let firmwareList = try? await session.firmware(platformId: rom.platformId) {
             for firmware in firmwareList where !firmware.missingFromFS {
                 let url = workDir.appendingPathComponent(firmware.fileName)
-                try? await download(session.firmwareContentRequest(firmware), to: url)
+                if (try? await download(session.firmwareContentRequest(firmware), to: url)) != nil {
+                    downloadedFirmwareURLs.append(url)
+                }
+            }
+        }
+
+        // Beetle Saturn hardcodes the exact filename it looks for
+        // ("sega_101.bin" for Japan, "mpr-17933.bin" for NA/EU), no
+        // fallback, and RomM's own firmware filenames are whatever
+        // whoever uploaded them called the file. EmulatorJS's bundled
+        // Saturn core clearly does the equivalent of this under the
+        // hood, since the same file plays fine in the webview under
+        // any name; this is that adaptation for the native side.
+        // Copied under both region names rather than picked, since
+        // there is no reliable region signal in what the API reports
+        // (Firmware carries a filename, not a region) and the real
+        // check is the disc's own region at runtime, not the file's:
+        // both slots pointing at a same-sized BIOS lets whichever one
+        // the disc actually asks for resolve correctly.
+        if core == .beetleSaturn {
+            for url in downloadedFirmwareURLs {
+                guard let size = try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int,
+                      size == 524_288
+                else { continue }
+                for name in ["sega_101.bin", "mpr-17933.bin"] {
+                    let target = workDir.appendingPathComponent(name)
+                    guard target != url, !FileManager.default.fileExists(atPath: target.path) else { continue }
+                    try? FileManager.default.copyItem(at: url, to: target)
+                }
             }
         }
 
