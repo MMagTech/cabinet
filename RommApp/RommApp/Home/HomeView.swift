@@ -550,6 +550,7 @@ struct HomeView: View {
                                     .clipShape(.rect(cornerRadius: 10))
                                     .compatibilityBadge(romId: rom.id, compact: true)
                                     .favoriteBadge(romId: rom.id, compact: true)
+                                    .downloadBadge(romId: rom.id, compact: true)
                                 Text(rom.displayName)
                                     .font(.caption)
                                     .lineLimit(1)
@@ -560,7 +561,7 @@ struct HomeView: View {
                             }
                         }
                         .buttonStyle(.plain)
-                        .gameContextMenu(romId: rom.id)
+                        .gameContextMenu(rom: rom)
                     }
                 }
             }

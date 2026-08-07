@@ -129,6 +129,25 @@ final class KeptGameStore: ObservableObject {
         games.first { $0.romId == romId }
     }
 
+    /// Whether a game can be kept at all: the same gate
+    /// `GameLaunchView`'s Storage card uses to decide whether its
+    /// toggle appears, extracted here so the long-press context menu
+    /// offers exactly the same games and the two can never drift apart.
+    /// Native-capable games mirror `NativeLauncher.prepare`'s own gates
+    /// (a Saturn game that is not a single-file chd gets nothing rather
+    /// than a kept copy nothing can boot); everything else needs only
+    /// to be a single file, matching the cache's one-entry-per-file
+    /// schema.
+    static func isKeepable(_ rom: Rom) -> Bool {
+        if let core = NativeCore.core(for: rom) {
+            if core == .beetleSaturn {
+                return !rom.hasMultipleFiles && rom.fsName.lowercased().hasSuffix(".chd")
+            }
+            return true
+        }
+        return !rom.hasMultipleFiles
+    }
+
     /// The directory the native launcher can boot straight from, or nil
     /// when the game is not kept or its ROM file has gone missing under
     /// us, in which case launching falls back to a normal download rather

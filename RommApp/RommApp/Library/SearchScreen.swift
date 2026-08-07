@@ -76,7 +76,7 @@ struct SearchScreen: View {
                         }
                     }
                 }
-                .gameContextMenu(romId: rom.id)
+                .gameContextMenu(rom: rom)
             }
         }
         .listStyle(.plain)

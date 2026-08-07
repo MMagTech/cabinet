@@ -129,19 +129,46 @@ private struct FavoriteBadge: ViewModifier {
     }
 }
 
+/// A small ring wherever a badge or an inline icon already lives,
+/// visible only while `KeptGameStore` actually has this game
+/// downloading, gone the instant it finishes or fails. Bound to the
+/// real byte progress, not a spinner, the same determinate-ring idiom
+/// the App Store uses on its own icons; this app already speaks that
+/// idiom for loading state everywhere else (a dimmed area with a
+/// centered `ProgressView`), so a real percentage here is a natural
+/// extension of it, not a new pattern. Deliberately not a permanent
+/// "kept" badge once the download finishes: that state already lives
+/// in Storage, and restating it on every cover forever would be one
+/// more thing this app was trying all day to stop doing.
+private struct DownloadProgressRing: View {
+    @ObservedObject private var keptStore = KeptGameStore.shared
+    let romId: Int
+
+    var body: some View {
+        if let progress = keptStore.downloading[romId] {
+            ProgressView(value: min(progress.fraction, 1))
+                .progressViewStyle(.circular)
+                .controlSize(.mini)
+        }
+    }
+}
+
 /// The long press menu, used everywhere a game can be tapped. A press
 /// rather than a swipe because a cover grid has no swipe to give, and one
 /// gesture across both views is worth more than the better gesture in one
 /// of them. Favoriting lives in the same menu rather than its own: two
 /// long-press menus on one view do not merge, the second silently wins, so
 /// every question a list can't otherwise answer without opening the game
-/// belongs in this one place.
+/// belongs in this one place. Download joined it the same way: deciding to
+/// keep a game used to mean opening its full launch screen for one toggle.
 private struct GameContextMenu: ViewModifier {
     @ObservedObject private var compatibility = Compatibility.shared
+    @ObservedObject private var keptStore = KeptGameStore.shared
     @EnvironmentObject private var session: Session
-    let romId: Int
+    let rom: Rom
 
     func body(content: Content) -> some View {
+        let romId = rom.id
         let marked = compatibility.isMarked(romId)
         let favorited = session.isFavorite(romId: romId)
         return content.contextMenu {
@@ -161,6 +188,32 @@ private struct GameContextMenu: ViewModifier {
                     systemImage: marked ? "checkmark.circle" : "exclamationmark.triangle"
                 )
             }
+            // Same eligibility as the launch screen's Storage card, same
+            // underlying calls: this is a second door, not a second
+            // mechanism. Three labels, not two, since this menu has no
+            // companion caption line the way the launch screen's toggle
+            // does to explain an in-progress download on its own.
+            if KeptGameStore.isKeepable(rom) {
+                if keptStore.downloading[romId] != nil {
+                    Button {
+                        keptStore.remove(romId: romId)
+                    } label: {
+                        Label("Cancel Download", systemImage: "xmark.circle")
+                    }
+                } else if keptStore.kept(romId: romId) != nil {
+                    Button {
+                        keptStore.remove(romId: romId)
+                    } label: {
+                        Label("Remove Download", systemImage: "xmark.circle")
+                    }
+                } else {
+                    Button {
+                        keptStore.keep(rom: rom, session: session)
+                    } label: {
+                        Label("Download", systemImage: "arrow.down.circle")
+                    }
+                }
+            }
         }
     }
 }
@@ -174,7 +227,25 @@ extension View {
         modifier(FavoriteBadge(romId: romId, compact: compact))
     }
 
-    func gameContextMenu(romId: Int) -> some View {
-        modifier(GameContextMenu(romId: romId))
+    /// A small ring badge, matching `compatibilityBadge`/`favoriteBadge`'s
+    /// own corner-circle styling, visible only while this game is
+    /// actively downloading. The bottom-trailing corner is free:
+    /// favorite already owns top-leading and compatibility top-trailing,
+    /// and a game can genuinely be both marked incompatible and worth
+    /// keeping for another emulator at once, so this needs its own
+    /// corner rather than risking a collision with either.
+    func downloadBadge(romId: Int, compact: Bool = false) -> some View {
+        overlay(alignment: .bottomTrailing) {
+            if KeptGameStore.shared.downloading[romId] != nil {
+                DownloadProgressRing(romId: romId)
+                    .padding(compact ? 4 : 6)
+                    .background(.regularMaterial, in: .circle)
+                    .padding(compact ? 4 : 6)
+            }
+        }
+    }
+
+    func gameContextMenu(rom: Rom) -> some View {
+        modifier(GameContextMenu(rom: rom))
     }
 }

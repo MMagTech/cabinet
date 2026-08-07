@@ -39,6 +39,7 @@ struct RomListView: View {
 
     @EnvironmentObject private var session: Session
     @ObservedObject private var compatibility = Compatibility.shared
+    @ObservedObject private var keptStore = KeptGameStore.shared
     @AppStorage(PlatformLabelSource.key) private var labelSourceRaw = PlatformLabelSource.platformName.rawValue
     private var labelSource: PlatformLabelSource {
         PlatformLabelSource(rawValue: labelSourceRaw) ?? .platformName
@@ -171,6 +172,7 @@ struct RomListView: View {
                                 .clipShape(.rect(cornerRadius: 10))
                                 .compatibilityBadge(romId: rom.id)
                                 .favoriteBadge(romId: rom.id)
+                                .downloadBadge(romId: rom.id)
 
                             Text(rom.displayName)
                                 .font(.caption)
@@ -182,7 +184,7 @@ struct RomListView: View {
                         }
                     }
                     .buttonStyle(.plain)
-                    .gameContextMenu(romId: rom.id)
+                    .gameContextMenu(rom: rom)
                     .onAppear { Task { await loadMoreIfNeeded(current: rom) } }
                 }
             }
@@ -216,12 +218,23 @@ struct RomListView: View {
                                     .font(.caption)
                                     .foregroundStyle(.orange)
                             }
+                            // A plain inline ring, not a corner badge: the
+                            // list row has no artwork to badge, only the
+                            // same trailing slot the star and triangle
+                            // already occupy, so the download indicator
+                            // matches their bare style rather than the
+                            // grid's material-circle one.
+                            if keptStore.downloading[rom.id] != nil {
+                                ProgressView(value: min(keptStore.downloading[rom.id]?.fraction ?? 0, 1))
+                                    .progressViewStyle(.circular)
+                                    .controlSize(.mini)
+                            }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
-                    .gameContextMenu(romId: rom.id)
+                    .gameContextMenu(rom: rom)
                     .onAppear { Task { await loadMoreIfNeeded(current: rom) } }
                 }
 
