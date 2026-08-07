@@ -64,16 +64,35 @@ hardcoded game, no polish.
   similar); the 413-too-large failure the webview already handles
   politely needs the same politeness natively.
 
-## The third category, in the UI
+## Integration: no new UI category
 
-Saturn today sits in RomM's supported list while being unplayable, which
-is the dishonest middle. Once (if) the native core proves out, the
-library and launch screens tell the truth in three tiers rather than
-two: plays in the web player, plays natively only, and cannot play on
-iOS. "Plays natively only" is a badge on the platform and a
-native-locked Player card on the game, not a separate library section.
-If the go/no-go fails, Saturn instead gets honestly marked as effectively
-unplayable rather than left pretending.
+Superseded, 2026-08-06. The original plan below was a three-tier badge
+system on top of the app's existing Supported/Unsupported split. Decided
+against: Marcus's read was that it looked bad and, more importantly, a
+static "plays natively only" label is itself a claim that goes stale the
+moment RomM ever improves its own Saturn core, the same dishonesty this
+was meant to fix, just moved.
+
+What ships instead: Saturn stays plain Supported, same as every other
+platform with a working core, no badge and no separate tier. Its launch
+screen never shows the Web/Native picker arcade gets, because unlike
+arcade's webview core, Saturn's does not work, so there is no real
+choice to offer; `LaunchChoices.defaultBackend` routes Saturn straight to
+native, one line (`if rom.platformSlug == "saturn" { return .native }`),
+which is also the one line to delete if the web core is ever fixed.
+Deliberately no automatic fallback back to webview if native fails on
+some untested title either: a fallback to a core already confirmed
+slow-and-crashing is not real insurance for the likely failure mode (a
+demanding title overwhelming the hardware, which would probably choke
+webview too), and building that machinery now, before any such failure
+has actually been observed, is exactly the kind of speculative design
+this project avoids. If a native-specific problem does turn up on a real
+game, that is a concrete fix to make then, the same reactive way
+arcade's own crash counters already work.
+
+Original plan, for the record: a three-tier Supported / plays-natively-
+only / Unsupported split, badge on the platform, native-locked Player
+card on the game. Not built.
 
 ## Out of scope, explicitly
 

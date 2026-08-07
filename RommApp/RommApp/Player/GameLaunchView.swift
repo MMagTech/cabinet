@@ -924,7 +924,14 @@ struct GameLaunchView: View {
         }
     }
 
-    /// Web player or the natively compiled core, arcade only for now.
+    /// Web player or the natively compiled core, arcade only. Not a
+    /// temporary limit: this shows only where both players genuinely
+    /// work, so there is a real choice to offer. Saturn has a native
+    /// core too (see `NativeCore`), but no working web alternative worth
+    /// picking between, so `LaunchChoices.defaultBackend` routes it to
+    /// native directly and no picker appears; the two-tier
+    /// Supported/Unsupported split stays exactly as it was rather than
+    /// growing a third state for this.
     /// Save states do not cross the boundary (each player's core build
     /// has its own state format), so the caption says so up front rather
     /// than letting someone discover it after losing a run.
