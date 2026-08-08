@@ -14,6 +14,8 @@ import SwiftUI
 /// categories) are right not to do this; this one has no such surface.
 struct SearchScreen: View {
     @EnvironmentObject private var session: Session
+    @ObservedObject private var networkMonitor = NetworkMonitor.shared
+    @ObservedObject private var keptStore = KeptGameStore.shared
     @AppStorage(PlatformLabelSource.key) private var labelSourceRaw = PlatformLabelSource.platformName.rawValue
     private var labelSource: PlatformLabelSource {
         PlatformLabelSource(rawValue: labelSourceRaw) ?? .platformName
@@ -35,7 +37,11 @@ struct SearchScreen: View {
                     ContentUnavailableView(
                         "Search your library",
                         systemImage: "magnifyingglass",
-                        description: Text("Every game on your server, by name.")
+                        description: Text(
+                            networkMonitor.isOffline
+                                ? "Every kept game, by name."
+                                : "Every game on your server, by name."
+                        )
                     )
                 } else if searching {
                     ProgressView()
@@ -47,10 +53,15 @@ struct SearchScreen: View {
                 }
             }
             .navigationTitle("Search")
-            .searchable(text: $searchText, prompt: "Search all games")
+            .searchable(text: $searchText, prompt: networkMonitor.isOffline ? "Search kept games" : "Search all games")
             .searchFocused($fieldFocused)
             .onAppear { fieldFocused = true }
             .task(id: searchText) { await runSearch() }
+            // Live, matching everywhere else Offline Mode touches
+            // tonight: stale online results should not sit on screen
+            // once the toggle flips, and typed text should not need to
+            // be re-entered to see it re-scoped to what is kept.
+            .onChange(of: networkMonitor.isOffline) { _, _ in Task { await runSearch() } }
             .fullScreenCover(item: $playing) { rom in
                 NavigationStack { GameLaunchView(rom: rom) }
             }
@@ -85,6 +96,28 @@ struct SearchScreen: View {
     private func runSearch() async {
         guard !searchText.isEmpty else {
             results = []
+            offline = false
+            return
+        }
+
+        // Real suppression, not a cosmetic switch, matching everywhere
+        // else Offline Mode touches tonight: this never reaches the
+        // network at all while it's on, even though the connection
+        // underneath might genuinely be fine. Instant, no debounce,
+        // since filtering an array already on the phone has no server
+        // to spare; a kept game either matches the text or it does not,
+        // the same honest "no results" screen a real search with
+        // nothing found already shows, not OfflineNotice, which implies
+        // a retry would help when nothing here needs one. Only
+        // native-capable kept games, the rule used everywhere else
+        // tonight: a webview-only kept game's player still needs the
+        // server, so surfacing it here would set up a tap that fails.
+        guard !networkMonitor.isOffline else {
+            results = keptStore.games
+                .filter { NativeCore.core(for: $0.rom) != nil }
+                .map(\.rom)
+                .filter { $0.displayName.localizedCaseInsensitiveContains(searchText) }
+                .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
             offline = false
             return
         }

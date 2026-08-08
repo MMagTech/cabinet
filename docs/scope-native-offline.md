@@ -153,6 +153,15 @@ shipped 2026-08-07, same session:
   is now the one place this is drawn, platform grouping, label
   formatting, the `OfflineNotice` fallback, all of it; Home and Library
   each just show it with their own retry action.
+- The library tab itself is hidden outright while Offline Mode is on
+  ("if both tabs are the same why two... drop the library and keep the
+  home"), selection falls back to Home if someone was standing on it
+  when the toggle flipped. Search stayed, unlike Library: finding one
+  game by name across everything kept is not redundant with Home's
+  platform list the way Library's content was, so it was fixed instead
+  of dropped, scoped to kept games with the same real-suppression rule
+  as everywhere else (Marcus caught it still leaking live server
+  results).
 
 ## Decisions already made
 
