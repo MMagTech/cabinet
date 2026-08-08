@@ -46,8 +46,16 @@ struct HomeView: View {
                 // Nothing cached means nothing to show behind a banner, so
                 // offline replaces the content rather than sitting above
                 // it. Kept in a ScrollView so pull to refresh still works
-                // as a second way to retry.
-                if offline, recent.isEmpty, favorites.isEmpty {
+                // as a second way to retry. The manual toggle bypasses
+                // that emptiness check entirely: real signal loss with a
+                // hero already on screen should not yank it away, but
+                // choosing Offline Mode is a deliberate act, and it has
+                // to visibly do something the instant it is flipped, not
+                // wait for recent/favorites to happen to be empty
+                // already or for a fresh launch to clear them (Marcus,
+                // 2026-08-07: had to force-quit and reopen to see it
+                // take effect).
+                if networkMonitor.manualOfflineMode || (offline && recent.isEmpty && favorites.isEmpty) {
                     // Nothing cached to show above a banner, same as
                     // before, but there may be something better: any
                     // kept, native-capable game plays with zero

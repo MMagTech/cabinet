@@ -77,6 +77,20 @@ struct LibraryScreen: View {
 
     private var platformList: some View {
         List {
+            // Checked first, ahead of everything else: browsing the full
+            // server catalog was out of scope for offline the day this
+            // whole feature was designed, so Offline Mode says so
+            // outright rather than quietly leaving a possibly-stale list
+            // on screen. Unlike the branches below, this one is not
+            // gated on `platforms.isEmpty`, on purpose: a deliberate
+            // toggle has to visibly do something the moment it is
+            // flipped, the same reasoning as Home's own fix a moment
+            // earlier, not wait for the list to happen to already be
+            // empty.
+            if networkMonitor.manualOfflineMode {
+                OfflineNotice { await loadPlatforms() }
+                    .listRowBackground(Color.clear)
+            }
             // Every one of these branches is gated on `platforms.isEmpty`
             // too, not just its own flag: a live connectivity change now
             // re-runs `loadPlatforms()` on its own (see the onChange
@@ -85,7 +99,7 @@ struct LibraryScreen: View {
             // just because the latest background refresh failed. Nothing
             // here discards good data, only a launch with nothing loaded
             // yet falls through to these.
-            if loadingPlatforms, platforms.isEmpty {
+            else if loadingPlatforms, platforms.isEmpty {
                 HStack(spacing: 10) {
                     ProgressView()
                     Text("Loading your library")
