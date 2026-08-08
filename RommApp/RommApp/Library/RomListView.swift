@@ -15,10 +15,17 @@ struct RomListView: View {
         /// collection is, just the same last-played query Home already
         /// makes, unpaged there and paged here.
         case recentlyPlayed
+        /// One platform's kept games, browsed with no network at all.
+        /// Offline Mode's answer to the library: the same grid and list
+        /// this screen already draws for a live platform, reused rather
+        /// than a second version built just for this, fed a plain array
+        /// instead of a paged fetch because every rom is already known,
+        /// already on the phone, nothing to page or retry.
+        case keptPlatform(Platform, [Rom])
 
         var title: String {
             switch self {
-            case .platform(let platform): return platform.slug
+            case .platform(let platform), .keptPlatform(let platform, _): return platform.slug
             case .collection(let collection): return collection.name
             case .recentlyPlayed: return "Recent"
             }
@@ -31,6 +38,7 @@ struct RomListView: View {
             case .platform(let platform): return "platform.\(platform.slug)"
             case .collection(let collection): return "collection.\(collection.id)"
             case .recentlyPlayed: return "recentlyPlayed"
+            case .keptPlatform(let platform, _): return "keptPlatform.\(platform.slug)"
             }
         }
     }
@@ -71,7 +79,7 @@ struct RomListView: View {
     /// collection has no such ambiguity, its name is just its name.
     private var navigationLabel: String {
         switch source {
-        case .platform(let platform):
+        case .platform(let platform), .keptPlatform(let platform, _):
             let metadataName = platform.displayName.flatMap { $0.isEmpty ? nil : $0 }
             let folderName = platform.fsSlug.isEmpty ? nil : platform.fsSlug
             switch labelSource {
@@ -307,17 +315,28 @@ struct RomListView: View {
         guard !loading else { return }
         loading = true
         do {
-            let page: RomPage
             switch source {
+            case .keptPlatform(_, let kept):
+                // No page to fetch: every kept rom for this platform is
+                // already known, already on the phone. Assigned
+                // directly rather than routed through RomPage, which
+                // models a server's paged response, not a plain local
+                // array.
+                roms = kept
+                total = kept.count
             case .platform(let platform):
-                page = try await session.roms(platformId: platform.id, offset: roms.count)
+                let page = try await session.roms(platformId: platform.id, offset: roms.count)
+                roms.append(contentsOf: page.items)
+                total = page.total
             case .collection(let collection):
-                page = try await session.roms(collectionId: collection.id, offset: roms.count)
+                let page = try await session.roms(collectionId: collection.id, offset: roms.count)
+                roms.append(contentsOf: page.items)
+                total = page.total
             case .recentlyPlayed:
-                page = try await session.recentlyPlayed(limit: 60, offset: roms.count)
+                let page = try await session.recentlyPlayed(limit: 60, offset: roms.count)
+                roms.append(contentsOf: page.items)
+                total = page.total
             }
-            roms.append(contentsOf: page.items)
-            total = page.total
         } catch {
             self.error = LoadFailure(error)
         }

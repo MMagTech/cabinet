@@ -273,7 +273,7 @@ struct HomeView: View {
     private var offlineKeptList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 4) {
-                Label("No connection", systemImage: "wifi.slash")
+                Label(networkMonitor.offlineReason.label, systemImage: networkMonitor.offlineReason.systemImage)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 Text("Kept games")

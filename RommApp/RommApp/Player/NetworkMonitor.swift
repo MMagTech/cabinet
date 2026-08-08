@@ -45,6 +45,18 @@ final class NetworkMonitor: ObservableObject {
     /// maintain for the manual case.
     var isOffline: Bool { !isConnected || manualOfflineMode }
 
+    /// What to tell someone about why they are looking at an offline
+    /// view: the plain truth when signal is actually gone, the
+    /// deliberate choice when it is not. Every screen that shows one of
+    /// these reads it from here, so they can never disagree with each
+    /// other or with reality, the exact bug caught on device (Marcus,
+    /// 2026-08-07): "No connection" showing over a full signal bar
+    /// because Offline Mode, not a dead signal, was what was actually
+    /// running.
+    var offlineReason: (label: String, systemImage: String) {
+        manualOfflineMode ? ("Offline Mode", "airplane") : ("No connection", "wifi.slash")
+    }
+
     private init() {
         manualOfflineMode = UserDefaults.standard.bool(forKey: Self.manualOfflineKey)
         let queue = DispatchQueue(label: "com.mmagtech.RommApp.networkMonitor")

@@ -94,6 +94,59 @@ earlier ones are useful without the later ones.
   fetched, labelled honestly rather than pretending to be the server's
   full list.
 
+### Same-day follow-on: the app notices offline, live, not on request
+
+Phase 2 shipped checking connectivity at specific moments, screen open,
+a boot stall. Nothing watched it continuously, so a screen already on
+screen had no way to react to a change; Marcus caught this directly
+("I have to exit it and then reenter to see offline view"). Built and
+shipped 2026-08-07, same session:
+
+- `NetworkMonitor` became a `@MainActor ObservableObject` with
+  `@Published isConnected`, not an actor with a polled property. Home
+  and Library both observe it and re-run their own existing load
+  functions the instant it changes, live.
+- A second, separate signal: a manual Offline Mode toggle (Marcus's
+  idea, the Low Data Mode shape, not a signal-loss fallback: forcing
+  the app to act offline on purpose, roaming, a capped hotspot, or just
+  not wanting a download to fire on signal you don't trust). Real
+  suppression, not cosmetic, load functions check it before touching
+  the network at all. `NetworkMonitor.isOffline` combines both signals
+  into the one thing every screen actually asks, so real disconnection
+  and the deliberate choice drive identical code paths everywhere,
+  never a second offline system to maintain for the manual case.
+  Surfaced as a real `Toggle` styled as a button in Home's toolbar,
+  airplane icon, tinted when on, matching how iOS itself treats a
+  standing mode rather than a one-shot action; invisible, not disabled,
+  when there are no native-capable kept games to switch to.
+- Two bugs found chasing this, both about a screen destroying good data
+  it did not need to: Library's loading spinner, offline banner and
+  error text all unconditionally hid an already-successful platform
+  list; now gated on the list actually being empty, so a failed
+  background refresh can correct or add to what's showing but never
+  erase it. And the manual toggle needed a force-quit to show anything
+  at all, because Home's offline view was itself gated on already
+  having nothing cached, correct for protecting content from an
+  accidental blip, wrong for a deliberate toggle that has to visibly do
+  something the instant it's flipped; both screens now let the manual
+  case bypass that gate outright.
+- Library's biggest gap: it went completely dark behind `OfflineNotice`
+  the moment either kind of offline was true, discarding kept games
+  entirely rather than surfacing them (Marcus: "Offline should show
+  platforms that have games downloaded for them"). `RomListView` gained
+  a `keptPlatform` source, roms assigned directly with no fetch, so
+  Library now groups kept, native-capable games by platform and routes
+  into the exact same grid/list screen live browsing already uses,
+  badges and context menu included, rather than a second screen built
+  just for this. Webview-only kept games excluded, same rule as Home's
+  offline list, their player still needs the server regardless of what
+  is stored.
+- Wording is centralized: `NetworkMonitor.offlineReason` picks "No
+  connection" or "Offline Mode" depending on which is actually true, so
+  a screen can never claim no signal while the real cause is a
+  deliberate choice with full bars showing, the exact bug a screenshot
+  caught.
+
 ## Decisions already made
 
 - Offline support is native-player-only. The webview player is not asked

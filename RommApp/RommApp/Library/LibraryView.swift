@@ -8,6 +8,7 @@ import SwiftUI
 struct LibraryScreen: View {
     @EnvironmentObject private var session: Session
     @ObservedObject private var networkMonitor = NetworkMonitor.shared
+    @ObservedObject private var keptStore = KeptGameStore.shared
     @AppStorage(PlatformLabelSource.key) private var labelSourceRaw = PlatformLabelSource.platformName.rawValue
     private var labelSource: PlatformLabelSource {
         PlatformLabelSource(rawValue: labelSourceRaw) ?? .platformName
@@ -77,19 +78,21 @@ struct LibraryScreen: View {
 
     private var platformList: some View {
         List {
-            // Checked first, ahead of everything else: browsing the full
-            // server catalog was out of scope for offline the day this
-            // whole feature was designed, so Offline Mode says so
-            // outright rather than quietly leaving a possibly-stale list
-            // on screen. Unlike the branches below, this one is not
-            // gated on `platforms.isEmpty`, on purpose: a deliberate
-            // toggle has to visibly do something the moment it is
-            // flipped, the same reasoning as Home's own fix a moment
-            // earlier, not wait for the list to happen to already be
-            // empty.
-            if networkMonitor.manualOfflineMode {
-                OfflineNotice { await loadPlatforms() }
-                    .listRowBackground(Color.clear)
+            // Checked first, ahead of everything else, and unlike the
+            // branches below not gated on `platforms.isEmpty`: a
+            // deliberate toggle, or a real signal loss, has to visibly
+            // change what this screen shows the moment it happens, not
+            // wait for the live list to be empty already. Browsing the
+            // full server catalog was always out of scope for offline,
+            // per the original scope doc, but kept games were never
+            // meant to be invisible here just because the rest of the
+            // catalog is (Marcus, 2026-08-07: "why would library show
+            // [nothing]. Offline should show platforms that have games
+            // downloaded for them"). Same NavigationLink shape as the
+            // live list below, same RomListView once inside one, just
+            // fed local data instead of a server fetch.
+            if networkMonitor.isOffline {
+                offlinePlatformSections
             }
             // Every one of these branches is gated on `platforms.isEmpty`
             // too, not just its own flag: a live connectivity change now
@@ -144,6 +147,62 @@ struct LibraryScreen: View {
                 Text("\(platform.romCount)")
                     .foregroundStyle(.secondary)
                     .font(.callout.monospacedDigit())
+            }
+        }
+    }
+
+    /// Kept, native-capable games grouped by platform, one row per
+    /// platform, the same NavigationLink shape as the live list above.
+    /// Webview-only kept games are left out, the same rule Home's own
+    /// offline list uses: their player still needs the server, so
+    /// listing them here would set up a tap that fails. A `Platform`
+    /// built straight from the kept rom's own embedded fields, not
+    /// fetched, since building one costs nothing a live one has that
+    /// matters here: the count is how many are kept, not the server's
+    /// full catalog size, which would mean nothing without a connection
+    /// to trust it.
+    private var offlinePlatforms: [(platform: Platform, roms: [Rom])] {
+        let kept = keptStore.games
+            .filter { NativeCore.core(for: $0.rom) != nil }
+            .map(\.rom)
+        return Dictionary(grouping: kept, by: \.platformId)
+            .map { platformId, roms in
+                let sample = roms[0]
+                let platform = Platform(
+                    id: platformId, name: sample.platformDisplayName, displayName: sample.platformDisplayName,
+                    slug: sample.platformSlug, fsSlug: sample.platformFsSlug, romCount: roms.count
+                )
+                let sorted = roms.sorted {
+                    $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+                }
+                return (platform, sorted)
+            }
+            .sorted { platformLabel(for: $0.platform) < platformLabel(for: $1.platform) }
+    }
+
+    @ViewBuilder
+    private var offlinePlatformSections: some View {
+        if offlinePlatforms.isEmpty {
+            Text("No kept games yet. Keep one from its own screen, or the long-press menu, to browse it here with no connection.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        } else {
+            Section {
+                ForEach(offlinePlatforms, id: \.platform.id) { entry in
+                    NavigationLink {
+                        RomListView(source: .keptPlatform(entry.platform, entry.roms))
+                    } label: {
+                        HStack {
+                            Text(platformLabel(for: entry.platform))
+                            Spacer()
+                            Text("\(entry.roms.count)")
+                                .foregroundStyle(.secondary)
+                                .font(.callout.monospacedDigit())
+                        }
+                    }
+                }
+            } header: {
+                Label(networkMonitor.offlineReason.label, systemImage: networkMonitor.offlineReason.systemImage)
             }
         }
     }
