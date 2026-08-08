@@ -35,6 +35,76 @@ struct LicensesView: View {
             file: "fbneo"
         ),
         Entry(
+            id: "beetle-saturn",
+            name: "Beetle Saturn",
+            role: "Native Saturn core",
+            summary: "GPL version 2, from the Mednafen project.",
+            file: "beetle-saturn"
+        ),
+        Entry(
+            id: "gambatte",
+            name: "Gambatte",
+            role: "Native Game Boy and Game Boy Color core",
+            summary: "GPL version 2.",
+            file: "gambatte"
+        ),
+        Entry(
+            id: "mgba",
+            name: "mGBA",
+            role: "Native Game Boy Advance core",
+            summary: "Mozilla Public License 2.0.",
+            file: "mgba"
+        ),
+        Entry(
+            id: "genesis-plus-gx",
+            name: "Genesis Plus GX",
+            role: "Native Genesis, Sega CD, Master System, Game Gear and 32X core",
+            summary: "Free for non-commercial use, with the same distribution terms Cabinet already meets for FBNeo.",
+            file: "genesis-plus-gx"
+        ),
+        Entry(
+            id: "beetle-pce-fast",
+            name: "Beetle PCE Fast",
+            role: "Native TurboGrafx-16 and TurboGrafx-CD core",
+            summary: "GPL version 2, from the Mednafen project.",
+            file: "beetle-pce-fast"
+        ),
+        Entry(
+            id: "snes9x",
+            name: "Snes9x",
+            role: "Native SNES core",
+            summary: "Free for non-commercial use. Cabinet is free and is not sold, which satisfies those terms.",
+            file: "snes9x"
+        ),
+        Entry(
+            id: "fceumm",
+            name: "FCEUmm",
+            role: "Native NES core",
+            summary: "GPL version 2.",
+            file: "fceumm"
+        ),
+        Entry(
+            id: "beetle-ngp",
+            name: "Beetle NeoPop",
+            role: "Native Neo Geo Pocket Color core",
+            summary: "GPL version 2, from the Mednafen project.",
+            file: "beetle-ngp"
+        ),
+        Entry(
+            id: "prosystem",
+            name: "ProSystem",
+            role: "Native Atari 7800 core",
+            summary: "GPL version 2.",
+            file: "prosystem"
+        ),
+        Entry(
+            id: "picodrive",
+            name: "PicoDrive",
+            role: "Native Sega 32X core",
+            summary: "Free for non-commercial use. Cabinet is free and is not sold, which satisfies those terms.",
+            file: "picodrive"
+        ),
+        Entry(
             id: "libretro-common",
             name: "libretro-common",
             role: "Emulator interface",
@@ -47,6 +117,41 @@ struct LicensesView: View {
             role: "ROM decompression",
             summary: "Compression library by Jean-loup Gailly and Mark Adler, zlib license.",
             file: "zlib"
+        ),
+        Entry(
+            id: "libchdr",
+            name: "libchdr",
+            role: "CHD disc image reading",
+            summary: "Reads the compressed disc format the CD-based cores load, BSD licensed.",
+            file: "libchdr"
+        ),
+        Entry(
+            id: "zstd",
+            name: "Zstandard",
+            role: "Disc image decompression",
+            summary: "Compression library by Meta, BSD licensed.",
+            file: "zstd"
+        ),
+        Entry(
+            id: "lzma",
+            name: "LZMA SDK",
+            role: "Archive decompression",
+            summary: "Igor Pavlov's compression code, placed in the public domain.",
+            file: "lzma"
+        ),
+        Entry(
+            id: "tremor",
+            name: "Tremor",
+            role: "CD audio decoding",
+            summary: "Xiph.Org's integer Ogg Vorbis decoder, used for CD audio tracks, BSD licensed.",
+            file: "tremor"
+        ),
+        Entry(
+            id: "inih",
+            name: "inih",
+            role: "Config parsing",
+            summary: "Ben Hoyt's INI parser, built into mGBA, BSD licensed.",
+            file: "inih"
         ),
     ]
 

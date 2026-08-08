@@ -24,6 +24,17 @@ struct RommApp: App {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 KeptGameStore.shared.reconcileFilesFolder()
+                // Unconditional, unlike syncIfOnline below: this makes no
+                // network call of its own, only reads
+                // session.platformsVersions already sitting in memory
+                // from whenever it was last fetched, so gating it behind
+                // Offline Mode would block a fix that has nothing to do
+                // with being online. Found 2026-08-08: wiring this into
+                // syncIfOnline the first time meant it silently never ran
+                // at all while Offline Mode was on, exactly the state
+                // most likely on screen while someone is testing Offline
+                // Mode.
+                KeptGameStore.shared.healCanonicalSlugs(session: session)
                 syncIfOnline()
             }
         }
@@ -31,8 +42,14 @@ struct RommApp: App {
         // Mode: a queued save, or a stub entry from a past format
         // change, should not need its own game's screen revisited,
         // only a connection to actually use.
-        .onChange(of: networkMonitor.isConnected) { _, _ in syncIfOnline() }
-        .onChange(of: networkMonitor.manualOfflineMode) { _, _ in syncIfOnline() }
+        .onChange(of: networkMonitor.isConnected) { _, isConnected in
+            if isConnected { KeptGameStore.shared.healCanonicalSlugs(session: session) }
+            syncIfOnline()
+        }
+        .onChange(of: networkMonitor.manualOfflineMode) { _, isManualOffline in
+            if !isManualOffline { KeptGameStore.shared.healCanonicalSlugs(session: session) }
+            syncIfOnline()
+        }
     }
 
     private func syncIfOnline() {

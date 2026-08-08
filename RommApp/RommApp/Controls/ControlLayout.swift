@@ -120,6 +120,18 @@ struct ControlLayout: Decodable {
             name = "nds"
         case "n64", "ique-player":
             name = "n64"
+        case "nes", "famicom", "fds", "new-style-nes", "game-televisison":
+            name = "nes"
+        case "sms", "sega-mark-iii", "sega-master-system-ii",
+             "master-system-girl", "master-system-super-compact",
+             "sega-game-box-9":
+            name = "sms"
+        case "gamegear":
+            name = "gamegear"
+        case "neo-geo-pocket", "neo-geo-pocket-color":
+            name = "ngpc"
+        case "atari7800":
+            name = "atari7800"
         default:
             name = "default"
         }

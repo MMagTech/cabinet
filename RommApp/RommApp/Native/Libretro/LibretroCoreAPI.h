@@ -23,6 +23,7 @@ typedef struct {
     void (*set_audio_sample_batch)(retro_audio_sample_batch_t);
     void (*set_input_poll)(retro_input_poll_t);
     void (*set_input_state)(retro_input_state_t);
+    void (*set_controller_port_device)(unsigned port, unsigned device);
     void (*init)(void);
     void (*deinit)(void);
     bool (*load_game)(const struct retro_game_info *game);

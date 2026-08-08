@@ -11,6 +11,7 @@ extern "C" {
     void retro_set_audio_sample_batch(retro_audio_sample_batch_t);
     void retro_set_input_poll(retro_input_poll_t);
     void retro_set_input_state(retro_input_state_t);
+    void retro_set_controller_port_device(unsigned, unsigned);
     void retro_init(void);
     void retro_deinit(void);
     bool retro_load_game(const struct retro_game_info *);
@@ -33,6 +34,7 @@ const LibretroCoreAPI *FBNeoCoreAPI(void) {
         .set_audio_sample_batch = retro_set_audio_sample_batch,
         .set_input_poll = retro_set_input_poll,
         .set_input_state = retro_set_input_state,
+        .set_controller_port_device = retro_set_controller_port_device,
         .init = retro_init,
         .deinit = retro_deinit,
         .load_game = retro_load_game,

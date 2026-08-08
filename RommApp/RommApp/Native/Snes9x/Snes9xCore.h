@@ -1,0 +1,16 @@
+#include "LibretroCoreAPI.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Snes9x's entry points as a table for the shared frontend. The
+// core's archive is a single merged object whose only exported symbols
+// are these s9x_retro_* forwarders; the real retro_* definitions
+// inside it are private, so they cannot collide with any other core's.
+// Built by tools/build-core.sh.
+const LibretroCoreAPI *Snes9xCoreAPI(void);
+
+#ifdef __cplusplus
+}
+#endif

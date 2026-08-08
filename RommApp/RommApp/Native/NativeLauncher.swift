@@ -33,9 +33,11 @@ enum NativeLauncher {
     @discardableResult
     @MainActor
     static func prepare(rom: Rom, session: Session) async throws -> NativeCore {
-        guard let core = NativeCore.core(for: rom) else {
+        let canonicalSlug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
+        guard let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug) else {
             throw LaunchError.noNativeCore
         }
+        let core = platform.core
 
         // Saturn stays chd-only, deliberately, matching RomM's own
         // recommended format for CD platforms. cue/bin is real work
@@ -59,7 +61,7 @@ enum NativeLauncher {
         cleanUpTempDirectories()
 
         if let keptDir = KeptGameStore.shared.launchDirectory(romId: rom.id) {
-            return try activate(core: core, romURL: keptDir.appendingPathComponent(rom.fsName), workDir: keptDir)
+            return try activate(platform: platform, romURL: keptDir.appendingPathComponent(rom.fsName), workDir: keptDir)
         }
 
         let workDir = FileManager.default.temporaryDirectory.appendingPathComponent(
@@ -80,44 +82,90 @@ enum NativeLauncher {
             }
         }
 
-        if core == .beetleSaturn {
-            stageSaturnBIOS(from: downloadedFirmwareURLs, in: workDir)
-        }
+        stageFirmware(from: downloadedFirmwareURLs, in: workDir, platform: platform)
 
-        return try activate(core: core, romURL: romURL, workDir: workDir)
+        return try activate(platform: platform, romURL: romURL, workDir: workDir)
     }
 
-    private static func activate(core: NativeCore, romURL: URL, workDir: URL) throws -> NativeCore {
+    private static func activate(platform: NativePlatform, romURL: URL, workDir: URL) throws -> NativeCore {
+        let core = platform.core
+        let loadURL = try extractedIfArchived(romURL, core: core, in: workDir)
         LibretroFrontend.shared.activateCore(core.coreID)
-        LibretroFrontend.shared.setCoreOptions(NativeCoreOptionsStore.dictionary(for: core))
-        if let failure = LibretroFrontend.shared.loadGame(romURL.path, systemDirectory: workDir.path) {
+        LibretroFrontend.shared.setCoreOptions(NativeCoreOptionsStore.dictionary(for: platform))
+        LibretroFrontend.shared.setControllerPortDevice(NativeCoreOptionsStore.padDevice(for: platform))
+        if let failure = LibretroFrontend.shared.loadGame(loadURL.path, systemDirectory: workDir.path) {
             throw NSError(domain: "NativeLauncher", code: 1, userInfo: [NSLocalizedDescriptionKey: failure])
         }
         return core
     }
 
-    /// Beetle Saturn hardcodes the exact filename it looks for
-    /// ("sega_101.bin" for Japan, "mpr-17933.bin" for NA/EU), no
-    /// fallback, and RomM's own firmware filenames are whatever
-    /// whoever uploaded them called the file. EmulatorJS's bundled
-    /// Saturn core clearly does the equivalent of this under the
-    /// hood, since the same file plays fine in the webview under
-    /// any name; this is that adaptation for the native side.
-    /// Copied under both region names rather than picked, since
-    /// there is no reliable region signal in what the API reports
-    /// (Firmware carries a filename, not a region) and the real
-    /// check is the disc's own region at runtime, not the file's:
-    /// both slots pointing at a same-sized BIOS lets whichever one
-    /// the disc actually asks for resolve correctly.
+    /// Every cartridge-style core here expects a raw ROM, either a path it
+    /// opens itself or bytes this app reads and hands over directly; none
+    /// of them decompress .zip/.7z archives on their own. FBNeo is the one
+    /// exception, its own arcade-set loader reads zips natively (arcade
+    /// ROMs are always zipped), so extracting first would only get in its
+    /// way. RomM serves cartridge platforms compressed, so without this a
+    /// core silently receives archive bytes as if they were the ROM, no
+    /// error, no crash, just garbage: found 2026-08-08 from a real device
+    /// test, a Genesis Plus GX game that ran a few frames on compressed
+    /// noise, produced one stray sound register write, then sat on a
+    /// permanently blank VDP state for the rest of the session.
+    private static func extractedIfArchived(_ romURL: URL, core: NativeCore, in workDir: URL) throws -> URL {
+        let ext = romURL.pathExtension.lowercased()
+        guard core != .fbneo, ext == "zip" || ext == "7z" else { return romURL }
+        var nameBuffer = [CChar](repeating: 0, count: 1024)
+        let ok = romURL.path.withCString { archivePath in
+            workDir.path.withCString { destDir in
+                archive_extract_first_file(archivePath, destDir, &nameBuffer, Int32(nameBuffer.count)) != 0
+            }
+        }
+        guard ok, let extractedName = String(validatingCString: nameBuffer), !extractedName.isEmpty else {
+            throw LaunchError.unsupportedFormat(
+                "Couldn't extract \"\(romURL.lastPathComponent)\". The archive may be corrupt or in an unsupported format."
+            )
+        }
+        return workDir.appendingPathComponent(extractedName)
+    }
+
+    /// The BIOS filenames a platform's core looks for, and the exact size
+    /// the real file is, since that is the only signal available to tell
+    /// one downloaded firmware file from another.
+    ///
+    /// Every core here hardcodes the filenames it will try and gives up if
+    /// none are present, while RomM's firmware filenames are whatever
+    /// whoever uploaded them called the file. Copying under every name the
+    /// core might ask for is what bridges the two.
+    ///
+    /// Copied under all of a platform's names rather than picked between
+    /// them, because there is no reliable region signal in what the API
+    /// reports (Firmware carries a filename, not a region) and the real
+    /// check is the disc's own region at runtime, not the file's. Genesis
+    /// Plus GX, like Beetle Saturn, selects a CD BIOS purely from the
+    /// disc's region code with no fallback if that one file is absent, so
+    /// every slot pointing at a same-sized BIOS is what lets whichever one
+    /// the disc actually asks for resolve.
+    private static let firmwareNames: [NativePlatform: (size: Int, names: [String])] = [
+        // Saturn: Japan and NA/EU, 512KB.
+        .saturn: (524_288, ["sega_101.bin", "mpr-17933.bin"]),
+        // Sega CD: NTSC-U, PAL and NTSC-J, a fixed 128KB boot ROM.
+        .segaCD: (131_072, ["bios_CD_U.bin", "bios_CD_E.bin", "bios_CD_J.bin"]),
+        // TurboGrafx-CD: Beetle PCE Fast defaults to System Card 3, 256KB.
+        .tgCD: (262_144, ["syscard3.pce"]),
+    ]
+
+    /// Copies whichever downloaded firmware file matches a platform's BIOS
+    /// size into place under every name that platform's core will look for.
+    /// A platform with no entry needs no BIOS and does nothing here.
     ///
     /// Shared with `KeptGameStore`, which runs it once at keep time so a
-    /// kept Saturn game's directory is boot-ready with no work at launch.
-    static func stageSaturnBIOS(from firmwareURLs: [URL], in dir: URL) {
+    /// kept game's directory is boot-ready with no work at launch.
+    static func stageFirmware(from firmwareURLs: [URL], in dir: URL, platform: NativePlatform) {
+        guard let expected = firmwareNames[platform] else { return }
         for url in firmwareURLs {
             guard let size = try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int,
-                  size == 524_288
+                  size == expected.size
             else { continue }
-            for name in ["sega_101.bin", "mpr-17933.bin"] {
+            for name in expected.names {
                 let target = dir.appendingPathComponent(name)
                 guard target != url, !FileManager.default.fileExists(atPath: target.path) else { continue }
                 try? FileManager.default.copyItem(at: url, to: target)

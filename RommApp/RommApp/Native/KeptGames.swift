@@ -37,6 +37,16 @@ struct KeptGame: Codable, Identifiable {
     /// game, or the platform has no native core to write a state for.
     let stateId: Int?
     let stateUpdatedAt: String?
+    /// `rom.canonicalPlatformSlug(platformsVersions:)`, resolved once at
+    /// keep time when a live session guarantees the server's slug mapping
+    /// is in hand, and persisted so every later native-core lookup for
+    /// this game (`offlinePlatforms`, search, sync) works with zero
+    /// network, matching a kept game's whole point. Optional because
+    /// manifests written before this field existed lack it: those fall
+    /// back to the raw, unmapped `platformFsSlug` via `resolvedCanonicalSlug`
+    /// below, self-healing to the real value the next time this game's
+    /// launch screen runs `refreshCachedState` online.
+    let canonicalPlatformSlug: String?
     /// True only for an entry rebuilt from an older manifest format
     /// that could no longer decode as-is: its `rom` is a best-effort
     /// stand-in, real platform data missing, until the next moment
@@ -51,6 +61,17 @@ struct KeptGame: Codable, Identifiable {
     var displayName: String { rom.displayName }
     var fsName: String { rom.fsName }
     var platformFsSlug: String { rom.platformFsSlug }
+
+    /// The slug every offline-safe native-core lookup for this game
+    /// should use. Falls back to the raw, unmapped folder slug for a
+    /// manifest predating `canonicalPlatformSlug`, which is exactly what
+    /// `Rom.canonicalPlatformSlug` itself falls back to for a platform
+    /// with no server-side mapping, so this is never worse than the
+    /// existing accepted fallback, only possibly stale until the next
+    /// online refresh corrects it.
+    var resolvedCanonicalSlug: String {
+        canonicalPlatformSlug ?? rom.platformFsSlug.lowercased()
+    }
 }
 
 /// Permanent on-device storage for kept games: the ROM plus every
@@ -151,7 +172,7 @@ final class KeptGameStore: ObservableObject {
     /// nothing without a connection to trust it.
     func offlinePlatforms() -> [(platform: Platform, roms: [Rom])] {
         let kept = games
-            .filter { NativeCore.core(for: $0.rom) != nil }
+            .filter { NativeCore.core(bySlug: $0.resolvedCanonicalSlug, isArcade: $0.rom.isArcade) != nil }
             .map(\.rom)
         return Dictionary(grouping: kept, by: \.platformId)
             .map { platformId, roms in
@@ -177,8 +198,8 @@ final class KeptGameStore: ObservableObject {
     /// than a kept copy nothing can boot); everything else needs only
     /// to be a single file, matching the cache's one-entry-per-file
     /// schema.
-    static func isKeepable(_ rom: Rom) -> Bool {
-        if let core = NativeCore.core(for: rom) {
+    static func isKeepable(_ rom: Rom, canonicalSlug: String) -> Bool {
+        if let core = NativeCore.core(for: rom, canonicalSlug: canonicalSlug) {
             if core == .beetleSaturn {
                 return !rom.hasMultipleFiles && rom.fsName.lowercased().hasSuffix(".chd")
             }
@@ -228,7 +249,8 @@ final class KeptGameStore: ObservableObject {
     /// Cabinet had a chance to look, not whatever was newest back when
     /// it was first kept.
     func refreshCachedState(rom: Rom, liveStates: [GameState], session: Session) {
-        guard let core = NativeCore.core(for: rom), let game = kept(romId: rom.id) else { return }
+        let canonicalSlug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
+        guard let core = NativeCore.core(for: rom, canonicalSlug: canonicalSlug), let game = kept(romId: rom.id) else { return }
         let newest = liveStates
             .filter { $0.emulator == core.emulatorTag }
             .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
@@ -244,6 +266,7 @@ final class KeptGameStore: ObservableObject {
                 rom: old.rom, totalBytes: Self.directorySize(dir), keptAt: old.keptAt,
                 fileId: old.fileId, webFileName: old.webFileName, contentLength: old.contentLength,
                 stateId: newest.id, stateUpdatedAt: newest.updatedAt,
+                canonicalPlatformSlug: old.rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions),
                 needsMetadataRefresh: old.needsMetadataRefresh
             )
             self.games[index] = updated
@@ -332,7 +355,7 @@ final class KeptGameStore: ObservableObject {
     /// file, only remove one once RomM has confirmed it.
     func syncPendingStates(session: Session) async {
         for game in games {
-            guard let core = NativeCore.core(for: game.rom) else { continue }
+            guard let core = NativeCore.core(bySlug: game.resolvedCanonicalSlug, isArcade: game.rom.isArcade) else { continue }
             for pending in pendingStates(for: game.romId) {
                 guard let stateData = try? Data(contentsOf: pending.stateURL) else { continue }
                 let screenshotData = pending.screenshotURL.flatMap { try? Data(contentsOf: $0) }
@@ -367,6 +390,44 @@ final class KeptGameStore: ObservableObject {
     /// from the server, momentarily unreachable) stays flagged and
     /// tries again next opportunity, the same tolerant shape as
     /// `syncPendingStates`.
+    /// Recomputes and persists `canonicalPlatformSlug` for every kept
+    /// game, not only ones missing it. No network round trip: `game.rom`
+    /// is already the real thing, this only needs `session.platformsVersions`
+    /// (already in memory once logged in), so it is cheap enough to run
+    /// unconditionally on every foreground and connectivity change,
+    /// matching where it is called from.
+    ///
+    /// Unconditional on purpose, not gated on `canonicalPlatformSlug ==
+    /// nil` the way a first cut of this method had it. `performKeep`
+    /// computes and permanently stores this slug at keep time, and
+    /// `platformsVersions` is fetched asynchronously; a keep that
+    /// happened to run before that fetch resolved got the empty-mapping
+    /// fallback, the raw unmapped folder name, written to disk as a
+    /// real, non-nil value, not a blank one. Found 2026-08-08: a real
+    /// device's GBA folder is literally "Game Boy Advance", RomM's own
+    /// display name rather than a slug, and with no mapping entry yet in
+    /// hand that lowercased straight through to "game boy advance",
+    /// matching nothing. A nil-only guard would never have corrected an
+    /// already-wrong value, only ever filled in a blank one.
+    func healCanonicalSlugs(session: Session) {
+        guard !session.platformsVersions.isEmpty else { return }
+        for game in games where game.needsMetadataRefresh != true {
+            guard let index = games.firstIndex(where: { $0.romId == game.romId }) else { continue }
+            let dir = directory(for: game.romId)
+            let updated = KeptGame(
+                rom: game.rom, totalBytes: game.totalBytes, keptAt: game.keptAt,
+                fileId: game.fileId, webFileName: game.webFileName, contentLength: game.contentLength,
+                stateId: game.stateId, stateUpdatedAt: game.stateUpdatedAt,
+                canonicalPlatformSlug: game.rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions),
+                needsMetadataRefresh: game.needsMetadataRefresh
+            )
+            games[index] = updated
+            if let manifestData = try? JSONEncoder().encode(updated) {
+                try? manifestData.write(to: dir.appendingPathComponent("manifest.json"))
+            }
+        }
+    }
+
     func refreshStaleMetadata(session: Session) async {
         for game in games where game.needsMetadataRefresh == true {
             guard let freshRom = try? await session.rom(id: game.romId) else { continue }
@@ -376,7 +437,9 @@ final class KeptGameStore: ObservableObject {
             let updated = KeptGame(
                 rom: freshRom, totalBytes: old.totalBytes, keptAt: old.keptAt,
                 fileId: old.fileId, webFileName: old.webFileName, contentLength: old.contentLength,
-                stateId: old.stateId, stateUpdatedAt: old.stateUpdatedAt, needsMetadataRefresh: nil
+                stateId: old.stateId, stateUpdatedAt: old.stateUpdatedAt,
+                canonicalPlatformSlug: freshRom.canonicalPlatformSlug(platformsVersions: session.platformsVersions),
+                needsMetadataRefresh: nil
             )
             games[index] = updated
             if let manifestData = try? JSONEncoder().encode(updated) {
@@ -397,6 +460,7 @@ final class KeptGameStore: ObservableObject {
             rom: old.rom, totalBytes: Self.directorySize(dir), keptAt: old.keptAt,
             fileId: old.fileId, webFileName: old.webFileName, contentLength: old.contentLength,
             stateId: old.stateId, stateUpdatedAt: old.stateUpdatedAt,
+            canonicalPlatformSlug: old.canonicalPlatformSlug,
             needsMetadataRefresh: old.needsMetadataRefresh
         )
         games[index] = updated
@@ -644,6 +708,11 @@ final class KeptGameStore: ObservableObject {
     }
 
     private func performKeep(rom: Rom, session: Session) async throws {
+        // No-op once already populated; a real retry otherwise, so the
+        // slug this keep permanently stores is computed against a real
+        // mapping rather than the empty-fallback race healCanonicalSlugs
+        // exists to correct after the fact.
+        await session.loadPlatformConfigIfNeeded()
         let staging = stagingDirectory(for: rom.id)
         try? FileManager.default.removeItem(at: staging)
         try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
@@ -667,8 +736,9 @@ final class KeptGameStore: ObservableObject {
                 _ = try await FileDownloader.download(session.firmwareContentRequest(firmware), to: url, onProgress: nil)
                 firmwareURLs.append(url)
             }
-            if NativeCore.core(for: rom) == .beetleSaturn {
-                NativeLauncher.stageSaturnBIOS(from: firmwareURLs, in: staging)
+            let canonicalSlug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
+            if let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug) {
+                NativeLauncher.stageFirmware(from: firmwareURLs, in: staging, platform: platform)
             }
 
             // Tolerated on failure, unlike everything above: without a
@@ -684,7 +754,7 @@ final class KeptGameStore: ObservableObject {
             // ordinary case, not an error.
             var cachedStateId: Int?
             var cachedStateUpdatedAt: String?
-            if let core = NativeCore.core(for: rom),
+            if let core = NativeCore.core(for: rom, canonicalSlug: canonicalSlug),
                let liveStates = try? await session.states(romId: rom.id) {
                 let newest = liveStates
                     .filter { $0.emulator == core.emulatorTag }
@@ -700,7 +770,8 @@ final class KeptGameStore: ObservableObject {
             let manifest = KeptGame(
                 rom: rom, totalBytes: Self.directorySize(staging), keptAt: Date(),
                 fileId: webFile?.id, webFileName: webFile?.fileName, contentLength: contentLength,
-                stateId: cachedStateId, stateUpdatedAt: cachedStateUpdatedAt, needsMetadataRefresh: nil
+                stateId: cachedStateId, stateUpdatedAt: cachedStateUpdatedAt,
+                canonicalPlatformSlug: canonicalSlug, needsMetadataRefresh: nil
             )
             let data = try JSONEncoder().encode(manifest)
             try data.write(to: staging.appendingPathComponent("manifest.json"))
@@ -788,7 +859,8 @@ final class KeptGameStore: ObservableObject {
                 let game = KeptGame(
                     rom: stubRom(from: legacy), totalBytes: legacy.totalBytes, keptAt: legacy.keptAt,
                     fileId: legacy.fileId, webFileName: legacy.webFileName, contentLength: legacy.contentLength,
-                    stateId: nil, stateUpdatedAt: nil, needsMetadataRefresh: true
+                    stateId: nil, stateUpdatedAt: nil,
+                    canonicalPlatformSlug: nil, needsMetadataRefresh: true
                 )
                 migrated.append((entry, game))
                 return game

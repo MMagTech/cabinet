@@ -180,12 +180,22 @@
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Info.plist;
 				HEADER_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/RommApp/Native/Libretro",
 					"$(PROJECT_DIR)/RommApp/Native/FBNeo",
 					"$(PROJECT_DIR)/RommApp/Native/Saturn",
+					"$(PROJECT_DIR)/RommApp/Native/Gambatte",
+					"$(PROJECT_DIR)/RommApp/Native/MGBA",
+					"$(PROJECT_DIR)/RommApp/Native/GenesisPlusGX",
+					"$(PROJECT_DIR)/RommApp/Native/BeetlePCEFast",
+					"$(PROJECT_DIR)/RommApp/Native/Snes9x",
+					"$(PROJECT_DIR)/RommApp/Native/FCEUmm",
+					"$(PROJECT_DIR)/RommApp/Native/BeetleNGP",
+					"$(PROJECT_DIR)/RommApp/Native/ProSystem",
+					"$(PROJECT_DIR)/RommApp/Native/PicoDrive",
+					"$(PROJECT_DIR)/RommApp/Native/Archive",
 				);
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet Dev";
 				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -200,11 +210,29 @@
 					"$(inherited)",
 					"$(PROJECT_DIR)/RommApp/Native/FBNeo",
 					"$(PROJECT_DIR)/RommApp/Native/Saturn",
+					"$(PROJECT_DIR)/RommApp/Native/Gambatte",
+					"$(PROJECT_DIR)/RommApp/Native/FCEUmm",
+					"$(PROJECT_DIR)/RommApp/Native/Snes9x",
+					"$(PROJECT_DIR)/RommApp/Native/BeetleNGP",
+					"$(PROJECT_DIR)/RommApp/Native/BeetlePCEFast",
+					"$(PROJECT_DIR)/RommApp/Native/GenesisPlusGX",
+					"$(PROJECT_DIR)/RommApp/Native/ProSystem",
+					"$(PROJECT_DIR)/RommApp/Native/MGBA",
+					"$(PROJECT_DIR)/RommApp/Native/PicoDrive",
 				);
 				MARKETING_VERSION = 0.1;
 				OTHER_LDFLAGS = (
 					"-lfbneo_libretro_ios",
 					"-lbeetle_saturn_ios",
+					"-lgambatte_ios",
+					"-lfceumm_ios",
+					"-lsnes9x_ios",
+					"-lbeetle_ngp_ios",
+					"-lbeetle_pce_fast_ios",
+					"-lgenesis_plus_gx_ios",
+					"-lprosystem_ios",
+					"-lmgba_ios",
+					"-lpicodrive_ios",
 					"-lc++",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev;
@@ -226,12 +254,22 @@
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Info.plist;
 				HEADER_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/RommApp/Native/Libretro",
 					"$(PROJECT_DIR)/RommApp/Native/FBNeo",
 					"$(PROJECT_DIR)/RommApp/Native/Saturn",
+					"$(PROJECT_DIR)/RommApp/Native/Gambatte",
+					"$(PROJECT_DIR)/RommApp/Native/MGBA",
+					"$(PROJECT_DIR)/RommApp/Native/GenesisPlusGX",
+					"$(PROJECT_DIR)/RommApp/Native/BeetlePCEFast",
+					"$(PROJECT_DIR)/RommApp/Native/Snes9x",
+					"$(PROJECT_DIR)/RommApp/Native/FCEUmm",
+					"$(PROJECT_DIR)/RommApp/Native/BeetleNGP",
+					"$(PROJECT_DIR)/RommApp/Native/ProSystem",
+					"$(PROJECT_DIR)/RommApp/Native/PicoDrive",
+					"$(PROJECT_DIR)/RommApp/Native/Archive",
 				);
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet Dev";
 				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -246,11 +284,29 @@
 					"$(inherited)",
 					"$(PROJECT_DIR)/RommApp/Native/FBNeo",
 					"$(PROJECT_DIR)/RommApp/Native/Saturn",
+					"$(PROJECT_DIR)/RommApp/Native/Gambatte",
+					"$(PROJECT_DIR)/RommApp/Native/FCEUmm",
+					"$(PROJECT_DIR)/RommApp/Native/Snes9x",
+					"$(PROJECT_DIR)/RommApp/Native/BeetleNGP",
+					"$(PROJECT_DIR)/RommApp/Native/BeetlePCEFast",
+					"$(PROJECT_DIR)/RommApp/Native/GenesisPlusGX",
+					"$(PROJECT_DIR)/RommApp/Native/ProSystem",
+					"$(PROJECT_DIR)/RommApp/Native/MGBA",
+					"$(PROJECT_DIR)/RommApp/Native/PicoDrive",
 				);
 				MARKETING_VERSION = 0.1;
 				OTHER_LDFLAGS = (
 					"-lfbneo_libretro_ios",
 					"-lbeetle_saturn_ios",
+					"-lgambatte_ios",
+					"-lfceumm_ios",
+					"-lsnes9x_ios",
+					"-lbeetle_ngp_ios",
+					"-lbeetle_pce_fast_ios",
+					"-lgenesis_plus_gx_ios",
+					"-lprosystem_ios",
+					"-lmgba_ios",
+					"-lpicodrive_ios",
 					"-lc++",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev;

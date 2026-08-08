@@ -114,7 +114,7 @@ struct SearchScreen: View {
         // server, so surfacing it here would set up a tap that fails.
         guard !networkMonitor.isOffline else {
             results = keptStore.games
-                .filter { NativeCore.core(for: $0.rom) != nil }
+                .filter { NativeCore.core(bySlug: $0.resolvedCanonicalSlug, isArcade: $0.rom.isArcade) != nil }
                 .map(\.rom)
                 .filter { $0.displayName.localizedCaseInsensitiveContains(searchText) }
                 .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }

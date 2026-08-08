@@ -536,14 +536,29 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         commandBuffer.commit()
     }
 
+    /// Scratch buffer for `.RGB1555`/`.RGB565` frames, reused across calls
+    /// rather than allocated fresh every frame.
+    private var conversionBuffer: [UInt8] = []
+
     private func updateTexture(from frame: LibretroFrame) {
         let width = Int(frame.width)
         let height = Int(frame.height)
-        let pixelFormat = metalPixelFormat(for: frame.pixelFormat)
 
+        // Always bgra8Unorm, converting 16-bit formats ourselves, rather
+        // than trusting Metal's native 16-bit packed texture formats
+        // (.b5g6r5Unorm, .bgr5A1Unorm) to store libretro's bit layout the
+        // way their names suggest. That native path was never actually
+        // exercised until Genesis Plus GX, the first core in this app to
+        // not request XRGB8888, and it rendered a real game as solid
+        // black with no error: either Metal's undocumented packing
+        // differs from libretro's, or the format itself silently failed
+        // to create a texture at all, both real possibilities neither
+        // worth staking correctness on. Converting here uses only
+        // libretro's own documented bit layout (retro_pixel_format in
+        // libretro.h), nothing assumed about Metal's internals.
         if texture == nil || textureWidth != width || textureHeight != height {
             let descriptor = MTLTextureDescriptor.texture2DDescriptor(
-                pixelFormat: pixelFormat, width: width, height: height, mipmapped: false
+                pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false
             )
             descriptor.usage = [.shaderRead]
             texture = device.makeTexture(descriptor: descriptor)
@@ -551,14 +566,51 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
             textureHeight = height
         }
 
+        let bytesPerRow = width * 4
         frame.pixels.withUnsafeBytes { raw in
             guard let base = raw.baseAddress else { return }
-            texture?.replace(
-                region: MTLRegionMake2D(0, 0, width, height),
-                mipmapLevel: 0,
-                withBytes: base,
-                bytesPerRow: Int(frame.bytesPerRow)
-            )
+            switch frame.pixelFormat {
+            case .XRGB8888:
+                texture?.replace(
+                    region: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0,
+                    withBytes: base, bytesPerRow: Int(frame.bytesPerRow)
+                )
+            case .RGB565, .RGB1555:
+                if conversionBuffer.count != bytesPerRow * height {
+                    conversionBuffer = [UInt8](repeating: 0, count: bytesPerRow * height)
+                }
+                let srcStride = Int(frame.bytesPerRow)
+                let is565 = frame.pixelFormat == .RGB565
+                conversionBuffer.withUnsafeMutableBytes { dst in
+                    for y in 0..<height {
+                        let srcRow = base.advanced(by: y * srcStride).assumingMemoryBound(to: UInt16.self)
+                        let dstRow = dst.baseAddress!.advanced(by: y * bytesPerRow).assumingMemoryBound(to: UInt8.self)
+                        for x in 0..<width {
+                            let p = srcRow[x]
+                            let r: UInt8, g: UInt8, b: UInt8
+                            if is565 {
+                                r = UInt8((p >> 11) & 0x1F) << 3
+                                g = UInt8((p >> 5) & 0x3F) << 2
+                                b = UInt8(p & 0x1F) << 3
+                            } else {
+                                r = UInt8((p >> 10) & 0x1F) << 3
+                                g = UInt8((p >> 5) & 0x1F) << 3
+                                b = UInt8(p & 0x1F) << 3
+                            }
+                            dstRow[x * 4] = b
+                            dstRow[x * 4 + 1] = g
+                            dstRow[x * 4 + 2] = r
+                            dstRow[x * 4 + 3] = 255
+                        }
+                    }
+                }
+                texture?.replace(
+                    region: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0,
+                    withBytes: conversionBuffer, bytesPerRow: bytesPerRow
+                )
+            @unknown default:
+                break
+            }
         }
     }
 
@@ -574,33 +626,12 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         let bytesPerRow = width * 4
         var bgra = [UInt8](repeating: 0, count: bytesPerRow * height)
 
-        switch texture.pixelFormat {
-        case .bgra8Unorm:
-            texture.getBytes(&bgra, bytesPerRow: bytesPerRow, from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
-        case .b5g6r5Unorm, .bgr5A1Unorm:
-            var raw = [UInt16](repeating: 0, count: width * height)
-            texture.getBytes(&raw, bytesPerRow: width * 2, from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
-            let is565 = texture.pixelFormat == .b5g6r5Unorm
-            for i in 0..<(width * height) {
-                let p = raw[i]
-                let r, g, b: UInt8
-                if is565 {
-                    r = UInt8((p >> 11) & 0x1F) << 3
-                    g = UInt8((p >> 5) & 0x3F) << 2
-                    b = UInt8(p & 0x1F) << 3
-                } else {
-                    r = UInt8((p >> 10) & 0x1F) << 3
-                    g = UInt8((p >> 5) & 0x1F) << 3
-                    b = UInt8(p & 0x1F) << 3
-                }
-                bgra[i * 4] = b
-                bgra[i * 4 + 1] = g
-                bgra[i * 4 + 2] = r
-                bgra[i * 4 + 3] = 255
-            }
-        default:
-            return nil
-        }
+        // The texture is always bgra8Unorm now: updateTexture converts
+        // every source pixel format itself rather than trusting Metal's
+        // native 16-bit packed formats, so there is only ever one case
+        // to read back here.
+        guard texture.pixelFormat == .bgra8Unorm else { return nil }
+        texture.getBytes(&bgra, bytesPerRow: bytesPerRow, from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
 
         guard let context = CGContext(
             data: &bgra, width: width, height: height, bitsPerComponent: 8, bytesPerRow: bytesPerRow,
@@ -618,15 +649,6 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         format.scale = 1
         return UIGraphicsImageRenderer(size: outputSize, format: format).pngData { _ in
             oriented.draw(in: CGRect(origin: .zero, size: outputSize))
-        }
-    }
-
-    private func metalPixelFormat(for format: LibretroPixelFormat) -> MTLPixelFormat {
-        switch format {
-        case .XRGB8888: return .bgra8Unorm
-        case .RGB565: return .b5g6r5Unorm
-        case .RGB1555: return .bgr5A1Unorm
-        @unknown default: return .bgra8Unorm
         }
     }
 

@@ -73,12 +73,15 @@ struct LaunchChoices {
 
     /// Which player runs the game: the webview (RomM's EmulatorJS page,
     /// the default and the only choice for anything that needs a JIT) or
-    /// the natively compiled core. Arcade offers a real picker, because
-    /// its webview core genuinely works and native is an upgrade on top
-    /// of something already fine. Saturn does not: its webview core
-    /// (confirmed firsthand, not assumed) runs slowed down and crashes,
-    /// so there is no working alternative worth offering a choice
-    /// between, and no picker shows. See `defaultBackend`.
+    /// the natively compiled core. Any platform with a native core offers
+    /// a real picker, because its webview core is RomM's ordinary,
+    /// working EmulatorJS core and native is an upgrade on top of
+    /// something already fine, the same reasoning that always applied to
+    /// Arcade, now applied everywhere it holds. Saturn is the one
+    /// exception: its webview core (confirmed firsthand, not assumed)
+    /// runs slowed down and crashes, so there is no working alternative
+    /// worth offering a choice between, and no picker shows for it. See
+    /// `defaultBackend`.
     enum PlayerBackend: String {
         case webview
         case native
@@ -91,14 +94,14 @@ struct LaunchChoices {
     /// native, since three dead sessions are a stronger signal than any
     /// general preference for the familiar player.
     @MainActor
-    static func defaultBackend(rom: Rom) -> PlayerBackend {
-        // Static, not evidence based, unlike arcade below: there is no
-        // picker for Saturn to record a stored choice or a crash count
-        // against, since GameLaunchView never shows one. This is the one
-        // line to remove if RomM's own Saturn core is ever fixed and a
-        // real choice becomes worth offering again.
-        if rom.platformSlug == "saturn" { return .native }
-        guard rom.isArcade else { return .webview }
+    static func defaultBackend(rom: Rom, canonicalSlug: String) -> PlayerBackend {
+        // Static, not evidence based, unlike everything below: there is
+        // no picker for Saturn to record a stored choice or a crash
+        // count against, since GameLaunchView never shows one. This is
+        // the one line to remove if RomM's own Saturn core is ever
+        // fixed and a real choice becomes worth offering again.
+        if canonicalSlug == "saturn" { return .native }
+        guard NativeCore.core(for: rom, canonicalSlug: canonicalSlug) != nil else { return .webview }
         if let stored = UserDefaults.standard.string(forKey: "romm.backend.rom.\(rom.id)"),
            let backend = PlayerBackend(rawValue: stored) {
             return backend

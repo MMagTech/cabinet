@@ -19,8 +19,11 @@ struct NativeCoreOption: Identifiable {
     var id: String { key }
 }
 
-/// The hand-picked option subsets per core, read from each core's real
+/// The hand-picked option subsets per platform, read from each core's real
 /// `RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2` source rather than guessed.
+/// Keyed by platform rather than by core: Genesis Plus GX serves five
+/// platforms, and a pad type chosen for Genesis is meaningless on Game
+/// Gear, let alone something to silently inherit.
 enum NativeCoreOptions {
     /// Three from FBNeo's 30+ keys (`retro_common.cpp`): the genuinely
     /// relevant ones, excluding Neo-Geo-only, audio, and the
@@ -88,24 +91,115 @@ enum NativeCoreOptions {
         ),
     ]
 
-    static func options(for core: NativeCore) -> [NativeCoreOption] {
-        switch core {
-        case .fbneo: return fbneo
-        case .beetleSaturn: return beetleSaturn
+    /// Gambatte's colorization mode. Not cosmetic for this family: a GBC
+    /// game was designed against real LCD color, and the core's default
+    /// leaves original Game Boy titles rendering in flat greyscale.
+    static let gameBoy: [NativeCoreOption] = [
+        NativeCoreOption(
+            key: "gambatte_gb_colorization",
+            label: "Colorization",
+            detail: "Colors original Game Boy games. Auto picks the most appropriate palette per game.",
+            choices: [
+                .init(value: "disabled", label: "Off"),
+                .init(value: "auto", label: "Auto"),
+                .init(value: "GBC", label: "Game Boy Color"),
+                .init(value: "SGB", label: "Super Game Boy"),
+            ],
+            defaultValue: "disabled"
+        ),
+    ]
+
+    /// mGBA's interframe blending. Some GBA games drive transparency by
+    /// flickering sprites every other frame and rely on the LCD to blur
+    /// them together, so without this those effects render as flicker.
+    static let gameBoyAdvance: [NativeCoreOption] = [
+        NativeCoreOption(
+            key: "mgba_interframe_blending",
+            label: "Interframe blending",
+            detail: "Blends consecutive frames. Games that flicker sprites for transparency need this to look right.",
+            // Values are the core's own, case-sensitive: "OFF", "mix",
+            // "mix_smart", "lcd_ghosting", "lcd_ghosting_fast".
+            choices: [
+                .init(value: "OFF", label: "Off"),
+                .init(value: "mix", label: "Simple"),
+                .init(value: "mix_smart", label: "Smart"),
+                .init(value: "lcd_ghosting", label: "LCD ghosting"),
+            ],
+            defaultValue: "OFF"
+        ),
+    ]
+
+    /// Genesis pad type. Stored like a core option but applied through
+    /// `retro_set_controller_port_device`, which is why the values here are
+    /// the RetroPad device ids rather than strings the core parses.
+    static let genesisPad = NativeCoreOption(
+        key: "pad-type",
+        label: "Controller",
+        detail: "Six-button games need the six-button pad; some three-button games misread it.",
+        choices: [
+            .init(value: "\(NativePadDevice.threeButton)", label: "3-button"),
+            .init(value: "\(NativePadDevice.sixButton)", label: "6-button"),
+        ],
+        defaultValue: "\(NativePadDevice.threeButton)"
+    )
+
+    static let genesis: [NativeCoreOption] = [genesisPad]
+
+    /// Sega CD boots off a region-matched BIOS, so a disc paired with the
+    /// wrong region simply does not start. Region detection is the lever
+    /// that decides which one the core reaches for.
+    static let segaCD: [NativeCoreOption] = [
+        NativeCoreOption(
+            key: "genesis_plus_gx_region_detect",
+            label: "Region",
+            detail: "Which region BIOS the disc boots against. A mismatch stops the game from starting at all.",
+            choices: [
+                .init(value: "auto", label: "Auto"),
+                .init(value: "ntsc-u", label: "NTSC-U"),
+                .init(value: "pal", label: "PAL"),
+                .init(value: "ntsc-j", label: "NTSC-J"),
+            ],
+            defaultValue: "auto"
+        ),
+        genesisPad,
+    ]
+
+    /// Per-platform option sets. A platform absent from this switch has no
+    /// options worth exposing, per docs/scope-native-core-settings.md:
+    /// only what decides whether a game boots or looks fundamentally
+    /// different clears the bar, never preference or performance toggles.
+    static func options(for platform: NativePlatform) -> [NativeCoreOption] {
+        switch platform {
+        case .arcade: return fbneo
+        case .saturn: return beetleSaturn
+        case .gb, .gbc: return gameBoy
+        case .gba: return gameBoyAdvance
+        case .genesis, .sega32X: return genesis
+        case .segaCD: return segaCD
+        default: return []
         }
     }
 }
 
-/// Per-core option values, stored in UserDefaults under a key namespaced
-/// by core and libretro key. Values fall back to the option's own default
-/// when unset, matching how the core itself treats a missing key.
+/// RetroPad device ids for the Genesis pad, `RETRO_DEVICE_SUBCLASS` of
+/// `RETRO_DEVICE_JOYPAD` as Genesis Plus GX defines them in its own
+/// libretro.c, not guessed.
+enum NativePadDevice {
+    static let threeButton: UInt32 = (0 + 1) << 8 | 1
+    static let sixButton: UInt32 = (1 + 1) << 8 | 1
+}
+
+/// Per-platform option values, stored in UserDefaults under a key
+/// namespaced by platform and libretro key. Values fall back to the
+/// option's own default when unset, matching how the core itself treats a
+/// missing key.
 enum NativeCoreOptionsStore {
-    private static func key(core: NativeCore, option: String) -> String {
-        "com.mmagtech.RommApp.nativeCoreOption.\(core.storageKey).\(option)"
+    private static func key(platform: NativePlatform, option: String) -> String {
+        "com.mmagtech.RommApp.nativeCoreOption.\(platform.storageKey).\(option)"
     }
 
-    static func value(_ option: NativeCoreOption, for core: NativeCore) -> String {
-        let stored = UserDefaults.standard.string(forKey: key(core: core, option: option.key))
+    static func value(_ option: NativeCoreOption, for platform: NativePlatform) -> String {
+        let stored = UserDefaults.standard.string(forKey: key(platform: platform, option: option.key))
         // A stored value the option no longer lists is discarded, not
         // trusted: an early build saved values FBNeo doesn't accept, and
         // anything stale from that build must fall back to the default
@@ -116,11 +210,11 @@ enum NativeCoreOptionsStore {
         return stored
     }
 
-    static func setValue(_ value: String, for option: NativeCoreOption, core: NativeCore) {
-        UserDefaults.standard.set(value, forKey: key(core: core, option: option.key))
+    static func setValue(_ value: String, for option: NativeCoreOption, platform: NativePlatform) {
+        UserDefaults.standard.set(value, forKey: key(platform: platform, option: option.key))
     }
 
-    /// The options dictionary for a core, ready for
+    /// The options dictionary for a platform, ready for
     /// `LibretroFrontend.setCoreOptions:`. Deliberately only the keys
     /// someone actually changed in Settings, not every option at its
     /// default: sending a value the core recognizes still changes how
@@ -129,15 +223,28 @@ enum NativeCoreOptionsStore {
     /// doesn't answer `SET_CORE_OPTIONS_V2` (a real, already-known gap).
     /// Games nobody has touched a core option for get exactly the empty
     /// dictionary this app always sent before this feature existed.
-    static func dictionary(for core: NativeCore) -> [String: String] {
+    ///
+    /// The pad type is excluded: it is not a core variable, it reaches the
+    /// core through `padDevice(for:)` instead.
+    static func dictionary(for platform: NativePlatform) -> [String: String] {
         var result: [String: String] = [:]
-        for option in NativeCoreOptions.options(for: core) {
-            let storageKey = key(core: core, option: option.key)
+        for option in NativeCoreOptions.options(for: platform)
+        where option.key != NativeCoreOptions.genesisPad.key {
+            let storageKey = key(platform: platform, option: option.key)
             guard let stored = UserDefaults.standard.string(forKey: storageKey),
                   option.choices.contains(where: { $0.value == stored })
             else { continue }
             result[option.key] = stored
         }
         return result
+    }
+
+    /// The RetroPad device port 0 should present, or 0 to leave the core's
+    /// own default in place.
+    static func padDevice(for platform: NativePlatform) -> UInt32 {
+        let option = NativeCoreOptions.genesisPad
+        guard NativeCoreOptions.options(for: platform).contains(where: { $0.key == option.key })
+        else { return 0 }
+        return UInt32(value(option, for: platform)) ?? 0
     }
 }

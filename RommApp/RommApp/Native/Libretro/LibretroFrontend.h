@@ -14,6 +14,15 @@ typedef NS_ENUM(uint32_t, LibretroPixelFormat) {
 typedef NS_ENUM(NSInteger, LibretroCoreID) {
     LibretroCoreIDFBNeo NS_SWIFT_NAME(fbneo) = 0,
     LibretroCoreIDBeetleSaturn NS_SWIFT_NAME(beetleSaturn) = 1,
+    LibretroCoreIDGambatte NS_SWIFT_NAME(gambatte) = 2,
+    LibretroCoreIDMGBA NS_SWIFT_NAME(mgba) = 3,
+    LibretroCoreIDGenesisPlusGX NS_SWIFT_NAME(genesisPlusGX) = 4,
+    LibretroCoreIDBeetlePCEFast NS_SWIFT_NAME(beetlePCEFast) = 5,
+    LibretroCoreIDSnes9x NS_SWIFT_NAME(snes9x) = 6,
+    LibretroCoreIDFCEUmm NS_SWIFT_NAME(fceumm) = 7,
+    LibretroCoreIDBeetleNGP NS_SWIFT_NAME(beetleNGP) = 8,
+    LibretroCoreIDProSystem NS_SWIFT_NAME(prosystem) = 9,
+    LibretroCoreIDPicoDrive NS_SWIFT_NAME(picoDrive) = 10,
 };
 
 @interface LibretroFrame : NSObject
@@ -43,6 +52,12 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 // the core's own defaults. FBNeo needs none; Beetle Saturn's speed levers
 // live here.
 - (void)setCoreOptions:(NSDictionary<NSString *, NSString *> *)options;
+
+// The device type port 0 is told to present, applied right after the game
+// loads. Not a core variable: Genesis Plus GX picks 3-button versus
+// 6-button through retro_set_controller_port_device, so it cannot ride
+// along in the options dictionary. 0 leaves the core's own default alone.
+- (void)setControllerPortDevice:(unsigned)device;
 
 // romPath: full path to the game file (zip for arcade, chd for CD systems).
 // systemDirectory: where the core looks up BIOS files by name, the same

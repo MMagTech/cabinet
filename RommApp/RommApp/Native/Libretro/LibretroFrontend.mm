@@ -2,6 +2,15 @@
 #include "LibretroCoreAPI.h"
 #import "FBNeoCore.h"
 #import "SaturnCore.h"
+#import "GambatteCore.h"
+#import "MGBACore.h"
+#import "GenesisPlusGXCore.h"
+#import "BeetlePCEFastCore.h"
+#import "Snes9xCore.h"
+#import "FCEUmmCore.h"
+#import "BeetleNGPCore.h"
+#import "ProSystemCore.h"
+#import "PicoDriveCore.h"
 #include <string>
 #include <vector>
 #include <mutex>
@@ -30,6 +39,7 @@ namespace {
 
 const LibretroCoreAPI *gCore = nullptr;
 LibretroCoreID gCoreID = LibretroCoreIDFBNeo;
+unsigned gPortDevice = 0;
 bool gInitialized = false;
 bool gGameLoaded = false;
 
@@ -151,6 +161,16 @@ bool environmentCallback(unsigned cmd, void *data) {
             return true;
         case RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME:
             return true;
+        case RETRO_ENVIRONMENT_GET_CAN_DUPE:
+            // videoRefresh already treats a null data pointer as "same as
+            // last frame, nothing changed" and skips the copy, exactly
+            // what this flag promises; it was just never actually
+            // advertised. Gambatte is the one core so far that refuses
+            // to load at all without an explicit yes here ("[Gambatte]
+            // Cannot dupe frames!", found 2026-08-08 on a real device,
+            // a valid, correctly-extracted ROM rejected outright).
+            *(bool *)data = true;
+            return true;
         case RETRO_ENVIRONMENT_SET_ROTATION:
             // Vertical (TATE) boards render sideways in the framebuffer
             // and ask the frontend to rotate the picture. Value is in
@@ -192,6 +212,24 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
             return FBNeoCoreAPI();
         case LibretroCoreIDBeetleSaturn:
             return BeetleSaturnCoreAPI();
+        case LibretroCoreIDGambatte:
+            return GambatteCoreAPI();
+        case LibretroCoreIDMGBA:
+            return MGBACoreAPI();
+        case LibretroCoreIDGenesisPlusGX:
+            return GenesisPlusGXCoreAPI();
+        case LibretroCoreIDBeetlePCEFast:
+            return BeetlePCEFastCoreAPI();
+        case LibretroCoreIDSnes9x:
+            return Snes9xCoreAPI();
+        case LibretroCoreIDFCEUmm:
+            return FCEUmmCoreAPI();
+        case LibretroCoreIDBeetleNGP:
+            return BeetleNGPCoreAPI();
+        case LibretroCoreIDProSystem:
+            return ProSystemCoreAPI();
+        case LibretroCoreIDPicoDrive:
+            return PicoDriveCoreAPI();
     }
     return FBNeoCoreAPI();
 }
@@ -241,12 +279,39 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     gOptions = [options copy];
 }
 
+- (void)setControllerPortDevice:(unsigned)device {
+    gPortDevice = device;
+}
+
 - (nullable NSString *)loadGame:(NSString *)romPath systemDirectory:(NSString *)systemDirectory {
     if (!gCore) {
         gCore = coreAPI(gCoreID);
     }
     gSystemDirectory = systemDirectory.fileSystemRepresentation;
     gSaveDirectory = systemDirectory.fileSystemRepresentation;
+
+    // A second game on the same already-active core skipped all of this
+    // entirely: `activateCore:` only tears a core down when switching to
+    // a different one, never when staying on the same one for a second
+    // game, so `loadGame:` itself has to enforce it. A plain
+    // retro_unload_game before the new retro_load_game (what this used
+    // to do) was enough to stop Genesis Plus GX corrupting memory across
+    // games (a real EXC_BAD_ACCESS in blip_delete, found 2026-08-08 from
+    // a crash log), but Beetle PCE Fast needs more: it loads correctly
+    // as the first game a process ever runs and then fails every game
+    // after, unload included, confirmed on a real device by loading the
+    // exact same game alone in a fresh process versus second in a
+    // session. Not every core's internal state resets cleanly from
+    // unload_game alone, so a full deinit before the fresh init below is
+    // the one guarantee that holds for all of them: this is exactly the
+    // teardown a core switch already gets, just now applied every time,
+    // not only when the core itself changes.
+    if (gInitialized && gGameLoaded) {
+        gCore->unload_game();
+        gCore->deinit();
+        gInitialized = false;
+    }
+    gGameLoaded = false;
 
     if (!gInitialized) {
         gCore->set_environment(environmentCallback);
@@ -259,6 +324,21 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
         gInitialized = true;
     }
 
+    // Reset to libretro's own documented default (0RGB1555) before this
+    // load, not left however the last core's SET_PIXEL_FORMAT call (or
+    // lack of one) happened to leave it. FBNeo and Saturn both request
+    // XRGB8888 explicitly, which is why `gPixelFormat`'s own initial
+    // value matched them by coincidence and nobody noticed this was
+    // missing. Genesis Plus GX never calls SET_PIXEL_FORMAT at all in
+    // this build (FRONTEND_SUPPORTS_RGB565 isn't defined, so it always
+    // stays on the spec default), so without this reset its real
+    // 16-bit-per-pixel frames get read as 32-bit XRGB8888 leftover from
+    // whatever ran before it, wrong stride, wrong byte count, silently:
+    // no crash, just a black screen. Found 2026-08-08 the same way as
+    // the audio crash, a real device test with correct controls and
+    // input but nothing on screen.
+    gPixelFormat = LibretroPixelFormatRGB1555;
+
     struct retro_game_info info = {};
     std::string path = romPath.fileSystemRepresentation;
     info.path = path.c_str();
@@ -266,10 +346,39 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     info.size = 0;
     info.meta = nullptr;
 
+    // FBNeo and Beetle Saturn, the only two cores this frontend carried
+    // until this session, both read the ROM themselves given a path
+    // (need_fullpath true in their own retro_get_system_info), so a
+    // path-only retro_game_info was never wrong, just accidentally
+    // narrow. Several of the cores added alongside them, Gambatte, mGBA,
+    // Snes9x and ProSystem confirmed by reading each core's own
+    // retro_get_system_info, report need_fullpath false: they expect the
+    // frontend to have already read the file and handed over the bytes,
+    // and reject anything with a null data pointer outright. Found
+    // 2026-08-08 from "the core rejected the ROM" on every one of them.
+    // std::vector, not NSData: its buffer must outlive this call but
+    // needs no cleanup after, load_game copies out whatever it keeps.
+    std::vector<uint8_t> fileBytes;
+    struct retro_system_info sysInfo = {};
+    gCore->get_system_info(&sysInfo);
+    if (!sysInfo.need_fullpath) {
+        NSData *data = [NSData dataWithContentsOfFile:romPath];
+        if (!data) {
+            return @"Couldn't read the ROM file from disk";
+        }
+        fileBytes.assign((const uint8_t *)data.bytes, (const uint8_t *)data.bytes + data.length);
+        info.data = fileBytes.data();
+        info.size = fileBytes.size();
+    }
+
     if (!gCore->load_game(&info)) {
         return @"retro_load_game returned false, the core rejected the ROM or couldn't find its BIOS";
     }
     gGameLoaded = true;
+
+    if (gPortDevice != 0) {
+        gCore->set_controller_port_device(0, gPortDevice);
+    }
 
     struct retro_system_av_info avInfo = {};
     gCore->get_system_av_info(&avInfo);

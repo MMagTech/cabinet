@@ -193,7 +193,9 @@ private struct GameContextMenu: ViewModifier {
             // mechanism. Three labels, not two, since this menu has no
             // companion caption line the way the launch screen's toggle
             // does to explain an in-progress download on its own.
-            if KeptGameStore.isKeepable(rom) {
+            if KeptGameStore.isKeepable(
+                rom, canonicalSlug: rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
+            ) {
                 if keptStore.downloading[romId] != nil {
                     Button {
                         keptStore.remove(romId: romId)

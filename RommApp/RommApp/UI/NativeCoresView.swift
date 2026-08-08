@@ -1,24 +1,31 @@
 import SwiftUI
 
-/// Settings > Native cores: one row per core with a native implementation,
-/// each pushing to that core's own options page. In Settings rather than
-/// in-game because these are abstract toggles with nothing to visually
-/// compare, per docs/scope-native-core-settings.md.
+/// Settings > Native cores: one row per platform with a native
+/// implementation and at least one option worth exposing, each pushing to
+/// that platform's own options page. In Settings rather than in-game
+/// because these are abstract toggles with nothing to visually compare,
+/// per docs/scope-native-core-settings.md.
+///
+/// Listed by platform, not by core. Several platforms share one core
+/// binary, and options set for one of them are not meaningful on the
+/// others.
 struct NativeCoresView: View {
-    private let cores: [NativeCore] = [.fbneo, .beetleSaturn]
+    private var platforms: [NativePlatform] {
+        NativePlatform.allCases.filter { !NativeCoreOptions.options(for: $0).isEmpty }
+    }
 
     var body: some View {
         List {
             Section {
-                ForEach(cores, id: \.storageKey) { core in
+                ForEach(platforms, id: \.rawValue) { platform in
                     NavigationLink {
-                        NativeCoreOptionsView(core: core)
+                        NativeCoreOptionsView(platform: platform)
                     } label: {
-                        Text(core.displayName)
+                        Text(platform.displayName)
                     }
                 }
             } footer: {
-                Text("Options apply to every game that core runs, not just the one you're currently playing.")
+                Text("Options apply to every game on this platform, not just the one you're currently playing.")
             }
         }
         .navigationTitle("Native cores")
@@ -27,11 +34,11 @@ struct NativeCoresView: View {
 }
 
 private struct NativeCoreOptionsView: View {
-    let core: NativeCore
+    let platform: NativePlatform
     @State private var values: [String: String] = [:]
 
     private var options: [NativeCoreOption] {
-        NativeCoreOptions.options(for: core)
+        NativeCoreOptions.options(for: platform)
     }
 
     var body: some View {
@@ -48,11 +55,11 @@ private struct NativeCoreOptionsView: View {
                 }
             }
         }
-        .navigationTitle(core.displayName)
+        .navigationTitle(platform.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             for option in options {
-                values[option.key] = NativeCoreOptionsStore.value(option, for: core)
+                values[option.key] = NativeCoreOptionsStore.value(option, for: platform)
             }
         }
     }
@@ -62,7 +69,7 @@ private struct NativeCoreOptionsView: View {
             get: { values[option.key] ?? option.defaultValue },
             set: { newValue in
                 values[option.key] = newValue
-                NativeCoreOptionsStore.setValue(newValue, for: option, core: core)
+                NativeCoreOptionsStore.setValue(newValue, for: option, platform: platform)
             }
         )
     }

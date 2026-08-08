@@ -12,6 +12,7 @@ extern "C" {
     void bsat_retro_set_audio_sample_batch(retro_audio_sample_batch_t);
     void bsat_retro_set_input_poll(retro_input_poll_t);
     void bsat_retro_set_input_state(retro_input_state_t);
+    void bsat_retro_set_controller_port_device(unsigned, unsigned);
     void bsat_retro_init(void);
     void bsat_retro_deinit(void);
     bool bsat_retro_load_game(const struct retro_game_info *);
@@ -34,6 +35,7 @@ const LibretroCoreAPI *BeetleSaturnCoreAPI(void) {
         .set_audio_sample_batch = bsat_retro_set_audio_sample_batch,
         .set_input_poll = bsat_retro_set_input_poll,
         .set_input_state = bsat_retro_set_input_state,
+        .set_controller_port_device = bsat_retro_set_controller_port_device,
         .init = bsat_retro_init,
         .deinit = bsat_retro_deinit,
         .load_game = bsat_retro_load_game,
