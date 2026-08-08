@@ -116,11 +116,15 @@ struct HomeView: View {
                 // app has cut back to only where it applies.
                 if !KeptGameStore.shared.offlinePlatforms().isEmpty {
                     ToolbarItem(placement: .topBarLeading) {
+                        // No explicit tint: the app has no custom accent
+                        // color, so leaving this alone inherits the same
+                        // system blue the Home tab icon already uses,
+                        // guaranteed to match rather than a hardcoded
+                        // guess at it.
                         Toggle(isOn: $networkMonitor.manualOfflineMode) {
                             Label("Offline Mode", systemImage: "airplane")
                         }
                         .toggleStyle(.button)
-                        .tint(.orange)
                     }
                 }
             }
