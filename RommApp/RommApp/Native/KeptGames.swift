@@ -502,7 +502,20 @@ final class KeptGameStore: ObservableObject {
             let folder = mirrorFolder(for: game, kind: isROM ? "roms" : "bios")
             try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             let target = folder.appendingPathComponent(Self.safeComponent(file.lastPathComponent))
-            guard !FileManager.default.fileExists(atPath: target.path) else { continue }
+            // A file already sitting at this exact path, whose inode is
+            // not the one we are about to link (confirmed above, this
+            // file's inode matched nothing currently tracked), is debris
+            // from an earlier incarnation of this same kept game, most
+            // likely a manifest that stopped decoding after a past
+            // structural change and left its Files copy behind with
+            // nothing tracking it any more. Removed, not skipped: found
+            // on device (Marcus, 2026-08-08) silently declining to link
+            // here left a legitimately re-kept game permanently invisible
+            // in Files, since nothing else ever revisits an occupied
+            // path once this loop moves past it.
+            if FileManager.default.fileExists(atPath: target.path) {
+                try? FileManager.default.removeItem(at: target)
+            }
             try? FileManager.default.linkItem(at: file, to: target)
             Self.excludeFromBackup(target)
         }
