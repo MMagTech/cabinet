@@ -358,6 +358,33 @@ final class KeptGameStore: ObservableObject {
         }
     }
 
+    /// Replaces a migrated entry's stand-in `Rom` with the real thing,
+    /// for every kept game still flagged `needsMetadataRefresh`. The
+    /// files on disk never needed this to be safe, they were never at
+    /// risk; this is purely about a stub entry stopping looking like
+    /// one, real cover art, exact platform data, the moment there is a
+    /// connection to ask for it. A rom that fails to fetch (deleted
+    /// from the server, momentarily unreachable) stays flagged and
+    /// tries again next opportunity, the same tolerant shape as
+    /// `syncPendingStates`.
+    func refreshStaleMetadata(session: Session) async {
+        for game in games where game.needsMetadataRefresh == true {
+            guard let freshRom = try? await session.rom(id: game.romId) else { continue }
+            guard let index = games.firstIndex(where: { $0.romId == game.romId }) else { continue }
+            let dir = directory(for: game.romId)
+            let old = games[index]
+            let updated = KeptGame(
+                rom: freshRom, totalBytes: old.totalBytes, keptAt: old.keptAt,
+                fileId: old.fileId, webFileName: old.webFileName, contentLength: old.contentLength,
+                stateId: old.stateId, stateUpdatedAt: old.stateUpdatedAt, needsMetadataRefresh: nil
+            )
+            games[index] = updated
+            if let manifestData = try? JSONEncoder().encode(updated) {
+                try? manifestData.write(to: dir.appendingPathComponent("manifest.json"))
+            }
+        }
+    }
+
     /// Recomputes and persists a kept game's stored size after a queue
     /// write or upload changes what is actually on disk, so Storage
     /// stays honest about what a kept game costs rather than reporting

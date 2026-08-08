@@ -24,18 +24,22 @@ struct RommApp: App {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 KeptGameStore.shared.reconcileFilesFolder()
-                syncPendingStatesIfOnline()
+                syncIfOnline()
             }
         }
         // Automatic, anywhere in the app, matching the rest of Offline
-        // Mode: a queued save should not need its own game's screen
-        // revisited to go up, only a connection to actually use.
-        .onChange(of: networkMonitor.isConnected) { _, _ in syncPendingStatesIfOnline() }
-        .onChange(of: networkMonitor.manualOfflineMode) { _, _ in syncPendingStatesIfOnline() }
+        // Mode: a queued save, or a stub entry from a past format
+        // change, should not need its own game's screen revisited,
+        // only a connection to actually use.
+        .onChange(of: networkMonitor.isConnected) { _, _ in syncIfOnline() }
+        .onChange(of: networkMonitor.manualOfflineMode) { _, _ in syncIfOnline() }
     }
 
-    private func syncPendingStatesIfOnline() {
+    private func syncIfOnline() {
         guard !networkMonitor.isOffline else { return }
-        Task { await KeptGameStore.shared.syncPendingStates(session: session) }
+        Task {
+            await KeptGameStore.shared.syncPendingStates(session: session)
+            await KeptGameStore.shared.refreshStaleMetadata(session: session)
+        }
     }
 }
