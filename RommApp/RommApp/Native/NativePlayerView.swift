@@ -282,6 +282,12 @@ struct NativePlayerView: View {
         return "\(rom.fsNameNoExt) [\(stamp)]"
     }
 
+    /// A kept game writes locally before anything else, the one
+    /// guarantee that matters: losing signal mid-save must never mean
+    /// losing the save. A game played natively without being kept has
+    /// no local directory to write into and never needed one, since
+    /// native play without a connection was never possible for it in
+    /// the first place, so it keeps the plain direct upload.
     private func saveState() {
         guard let state = LibretroFrontend.shared.serializeState() else {
             menuStatus = "The core produced no state to save."
@@ -291,53 +297,87 @@ struct NativePlayerView: View {
         // holds the exact frame being saved. The webview player does the
         // same one frame before its pause for the same reason.
         let screenshot = renderer.screenshotPNG()
+        let stem = stateFileStem()
+
+        guard KeptGameStore.shared.kept(romId: rom.id) != nil else {
+            menuBusy = true
+            menuStatus = "Uploading\u{2026}"
+            Task {
+                do {
+                    try await session.uploadState(
+                        romId: rom.id, emulator: core.emulatorTag, fileName: "\(stem).state",
+                        stateData: state, screenshotName: screenshot != nil ? "\(stem).png" : nil,
+                        screenshotData: screenshot
+                    )
+                    menuStatus = "Saved to RomM."
+                } catch {
+                    menuStatus = error.localizedDescription
+                }
+                menuBusy = false
+            }
+            return
+        }
+
+        KeptGameStore.shared.queuePendingState(romId: rom.id, stem: stem, stateData: state, screenshotData: screenshot)
         menuBusy = true
         menuStatus = "Uploading\u{2026}"
-        let stem = stateFileStem()
         Task {
-            do {
-                try await session.uploadState(
-                    romId: rom.id,
-                    emulator: core.emulatorTag,
-                    fileName: "\(stem).state",
-                    stateData: state,
-                    screenshotName: screenshot != nil ? "\(stem).png" : nil,
-                    screenshotData: screenshot
-                )
-                menuStatus = "Saved to RomM."
-            } catch {
-                menuStatus = error.localizedDescription
-            }
+            await KeptGameStore.shared.syncPendingStates(session: session)
+            // Queued means this exact save is still sitting locally,
+            // whether this attempt never had a connection or the
+            // upload itself failed; either way "waiting" is the honest
+            // word, offline already explains itself.
+            let stillQueued = KeptGameStore.shared.pendingStates(for: rom.id).contains { $0.stem == stem }
+            menuStatus = stillQueued ? "Waiting for signal to upload." : "Saved to RomM."
             menuBusy = false
         }
     }
 
+    /// Offline, or simply not reachable right now, falls back to
+    /// whichever save is genuinely newest on the phone, the downloaded
+    /// resume state or a still-queued local one. Online, the server
+    /// stays the source of truth, since another device may have saved
+    /// something Cabinet has not seen yet.
     private func loadLatestState() {
-        menuBusy = true
-        menuStatus = "Fetching\u{2026}"
-        Task {
-            do {
-                let states = try await session.states(romId: rom.id)
-                    .filter { $0.emulator == core.emulatorTag }
-                    .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
-                guard let latest = states.first else {
-                    menuStatus = "No states for this core on the server."
+        guard KeptGameStore.shared.kept(romId: rom.id) != nil, NetworkMonitor.shared.isOffline else {
+            menuBusy = true
+            menuStatus = "Fetching\u{2026}"
+            Task {
+                do {
+                    let states = try await session.states(romId: rom.id)
+                        .filter { $0.emulator == core.emulatorTag }
+                        .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
+                    guard let latest = states.first else {
+                        menuStatus = "No states for this core on the server."
+                        menuBusy = false
+                        return
+                    }
+                    let bytes = try await session.stateContent(latest)
+                    if LibretroFrontend.shared.unserializeState(bytes) {
+                        menuStatus = nil
+                        menuBusy = false
+                        closeMenu()
+                    } else {
+                        menuStatus = "The core rejected that state. It was likely written by a different core build."
+                        menuBusy = false
+                    }
+                } catch {
+                    menuStatus = error.localizedDescription
                     menuBusy = false
-                    return
                 }
-                let bytes = try await session.stateContent(latest)
-                if LibretroFrontend.shared.unserializeState(bytes) {
-                    menuStatus = nil
-                    menuBusy = false
-                    closeMenu()
-                } else {
-                    menuStatus = "The core rejected that state. It was likely written by a different core build."
-                    menuBusy = false
-                }
-            } catch {
-                menuStatus = error.localizedDescription
-                menuBusy = false
             }
+            return
+        }
+
+        guard let bytes = KeptGameStore.shared.newestLocalState(for: rom.id) else {
+            menuStatus = "No local state for this game yet."
+            return
+        }
+        if LibretroFrontend.shared.unserializeState(bytes) {
+            menuStatus = nil
+            closeMenu()
+        } else {
+            menuStatus = "The core rejected that state. It was likely written by a different core build."
         }
     }
 }

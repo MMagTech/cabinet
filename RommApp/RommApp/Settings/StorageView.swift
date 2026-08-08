@@ -47,6 +47,12 @@ struct StorageView: View {
                                 Text(byteCount(game.totalBytes))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                let pending = keptStore.pendingStateCount(for: game.romId)
+                                if pending > 0 {
+                                    Text("\(pending) save\(pending == 1 ? "" : "s") waiting to upload")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
                         .swipeActions {
@@ -58,7 +64,7 @@ struct StorageView: View {
                 } header: {
                     Text("Kept games")
                 } footer: {
-                    Text("\(byteCount(keptStore.totalBytes)) kept. These files also appear in the Files app, under Cabinet, Games, laid out like your RomM library; copy them to other apps from there. Deleting one there removes it here too. Nothing clears on its own.")
+                    Text("\(byteCount(keptStore.totalBytes)) kept. These files also appear in the Files app, laid out like your RomM library; copy them to other apps from there. Deleting one there removes it here too. Nothing clears on its own.")
                 }
             }
 

@@ -636,6 +636,12 @@ struct GameLaunchView: View {
                 // cached, which needs a connection either way.
                 if let local = keptStore.localState(for: rom.id), local.stateId == selectedState.id {
                     nativeInitialState = local.data
+                } else if let pending = keptStore.pendingStates(for: rom.id)
+                    .first(where: { $0.stem.hashValue == selectedState.id }),
+                    let data = try? Data(contentsOf: pending.stateURL) {
+                    // A save still waiting to upload: the only copy of
+                    // it is the one on this phone, network or not.
+                    nativeInitialState = data
                 } else {
                     guard let bytes = try? await session.stateContent(selectedState) else {
                         playError = "Couldn't reach the server to load that state."
@@ -708,6 +714,15 @@ struct GameLaunchView: View {
 
     private func byteCount(_ bytes: Int64) -> String {
         ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+
+    /// A queued save's file date, in the same format a server
+    /// `updatedAt` string arrives in, so `RommDate.relativeLabel` reads
+    /// it identically either way.
+    private static func isoStamp(_ date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: date)
     }
 
     /// The offer to pick an interrupted run back up. A card like the others,
@@ -1090,6 +1105,12 @@ struct GameLaunchView: View {
                 Text(keptCaption)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                let pending = keptStore.pendingStateCount(for: rom.id)
+                if pending > 0 {
+                    Text("\(pending) save\(pending == 1 ? "" : "s") waiting to upload")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             } else if let error = keptStore.errors[rom.id] {
                 Text(error)
                     .font(.caption)
@@ -1479,16 +1500,27 @@ struct GameLaunchView: View {
             states = []
         }
 
-        // A kept game's local state belongs in the list either way:
-        // offline it is the only thing there is to offer, online it is
-        // already present above unless the refresh just started
-        // replacing it with something the live fetch has not caught up
-        // to yet, in which case showing both would be the same state
-        // twice under two different labels.
-        if let core = NativeCore.core(for: rom),
-           let local = keptStore.localState(for: rom.id),
-           !states.contains(where: { $0.id == local.stateId }) {
-            states.append(GameState(localStateId: local.stateId, updatedAt: local.updatedAt, emulator: core.emulatorTag))
+        // A kept game's local states belong in the list either way:
+        // offline they are the only thing there is to offer, online they
+        // are already present above unless a refresh has not caught up
+        // yet, in which case showing both would be the same state twice
+        // under two different labels. Every queued save gets its own
+        // row too, not just the newest, so a trip with several saves
+        // offers every one of them back, not only the last.
+        if let core = NativeCore.core(for: rom) {
+            if let local = keptStore.localState(for: rom.id),
+               !states.contains(where: { $0.id == local.stateId }) {
+                states.append(GameState(localStateId: local.stateId, updatedAt: local.updatedAt, emulator: core.emulatorTag))
+            }
+            for pending in keptStore.pendingStates(for: rom.id) {
+                let syntheticId = pending.stem.hashValue
+                guard !states.contains(where: { $0.id == syntheticId }) else { continue }
+                states.append(
+                    GameState(
+                        localStateId: syntheticId, updatedAt: Self.isoStamp(pending.savedAt), emulator: core.emulatorTag
+                    )
+                )
+            }
             states.sort { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
         }
 

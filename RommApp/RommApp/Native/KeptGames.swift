@@ -94,7 +94,7 @@ final class KeptGameStore: ObservableObject {
     /// Files inside a kept game's private directory that never become a
     /// Files app link: the manifest is bookkeeping, and the cached state
     /// stays internal per the platform-shape decision above.
-    private static let internalOnly: Set<String> = ["manifest.json", stateFileName]
+    private static let internalOnly: Set<String> = ["manifest.json", stateFileName, pendingStatesDirName]
 
     var totalBytes: Int64 {
         games.reduce(0) { $0 + $1.totalBytes }
@@ -241,6 +241,130 @@ final class KeptGameStore: ObservableObject {
             if let manifestData = try? JSONEncoder().encode(updated) {
                 try? manifestData.write(to: dir.appendingPathComponent("manifest.json"))
             }
+        }
+    }
+
+    /// Save states made for a kept game that have not yet reached RomM,
+    /// never linked into the Files mirror, same reasoning as the single
+    /// cached state: core-format-specific, no use to another app. The
+    /// directory itself is the queue, no separate manifest to keep in
+    /// sync: a file existing here means it still owes an upload, its
+    /// absence means the upload already succeeded. Append-only by
+    /// construction, each file already carries the same timestamped
+    /// name RomM itself would give it, so nothing here ever overwrites
+    /// anything, sync is only ever "finish the uploads."
+    private static let pendingStatesDirName = "pending-states"
+
+    private func pendingStatesDirectory(for romId: Int) -> URL {
+        directory(for: romId).appendingPathComponent(Self.pendingStatesDirName, isDirectory: true)
+    }
+
+    /// Every save still owed to RomM for this kept game, newest first.
+    func pendingStates(for romId: Int) -> [(stem: String, stateURL: URL, screenshotURL: URL?, savedAt: Date)] {
+        let dir = pendingStatesDirectory(for: romId)
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: dir, includingPropertiesForKeys: [.contentModificationDateKey]
+        ) else { return [] }
+        return entries
+            .filter { $0.pathExtension == "state" }
+            .map { url -> (stem: String, stateURL: URL, screenshotURL: URL?, savedAt: Date) in
+                let stem = url.deletingPathExtension().lastPathComponent
+                let screenshot = dir.appendingPathComponent("\(stem).png")
+                let savedAt = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
+                    ?? Date.distantPast
+                return (
+                    stem, url,
+                    FileManager.default.fileExists(atPath: screenshot.path) ? screenshot : nil, savedAt
+                )
+            }
+            .sorted { $0.savedAt > $1.savedAt }
+    }
+
+    func pendingStateCount(for romId: Int) -> Int {
+        pendingStates(for: romId).count
+    }
+
+    /// Whichever save is genuinely newest for this game, the downloaded
+    /// resume state or a still-queued local one, whichever has the
+    /// later file date: what "Load latest state" and the launch
+    /// screen's Resume-from list both mean by "latest" once nothing can
+    /// be asked live.
+    func newestLocalState(for romId: Int) -> Data? {
+        let cachedURL = directory(for: romId).appendingPathComponent(Self.stateFileName)
+        let cachedDate = try? cachedURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        if let newestPending = pendingStates(for: romId).first,
+           cachedDate == nil || newestPending.savedAt > cachedDate! {
+            return try? Data(contentsOf: newestPending.stateURL)
+        }
+        return try? Data(contentsOf: cachedURL)
+    }
+
+    /// Writes a save straight to local storage before any attempt to
+    /// reach the server: the one guarantee this queue exists to make,
+    /// losing signal mid-save must never mean losing the save.
+    @discardableResult
+    func queuePendingState(romId: Int, stem: String, stateData: Data, screenshotData: Data?) -> Bool {
+        let dir = pendingStatesDirectory(for: romId)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        guard (try? stateData.write(to: dir.appendingPathComponent("\(stem).state"))) != nil else { return false }
+        if let screenshotData {
+            try? screenshotData.write(to: dir.appendingPathComponent("\(stem).png"))
+        }
+        touchTotalBytes(romId: romId)
+        return true
+    }
+
+    /// Attempts every queued save across every kept game, each upload
+    /// using the file's own already-timestamped name so RomM's list
+    /// catches up exactly as if the save had happened online. A file
+    /// that uploads successfully leaves the queue; one that fails stays,
+    /// tried again next time this runs. Safe to call often and
+    /// opportunistically: nothing here can duplicate an upload or lose a
+    /// file, only remove one once RomM has confirmed it.
+    func syncPendingStates(session: Session) async {
+        for game in games {
+            guard let core = NativeCore.core(for: game.rom) else { continue }
+            for pending in pendingStates(for: game.romId) {
+                guard let stateData = try? Data(contentsOf: pending.stateURL) else { continue }
+                let screenshotData = pending.screenshotURL.flatMap { try? Data(contentsOf: $0) }
+                do {
+                    try await session.uploadState(
+                        romId: game.romId, emulator: core.emulatorTag,
+                        fileName: pending.stateURL.lastPathComponent,
+                        stateData: stateData,
+                        screenshotName: pending.screenshotURL?.lastPathComponent,
+                        screenshotData: screenshotData
+                    )
+                    try? FileManager.default.removeItem(at: pending.stateURL)
+                    if let screenshotURL = pending.screenshotURL {
+                        try? FileManager.default.removeItem(at: screenshotURL)
+                    }
+                    touchTotalBytes(romId: game.romId)
+                } catch {
+                    // Left queued on purpose; the next opportunity, a
+                    // connection returning anywhere in the app or simply
+                    // revisiting this game, tries it again.
+                }
+            }
+        }
+    }
+
+    /// Recomputes and persists a kept game's stored size after a queue
+    /// write or upload changes what is actually on disk, so Storage
+    /// stays honest about what a kept game costs rather than reporting
+    /// whatever it measured back when it was first kept.
+    private func touchTotalBytes(romId: Int) {
+        guard let index = games.firstIndex(where: { $0.romId == romId }) else { return }
+        let dir = directory(for: romId)
+        let old = games[index]
+        let updated = KeptGame(
+            rom: old.rom, totalBytes: Self.directorySize(dir), keptAt: old.keptAt,
+            fileId: old.fileId, webFileName: old.webFileName, contentLength: old.contentLength,
+            stateId: old.stateId, stateUpdatedAt: old.stateUpdatedAt
+        )
+        games[index] = updated
+        if let manifestData = try? JSONEncoder().encode(updated) {
+            try? manifestData.write(to: dir.appendingPathComponent("manifest.json"))
         }
     }
 
@@ -576,13 +700,20 @@ final class KeptGameStore: ObservableObject {
             .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
     }
 
+    /// Recursive, not a shallow listing: the pending-states queue lives
+    /// in its own subdirectory, and a shallow count would silently
+    /// undercount a kept game's real size the moment a save queued up
+    /// inside it.
     private static func directorySize(_ dir: URL) -> Int64 {
-        guard let entries = try? FileManager.default.contentsOfDirectory(
-            at: dir, includingPropertiesForKeys: [.fileSizeKey]
+        guard let enumerator = FileManager.default.enumerator(
+            at: dir, includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey]
         ) else { return 0 }
-        return entries.reduce(0) { total, url in
-            total + Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        var total: Int64 = 0
+        for case let url as URL in enumerator {
+            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { continue }
+            total += Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
         }
+        return total
     }
 }
 

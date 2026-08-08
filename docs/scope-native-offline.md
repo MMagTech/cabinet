@@ -1,6 +1,6 @@
 # Offline play through the native player, scope
 
-Status: phases 1 and 2 built 2026-08-07. Follows from the native player work on the
+Status: all three phases built 2026-08-07. Follows from the native player work on the
 `native-player-spike` branch (see scope-native-player-spike.md, whose
 spike succeeded and whose integration landed 2026-08-06).
 
@@ -80,19 +80,41 @@ earlier ones are useful without the later ones.
   list: their player still needs the server to start, so listing them
   would set up a tap that fails.
 
-### Phase 3: Saves written locally, synced when connectivity returns
+### Phase 3: Saves written locally, synced when connectivity returns (built 2026-08-07)
 
-- A state saved while offline writes to local storage immediately and
-  queues its upload. Losing signal must never mean losing the save.
-- On regaining connectivity (or at next online launch), queued states
-  upload to RomM with their original timestamped names, so the server
-  list catches up as if the saves had happened online.
-- Conflicts are designed out rather than resolved: states are
-  append-only files with timestamped names, nothing overwrites anything,
-  so sync is only "finish the uploads," never a merge.
-- The state list shown offline is the local queue plus whatever was last
-  fetched, labelled honestly rather than pretending to be the server's
-  full list.
+- A state saved on a kept game writes to local storage first, before
+  any attempt to reach RomM, in `KeptGameStore`'s own per-game
+  `pending-states` directory. Losing signal mid-save never means
+  losing the save; a game played natively without being kept still
+  saves directly, since native play without a connection was never
+  possible for it anyway.
+- Conflicts are designed out rather than resolved: each queued file
+  already carries RomM's own timestamped name (`stateFileStem()`), so
+  an upload lands exactly as if it had happened online, nothing
+  overwrites anything, sync is only "finish the uploads."
+  `KeptGameStore.syncPendingStates` is safe to call often: a file that
+  uploads successfully leaves the queue, one that fails stays for the
+  next attempt.
+- Upload is automatic and app-wide, per Marcus: `RommApp` observes
+  `NetworkMonitor` directly and syncs on foreground, on the connection
+  itself changing, or the manual toggle turning off, not only when the
+  specific game's screen happens to be revisited.
+- Every queued save shows as its own row in Resume-from, not just the
+  newest, matching "the local queue plus whatever was last fetched"
+  above literally: a trip with several saves offers every one of them
+  back. Loading falls back through local sources before ever asking
+  the network, and the pause menu's own "Load latest state" now
+  prefers the newest local save when offline instead of failing.
+- Visibility: a terse "N saves waiting to upload" appears on the
+  game's own Storage card and in the Storage settings list once
+  something is queued (Marcus: saves are important enough to warrant
+  this, not fully silent).
+- Wording settled after a direct correction: the pause menu's offline
+  save status is "Waiting for signal to upload.", not a longer
+  "Saved on this iPhone, uploads once you're back online" draft,
+  since being offline already implies the save is local, no need to
+  say so twice, a standing correction to this project's UI copy, not
+  a one-off.
 
 ### Same-day follow-on: the app notices offline, live, not on request
 
