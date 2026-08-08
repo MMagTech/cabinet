@@ -129,6 +129,37 @@ final class KeptGameStore: ObservableObject {
         games.first { $0.romId == romId }
     }
 
+    /// Kept, native-capable games grouped by platform: the one shape
+    /// Offline Mode uses for browsing everywhere it appears, Home and
+    /// the library both, so the two can never draw a different picture
+    /// of the same underlying data (Marcus, 2026-08-07: Home's offline
+    /// view "should essentially just be what the current library looks
+    /// like"). Webview-only kept games are excluded, the rule used
+    /// everywhere else tonight: their player still needs the server, so
+    /// listing them would set up a tap that fails regardless of what is
+    /// actually stored. A `Platform` built straight from the kept rom's
+    /// own embedded fields, not fetched: the count is how many are
+    /// kept, not the server's full catalog size, which would mean
+    /// nothing without a connection to trust it.
+    func offlinePlatforms() -> [(platform: Platform, roms: [Rom])] {
+        let kept = games
+            .filter { NativeCore.core(for: $0.rom) != nil }
+            .map(\.rom)
+        return Dictionary(grouping: kept, by: \.platformId)
+            .map { platformId, roms in
+                let sample = roms[0]
+                let platform = Platform(
+                    id: platformId, name: sample.platformDisplayName, displayName: sample.platformDisplayName,
+                    slug: sample.platformSlug, fsSlug: sample.platformFsSlug, romCount: roms.count
+                )
+                let sorted = roms.sorted {
+                    $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+                }
+                return (platform, sorted)
+            }
+            .sorted { $0.platform.slug.localizedCaseInsensitiveCompare($1.platform.slug) == .orderedAscending }
+    }
+
     /// Whether a game can be kept at all: the same gate
     /// `GameLaunchView`'s Storage card uses to decide whether its
     /// toggle appears, extracted here so the long-press context menu

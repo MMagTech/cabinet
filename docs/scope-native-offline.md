@@ -146,6 +146,13 @@ shipped 2026-08-07, same session:
   a screen can never claim no signal while the real cause is a
   deliberate choice with full bars showing, the exact bug a screenshot
   caught.
+- Consolidated same day: Home's offline list and the library's were two
+  separately maintained copies of the identical grouping the moment
+  both existed, and Marcus caught it comparing them directly ("why
+  would the two need to exist... we just need a home"). `OfflineLibraryView`
+  is now the one place this is drawn, platform grouping, label
+  formatting, the `OfflineNotice` fallback, all of it; Home and Library
+  each just show it with their own retry action.
 
 ## Decisions already made
 
