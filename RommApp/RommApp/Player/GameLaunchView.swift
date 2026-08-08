@@ -83,6 +83,7 @@ struct GameLaunchView: View {
     @State private var togglingFavorite = false
     @State private var favoriteError: String?
     @ObservedObject private var keptStore = KeptGameStore.shared
+    @ObservedObject private var networkMonitor = NetworkMonitor.shared
     @StateObject private var exporter = RomExporter()
     @State private var showingExportSheet = false
     /// Whatever export was last attempted, so Retry repeats the same one
@@ -165,7 +166,7 @@ struct GameLaunchView: View {
                                 .fixedSize(horizontal: false, vertical: true)
                             }
 
-                            if rom.isArcade { playerCard }
+                            if rom.isArcade, !networkMonitor.isOffline { playerCard }
                             if showsKeepCard { keepCard }
 
                             // No dead button on unsupported systems: the
@@ -760,7 +761,7 @@ struct GameLaunchView: View {
                 if interruptedAt != nil { continueCard }
                 if !rom.isArcade, selectedBackend == .webview, cores.count > 1 { coreCard }
                 if !rom.isArcade, selectedBackend == .webview, showsFirmwareCard { firmwareCard }
-                if rom.isArcade { playerCard }
+                if rom.isArcade, !networkMonitor.isOffline { playerCard }
                 if showsKeepCard { keepCard }
                 if arcadeBase != nil { arcadeControlsCard }
                 if !states.isEmpty || !saves.isEmpty { resumeCard }
@@ -783,7 +784,7 @@ struct GameLaunchView: View {
                 if interruptedAt != nil { continueCard }
                 if !rom.isArcade, selectedBackend == .webview, cores.count > 1 { coreCard }
                 if !rom.isArcade, selectedBackend == .webview, showsFirmwareCard { firmwareCard }
-                if rom.isArcade { playerCard }
+                if rom.isArcade, !networkMonitor.isOffline { playerCard }
                 if showsKeepCard { keepCard }
                 if arcadeBase != nil { arcadeControlsCard }
                 if !states.isEmpty || !saves.isEmpty { resumeCard }
@@ -1049,7 +1050,25 @@ struct GameLaunchView: View {
         // caption, and the card now shares name and icon with
         // Settings > Storage, two views of the same concept.
         LaunchCard(title: "Storage", systemImage: "internaldrive") {
-            Toggle("Download", isOn: keepBinding)
+            let isKept = keptStore.kept(romId: rom.id) != nil
+            // No toggle at all once a game is kept and there is no
+            // connection: the one action here is destructive, and
+            // offline it is permanent until signal returns, exactly the
+            // fat-finger risk on a cramped tray table with no way back
+            // Marcus flagged. There is no offline use for the freed
+            // space either, keeping something else still needs a
+            // connection, so nothing real is lost by waiting. Files
+            // stays the deliberate path for removing a kept game,
+            // untouched by this. A game that is not yet kept keeps its
+            // toggle visible, just disabled: starting a download that
+            // fails is an annoyance, not a loss, so it is greyed rather
+            // than hidden, the same distinction this app draws
+            // everywhere else between temporarily and permanently
+            // unavailable.
+            if !(networkMonitor.isOffline && isKept) {
+                Toggle("Download", isOn: keepBinding)
+                    .disabled(networkMonitor.isOffline && !isKept)
+            }
 
             if let progress = keptStore.downloading[rom.id] {
                 VStack(alignment: .leading, spacing: 8) {
@@ -1067,12 +1086,16 @@ struct GameLaunchView: View {
                     Text("Preparing the web player's copy").foregroundStyle(.secondary)
                 }
                 .font(.caption)
-            } else if keptStore.kept(romId: rom.id) != nil {
+            } else if isKept {
                 Text(keptCaption)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else if let error = keptStore.errors[rom.id] {
                 Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if networkMonitor.isOffline {
+                Text("Needs a connection to download.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -1407,7 +1430,13 @@ struct GameLaunchView: View {
         isComputerPlatform = ComputerPlatforms.contains(canonicalSlug)
         cores = CoreCatalog.cores(for: canonicalSlug)
         selectedCore = LaunchChoices.defaultCore(rom: rom, canonicalSlug: canonicalSlug, from: cores)
-        selectedBackend = LaunchChoices.defaultBackend(rom: rom)
+        // Offline, there is exactly one player that can work, the same
+        // situation Saturn is always in, which is why Saturn never
+        // shows a picker at all. Arcade's real choice, web or native,
+        // only exists with a connection, so it collapses to native the
+        // same way whenever there is none, rather than presenting a
+        // player that will only stall.
+        selectedBackend = networkMonitor.isOffline ? .native : LaunchChoices.defaultBackend(rom: rom)
 
         if rom.isArcade {
             let base = ArcadeProfileStore.shared.resolve(shortname: rom.fsNameNoExt)

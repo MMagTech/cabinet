@@ -162,6 +162,23 @@ shipped 2026-08-07, same session:
   of dropped, scoped to kept games with the same real-suppression rule
   as everywhere else (Marcus caught it still leaking live server
   results).
+- The game launch screen itself was the last gap: it let the web player
+  be selected and "launch" offline, which could only stall, since
+  nothing checked connectivity before presenting `PlayerView`. The
+  Player card now vanishes offline the same way it already does for
+  Saturn, no picker where there is no real choice, backend forced to
+  native, live if the toggle flips mid-view. Separately, the Storage
+  toggle's remove action is a real, permanent-until-signal-returns
+  deletion, an easy accidental tap on a screen with no undo (Marcus:
+  "I can't think of a situation... they can go to files instead of
+  accidentally triggering in UI"); it disappears entirely once a game
+  is both kept and offline, informational caption unchanged, Files
+  staying the deliberate path for that action. A not-yet-kept game's
+  toggle stays visible but disabled offline, greyed rather than hidden,
+  since a failed download attempt costs nothing to undo. Saves
+  (`GameSave`, distinct from states) were confirmed as a non-issue
+  while looking at this: they were never wired into native play at all,
+  online or off, so their offline emptiness is correct, not a gap.
 
 ## Decisions already made
 
