@@ -74,7 +74,11 @@ struct OfflineLibraryView: View {
                         }
                     }
                 } header: {
-                    Label(networkMonitor.offlineReason.label, systemImage: networkMonitor.offlineReason.systemImage)
+                    // Text alone, no icon: the real toggle is already on
+                    // screen wherever this view appears, and repeating
+                    // its airplane glyph here just doubled it (Marcus,
+                    // 2026-08-07: "redundant to the airplane above it").
+                    Text(networkMonitor.offlineReason.label)
                 }
             }
             .listStyle(.insetGrouped)

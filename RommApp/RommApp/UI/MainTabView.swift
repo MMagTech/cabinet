@@ -23,14 +23,23 @@ struct MainTabView: View {
 
     @State private var selection: AppTab = .home
     @ObservedObject private var quickActions = QuickActionRouter.shared
+    @ObservedObject private var networkMonitor = NetworkMonitor.shared
 
     var body: some View {
         TabView(selection: $selection) {
             Tab("Home", systemImage: "house", value: AppTab.home) {
                 HomeView()
             }
-            Tab("Library", systemImage: "square.grid.2x2", value: AppTab.library) {
-                NavigationStack { LibraryScreen() }
+            // Hidden entirely in Offline Mode, not shown with nothing to
+            // browse: its only honest content there is exactly what Home
+            // already shows, `OfflineLibraryView`, the one shared view
+            // both screens draw from. A second tab pointing at the same
+            // screen is just a second way to reach the first (Marcus,
+            // 2026-08-07: "if both tabs are the same why two").
+            if !networkMonitor.isOffline {
+                Tab("Library", systemImage: "square.grid.2x2", value: AppTab.library) {
+                    NavigationStack { LibraryScreen() }
+                }
             }
             // The dedicated search role, not just a third ordinary tab:
             // the system draws it apart from the others, matching Music
@@ -48,6 +57,12 @@ struct MainTabView: View {
         // recents fetch and the lists need a loaded favorites collection.
         .onChange(of: quickActions.pending) { _, action in route(action) }
         .onAppear { route(quickActions.pending) }
+        // The tab someone is standing on can vanish out from under them
+        // the instant Offline Mode turns on; without this the selection
+        // points at a tab that no longer exists.
+        .onChange(of: networkMonitor.isOffline) { _, offline in
+            if offline, selection == .library { selection = .home }
+        }
     }
 
     private func route(_ action: QuickAction?) {
