@@ -465,6 +465,14 @@ actor RommClient {
         try await send(request(path: "/api/roms/\(romId)"), decoding: RomFilesResponse.self).files
     }
 
+    /// The same rom detail response `romFiles` reads, decoded as `Rom`
+    /// itself this time: the one place a kept game's full record can be
+    /// rebuilt from nothing but its id, for a manifest that survived a
+    /// past format change with only a stub `Rom` to show for it.
+    func rom(id: Int) async throws -> Rom {
+        try await send(request(path: "/api/roms/\(id)"), decoding: Rom.self)
+    }
+
     private struct RomFilesResponse: Decodable {
         let files: [RomFile]
     }

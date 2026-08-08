@@ -396,6 +396,11 @@ final class Session: ObservableObject {
         return try await client.romFiles(romId: romId)
     }
 
+    func rom(id: Int) async throws -> Rom {
+        guard let client else { throw RommError.transport("No server selected.") }
+        return try await client.rom(id: id)
+    }
+
     func romFileContentRequest(romId: Int, file: RomFile) async throws -> URLRequest {
         guard let client else { throw RommError.transport("No server selected.") }
         return await client.fileRequest(path: "/api/roms/\(romId)/files/content/\(file.fileName)")

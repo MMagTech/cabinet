@@ -37,6 +37,14 @@ struct KeptGame: Codable, Identifiable {
     /// game, or the platform has no native core to write a state for.
     let stateId: Int?
     let stateUpdatedAt: String?
+    /// True only for an entry rebuilt from an older manifest format
+    /// that could no longer decode as-is: its `rom` is a best-effort
+    /// stand-in, real platform data missing, until the next moment
+    /// this app is online replaces it with the genuine thing.
+    /// `Bool?` rather than a plain `Bool` so every manifest already on
+    /// disk before this field existed keeps decoding without change,
+    /// nil reads as false everywhere this is checked.
+    let needsMetadataRefresh: Bool?
 
     var id: Int { rom.id }
     var romId: Int { rom.id }
@@ -235,7 +243,8 @@ final class KeptGameStore: ObservableObject {
             let updated = KeptGame(
                 rom: old.rom, totalBytes: Self.directorySize(dir), keptAt: old.keptAt,
                 fileId: old.fileId, webFileName: old.webFileName, contentLength: old.contentLength,
-                stateId: newest.id, stateUpdatedAt: newest.updatedAt
+                stateId: newest.id, stateUpdatedAt: newest.updatedAt,
+                needsMetadataRefresh: old.needsMetadataRefresh
             )
             self.games[index] = updated
             if let manifestData = try? JSONEncoder().encode(updated) {
@@ -360,7 +369,8 @@ final class KeptGameStore: ObservableObject {
         let updated = KeptGame(
             rom: old.rom, totalBytes: Self.directorySize(dir), keptAt: old.keptAt,
             fileId: old.fileId, webFileName: old.webFileName, contentLength: old.contentLength,
-            stateId: old.stateId, stateUpdatedAt: old.stateUpdatedAt
+            stateId: old.stateId, stateUpdatedAt: old.stateUpdatedAt,
+            needsMetadataRefresh: old.needsMetadataRefresh
         )
         games[index] = updated
         if let manifestData = try? JSONEncoder().encode(updated) {
@@ -663,7 +673,7 @@ final class KeptGameStore: ObservableObject {
             let manifest = KeptGame(
                 rom: rom, totalBytes: Self.directorySize(staging), keptAt: Date(),
                 fileId: webFile?.id, webFileName: webFile?.fileName, contentLength: contentLength,
-                stateId: cachedStateId, stateUpdatedAt: cachedStateUpdatedAt
+                stateId: cachedStateId, stateUpdatedAt: cachedStateUpdatedAt, needsMetadataRefresh: nil
             )
             let data = try JSONEncoder().encode(manifest)
             try data.write(to: staging.appendingPathComponent("manifest.json"))
@@ -681,36 +691,100 @@ final class KeptGameStore: ObservableObject {
         }
     }
 
+    /// `KeptGame`'s shape before it embedded the whole `Rom`, kept only
+    /// so a manifest written in that era still has somewhere to land.
+    /// Never constructed by anything but `loadManifests`'s fallback.
+    private struct LegacyKeptGameV1: Decodable {
+        let romId: Int
+        let displayName: String
+        let fsName: String
+        let totalBytes: Int64
+        let keptAt: Date
+        let fileId: Int?
+        let webFileName: String?
+        let contentLength: String?
+        let platformFsSlug: String?
+    }
+
+    /// A stand-in `Rom` from whatever a legacy manifest actually knew.
+    /// Good enough to show the game as kept, its size, and its ROM
+    /// file's own name; not good enough to know its real platform,
+    /// which `refreshStaleMetadata` corrects at the next connection.
+    /// `platformSlug` borrows the folder name as a same-day guess where
+    /// arcade and Saturn, the only two native platforms that existed
+    /// when this legacy shape did, commonly share that name with their
+    /// real IGDB slug; wrong only narrows a brief window before the
+    /// real value replaces it, never loses a file.
+    private static func stubRom(from legacy: LegacyKeptGameV1) -> Rom {
+        let slugGuess = legacy.platformFsSlug ?? ""
+        return Rom(
+            id: legacy.romId, name: legacy.displayName, fsName: legacy.fsName,
+            fsNameNoTags: legacy.displayName,
+            fsNameNoExt: (legacy.fsName as NSString).deletingPathExtension,
+            platformId: 0, platformSlug: slugGuess, platformFsSlug: slugGuess,
+            platformDisplayName: nil, summary: nil, pathCoverSmall: nil, pathCoverLarge: nil,
+            fsSizeBytes: legacy.totalBytes, hasMultipleFiles: false
+        )
+    }
+
+    /// Never deletes a real kept game just because its manifest no
+    /// longer decodes: a `.partial` staging leftover is safe to clean
+    /// up, it was never a finished keep, but a manifest that once
+    /// described a real, completed download is preserved either as a
+    /// direct decode, a migrated legacy one, or, failing both, left
+    /// entirely alone on disk rather than destroyed. The failure that
+    /// taught this (Marcus, 2026-08-07): a structural change to this
+    /// exact struct wiped real kept games outright, their files
+    /// surviving only by accident through an already-made Files link,
+    /// which then caused a second, separate bug of its own.
     private static func loadManifests(in root: URL) -> [KeptGame] {
         guard let entries = try? FileManager.default.contentsOfDirectory(
             at: root, includingPropertiesForKeys: nil
         ) else { return [] }
         let decoder = JSONDecoder()
-        return entries
-            .compactMap { entry -> KeptGame? in
-                guard let data = try? Data(contentsOf: entry.appendingPathComponent("manifest.json")) else {
-                    // A leftover ".partial" from a keep that died mid-move,
-                    // or anything else unrecognised: not a kept game, and
-                    // partials are re-created from scratch anyway.
-                    if entry.lastPathComponent.hasSuffix(".partial") {
-                        try? FileManager.default.removeItem(at: entry)
-                    }
-                    return nil
+        var migrated: [(entry: URL, game: KeptGame)] = []
+
+        let games = entries.compactMap { entry -> KeptGame? in
+            guard let data = try? Data(contentsOf: entry.appendingPathComponent("manifest.json")) else {
+                // A leftover ".partial" from a keep that died mid-move,
+                // or anything else unrecognised: not a kept game, and
+                // partials are re-created from scratch anyway.
+                if entry.lastPathComponent.hasSuffix(".partial") {
+                    try? FileManager.default.removeItem(at: entry)
                 }
-                if let game = try? decoder.decode(KeptGame.self, from: data) {
-                    return game
-                }
-                // A manifest that exists but no longer decodes is from
-                // before `KeptGame` embedded the full `Rom` (this build's
-                // structural change, not a format this app can migrate
-                // in place, since the fields a Rom needs are not
-                // reconstructable from the old flat manifest alone).
-                // Wiped rather than left as untracked storage; re-keeping
-                // is one tap.
-                try? FileManager.default.removeItem(at: entry)
                 return nil
             }
-            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+            if let game = try? decoder.decode(KeptGame.self, from: data) {
+                return game
+            }
+            if let legacy = try? decoder.decode(LegacyKeptGameV1.self, from: data) {
+                let game = KeptGame(
+                    rom: stubRom(from: legacy), totalBytes: legacy.totalBytes, keptAt: legacy.keptAt,
+                    fileId: legacy.fileId, webFileName: legacy.webFileName, contentLength: legacy.contentLength,
+                    stateId: nil, stateUpdatedAt: nil, needsMetadataRefresh: true
+                )
+                migrated.append((entry, game))
+                return game
+            }
+            // Genuinely unrecognised, neither the current shape nor the
+            // one shape this app has ever migrated from: left alone on
+            // disk. Invisible to this launch, exactly as safe as
+            // deleting it and strictly more recoverable, since the
+            // files are still there for a future, smarter migration or
+            // a person's own inspection in Files to find.
+            return nil
+        }
+        .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+
+        // Rewritten to the current shape immediately, not left to
+        // re-migrate on every future launch until a connection happens
+        // to arrive.
+        for (entry, game) in migrated {
+            if let data = try? JSONEncoder().encode(game) {
+                try? data.write(to: entry.appendingPathComponent("manifest.json"))
+            }
+        }
+        return games
     }
 
     /// Recursive, not a shallow listing: the pending-states queue lives
