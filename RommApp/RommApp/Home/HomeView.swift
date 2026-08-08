@@ -97,6 +97,27 @@ struct HomeView: View {
                         Image(systemName: "gearshape")
                     }
                 }
+                // A real Toggle, not a plain button: a toolbar icon that
+                // just triggers something is the wrong shape for a mode
+                // that stays on, nothing in iOS treats Low Power Mode or
+                // Airplane Mode itself as a one-shot action button. The
+                // button style keeps it toolbar-sized while still
+                // reading as a switch, filled when on the same way
+                // Control Center's own toggles are; the airplane glyph
+                // is deliberately the one iOS already uses for exactly
+                // this idea, acting as though there is no signal.
+                // Invisible, not merely disabled, when there is nothing
+                // it could switch to, matching every other control this
+                // app has cut back to only where it applies.
+                if !offlineKeptGames.isEmpty {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Toggle(isOn: $networkMonitor.manualOfflineMode) {
+                            Label("Offline Mode", systemImage: "airplane")
+                        }
+                        .toggleStyle(.button)
+                        .tint(.orange)
+                    }
+                }
             }
             .refreshable { await load() }
             // A game reached through Library, not Home's own resume flow,
@@ -115,6 +136,7 @@ struct HomeView: View {
             // needed a manual re-navigation to notice (Marcus,
             // 2026-08-07).
             .onChange(of: networkMonitor.isConnected) { _, _ in Task { await load() } }
+            .onChange(of: networkMonitor.manualOfflineMode) { _, _ in Task { await load() } }
             .fullScreenCover(item: $resuming) { rom in
                 NavigationStack { GameLaunchView(rom: rom) }
             }
@@ -616,6 +638,18 @@ struct HomeView: View {
     /// a server side error and the library screen will explain it properly
     /// the moment they go looking.
     private func load() async {
+        // Real suppression, not a cosmetic switch: manual offline mode
+        // has to actually stop the app from spending a connection it was
+        // told not to use, or the roaming/capped-data reason for having
+        // it at all would not hold up. Genuine signal loss already
+        // avoided this same round trip everywhere else tonight; this is
+        // the same check, just also true when someone chose it.
+        guard !networkMonitor.isOffline else {
+            offline = true
+            loaded = true
+            return
+        }
+
         // A session that just ended must reach the server before recents
         // are asked for, or the game played a moment ago sorts under the
         // one before it. No-op when nothing is pending.

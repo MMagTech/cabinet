@@ -67,6 +67,7 @@ struct LibraryScreen: View {
         // platform list already sitting on screen, only correct or add to
         // it once a connection returns.
         .onChange(of: networkMonitor.isConnected) { _, _ in Task { await loadPlatforms() } }
+        .onChange(of: networkMonitor.manualOfflineMode) { _, _ in Task { await loadPlatforms() } }
         .fullScreenCover(item: $playing) { rom in
             NavigationStack { GameLaunchView(rom: rom) }
         }
@@ -149,6 +150,17 @@ struct LibraryScreen: View {
     private func loadPlatforms() async {
         loadingPlatforms = true
         platformsError = nil
+        // Real suppression, not a cosmetic switch: manual offline mode
+        // must actually stop this screen from touching the network, the
+        // same reason GameLaunchView and Home both skip their own
+        // fetches outright rather than just hiding the result. Whatever
+        // list already loaded stays exactly as it was, per the branching
+        // in platformList above.
+        guard !networkMonitor.isOffline else {
+            platformsError = LoadFailure(RommError.offline)
+            loadingPlatforms = false
+            return
+        }
         // A no-op once a real mapping exists; the recovery path for a
         // launch that started with no connection, so Supported and
         // Unsupported settle correctly the first time this screen is

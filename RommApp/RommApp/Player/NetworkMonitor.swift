@@ -22,11 +22,31 @@ import SwiftUI
 @MainActor
 final class NetworkMonitor: ObservableObject {
     static let shared = NetworkMonitor()
+    private static let manualOfflineKey = "com.mmagtech.RommApp.manualOfflineMode"
 
     private let monitor = NWPathMonitor()
+    /// The literal hardware truth: is there a network path right now.
     @Published private(set) var isConnected = true
+    /// A person's own choice to have the app act as though there is no
+    /// connection, kept games only, even when there genuinely is one.
+    /// The Low Data Mode shape, not a fallback for a broken signal: the
+    /// same reason to have it exists whether or not signal is actually
+    /// weak, roaming, a capped hotspot, or simply not wanting a big
+    /// download to fire while there is one. Persisted, so it survives a
+    /// relaunch the way a real mode should. Marcus, 2026-08-07.
+    @Published var manualOfflineMode: Bool {
+        didSet { UserDefaults.standard.set(manualOfflineMode, forKey: Self.manualOfflineKey) }
+    }
+
+    /// What every screen actually asks. Real signal loss and the manual
+    /// choice both answer this the same way on purpose: one signal, so
+    /// every screen already wired to react to it behaves identically
+    /// regardless of which caused it, no separate offline system to
+    /// maintain for the manual case.
+    var isOffline: Bool { !isConnected || manualOfflineMode }
 
     private init() {
+        manualOfflineMode = UserDefaults.standard.bool(forKey: Self.manualOfflineKey)
         let queue = DispatchQueue(label: "com.mmagtech.RommApp.networkMonitor")
         monitor.pathUpdateHandler = { [weak self] path in
             let connected = path.status == .satisfied

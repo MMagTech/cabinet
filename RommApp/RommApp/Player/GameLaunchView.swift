@@ -1424,7 +1424,7 @@ struct GameLaunchView: View {
         // waiting to be told. A kept game still gets a Resume-from row
         // either way, synthesized below from what Keep already
         // downloaded, so skipping the fetch costs it nothing.
-        if NetworkMonitor.shared.isConnected {
+        if !NetworkMonitor.shared.isOffline {
             async let firmwareTask = try? session.firmware(platformId: rom.platformId)
             async let savesTask = try? session.saves(romId: rom.id)
             async let statesTask = try? session.states(romId: rom.id)
