@@ -1,0 +1,42 @@
+name: Build
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build for device
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          xcode-select -p
+
+      # Cabinet cannot build for the simulator: the twelve libretro cores are
+      # device-only arm64 static libraries and are linked unconditionally.
+      # Signing is skipped so this needs no secrets and a fork can run it too.
+      # This exists to prove the repository compiles from a clean checkout.
+      #
+      # -target rather than -scheme because the project has no shared schemes,
+      # and only the RommApp target ships. LayoutEditor is a dev tool.
+      - name: Build
+        run: |
+          xcodebuild build \
+            -project RommApp/RommApp.xcodeproj \
+            -target RommApp \
+            -configuration Release \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            -quiet
+        env:
+          NSUnbufferedIO: YES
