@@ -33,6 +33,7 @@ Secrets.plist
 # Generated data
 tools/*.xml
 tools/profiles.json
+tools/.layout_pulls/
 
 # Vendored third party source, not ours to commit
 spikes/
