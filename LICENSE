@@ -1,3 +1,18 @@
+This licence covers Cabinet's own source code.
+
+It does NOT cover the prebuilt emulator core libraries in
+RommApp/RommApp/Native/*/lib*.a, or the third party C sources in
+RommApp/RommApp/Native/Archive. Those are separate works under their own terms,
+several of which are GPL v2 or free for non-commercial use only. Every one of
+them is listed with its licence, upstream source and build commit in
+docs/licenses.md.
+
+Because GPL v2 cores are statically linked, the distributed application binary
+is a combined work subject to those terms. The permissions below apply to the
+source in this repository, not to that binary as a whole.
+
+----
+
 MIT License
 
 Copyright (c) 2026 MMagTech

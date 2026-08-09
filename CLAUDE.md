@@ -12,10 +12,10 @@ design and the reasoning behind it, and most decisions in it are already settled
 
 ## Git conventions
 
-- Work on `dev`. `main` gets squash merges only.
-- Before merging `dev` to `main`, stop and walk me through the squash merge step
-  by step before running anything. Raw dev commit messages have leaked into a
-  public main history before and I do not want that repeated.
+- Work on `dev`. `main` is the release branch and carries the full history.
+- The old squash-merge-only rule is retired. Decided 2026-08-09, at launch: the
+  history is public and complete on purpose, including the messy parts. Do not
+  squash it away or propose hiding branches.
 - After every build or package operation, provide a one line commit summary and a
   full commit description without being asked.
 - `SECURITY.md` stays in the repository root.
@@ -30,12 +30,17 @@ design and the reasoning behind it, and most decisions in it are already settled
 
 ## Project shape
 
-Native SwiftUI shell, `WKWebView` player running RomM's EmulatorJS page.
+Native SwiftUI shell, with two ways to run a game: twelve libretro cores
+compiled into the app, and a `WKWebView` player running RomM's EmulatorJS page
+for everything else.
 
-The app never emulates natively. WKWebView's WebContent process carries the
-dynamic code signing entitlement so WASM cores get a real JIT, while the same
-cores compiled into the app process would be interpreter only. This is the
-load bearing architectural decision. Do not propose vendoring native cores.
+The JIT boundary decides which is which. WKWebView's WebContent process carries
+the dynamic code signing entitlement so WASM cores get a real JIT, while cores
+compiled into the app process are interpreter only. Systems whose cores need a
+dynamic recompiler to hit full speed, N64 and anything heavier, stay on the
+webview. Systems an interpreter can carry run natively, which buys real
+fullscreen, native input and offline play. That split is settled; do not
+propose moving a dynarec-dependent system into the app process.
 
 Home is resume first, not a library grid. One tap back into the last game.
 

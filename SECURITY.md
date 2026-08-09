@@ -31,3 +31,5 @@ Areas of particular interest:
 ## Supported versions
 
 This project is pre-release. Only the latest commit on `main` is supported.
+Cabinet is distributed as a sideloaded IPA and built from source; there is no
+automatic update mechanism, so fixes reach you when you install a new build.
