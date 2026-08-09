@@ -1,0 +1,92 @@
+name: Bug report
+description: Something in Cabinet does not work
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Cabinet talks to your own RomM server and runs games two different ways,
+        so the details below are usually what decides whether a problem is
+        reproducible. Please fill them in even if they seem irrelevant.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: input
+    id: system
+    attributes:
+      label: Which system
+      description: The console the game is for, for example Genesis, Saturn, PlayStation, Arcade.
+      placeholder: Genesis
+    validations:
+      required: false
+
+  - type: dropdown
+    id: player
+    attributes:
+      label: Native core or web player
+      description: Cabinet tells you which one it used on the launch screen before the game starts.
+      options:
+        - Native core
+        - Web player
+        - Not sure
+    validations:
+      required: false
+
+  - type: input
+    id: game
+    attributes:
+      label: Game and file format
+      description: Helpful for disc based systems, where the format often is the problem.
+      placeholder: Sonic 2, .md
+    validations:
+      required: false
+
+  - type: input
+    id: ios-version
+    attributes:
+      label: iOS version
+      placeholder: "18.5"
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      placeholder: iPhone 15 Pro
+    validations:
+      required: true
+
+  - type: input
+    id: romm-version
+    attributes:
+      label: RomM server version
+      description: Shown in RomM's own web interface.
+      placeholder: "5.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you installed Cabinet
+      options:
+        - Sideloaded IPA from Releases
+        - Built from source
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: offline
+    attributes:
+      label: Conditions
+      options:
+        - label: The game was kept on the device for offline play
+        - label: It happened while offline or on a bad connection
+        - label: A physical controller was connected

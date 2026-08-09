@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: A problem with RomM itself
+    url: https://github.com/rommapp/romm/issues
+    about: Cabinet is only a client. Library scanning, metadata and the server side belong to the RomM project.
+  - name: Security issue
+    url: https://github.com/MMagTech/cabinet/security/advisories/new
+    about: Anything involving tokens, pairing or access to your server. Please report privately.
