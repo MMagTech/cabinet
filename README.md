@@ -1,95 +1,70 @@
 # Cabinet
 
-An iOS app for your own [RomM](https://github.com/rommapp/romm) server.
+Your game collection, on your iPhone.
 
-Cabinet connects to the RomM instance you already run, shows your library, and
-plays your games. It opens on whatever you were last playing, so getting back
-into a game is one tap.
+Cabinet plays the games from your own RomM server. It opens on whatever you were
+playing last, so you are back in the game in one tap.
 
-## What it does
+<!-- screenshots -->
 
-**Picks up where you left off.** The home screen is your last session, not a
-grid you have to navigate. One tap and you are back in the game.
+## What you get
 
-**Real fullscreen.** Safari on iPhone cannot put an arbitrary element into
-fullscreen, which is why RomM ships a workaround for iOS. A native app has no
-browser chrome to hide, so fullscreen is simply how it looks.
+**Straight back into your game.** No menus to navigate. The app opens where you
+left off.
 
-**Touch controls that were designed, not generated.** Every system gets its own
-layout, tuned per device size and orientation. D-pads report continuously and
-their hit areas overlap, so diagonals work the way they should. Buttons have
-larger touch areas than they appear to, because your thumb is not a mouse
-pointer.
+**Controls built for thumbs.** Every console gets its own layout, arranged for
+the phone you are holding and the way you are holding it. Diagonals work.
+Buttons are easier to hit than they look.
 
-**Physical controllers.** Captured natively, so they work the same way they do
-in any other iOS game.
+**Your controller just works.** Connect any controller your iPhone supports and
+play.
 
-**Plays offline.** Keep a game on the device and it stays playable with no
-server and no signal. Saves and play history queue locally and sync back to
-RomM when you reconnect.
+**Play anywhere.** Most systems can be kept on your phone and played with no
+signal and no server at all. On a plane, on the subway, anywhere.
 
-**Saves live on your server.** Save states and battery saves go to RomM, so
-they are on whatever else you play on. PlayStation games get a real memory card
-per game.
+**Your saves follow you.** Save states and battery saves go back to your server,
+so they are waiting wherever you play next. PlayStation games get their own
+memory card.
 
-## Systems
+**The whole screen.** No browser bars, no toolbars. Just the game.
 
-Seventeen systems run on native cores compiled into the app:
+## What you can play
 
-Arcade, Saturn, PlayStation, SNES, NES, Game Boy, Game Boy Color, Game Boy
-Advance, Genesis, Sega CD, 32X, Master System, Game Gear, TurboGrafx-16,
-TurboGrafx-CD, Neo Geo Pocket Color, Atari 7800.
-
-Everything else your RomM server supports runs through RomM's own web player
-inside the app, including N64, DS, PSP, 3DO, PC-FX, Lynx and WonderSwan. Touch
-layouts and controller support work the same either way.
+Arcade, PlayStation, Saturn, SNES, NES, Nintendo 64, Game Boy, Game Boy Color,
+Game Boy Advance, DS, Genesis, Sega CD, 32X, Master System, Game Gear, PSP,
+TurboGrafx-16, TurboGrafx-CD, Neo Geo Pocket Color, Atari 7800, Lynx,
+WonderSwan, 3DO and more.
 
 ## What you need
 
 - An iPhone running iOS 18 or later
-- A RomM server you can reach, running RomM 4.0 or later
-- Your own games on it
+- A RomM server with your games on it
 
-Cabinet ships no games and no BIOS files. It is a client for a server you
-already run.
+Cabinet does not come with any games. It plays yours.
 
-## Installing
+## Get it
 
-Grab the IPA from [Releases](https://github.com/MMagTech/cabinet/releases) and
-sideload it with [AltStore](https://altstore.io) or
-[SideStore](https://sidestore.io).
+Download the latest IPA from
+[Releases](https://github.com/MMagTech/cabinet/releases) and install it with
+[AltStore](https://altstore.io) or [SideStore](https://sidestore.io).
 
-Sideloaded apps are signed with your own Apple ID. On a free Apple ID that
-signature lasts seven days, and AltStore or SideStore will refresh it for you in
-the background. With a paid Apple Developer account it lasts a year.
+Or [build it yourself](docs/building.md).
 
-You can also [build it from source](docs/building.md).
+When you first open it, type in your server address and approve it in RomM. That
+is all. Cabinet never asks for your password.
 
-On first launch you enter your server address and approve the pairing in RomM's
-web interface. Cabinet never asks for your password. It uses RomM's device
-authorization flow, the same one built for third party clients.
+## Before you install
 
-## About this project
-
-I am not a programmer. Cabinet was built with AI assistance, by me, over a
-short stretch of evenings and weekends, because I wanted this app to exist and
-it did not. The full commit history is here rather than squashed away, so you
-can see exactly how it came together.
-
-That is worth knowing before you decide to trust it with anything. Read the
-code, or do not install it. The design reasoning is written down in
-[docs/scope-v0.1.md](docs/scope-v0.1.md) if you want to see why things are the
-way they are.
+I am not a programmer. Cabinet was built with AI assistance, by me, because I
+wanted this app to exist and it did not. The entire history is here, unedited,
+so you can see how it was made and judge for yourself.
 
 ## Licences
 
-Cabinet's own source is MIT. The emulator cores it links are not, and each one
-keeps its own terms. Cabinet is free, is not sold, and takes no donations,
-which is what keeps the non-commercial cores legitimate here.
+Cabinet is MIT. The emulators it uses keep their own licences, listed in
+[docs/licenses.md](docs/licenses.md) and in the app under Settings.
 
-Every core, its upstream source and its licence is listed in
-[docs/licenses.md](docs/licenses.md), and in the app under Settings, Licenses.
+Cabinet is free, is not sold, and takes no donations. Some of those emulators
+require exactly that, so it stays that way.
 
-## Security
-
-Found something? [SECURITY.md](SECURITY.md) covers how to report it.
+Security issues: [SECURITY.md](SECURITY.md).
