@@ -193,6 +193,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/BeetleNGP",
 					"$(PROJECT_DIR)/RommApp/Native/ProSystem",
 					"$(PROJECT_DIR)/RommApp/Native/PicoDrive",
+					"$(PROJECT_DIR)/RommApp/Native/PCSXReARMed",
 					"$(PROJECT_DIR)/RommApp/Native/Archive",
 				);
 				INFOPLIST_FILE = Info.plist;
@@ -219,6 +220,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/ProSystem",
 					"$(PROJECT_DIR)/RommApp/Native/MGBA",
 					"$(PROJECT_DIR)/RommApp/Native/PicoDrive",
+					"$(PROJECT_DIR)/RommApp/Native/PCSXReARMed",
 				);
 				MARKETING_VERSION = 0.1;
 				OTHER_LDFLAGS = (
@@ -233,6 +235,7 @@
 					"-lprosystem_ios",
 					"-lmgba_ios",
 					"-lpicodrive_ios",
+					"-lpcsx_rearmed_ios",
 					"-lc++",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev;
@@ -267,6 +270,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/BeetleNGP",
 					"$(PROJECT_DIR)/RommApp/Native/ProSystem",
 					"$(PROJECT_DIR)/RommApp/Native/PicoDrive",
+					"$(PROJECT_DIR)/RommApp/Native/PCSXReARMed",
 					"$(PROJECT_DIR)/RommApp/Native/Archive",
 				);
 				INFOPLIST_FILE = Info.plist;
@@ -293,6 +297,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/ProSystem",
 					"$(PROJECT_DIR)/RommApp/Native/MGBA",
 					"$(PROJECT_DIR)/RommApp/Native/PicoDrive",
+					"$(PROJECT_DIR)/RommApp/Native/PCSXReARMed",
 				);
 				MARKETING_VERSION = 0.1;
 				OTHER_LDFLAGS = (
@@ -307,6 +312,7 @@
 					"-lprosystem_ios",
 					"-lmgba_ios",
 					"-lpicodrive_ios",
+					"-lpcsx_rearmed_ios",
 					"-lc++",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev;

@@ -126,3 +126,52 @@ fragment float4 shader_crt_caligari_fragment(VertexOut in [[stage_in]],
     float3 desaturated = mix(blended.rgb, float3(gray), 0.08);
     return float4(desaturated * scan, blended.a);
 }
+
+// lcd: the generic handheld screen look for GBA/Game Gear/NGPC, none of
+// which were ever displayed on a CRT. Reimplements the real math (not a
+// copy) of libretro/slang-shaders' lcd3x.slang, itself explicitly public
+// domain (Author: Gigaherz), using its own shipped defaults
+// (brighten_scanlines 16.0, brighten_lcd 4.0): a soft sine-based scanline
+// darkening plus a per-channel horizontal subpixel-fringe term, phase
+// offset 2/3 of a cycle per channel to fake an RGB stripe mask without
+// sampling neighbouring texels.
+fragment float4 shader_lcd_fragment(VertexOut in [[stage_in]],
+                                     texture2d<float> tex [[texture(0)]],
+                                     sampler samp [[sampler(0)]],
+                                     constant float2 &texelSize [[buffer(1)]]) {
+    float4 color = tex.sample(samp, in.texCoord);
+    const float brightenScanlines = 16.0;
+    const float brightenLCD = 4.0;
+    float2 omega = (2.0 * M_PI_F) / texelSize;
+    float2 angle = in.texCoord * omega;
+    float yFactor = (brightenScanlines + sin(angle.y)) / (brightenScanlines + 1.0);
+    float3 offsets = M_PI_F * float3(0.5, 0.5 - 2.0 / 3.0, 0.5 - 4.0 / 3.0);
+    float3 xFactors = (brightenLCD + sin(angle.x + offsets)) / (brightenLCD + 1.0);
+    float3 shaped = yFactor * xFactors * color.rgb;
+    return float4(shaped, color.a);
+}
+
+// gameboy: a two-axis dot-matrix grid (both x and y, unlike lcd's
+// scanline-only pattern), a touch of extra contrast, and a faint warm-
+// green tint evoking the original DMG/GBC reflective screen. The real
+// community dot-matrix shader (libretro/slang-shaders handheld/shaders/
+// gameboy) is a five-pass pipeline with border art and previous-frame
+// ghosting; this frontend has no multi-pass or prior-frame support, so
+// this is a single-pass approximation of the same idea, not a port of
+// its exact math. Colorization/recoloring is deliberately left alone
+// here: Gambatte's own gambatte_gb_colorization core option already
+// owns "what colors a mono Game Boy cart gets," this shader only shapes
+// the screen, never repaints the palette.
+fragment float4 shader_gameboy_fragment(VertexOut in [[stage_in]],
+                                         texture2d<float> tex [[texture(0)]],
+                                         sampler samp [[sampler(0)]],
+                                         constant float2 &texelSize [[buffer(1)]]) {
+    float4 color = tex.sample(samp, in.texCoord);
+    float2 cell = fract(in.texCoord / texelSize);
+    float2 dist = abs(cell - 0.5) * 2.0;
+    float grid = 1.0 - max(dist.x, dist.y) * 0.22;
+    float3 shaped = color.rgb * grid;
+    float3 contrasted = (shaped - 0.5) * 1.08 + 0.5;
+    float3 tinted = mix(contrasted, contrasted * float3(0.92, 1.02, 0.9), 0.18);
+    return float4(clamp(tinted, 0.0, 1.0), color.a);
+}

@@ -40,6 +40,14 @@ prosystem)
 picodrive)
     PREFIX=pico; REPO=https://github.com/libretro/picodrive.git
     MAKEDIR=.; MAKEFILE=Makefile.libretro; OUT=PicoDrive; LIB=libpicodrive_ios.a ;;
+pcsx_rearmed)
+    # platform=ios-arm64 forces DYNAREC=0 in this core's own Makefile,
+    # a pure interpreter build, the same no-JIT exception Beetle Saturn
+    # already proved out for its SH-2 core. Confirm on-device speed
+    # before treating PS1 as shipped; this is a go/no-go, not a batch
+    # build like the other nine cores.
+    PREFIX=psx; REPO=https://github.com/libretro/pcsx_rearmed.git
+    MAKEDIR=.; MAKEFILE=Makefile.libretro; OUT=PCSXReARMed; LIB=libpcsx_rearmed_ios.a ;;
 *)
     echo "unknown core: $NAME" >&2; exit 1 ;;
 esac

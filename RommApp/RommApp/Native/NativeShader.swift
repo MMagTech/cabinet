@@ -4,10 +4,12 @@ import Foundation
 /// docs/scope-native-core-settings.md, then got culled on device: the two
 /// ScaleHQ scalers and crt-geom looked bad enough in this Metal port that
 /// Marcus dropped them on sight (2026-08-07). SABR and four CRT variants
-/// survived, plus "Sharp" as the unfiltered default. One list for every
-/// native core, no per-shader filtering yet. A choice stored under a
-/// dropped shader's old raw value simply fails the enum init and falls
-/// back to Sharp.
+/// survived, plus "Sharp" as the unfiltered default. Two handheld-specific
+/// shaders (LCD, Game Boy) joined 2026-08-08, gated to the platforms they
+/// actually apply to by `NativeShader.available(for:)`, not offered
+/// everywhere like the original six. A choice stored under a dropped
+/// shader's old raw value simply fails the enum init and falls back to
+/// Sharp.
 enum NativeShader: String, CaseIterable, Identifiable {
     case sharp
     case sabr
@@ -16,6 +18,8 @@ enum NativeShader: String, CaseIterable, Identifiable {
     case crtMattias
     case crtBeam
     case crtCaligari
+    case lcd
+    case gameBoy
 
     var id: String { rawValue }
 
@@ -28,6 +32,8 @@ enum NativeShader: String, CaseIterable, Identifiable {
         case .crtMattias: return "CRT (mattias)"
         case .crtBeam: return "CRT (beam)"
         case .crtCaligari: return "CRT (caligari)"
+        case .lcd: return "LCD"
+        case .gameBoy: return "Game Boy"
         }
     }
 
@@ -43,20 +49,52 @@ enum NativeShader: String, CaseIterable, Identifiable {
         case .crtMattias: return "shader_crt_mattias_fragment"
         case .crtBeam: return "shader_crt_beam_fragment"
         case .crtCaligari: return "shader_crt_caligari_fragment"
+        case .lcd: return "shader_lcd_fragment"
+        case .gameBoy: return "shader_gameboy_fragment"
         }
     }
 
-    private static func key(for core: NativeCore) -> String {
-        "com.mmagtech.RommApp.nativeShader.\(core.storageKey)"
+    /// The CRT shaders simulate a television; none of these platforms was
+    /// ever displayed on one, they had their own small LCD screens. Found
+    /// 2026-08-08 while adding LCD/Game Boy: no reason to keep offering a
+    /// look that never applied to this hardware.
+    private static let handheldPlatforms: Set<NativePlatform> = [.gb, .gbc, .gba, .gameGear, .ngpc]
+
+    /// The shaders worth offering for a platform. Handhelds swap the five
+    /// CRT variants for whichever real-screen shader actually fits: Game
+    /// Boy/Color get the dot-matrix look built for their specific screen,
+    /// the other three (GBA, Game Gear, NGPC) get the generic LCD grid,
+    /// same shader shared across all of them the way Provenance's own
+    /// "LCD" filter is generic rather than per-console. Everything else
+    /// keeps the original seven-shader list unchanged.
+    static func available(for platform: NativePlatform) -> [NativeShader] {
+        guard handheldPlatforms.contains(platform) else { return allCases }
+        let handheldSpecific: [NativeShader] = (platform == .gb || platform == .gbc) ? [.gameBoy] : [.lcd]
+        return [.sharp, .sabr] + handheldSpecific
     }
 
-    /// Stored per core, not per game, matching how core options are
-    /// inherently core-scoped already.
-    static func current(for core: NativeCore) -> NativeShader {
-        UserDefaults.standard.string(forKey: key(for: core)).flatMap(NativeShader.init) ?? .sharp
+    private static func key(for platform: NativePlatform) -> String {
+        "com.mmagtech.RommApp.nativeShader.\(platform.storageKey)"
     }
 
-    static func setCurrent(_ shader: NativeShader, for core: NativeCore) {
-        UserDefaults.standard.set(shader.rawValue, forKey: key(for: core))
+    /// Stored per platform, not per core: Genesis Plus GX alone serves
+    /// four platforms, and a shader chosen for Genesis silently carrying
+    /// into Sega CD/Master System/Game Gear was a real, if harmless until
+    /// now, instance of the same core-vs-platform storage bug core
+    /// options were redesigned around. Fixed alongside the handheld work
+    /// since it needed touching this file anyway. A value from a
+    /// shader this platform no longer offers (e.g. a CRT choice under a
+    /// now-handheld-filtered platform) falls back to Sharp rather than
+    /// being trusted.
+    static func current(for platform: NativePlatform) -> NativeShader {
+        guard let stored = UserDefaults.standard.string(forKey: key(for: platform)),
+              let shader = NativeShader(rawValue: stored),
+              available(for: platform).contains(shader)
+        else { return .sharp }
+        return shader
+    }
+
+    static func setCurrent(_ shader: NativeShader, for platform: NativePlatform) {
+        UserDefaults.standard.set(shader.rawValue, forKey: key(for: platform))
     }
 }

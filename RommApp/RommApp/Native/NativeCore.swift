@@ -15,6 +15,7 @@ enum NativeCore {
     case beetleNGP
     case prosystem
     case picoDrive
+    case pcsxReARMed
 
     /// The frontend's identifier for the statically linked core.
     var coreID: LibretroCoreID {
@@ -30,6 +31,7 @@ enum NativeCore {
         case .beetleNGP: return .beetleNGP
         case .prosystem: return .prosystem
         case .picoDrive: return .picoDrive
+        case .pcsxReARMed: return .pcsxReARMed
         }
     }
 
@@ -53,6 +55,7 @@ enum NativeCore {
         case .beetleNGP: return "ngp-native"
         case .prosystem: return "prosystem-native"
         case .picoDrive: return "picodrive-native"
+        case .pcsxReARMed: return "pcsx-rearmed-native"
         }
     }
 
@@ -71,6 +74,7 @@ enum NativeCore {
         case .beetleNGP: return "beetleNGP"
         case .prosystem: return "prosystem"
         case .picoDrive: return "picoDrive"
+        case .pcsxReARMed: return "pcsxReARMed"
         }
     }
 
@@ -110,6 +114,7 @@ enum NativePlatform: String, CaseIterable {
     case nes
     case ngpc
     case atari7800
+    case psx
 
     var core: NativeCore {
         switch self {
@@ -125,6 +130,7 @@ enum NativePlatform: String, CaseIterable {
         case .nes: return .fceumm
         case .ngpc: return .beetleNGP
         case .atari7800: return .prosystem
+        case .psx: return .pcsxReARMed
         }
     }
 
@@ -149,6 +155,7 @@ enum NativePlatform: String, CaseIterable {
         case .nes: return "NES"
         case .ngpc: return "Neo Geo Pocket Color"
         case .atari7800: return "Atari 7800"
+        case .psx: return "PlayStation"
         }
     }
 
@@ -222,6 +229,8 @@ enum NativePlatform: String, CaseIterable {
             return .ngpc
         case "atari7800":
             return .atari7800
+        case "psx":
+            return .psx
         default:
             return nil
         }

@@ -105,6 +105,13 @@ struct LicensesView: View {
             file: "picodrive"
         ),
         Entry(
+            id: "pcsx-rearmed",
+            name: "PCSX ReARMed",
+            role: "Native PlayStation core",
+            summary: "GPL version 2.",
+            file: "pcsx-rearmed"
+        ),
+        Entry(
             id: "libretro-common",
             name: "libretro-common",
             role: "Emulator interface",

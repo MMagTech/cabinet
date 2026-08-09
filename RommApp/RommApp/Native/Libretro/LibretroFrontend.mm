@@ -11,6 +11,7 @@
 #import "BeetleNGPCore.h"
 #import "ProSystemCore.h"
 #import "PicoDriveCore.h"
+#import "PCSXReARMedCore.h"
 #include <string>
 #include <vector>
 #include <mutex>
@@ -230,6 +231,8 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
             return ProSystemCoreAPI();
         case LibretroCoreIDPicoDrive:
             return PicoDriveCoreAPI();
+        case LibretroCoreIDPCSXReARMed:
+            return PCSXReARMedCoreAPI();
     }
     return FBNeoCoreAPI();
 }

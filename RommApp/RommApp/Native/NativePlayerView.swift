@@ -37,6 +37,16 @@ struct NativePlayerView: View {
         rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
     }
 
+    /// The platform this rom actually runs as, for shader storage/
+    /// availability. Falls back to arcade's platform when resolution
+    /// somehow fails (it never should have gotten this far otherwise,
+    /// `NativeLauncher.prepare` already required a resolved platform to
+    /// reach this screen at all), matching `core`'s own required-not-
+    /// optional treatment upstream.
+    private var platform: NativePlatform {
+        NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug) ?? .arcade
+    }
+
     /// Matches PlayerView.controlLayout exactly: arcade resolves per game
     /// through the MAME profile map, everything else through the bundled
     /// per-platform file. This used to be arcade-only unconditionally,
@@ -151,7 +161,7 @@ struct NativePlayerView: View {
             // reasoning as the webview player's pauseGame on disconnect.
             GameControllerManager.shared.onDisconnect = { openMenu() }
             renderer.pendingState = initialState
-            renderer.shader = NativeShader.current(for: core)
+            renderer.shader = NativeShader.current(for: platform)
             NativeSessionMarker.recordGameRunning(romId: rom.id)
         }
         .onDisappear {
@@ -216,10 +226,10 @@ struct NativePlayerView: View {
                     }
                     .buttonStyle(.bordered)
                     Menu {
-                        ForEach(NativeShader.allCases) { candidate in
+                        ForEach(NativeShader.available(for: platform)) { candidate in
                             Button {
                                 renderer.shader = candidate
-                                NativeShader.setCurrent(candidate, for: core)
+                                NativeShader.setCurrent(candidate, for: platform)
                             } label: {
                                 if candidate == renderer.shader {
                                     Label(candidate.label, systemImage: "checkmark")

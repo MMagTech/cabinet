@@ -460,6 +460,26 @@ struct GameLaunchView: View {
             seedPhase = .failed
             return
         }
+        // EmulatorCacheBridge.put base64-encodes the whole file into a
+        // Swift dictionary and runs it through
+        // JSONSerialization.data(withJSONObject:), which is fine for a
+        // cartridge ROM but not for a CD image: found 2026-08-08 from a
+        // real device crash on a PS1 .chd, NSJSONSerialization's internal
+        // string growth failing to allocate ~3.6GB while base64-encoding
+        // a file well under that size, not the file size itself, the
+        // serializer's own transient buffer overhead. Same soft-failure
+        // treatment as every other seed failure: the kept copy already
+        // has the game, this only ever saved the web player one organic
+        // download.
+        guard data.count <= 64 * 1024 * 1024 else {
+            seedPhase = .failed
+            DiagnosticsLog.record(
+                context: "Web player copy",
+                message: "Skipped: \(fileName) is too large to seed safely.",
+                romVersion: session.serverVersion
+            )
+            return
+        }
         let encodedName = Self.jsEncodeURIComponent(fileName)
         let relativeURL = "/api/roms/\(rom.id)/content/\(encodedName)?file_ids=\(fileId)"
         let result = await cacheBridge.put(

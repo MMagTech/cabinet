@@ -47,10 +47,10 @@ enum NativeLauncher {
         // full speed, and a cue/bin failure would be indistinguishable
         // from a real performance failure. Revisit only if a concrete
         // library needs it once the core itself is a known quantity.
-        if core == .beetleSaturn {
+        if core == .beetleSaturn || core == .pcsxReARMed {
             guard !rom.hasMultipleFiles, rom.fsName.lowercased().hasSuffix(".chd") else {
                 throw LaunchError.unsupportedFormat(
-                    "Only .chd is supported for Saturn right now, not \"\(rom.fsName)\". Re-rip or re-add the game as chd."
+                    "Only .chd is supported for \(platform.displayName) right now, not \"\(rom.fsName)\". Re-rip or re-add the game as chd."
                 )
             }
         }
@@ -190,15 +190,25 @@ enum NativeLauncher {
         }
     }
 
+    /// Streams straight to disk rather than materializing the whole
+    /// response as one `Data` blob: found 2026-08-08 from a real device
+    /// crash on a PS1 .chd, `NSMallocException: Failed to grow buffer to
+    /// 3632512361` (roughly 3.6GB), `URLSession.data(for:)` trying to hold
+    /// an entire multi-gigabyte file in memory at once on a phone. Every
+    /// ROM/firmware download in this app went through that one call;
+    /// arcade sets and cartridge ROMs never got big enough to hit the
+    /// ceiling, PS1 discs are the first platform here that reliably do.
     private static func download(_ request: URLRequest, to url: URL) async throws {
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (tempURL, response) = try await URLSession.shared.download(for: request)
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            try? FileManager.default.removeItem(at: tempURL)
             throw NSError(
                 domain: "NativeLauncher",
                 code: http.statusCode,
                 userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode) for \(url.lastPathComponent)"]
             )
         }
-        try data.write(to: url)
+        try? FileManager.default.removeItem(at: url)
+        try FileManager.default.moveItem(at: tempURL, to: url)
     }
 }

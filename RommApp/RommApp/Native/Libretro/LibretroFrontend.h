@@ -23,6 +23,7 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
     LibretroCoreIDBeetleNGP NS_SWIFT_NAME(beetleNGP) = 8,
     LibretroCoreIDProSystem NS_SWIFT_NAME(prosystem) = 9,
     LibretroCoreIDPicoDrive NS_SWIFT_NAME(picoDrive) = 10,
+    LibretroCoreIDPCSXReARMed NS_SWIFT_NAME(pcsxReARMed) = 11,
 };
 
 @interface LibretroFrame : NSObject

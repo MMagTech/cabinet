@@ -59,6 +59,48 @@ enum NativeCoreOptions {
             ],
             defaultValue: "disabled"
         ),
+        // Companions to fbneo-frameskip-type: "Fixed" and "Manual" are
+        // meaningless choices without these, the core just falls back to
+        // its own internal default with no way to change it. Found
+        // 2026-08-08: shipped with the picker but not its two levers.
+        NativeCoreOption(
+            key: "fbneo-fixed-frameskip",
+            label: "Fixed frameskip rate",
+            detail: "Used when Frameskip is set to Fixed. How many frames out of X+1 to skip rendering.",
+            choices: [
+                .init(value: "0", label: "No skipping"),
+                .init(value: "1", label: "1 out of 2"),
+                .init(value: "2", label: "2 out of 3"),
+                .init(value: "3", label: "3 out of 4"),
+                .init(value: "4", label: "4 out of 5"),
+                .init(value: "5", label: "5 out of 6"),
+            ],
+            defaultValue: "0"
+        ),
+        NativeCoreOption(
+            key: "fbneo-frameskip-manual-threshold",
+            label: "Frameskip threshold",
+            detail: "Used when Frameskip is set to Manual. Audio buffer occupancy percentage below which frames are skipped; higher reduces crackling by dropping frames more often.",
+            choices: [
+                .init(value: "15", label: "15%"),
+                .init(value: "18", label: "18%"),
+                .init(value: "21", label: "21%"),
+                .init(value: "24", label: "24%"),
+                .init(value: "27", label: "27%"),
+                .init(value: "30", label: "30%"),
+                .init(value: "33", label: "33%"),
+                .init(value: "36", label: "36%"),
+                .init(value: "39", label: "39%"),
+                .init(value: "42", label: "42%"),
+                .init(value: "45", label: "45%"),
+                .init(value: "48", label: "48%"),
+                .init(value: "51", label: "51%"),
+                .init(value: "54", label: "54%"),
+                .init(value: "57", label: "57%"),
+                .init(value: "60", label: "60%"),
+            ],
+            defaultValue: "33"
+        ),
         NativeCoreOption(
             key: "fbneo-allow-depth-32",
             label: "32-bit color",
@@ -172,7 +214,13 @@ enum NativeCoreOptions {
         switch platform {
         case .arcade: return fbneo
         case .saturn: return beetleSaturn
-        case .gb, .gbc: return gameBoy
+        // GBC excluded on purpose: Gambatte's own libretro.cpp hard-skips
+        // the whole custom-palette branch whenever gb.isCgb() is true
+        // (colorization only ever applies to plain monochrome Game Boy
+        // ROMs, a real GBC game already has its own built-in colors), so
+        // showing this option under Game Boy Color would be a setting
+        // that visibly does nothing. Found 2026-08-08.
+        case .gb: return gameBoy
         case .gba: return gameBoyAdvance
         case .genesis, .sega32X: return genesis
         case .segaCD: return segaCD
@@ -236,7 +284,18 @@ enum NativeCoreOptionsStore {
             else { continue }
             result[option.key] = stored
         }
+        result.merge(forcedOptions(for: platform)) { _, forced in forced }
         return result
+    }
+
+    /// Options that are never a user choice, always sent, and never listed
+    /// in `NativeCoreOptions.options(for:)`: not preferences, hard
+    /// requirements this frontend imposes on a core. Empty for now: N64
+    /// was tried and dropped, see docs/roadmap notes, no core currently
+    /// needs a forced default. Kept as a real mechanism (not deleted)
+    /// since a future core may need one again.
+    private static func forcedOptions(for platform: NativePlatform) -> [String: String] {
+        [:]
     }
 
     /// The RetroPad device port 0 should present, or 0 to leave the core's
