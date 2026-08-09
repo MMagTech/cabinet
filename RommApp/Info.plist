@@ -12,5 +12,11 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+	<!-- Cabinet talks to a RomM server over HTTPS and does nothing else with
+	     encryption, which is exempt. Declaring it here answers the export
+	     compliance question once instead of on every upload to App Store
+	     Connect. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>
