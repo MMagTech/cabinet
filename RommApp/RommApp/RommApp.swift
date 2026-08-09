@@ -55,8 +55,22 @@ struct RommApp: App {
     private func syncIfOnline() {
         guard !networkMonitor.isOffline else { return }
         Task {
-            await KeptGameStore.shared.syncPendingStates(session: session)
+            let savesUploaded = await KeptGameStore.shared.syncPendingStates(session: session)
+            let sessionsUploaded = await session.syncPendingPlaySessions()
             await KeptGameStore.shared.refreshStaleMetadata(session: session)
+            if savesUploaded > 0 || sessionsUploaded > 0 {
+                session.lastSyncSummary = Self.summaryText(saves: savesUploaded, sessions: sessionsUploaded)
+            }
         }
+    }
+
+    /// Terse on purpose, matching how every other offline-sync caption in
+    /// this app reads: the fact that something uploaded is the whole
+    /// message, nothing here needs restating why or how.
+    private static func summaryText(saves: Int, sessions: Int) -> String {
+        var parts: [String] = []
+        if saves > 0 { parts.append(saves == 1 ? "1 save" : "\(saves) saves") }
+        if sessions > 0 { parts.append(sessions == 1 ? "1 play session" : "\(sessions) play sessions") }
+        return parts.joined(separator: ", ") + " uploaded"
     }
 }

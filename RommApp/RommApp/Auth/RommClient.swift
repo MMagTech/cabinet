@@ -138,7 +138,14 @@ actor RommClient {
     /// separate: sending only heartbeats left games with no last played
     /// time at all, so a game played here never reached Home's resume list
     /// or RomM's own.
-    func reportPlaySession(romId: Int, start: Date, end: Date) async {
+    /// Returns whether the report actually reached the server, not just
+    /// whether the request was sent: `Session` queues a session to disk
+    /// the moment it ends and only clears that queue entry on a real
+    /// success, the same durability the save-state queue already
+    /// guarantees, so a lost connection mid-report never silently drops
+    /// history the way this used to.
+    @discardableResult
+    func reportPlaySession(romId: Int, start: Date, end: Date) async -> Bool {
         var req = request(path: "/api/play-sessions", method: "POST")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let stamp = ISO8601DateFormatter()
@@ -152,7 +159,10 @@ actor RommClient {
                 "duration_ms": max(0, Int(end.timeIntervalSince(start) * 1000)),
             ]],
         ])
-        _ = try? await session.data(for: req)
+        guard let (_, response) = try? await session.data(for: req),
+              let http = response as? HTTPURLResponse
+        else { return false }
+        return (200...299).contains(http.statusCode)
     }
 
     /// Maps a platform's folder name to the short name EmulatorJS's core

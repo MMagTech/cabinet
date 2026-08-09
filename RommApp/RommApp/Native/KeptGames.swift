@@ -353,7 +353,11 @@ final class KeptGameStore: ObservableObject {
     /// tried again next time this runs. Safe to call often and
     /// opportunistically: nothing here can duplicate an upload or lose a
     /// file, only remove one once RomM has confirmed it.
-    func syncPendingStates(session: Session) async {
+    /// Returns how many saves actually uploaded this pass, for the in-app
+    /// confirmation Home shows; a no-op pass returns 0 and shows nothing.
+    @discardableResult
+    func syncPendingStates(session: Session) async -> Int {
+        var uploaded = 0
         for game in games {
             guard let core = NativeCore.core(bySlug: game.resolvedCanonicalSlug, isArcade: game.rom.isArcade) else { continue }
             for pending in pendingStates(for: game.romId) {
@@ -372,6 +376,7 @@ final class KeptGameStore: ObservableObject {
                         try? FileManager.default.removeItem(at: screenshotURL)
                     }
                     touchTotalBytes(romId: game.romId)
+                    uploaded += 1
                 } catch {
                     // Left queued on purpose; the next opportunity, a
                     // connection returning anywhere in the app or simply
@@ -379,6 +384,7 @@ final class KeptGameStore: ObservableObject {
                 }
             }
         }
+        return uploaded
     }
 
     /// Replaces a migrated entry's stand-in `Rom` with the real thing,

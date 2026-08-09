@@ -84,6 +84,26 @@ struct HomeView: View {
                     ScrollView { tallLayout(height: geometry.size.height) }
                 }
             }
+            // Shown only when a background sync pass actually uploaded
+            // something (a queued save, a queued play-session report),
+            // never for a no-op check: same "invisible when it applies
+            // to nothing" rule the Offline Mode toggle already follows.
+            // safeAreaInset rather than an overlay so it never covers the
+            // toolbar or the hero underneath it, in either orientation,
+            // without needing to be threaded into both layouts
+            // separately.
+            .safeAreaInset(edge: .top) {
+                if let summary = session.lastSyncSummary {
+                    syncBanner(summary)
+                }
+            }
+            .onChange(of: session.lastSyncSummary) { _, summary in
+                guard summary != nil else { return }
+                Task {
+                    try? await Task.sleep(nanoseconds: 4_000_000_000)
+                    withAnimation { session.lastSyncSummary = nil }
+                }
+            }
             // No large title. The tab bar already names this screen, and
             // in landscape the large title overlapped the first rail's
             // header outright. Inline keeps the bar itself, which the
@@ -555,6 +575,20 @@ struct HomeView: View {
             }
             .contentMargins(.horizontal, 20, for: .scrollContent)
         }
+    }
+
+    /// A background sync just uploaded something the app was holding
+    /// offline. Self-dismissing (see the onChange above), terse, matching
+    /// every other offline-sync caption in this app: the fact that
+    /// something uploaded is the whole message.
+    private func syncBanner(_ summary: String) -> some View {
+        Label(summary, systemImage: "checkmark.icloud")
+            .font(.footnote.weight(.medium))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(.ultraThinMaterial, in: .capsule)
+            .padding(.top, 8)
+            .transition(.move(edge: .top).combined(with: .opacity))
     }
 
     private var emptyState: some View {

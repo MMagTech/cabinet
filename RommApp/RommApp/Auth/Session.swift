@@ -238,8 +238,9 @@ final class Session: ObservableObject {
         await client?.reportPlaying(romId: romId)
     }
 
-    func reportPlaySession(romId: Int, start: Date, end: Date) async {
-        await client?.reportPlaySession(romId: romId, start: start, end: end)
+    @discardableResult
+    func reportPlaySession(romId: Int, start: Date, end: Date) async -> Bool {
+        await client?.reportPlaySession(romId: romId, start: start, end: end) ?? false
     }
 
     /// The in-flight end-of-session report, if any. The player fires its
@@ -251,10 +252,20 @@ final class Session: ObservableObject {
     private(set) var pendingPlayReport: Task<Void, Never>?
 
     /// Records a finished session as a task Home can wait on, rather than
-    /// a fire-and-forget the recents fetch can outrun.
+    /// a fire-and-forget the recents fetch can outrun. Also queued to
+    /// disk before the network is ever touched: found 2026-08-09 that a
+    /// session ending offline (or racing a connection drop) used to just
+    /// vanish, `RommClient.reportPlaySession` swallowed its own failure
+    /// with `try?` and nothing remembered to retry, unlike saves, which
+    /// already had a durable queue. Same fix, same shape: write first,
+    /// clear the file only once RomM has actually confirmed it.
     func reportPlaySessionEnded(romId: Int, start: Date, end: Date) {
+        let queuedURL = Self.queuePendingSession(romId: romId, start: start, end: end)
         pendingPlayReport = Task {
-            await reportPlaySession(romId: romId, start: start, end: end)
+            let success = await reportPlaySession(romId: romId, start: start, end: end)
+            if success, let queuedURL {
+                try? FileManager.default.removeItem(at: queuedURL)
+            }
         }
     }
 
@@ -264,6 +275,86 @@ final class Session: ObservableObject {
         await pendingPlayReport?.value
         pendingPlayReport = nil
     }
+
+    // MARK: Offline play-session queue
+
+    /// A flat directory of small per-session files, not nested under any
+    /// particular kept game: unlike saves, a play-session report can fail
+    /// for a rom that is not kept at all, it only needs to have started
+    /// online and lost signal before ending. The directory itself is the
+    /// queue, no separate manifest, same convention KeptGameStore's
+    /// pending-states directory already uses.
+    private static let pendingSessionsDir: URL = {
+        let fm = FileManager.default
+        let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let dir = support.appendingPathComponent("PendingPlaySessions", isDirectory: true)
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }()
+
+    private struct PendingSession: Codable {
+        let romId: Int
+        let start: Date
+        let end: Date
+    }
+
+    /// Writes a session to disk before any attempt to reach the server,
+    /// the same guarantee the save queue makes: losing signal around the
+    /// report must never mean losing the record. Named for its own end
+    /// time and rom, so nothing here ever overwrites anything real.
+    @discardableResult
+    private static func queuePendingSession(romId: Int, start: Date, end: Date) -> URL? {
+        let stamp = Int(end.timeIntervalSince1970 * 1000)
+        let url = pendingSessionsDir.appendingPathComponent("\(stamp)-\(romId).json")
+        let pending = PendingSession(romId: romId, start: start, end: end)
+        guard let data = try? JSONEncoder().encode(pending) else { return nil }
+        do {
+            try data.write(to: url)
+            return url
+        } catch {
+            return nil
+        }
+    }
+
+    private static func pendingSessions() -> [(url: URL, session: PendingSession)] {
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: pendingSessionsDir, includingPropertiesForKeys: nil
+        ) else { return [] }
+        let decoder = JSONDecoder()
+        return entries
+            .filter { $0.pathExtension == "json" }
+            .compactMap { url -> (url: URL, session: PendingSession)? in
+                guard let data = try? Data(contentsOf: url),
+                      let pending = try? decoder.decode(PendingSession.self, from: data)
+                else { return nil }
+                return (url, pending)
+            }
+            .sorted { $0.session.end < $1.session.end }
+    }
+
+    /// Retries every queued play-session report, oldest first so history
+    /// lands in the right order. Safe to call often and opportunistically:
+    /// a report that succeeds leaves the queue, one that fails stays,
+    /// tried again next time this runs. Returns how many actually went
+    /// through, for the in-app confirmation Home shows.
+    @discardableResult
+    func syncPendingPlaySessions() async -> Int {
+        var uploaded = 0
+        for (url, pending) in Self.pendingSessions() {
+            let success = await reportPlaySession(romId: pending.romId, start: pending.start, end: pending.end)
+            if success {
+                try? FileManager.default.removeItem(at: url)
+                uploaded += 1
+            }
+        }
+        return uploaded
+    }
+
+    /// Set only when a sync pass actually uploaded something, cleared by
+    /// whoever shows it. Never shown for a no-op check, per the same
+    /// "invisible when it applies to nothing" rule the Offline Mode
+    /// toggle already follows.
+    @Published var lastSyncSummary: String?
 
     func roms(
         platformId: Int? = nil,
