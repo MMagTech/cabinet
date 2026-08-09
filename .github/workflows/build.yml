@@ -10,7 +10,10 @@ on:
 jobs:
   build:
     name: Build for device
-    runs-on: macos-15
+    # Needs the iOS 26 SDK: Cabinet deploys to iOS 18 but compiles against a
+    # few iOS 26 APIs behind availability checks. macos-15 ships Xcode 16 and
+    # fails on them.
+    runs-on: macos-26
 
     steps:
       - uses: actions/checkout@v4

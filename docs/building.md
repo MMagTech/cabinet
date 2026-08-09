@@ -5,9 +5,14 @@ no `pod install`, no Swift Package resolution step. Clone it and open it.
 
 ## What you need
 
-- macOS with Xcode 16 or later
+- macOS with **Xcode 26 or later**
 - An iPhone running iOS 18 or later
 - An Apple ID
+
+Xcode 26 is not optional. Cabinet's deployment target is iOS 18, so it runs on
+iOS 18 devices, but it calls a few iOS 26 APIs behind availability checks and
+those still need the iOS 26 SDK to compile. On Xcode 16 the build fails on
+`tabBarMinimizeBehavior` and `scrollEdgeEffectHidden`.
 
 ## Steps
 
