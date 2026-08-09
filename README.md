@@ -44,6 +44,9 @@ WonderSwan, 3DO and more.
 - An iPhone running iOS 18 or later
 - A RomM server with your games on it
 
+Cabinet was built and tested against RomM 5.1.0. Other versions may work, but
+that is the only one it has actually been run against.
+
 Cabinet does not come with any games. It plays yours.
 
 ## Get it
