@@ -5,7 +5,11 @@ Your game collection, on your iPhone.
 Cabinet plays the games from your own RomM server. It opens on whatever you were
 playing last, so you are back in the game in one tap.
 
-<!-- screenshots -->
+| | | |
+|:---:|:---:|:---:|
+| ![Home](docs/images/home.png) | ![Playing a game](docs/images/playing.png) | ![Library](docs/images/library.png) |
+
+![A game in landscape](docs/images/landscape.png)
 
 ## What you get
 
