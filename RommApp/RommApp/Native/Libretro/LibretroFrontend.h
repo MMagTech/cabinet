@@ -110,6 +110,20 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 // written by a different core build.
 - (BOOL)unserializeState:(NSData *)state;
 
+// The core's battery-backed save RAM (RETRO_MEMORY_SAVE_RAM): a PS1
+// memory card, a cartridge battery. Nil when the active core's wiring
+// does not export the memory API or the core reports no save RAM for
+// the loaded game. Same threading rule as serializeState: the core
+// mutates this buffer inside retro_run, so only touch it from the
+// thread driving runFrame.
+- (nullable NSData *)saveRAM;
+
+// Copies bytes into the core's save RAM buffer, the standard libretro
+// frontend contract for restoring battery saves: call it after the game
+// loads, before play begins. Returns NO when there is no buffer or the
+// sizes disagree, both meaning the bytes belong to something else.
+- (BOOL)loadSaveRAM:(NSData *)data;
+
 @end
 
 NS_ASSUME_NONNULL_END

@@ -1348,27 +1348,44 @@ struct GameLaunchView: View {
         .opacity(deletingAssetIds.contains(state.id) ? 0.4 : 1)
     }
 
+    /// A save the native player loads on its own every launch (a PS1
+    /// memory card), rather than one the person picks here. Shown as
+    /// information, not a choice: offering a radio button for something
+    /// that happens regardless would be a lie.
+    private func saveLoadsAutomatically(_ save: GameSave) -> Bool {
+        guard selectedBackend == .native else { return false }
+        return save.emulator == NativeCore.core(for: rom, canonicalSlug: canonicalSlug)?.emulatorTag
+    }
+
     private func saveRow(_ save: GameSave) -> some View {
-        HStack(spacing: 10) {
+        let automatic = saveLoadsAutomatically(save)
+        return HStack(spacing: 10) {
             Button {
                 selectedSave = selectedSave?.id == save.id ? nil : save
                 selectedState = nil
                 if selectedSave != nil { continueRun = false }
             } label: {
                 HStack(spacing: 10) {
-                    Image(systemName: selectedSave?.id == save.id ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(
-                            selectedSave?.id == save.id ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary)
-                        )
+                    Image(
+                        systemName: automatic
+                            ? "checkmark.circle"
+                            : selectedSave?.id == save.id ? "checkmark.circle.fill" : "circle"
+                    )
+                    .foregroundStyle(
+                        automatic || selectedSave?.id == save.id
+                            ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary)
+                    )
                     VStack(alignment: .leading, spacing: 1) {
                         Text(RommDate.relativeLabel(save.updatedAt)).lineLimit(1)
-                        Text("save").font(.caption).foregroundStyle(.secondary)
+                        Text(automatic ? "memory card, loads automatically" : "save")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 0)
                 }
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
+            .disabled(automatic)
             rowMenu(
                 screenshotPath: save.screenshotPath, title: RommDate.relativeLabel(save.updatedAt),
                 delete: { pendingSaveDelete = save }

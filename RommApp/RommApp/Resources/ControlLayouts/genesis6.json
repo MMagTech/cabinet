@@ -1,0 +1,146 @@
+{
+ "system": "genesis",
+ "_ergonomics": "Six-button Genesis pad, chosen by the Controller core setting rather than by platform: X/Y/Z above A/B/C in two rows of three, the same shape as the real pad, borrowing the two-row geometry the PC Engine layout already proved. Mode joins Start up top; input ids confirmed against Genesis Plus GX's own libretro.c (X=L, Y=X, Z=R, Mode=Select).",
+ "items": [
+  {
+   "kind": "dpad",
+   "inputs": [4, 5, 6, 7],
+   "frame": {"x": 0.07, "y": 0.38, "w": 0.4, "h": 0.52},
+   "extended": {"x": 0.02, "y": 0.3, "w": 0.5, "h": 0.68}
+  },
+  {
+   "kind": "button",
+   "label": "A",
+   "input": 1,
+   "frame": {"x": 0.55, "y": 0.44, "w": 0.14, "h": 0.17},
+   "extended": {"x": 0.5, "y": 0.38, "w": 0.24, "h": 0.29}
+  },
+  {
+   "kind": "button",
+   "label": "B",
+   "input": 0,
+   "frame": {"x": 0.7, "y": 0.44, "w": 0.14, "h": 0.17},
+   "extended": {"x": 0.65, "y": 0.38, "w": 0.24, "h": 0.29}
+  },
+  {
+   "kind": "button",
+   "label": "C",
+   "input": 8,
+   "frame": {"x": 0.85, "y": 0.44, "w": 0.14, "h": 0.17},
+   "extended": {"x": 0.8, "y": 0.38, "w": 0.2, "h": 0.29}
+  },
+  {
+   "kind": "button",
+   "label": "X",
+   "input": 10,
+   "frame": {"x": 0.55, "y": 0.24, "w": 0.14, "h": 0.17},
+   "extended": {"x": 0.5, "y": 0.18, "w": 0.24, "h": 0.29}
+  },
+  {
+   "kind": "button",
+   "label": "Y",
+   "input": 9,
+   "frame": {"x": 0.7, "y": 0.24, "w": 0.14, "h": 0.17},
+   "extended": {"x": 0.65, "y": 0.18, "w": 0.24, "h": 0.29}
+  },
+  {
+   "kind": "button",
+   "label": "Z",
+   "input": 11,
+   "frame": {"x": 0.85, "y": 0.24, "w": 0.14, "h": 0.17},
+   "extended": {"x": 0.8, "y": 0.18, "w": 0.2, "h": 0.29}
+  },
+  {
+   "kind": "pill",
+   "label": "Mode",
+   "input": 2,
+   "frame": {"x": 0.25, "y": 0.03, "w": 0.19, "h": 0.1},
+   "extended": {"x": 0.22, "y": 0.0, "w": 0.25, "h": 0.16}
+  },
+  {
+   "kind": "pill",
+   "label": "Start",
+   "input": 3,
+   "frame": {"x": 0.56, "y": 0.03, "w": 0.19, "h": 0.1},
+   "extended": {"x": 0.53, "y": 0.0, "w": 0.25, "h": 0.16}
+  },
+  {
+   "kind": "pill",
+   "label": "Menu",
+   "input": -1,
+   "frame": {"x": 0.4, "y": 0.21, "w": 0.2, "h": 0.1},
+   "extended": {"x": 0.37, "y": 0.18, "w": 0.26, "h": 0.16}
+  }
+ ],
+ "landscapeItems": [
+  {
+   "kind": "dpad",
+   "inputs": [4, 5, 6, 7],
+   "frame": {"x": 0.03, "y": 0.42, "w": 0.19, "h": 0.42},
+   "extended": {"x": 0.0, "y": 0.32, "w": 0.25, "h": 0.58}
+  },
+  {
+   "kind": "button",
+   "label": "A",
+   "input": 1,
+   "frame": {"x": 0.7, "y": 0.5, "w": 0.07, "h": 0.13},
+   "extended": {"x": 0.65, "y": 0.44, "w": 0.17, "h": 0.25}
+  },
+  {
+   "kind": "button",
+   "label": "B",
+   "input": 0,
+   "frame": {"x": 0.79, "y": 0.5, "w": 0.07, "h": 0.13},
+   "extended": {"x": 0.74, "y": 0.44, "w": 0.17, "h": 0.25}
+  },
+  {
+   "kind": "button",
+   "label": "C",
+   "input": 8,
+   "frame": {"x": 0.88, "y": 0.5, "w": 0.07, "h": 0.13},
+   "extended": {"x": 0.83, "y": 0.44, "w": 0.17, "h": 0.25}
+  },
+  {
+   "kind": "button",
+   "label": "X",
+   "input": 10,
+   "frame": {"x": 0.7, "y": 0.3, "w": 0.07, "h": 0.13},
+   "extended": {"x": 0.65, "y": 0.24, "w": 0.17, "h": 0.25}
+  },
+  {
+   "kind": "button",
+   "label": "Y",
+   "input": 9,
+   "frame": {"x": 0.79, "y": 0.3, "w": 0.07, "h": 0.13},
+   "extended": {"x": 0.74, "y": 0.24, "w": 0.17, "h": 0.25}
+  },
+  {
+   "kind": "button",
+   "label": "Z",
+   "input": 11,
+   "frame": {"x": 0.88, "y": 0.3, "w": 0.07, "h": 0.13},
+   "extended": {"x": 0.83, "y": 0.24, "w": 0.17, "h": 0.25}
+  },
+  {
+   "kind": "pill",
+   "label": "Mode",
+   "input": 2,
+   "frame": {"x": 0.03, "y": 0.06, "w": 0.1, "h": 0.09},
+   "extended": {"x": 0.0, "y": 0.03, "w": 0.16, "h": 0.15}
+  },
+  {
+   "kind": "pill",
+   "label": "Start",
+   "input": 3,
+   "frame": {"x": 0.87, "y": 0.06, "w": 0.1, "h": 0.09},
+   "extended": {"x": 0.84, "y": 0.03, "w": 0.16, "h": 0.15}
+  },
+  {
+   "kind": "pill",
+   "label": "Menu",
+   "input": -1,
+   "frame": {"x": 0.16, "y": 0.06, "w": 0.1, "h": 0.09},
+   "extended": {"x": 0.13, "y": 0.03, "w": 0.16, "h": 0.15}
+  }
+ ]
+}

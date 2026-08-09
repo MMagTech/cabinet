@@ -28,6 +28,9 @@ struct NativePlayerView: View {
     @AppStorage("com.mmagtech.RommApp.controlOpacity") private var controlOpacity = 0.7
     @Environment(\.scenePhase) private var scenePhase
     @State private var startedAt: Date?
+    /// The card bytes as of the last sync or upload, so snapshots only
+    /// travel when an in-game save actually changed them.
+    @State private var lastCardData: Data?
 
     private var profile: ArcadeProfile {
         ArcadeProfileStore.shared.resolve(romId: rom.id, shortname: rom.fsNameNoExt)
@@ -57,6 +60,14 @@ struct NativePlayerView: View {
         if rom.isArcade {
             return ArcadeLayout.build(for: profile)
         }
+        // The six-button Genesis pad follows the Controller core setting,
+        // the same lever that already tells the core which pad port 0
+        // presents: with the setting on, the touch overlay finally grows
+        // the X/Y/Z row and Mode that only physical controllers had.
+        if NativeCoreOptionsStore.padDevice(for: platform) == NativePadDevice.sixButton,
+           let sixButton = ControlLayout.named("genesis6") {
+            return sixButton
+        }
         return ControlLayout.forPlatform(slug: canonicalSlug) ?? ArcadeLayout.build(for: .fallback)
     }
 
@@ -83,6 +94,143 @@ struct NativePlayerView: View {
         renderer.paused = true
         menuStatus = nil
         menuVisible = true
+        captureMemoryCard()
+    }
+
+    /// Whether this session has a battery save to look after. Gated on the
+    /// platform rather than probing the core: PCSX ReARMed is the only
+    /// core whose wiring exports the memory API, and the pause path runs
+    /// often enough that a cheap check matters.
+    private var hasMemoryCard: Bool {
+        platform == .psx
+    }
+
+    /// The launch-time decision of which card goes into the slot: a local
+    /// copy still waiting to upload always wins (it is strictly newer than
+    /// anything the server has), otherwise the server's card wins whenever
+    /// its stamp moved since the last sync, covering saves made on another
+    /// device. Offline, or with nothing on the server, whatever is on disk
+    /// plays. A game with no card anywhere just starts with the core's
+    /// own freshly formatted one.
+    /// Whether a card image holds any actual saves: directory frames 1-15
+    /// carry 0x51/0x52/0x53 in their first byte for in-use blocks, 0xA0
+    /// for free ones (the PS1 memory card spec's block allocation states).
+    /// A freshly formatted card that no game ever wrote must never outrank
+    /// a real card from the server, which is exactly what happened when a
+    /// quick native boot left an empty local card behind and blocked the
+    /// adoption path below.
+    private func cardHasSaves(_ card: Data) -> Bool {
+        guard card.count == 128 * 1024 else { return false }
+        return (1...15).contains { block in
+            [0x51, 0x52, 0x53].contains(Int(card[128 * block]))
+        }
+    }
+
+    private func syncMemoryCardIn() async {
+        guard hasMemoryCard else { return }
+        defer { renderer.awaitingSaveRAM = false }
+        let store = MemoryCardStore.shared
+        let local = store.localCard(romId: rom.id)
+        let localUseful = local.map(cardHasSaves) ?? false
+
+        if store.pendingUpload(romId: rom.id), let local, localUseful {
+            renderer.pendingSaveRAM = local
+            lastCardData = local
+            DiagnosticsLog.record(
+                context: "Memory card",
+                message: "Using the local card; its upload is still pending.",
+                romVersion: session.serverVersion
+            )
+            await uploadMemoryCard(local)
+            return
+        }
+
+        if let saves = try? await session.saves(romId: rom.id) {
+            let sorted = saves.sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
+            let own = sorted.first { $0.emulator == core.emulatorTag }
+            // A game with no Cabinet card worth keeping adopts the newest
+            // card from anywhere else: a save uploaded through RomM's web
+            // UI, a card brought over from another emulator. Only ever as
+            // a seed when there is no local card holding real saves, and
+            // only if the bytes verify as an actual card image with saves
+            // on it. In-game saves after this fork into Cabinet's own row;
+            // the original upload is never touched.
+            let newest = own ?? (localUseful ? nil : sorted.first)
+            if let newest, newest.updatedAt != store.serverStamp(romId: rom.id) || !localUseful {
+                if let bytes = try? await session.saveContent(newest),
+                   cardHasSaves(bytes) {
+                    store.storeDownloaded(romId: rom.id, data: bytes, serverStamp: newest.updatedAt)
+                    renderer.pendingSaveRAM = bytes
+                    lastCardData = bytes
+                    DiagnosticsLog.record(
+                        context: "Memory card",
+                        message: "Loaded \(newest.fileName) from the server into the card slot.",
+                        romVersion: session.serverVersion
+                    )
+                    return
+                }
+                DiagnosticsLog.record(
+                    context: "Memory card",
+                    message: "Found \(newest.fileName) on the server but its content did not verify as a card with saves.",
+                    romVersion: session.serverVersion
+                )
+            }
+        } else {
+            DiagnosticsLog.record(
+                context: "Memory card",
+                message: "Could not list saves from the server; using what is on this phone.",
+                romVersion: session.serverVersion
+            )
+        }
+
+        if let local {
+            renderer.pendingSaveRAM = local
+            lastCardData = local
+            DiagnosticsLog.record(
+                context: "Memory card",
+                message: localUseful ? "Using the local card." : "Using the local card; it holds no saves yet.",
+                romVersion: session.serverVersion
+            )
+        }
+    }
+
+    /// Snapshots the card while the core is paused and, when it actually
+    /// changed, writes it to disk first and then tries the upload. Runs on
+    /// every pause, quit and background: cards are small and in-game saves
+    /// are the one thing a player never expects to lose.
+    private func captureMemoryCard() {
+        guard hasMemoryCard, renderer.paused, let data = renderer.snapshotSaveRAM() else { return }
+        guard data != lastCardData else { return }
+        lastCardData = data
+        MemoryCardStore.shared.storeSnapshot(romId: rom.id, data: data)
+        Task { await uploadMemoryCard(data) }
+    }
+
+    private func uploadMemoryCard(_ data: Data) async {
+        do {
+            // The Cabinet marker keeps this row's filename distinct from
+            // anything the web player made: RomM's overwrite matches rows
+            // by filename alone, emulator tag not included (confirmed in
+            // its saves endpoint source), so a bare "<name>.srm" upload
+            // would silently take over and rewrite an existing EmulatorJS
+            // card of the same name.
+            try await session.uploadSave(
+                romId: rom.id, emulator: core.emulatorTag,
+                fileName: "\(rom.fsNameNoExt) (Cabinet).srm", saveData: data
+            )
+            // Re-list to learn the stamp the server just minted, so the
+            // next launch recognises its own upload instead of pulling
+            // it back down.
+            let saves = (try? await session.saves(romId: rom.id)) ?? []
+            let stamp = saves
+                .filter { $0.emulator == core.emulatorTag }
+                .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
+                .first?.updatedAt
+            MemoryCardStore.shared.markUploaded(romId: rom.id, serverStamp: stamp)
+        } catch {
+            // The disk copy and its pending flag survive; the next launch
+            // retries. Same soft failure as the state queue.
+        }
     }
 
     private func closeMenu() {
@@ -138,6 +286,7 @@ struct NativePlayerView: View {
         // game is loaded and running.
         .task {
             if startedAt == nil { startedAt = Date() }
+            await syncMemoryCardIn()
             while !Task.isCancelled {
                 await session.reportPlaying(romId: rom.id)
                 try? await Task.sleep(for: .seconds(60))
@@ -149,6 +298,11 @@ struct NativePlayerView: View {
             // Settings and the remap screen, so a fresh launch straight into
             // a native game left every controller silent.
             GameControllerManager.shared.start()
+            // Same as the webview player: a running game is being watched
+            // even when nothing touches the screen, and with a physical
+            // controller nothing ever does. Without this the screen dims
+            // and locks mid-game.
+            UIApplication.shared.isIdleTimerDisabled = true
             previousControllerSend = GameControllerManager.shared.send
             previousControllerMenu = GameControllerManager.shared.onMenu
             previousControllerDisconnect = GameControllerManager.shared.onDisconnect
@@ -161,10 +315,15 @@ struct NativePlayerView: View {
             // reasoning as the webview player's pauseGame on disconnect.
             GameControllerManager.shared.onDisconnect = { openMenu() }
             renderer.pendingState = initialState
+            // Held before the first frame ever runs, so a PS1 game cannot
+            // boot past its own card check while the card decision is
+            // still in flight; syncMemoryCardIn releases it.
+            renderer.awaitingSaveRAM = hasMemoryCard
             renderer.shader = NativeShader.current(for: platform)
             NativeSessionMarker.recordGameRunning(romId: rom.id)
         }
         .onDisappear {
+            UIApplication.shared.isIdleTimerDisabled = false
             GameControllerManager.shared.send = previousControllerSend
             GameControllerManager.shared.onMenu = previousControllerMenu
             GameControllerManager.shared.onDisconnect = previousControllerDisconnect
@@ -186,6 +345,7 @@ struct NativePlayerView: View {
             if phase == .background {
                 NativeSessionMarker.recordBackgrounded()
                 renderer.paused = true
+                captureMemoryCard()
             } else if phase == .active && !menuVisible {
                 renderer.paused = false
             }
@@ -495,10 +655,48 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     /// before a full machine state takes, the same settle delay the
     /// webview player learned the hard way.
     var pendingState: Data?
+    /// A battery save (a PS1 memory card) waiting to be copied into the
+    /// core's save RAM, set by the launch sync once it has decided which
+    /// copy wins. Applied on this draw loop, not where it was fetched,
+    /// because the core reads and writes the same buffer inside
+    /// retro_run. No settle delay: unlike a machine state, save RAM is
+    /// plain memory the core only consults when the game visits its own
+    /// save screens, and applying late risks the game having already
+    /// read an empty card.
+    var pendingSaveRAM: Data?
+    /// While true the draw loop presents but does not run the core: the
+    /// memory card decision is still in flight, and a PS1 game must not
+    /// boot past its own card check before the card is in the slot. EA's
+    /// games check during the boot logos, which is exactly the race that
+    /// made an adopted card invisible until the second launch. Set before
+    /// the first frame for card platforms, cleared by the launch sync
+    /// whichever way it resolves.
+    var awaitingSaveRAM = false
     private var framesRun = 0
 
+    /// The core's current save RAM. Only call while `paused`, the same
+    /// contract as serializeState and for the same reason.
+    func snapshotSaveRAM() -> Data? {
+        frontend.saveRAM()
+    }
+
     func draw(in view: MTKView) {
-        if !paused {
+        if !paused && !awaitingSaveRAM {
+            if let card = pendingSaveRAM {
+                pendingSaveRAM = nil
+                let loaded = frontend.loadSaveRAM(card)
+                // MTKView drives this on the main thread, so recording
+                // straight from here is safe. The apply's result was
+                // silently discarded before, which made "the write never
+                // landed" indistinguishable from "the game ignored it".
+                DiagnosticsLog.record(
+                    context: "Memory card",
+                    message: loaded
+                        ? "Card seated in the core (frame \(framesRun))."
+                        : "Core refused the card bytes (frame \(framesRun)).",
+                    romVersion: nil
+                )
+            }
             let mask = heldButtons.reduce(into: UInt32(0)) { $0 |= (1 << $1) }
             frontend.setButtonMask(mask)
             frontend.runFrame()

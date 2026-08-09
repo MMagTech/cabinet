@@ -22,6 +22,8 @@ extern "C" {
     size_t psx_retro_serialize_size(void);
     bool psx_retro_serialize(void *, size_t);
     bool psx_retro_unserialize(const void *, size_t);
+    void *psx_retro_get_memory_data(unsigned);
+    size_t psx_retro_get_memory_size(unsigned);
 }
 
 const LibretroCoreAPI *PCSXReARMedCoreAPI(void) {
@@ -45,6 +47,12 @@ const LibretroCoreAPI *PCSXReARMedCoreAPI(void) {
         .serialize_size = psx_retro_serialize_size,
         .serialize = psx_retro_serialize,
         .unserialize = psx_retro_unserialize,
+        // Memory card 1, exposed as standard SAVE_RAM because the core's
+        // pcsx_rearmed_memcard1 option defaults to "libretro". The only
+        // core wired for save RAM so far: PS1 saves have no other home,
+        // while cartridge systems still cover themselves with states.
+        .get_memory_data = psx_retro_get_memory_data,
+        .get_memory_size = psx_retro_get_memory_size,
     };
     return &api;
 }

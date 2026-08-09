@@ -420,6 +420,71 @@ actor RommClient {
         try await sendQuery("/api/saves", [URLQueryItem(name: "rom_id", value: String(romId))])
     }
 
+    /// Uploads a battery save (POST /api/saves, multipart with a `saveFile`
+    /// part), the endpoint RomM keeps distinct from states for exactly this
+    /// kind of data. `overwrite` replaces the server's copy of the same
+    /// file name instead of stacking a new row per upload, which is what
+    /// keeps a PS1 game at one memory card rather than one per session.
+    /// Both the parameter and the part name are confirmed against the live
+    /// server's OpenAPI schema, not assumed.
+    func uploadSave(
+        romId: Int,
+        emulator: String,
+        fileName: String,
+        saveData: Data
+    ) async throws {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("/api/saves"), resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [
+            URLQueryItem(name: "rom_id", value: String(romId)),
+            URLQueryItem(name: "emulator", value: emulator),
+            URLQueryItem(name: "overwrite", value: "true"),
+        ]
+        guard let url = components?.url else {
+            throw RommError.transport("Could not build the request address.")
+        }
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        if let accessToken {
+            req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"saveFile\"; filename=\"\(fileName)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: application/octet-stream\r\n\r\n".data(using: .utf8)!)
+        body.append(saveData)
+        body.append("\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        req.httpBody = body
+
+        let (data, response) = try await session.data(for: req)
+        guard let http = response as? HTTPURLResponse else {
+            throw RommError.transport("The server sent a response the app could not read.")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw RommError(status: http.statusCode, body: data)
+        }
+    }
+
+    /// The raw bytes of one battery save, the same content-endpoint
+    /// pattern as states, covers and firmware.
+    func saveContent(_ save: GameSave) async throws -> Data {
+        let req = request(path: "/api/saves/\(save.id)/content")
+        let (data, response) = try await session.data(for: req)
+        guard let http = response as? HTTPURLResponse else {
+            throw RommError.transport("The server sent a response the app could not read.")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw RommError(status: http.statusCode, body: data)
+        }
+        return data
+    }
+
     func states(romId: Int) async throws -> [GameState] {
         try await sendQuery("/api/states", [URLQueryItem(name: "rom_id", value: String(romId))])
     }

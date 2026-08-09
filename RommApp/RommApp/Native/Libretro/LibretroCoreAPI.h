@@ -34,6 +34,12 @@ typedef struct {
     size_t (*serialize_size)(void);
     bool (*serialize)(void *data, size_t size);
     bool (*unserialize)(const void *data, size_t size);
+    // Battery-backed save RAM (RETRO_MEMORY_SAVE_RAM): a PS1 memory card,
+    // a cartridge battery. Optional; wiring files that leave these null
+    // simply have no save RAM the frontend can reach, and the designated
+    // initializers they all use zero-fill absent fields.
+    void *(*get_memory_data)(unsigned id);
+    size_t (*get_memory_size)(unsigned id);
 } LibretroCoreAPI;
 
 #ifdef __cplusplus

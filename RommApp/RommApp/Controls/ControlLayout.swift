@@ -86,6 +86,20 @@ struct ControlLayout: Decodable {
     /// keyboard machine or an analog stick, a two button pad is at least a
     /// plausible, if incomplete, way to play, so it is offered rather than
     /// refused.
+    /// A layout by bundled file name, for the cases where the file is not
+    /// a straight function of the platform: the six-button Genesis pad is
+    /// picked by a core setting, not a slug.
+    static func named(_ name: String) -> ControlLayout? {
+        guard let url = Bundle.main.url(forResource: name, withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let layout = try? JSONDecoder().decode(ControlLayout.self, from: data)
+        else {
+            assertionFailure("Missing or invalid control layout \(name).json")
+            return nil
+        }
+        return layout
+    }
+
     static func forPlatform(slug: String) -> ControlLayout? {
         let name: String
         switch slug {

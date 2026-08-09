@@ -52,8 +52,10 @@ enum ControlTheme: String, CaseIterable {
         }
         switch system {
         // Super Famicom's four colours, which the American SNES dropped and
-        // most people picture anyway.
-        case "default":
+        // most people picture anyway. "snes" was missing from this case for
+        // as long as the theme existed, so the one console these colours
+        // belong to drew plain white while every unknown platform got them.
+        case "default", "snes":
             switch input {
             case RetroPad.a: return .neoRed
             case RetroPad.b: return .neoYellow
@@ -68,6 +70,35 @@ enum ControlTheme: String, CaseIterable {
             case RetroPad.a, RetroPad.b: return .dmgMagenta
             default: return nil
             }
+        // The shape colours on every DualShock ever made: green triangle,
+        // red circle, blue cross, pink square. The layouts share ids, so
+        // one case covers both.
+        case "psx", "psp":
+            switch input {
+            case RetroPad.x: return .psTriangle
+            case RetroPad.a: return .psCircle
+            case RetroPad.b: return .psCross
+            case RetroPad.y: return .psSquare
+            default: return nil
+            }
+        // The N64 pad's blue A and green B. The C cluster is drawn as a
+        // d-pad, which takes no tint, so its yellow stays aspirational.
+        case "n64":
+            switch input {
+            case RetroPad.a: return .n64Blue
+            case RetroPad.b: return .n64Green
+            default: return nil
+            }
+        // The NES brick's two red squares, same colour on purpose, like
+        // the Game Boy's magenta.
+        case "nes":
+            switch input {
+            case RetroPad.a, RetroPad.b: return .nesRed
+            default: return nil
+            }
+        // Saturn deliberately absent: its common pads (Japanese grey, US
+        // black) have plain black buttons, and the colourful A/B/C pad is
+        // a later variant, so the hardware has no one opinion to honour.
         default:
             return nil
         }
@@ -116,6 +147,14 @@ private extension UIColor {
     static let neoGreen = UIColor(red: 0.30, green: 0.82, blue: 0.42, alpha: 1)
     static let neoBlue = UIColor(red: 0.29, green: 0.56, blue: 0.98, alpha: 1)
     static let dmgMagenta = UIColor(red: 0.80, green: 0.31, blue: 0.55, alpha: 1)
+
+    static let psTriangle = UIColor(red: 0.25, green: 0.78, blue: 0.52, alpha: 1)
+    static let psCircle = UIColor(red: 0.94, green: 0.35, blue: 0.32, alpha: 1)
+    static let psCross = UIColor(red: 0.42, green: 0.62, blue: 0.95, alpha: 1)
+    static let psSquare = UIColor(red: 0.93, green: 0.48, blue: 0.70, alpha: 1)
+    static let n64Blue = UIColor(red: 0.28, green: 0.47, blue: 0.94, alpha: 1)
+    static let n64Green = UIColor(red: 0.30, green: 0.78, blue: 0.40, alpha: 1)
+    static let nesRed = UIColor(red: 0.86, green: 0.24, blue: 0.22, alpha: 1)
 
     static let punchLight = UIColor(red: 0.98, green: 0.76, blue: 0.30, alpha: 1)
     static let punchMedium = UIColor(red: 0.96, green: 0.52, blue: 0.22, alpha: 1)

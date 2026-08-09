@@ -290,12 +290,33 @@ enum NativeCoreOptionsStore {
 
     /// Options that are never a user choice, always sent, and never listed
     /// in `NativeCoreOptions.options(for:)`: not preferences, hard
-    /// requirements this frontend imposes on a core. Empty for now: N64
-    /// was tried and dropped, see docs/roadmap notes, no core currently
-    /// needs a forced default. Kept as a real mechanism (not deleted)
-    /// since a future core may need one again.
+    /// requirements this frontend imposes on a core.
     private static func forcedOptions(for platform: NativePlatform) -> [String: String] {
-        [:]
+        switch platform {
+        case .psx:
+            // Without an answer for these keys PCSX ReARMed's
+            // load_memcards() skips card setup entirely (memcard_type
+            // stays NONE, confirmed in the vendored libretro.c), leaving
+            // the game with no card at all. Card 1 as "libretro" is what
+            // exposes it through RETRO_MEMORY_SAVE_RAM for the memory
+            // card sync; card 2 stays explicitly off rather than
+            // "shared", which would write a .mcd into the per-launch
+            // temp directory the next launch deletes.
+            return [
+                "pcsx_rearmed_memcard1": "libretro",
+                "pcsx_rearmed_memcard2": "none",
+            ]
+        case .sega32X:
+            // PicoDrive's retro_set_controller_port_device is an empty
+            // function (confirmed in its libretro.c); pad type only moves
+            // through the picodrive_input1 variable. Without this
+            // translation the Controller setting silently did nothing on
+            // 32X, for touch and physical controllers alike.
+            let sixButton = padDevice(for: .sega32X) == NativePadDevice.sixButton
+            return ["picodrive_input1": sixButton ? "6 button pad" : "3 button pad"]
+        default:
+            return [:]
+        }
     }
 
     /// The RetroPad device port 0 should present, or 0 to leave the core's

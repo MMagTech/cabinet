@@ -464,4 +464,29 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     return gCore->unserialize(state.bytes, state.length);
 }
 
+- (nullable NSData *)saveRAM {
+    if (!gInitialized || !gGameLoaded || !gCore->get_memory_data || !gCore->get_memory_size) {
+        return nil;
+    }
+    void *bytes = gCore->get_memory_data(RETRO_MEMORY_SAVE_RAM);
+    size_t size = gCore->get_memory_size(RETRO_MEMORY_SAVE_RAM);
+    if (!bytes || size == 0) {
+        return nil;
+    }
+    return [NSData dataWithBytes:bytes length:size];
+}
+
+- (BOOL)loadSaveRAM:(NSData *)data {
+    if (!gInitialized || !gGameLoaded || !gCore->get_memory_data || !gCore->get_memory_size) {
+        return NO;
+    }
+    void *bytes = gCore->get_memory_data(RETRO_MEMORY_SAVE_RAM);
+    size_t size = gCore->get_memory_size(RETRO_MEMORY_SAVE_RAM);
+    if (!bytes || size == 0 || data.length != size) {
+        return NO;
+    }
+    memcpy(bytes, data.bytes, size);
+    return YES;
+}
+
 @end

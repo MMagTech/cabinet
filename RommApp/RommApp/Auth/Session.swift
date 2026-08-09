@@ -436,6 +436,23 @@ final class Session: ObservableObject {
         return try await client.stateContent(state)
     }
 
+    func saveContent(_ save: GameSave) async throws -> Data {
+        guard let client else { throw RommError.transport("No server selected.") }
+        return try await client.saveContent(save)
+    }
+
+    func uploadSave(
+        romId: Int,
+        emulator: String,
+        fileName: String,
+        saveData: Data
+    ) async throws {
+        guard let client else { throw RommError.transport("No server selected.") }
+        try await client.uploadSave(
+            romId: romId, emulator: emulator, fileName: fileName, saveData: saveData
+        )
+    }
+
     func uploadState(
         romId: Int,
         emulator: String,

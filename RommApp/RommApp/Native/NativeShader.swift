@@ -65,10 +65,14 @@ enum NativeShader: String, CaseIterable, Identifiable {
     /// Boy/Color get the dot-matrix look built for their specific screen,
     /// the other three (GBA, Game Gear, NGPC) get the generic LCD grid,
     /// same shader shared across all of them the way Provenance's own
-    /// "LCD" filter is generic rather than per-console. Everything else
-    /// keeps the original seven-shader list unchanged.
+    /// "LCD" filter is generic rather than per-console. The filter cuts
+    /// both ways: consoles drop the two handheld screens the same way
+    /// handhelds drop the CRTs, since a PS1 game offering a Game Boy
+    /// dot-matrix was the same mismatch in the other direction.
     static func available(for platform: NativePlatform) -> [NativeShader] {
-        guard handheldPlatforms.contains(platform) else { return allCases }
+        guard handheldPlatforms.contains(platform) else {
+            return allCases.filter { $0 != .lcd && $0 != .gameBoy }
+        }
         let handheldSpecific: [NativeShader] = (platform == .gb || platform == .gbc) ? [.gameBoy] : [.lcd]
         return [.sharp, .sabr] + handheldSpecific
     }
