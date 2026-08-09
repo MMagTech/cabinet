@@ -1143,6 +1143,11 @@ struct GameLaunchView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                if MemoryCardStore.shared.pendingUpload(romId: rom.id) {
+                    Text("Memory card waiting to upload")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             } else if let error = keptStore.errors[rom.id] {
                 Text(error)
                     .font(.caption)

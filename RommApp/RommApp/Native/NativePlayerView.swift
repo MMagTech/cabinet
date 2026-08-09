@@ -68,6 +68,14 @@ struct NativePlayerView: View {
            let sixButton = ControlLayout.named("genesis6") {
             return sixButton
         }
+        // Same idea for PCE's Avenue Pad 6, but through a genuine core
+        // variable rather than a controller-port device change, since
+        // that is what pce_fast_default_joypad_type_p1 actually is.
+        if (platform == .tg16 || platform == .tgCD),
+           NativeCoreOptionsStore.value(NativeCoreOptions.pceJoypad, for: platform) == "6 Buttons",
+           let sixButton = ControlLayout.named("pce6") {
+            return sixButton
+        }
         return ControlLayout.forPlatform(slug: canonicalSlug) ?? ArcadeLayout.build(for: .fallback)
     }
 

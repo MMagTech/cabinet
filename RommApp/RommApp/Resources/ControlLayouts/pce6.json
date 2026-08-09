@@ -1,75 +1,75 @@
 {
- "system": "pc-fx",
- "_ergonomics": "Six numbered face buttons, I-VI, in two rows the same shape as the real pad, so a thumb sweep across the row matches the console's own.",
+ "system": "pce",
+ "_ergonomics": "Six-button PC Engine/TurboGrafx pad, chosen by the Controller core setting rather than by platform, the same lever used for genesis6.json. The base pad (pce.json) only has I and II; this is the Avenue Pad 6 accessory a minority of games, mostly fighting games, actually read.",
  "items": [
   {
    "kind": "dpad",
    "inputs": [4, 5, 6, 7],
-   "frame": {"x": 0.07, "y": 0.38, "w": 0.4, "h": 0.52},
-   "extended": {"x": 0.02, "y": 0.3, "w": 0.5, "h": 0.68}
+   "frame": {"x": 0.0843, "y": 0.3982, "w": 0.3714, "h": 0.4836},
+   "extended": {"x": 0.0343, "y": 0.3182, "w": 0.4714, "h": 0.6436}
   },
   {
    "kind": "button",
    "label": "I",
    "input": 8,
-   "frame": {"x": 0.55, "y": 0.665, "w": 0.14, "h": 0.17},
-   "extended": {"x": 0.5095, "y": 0.6171, "w": 0.221, "h": 0.2658}
+   "frame": {"x": 0.55, "y": 0.66, "w": 0.14, "h": 0.17},
+   "extended": {"x": 0.5095, "y": 0.6121, "w": 0.221, "h": 0.2658}
   },
   {
    "kind": "button",
    "label": "II",
    "input": 0,
-   "frame": {"x": 0.7, "y": 0.665, "w": 0.14, "h": 0.17},
-   "extended": {"x": 0.6595, "y": 0.6171, "w": 0.221, "h": 0.2658}
+   "frame": {"x": 0.7, "y": 0.66, "w": 0.14, "h": 0.17},
+   "extended": {"x": 0.6595, "y": 0.6121, "w": 0.221, "h": 0.2658}
   },
   {
    "kind": "button",
    "label": "III",
    "input": 9,
-   "frame": {"x": 0.85, "y": 0.665, "w": 0.14, "h": 0.17},
-   "extended": {"x": 0.8095, "y": 0.6171, "w": 0.181, "h": 0.2658}
+   "frame": {"x": 0.85, "y": 0.66, "w": 0.14, "h": 0.17},
+   "extended": {"x": 0.8095, "y": 0.6121, "w": 0.19, "h": 0.2658}
   },
   {
    "kind": "button",
    "label": "IV",
    "input": 1,
-   "frame": {"x": 0.55, "y": 0.41, "w": 0.14, "h": 0.17},
-   "extended": {"x": 0.5095, "y": 0.3621, "w": 0.221, "h": 0.2658}
+   "frame": {"x": 0.55, "y": 0.425, "w": 0.14, "h": 0.17},
+   "extended": {"x": 0.5095, "y": 0.3771, "w": 0.221, "h": 0.2658}
   },
   {
    "kind": "button",
    "label": "V",
    "input": 10,
-   "frame": {"x": 0.7, "y": 0.41, "w": 0.14, "h": 0.17},
-   "extended": {"x": 0.6595, "y": 0.3621, "w": 0.221, "h": 0.2658}
+   "frame": {"x": 0.7, "y": 0.425, "w": 0.14, "h": 0.17},
+   "extended": {"x": 0.6595, "y": 0.3771, "w": 0.221, "h": 0.2658}
   },
   {
    "kind": "button",
    "label": "VI",
    "input": 11,
-   "frame": {"x": 0.85, "y": 0.41, "w": 0.14, "h": 0.17},
-   "extended": {"x": 0.8095, "y": 0.3621, "w": 0.181, "h": 0.2658}
+   "frame": {"x": 0.85, "y": 0.425, "w": 0.14, "h": 0.17},
+   "extended": {"x": 0.8095, "y": 0.3771, "w": 0.19, "h": 0.2658}
   },
   {
    "kind": "pill",
    "label": "Select",
    "input": 2,
-   "frame": {"x": 0.28, "y": 0.005, "w": 0.19, "h": 0.1},
-   "extended": {"x": 0.2595, "y": -0.0129, "w": 0.231, "h": 0.1358}
+   "frame": {"x": 0.25, "y": 0.01, "w": 0.19, "h": 0.1},
+   "extended": {"x": 0.2295, "y": -0.0079, "w": 0.231, "h": 0.1358}
   },
   {
    "kind": "pill",
    "label": "Run",
    "input": 3,
-   "frame": {"x": 0.53, "y": 0.005, "w": 0.19, "h": 0.1},
-   "extended": {"x": 0.5095, "y": -0.0129, "w": 0.231, "h": 0.1358}
+   "frame": {"x": 0.56, "y": 0.01, "w": 0.19, "h": 0.1},
+   "extended": {"x": 0.5395, "y": -0.0079, "w": 0.231, "h": 0.1358}
   },
   {
    "kind": "pill",
    "label": "Menu",
    "input": -1,
-   "frame": {"x": 0.4, "y": 0.145, "w": 0.2, "h": 0.1},
-   "extended": {"x": 0.3795, "y": 0.1271, "w": 0.241, "h": 0.1358}
+   "frame": {"x": 0.4, "y": 0.19, "w": 0.2, "h": 0.1},
+   "extended": {"x": 0.3795, "y": 0.1721, "w": 0.241, "h": 0.1358}
   }
  ],
  "landscapeItems": [
@@ -126,7 +126,7 @@
    "label": "Select",
    "input": 2,
    "frame": {"x": 0.03, "y": 0.06, "w": 0.1, "h": 0.09},
-   "extended": {"x": 0.0103, "y": 0.05, "w": 0.1394, "h": 0.11}
+   "extended": {"x": 0.0, "y": 0.03, "w": 0.16, "h": 0.15}
   },
   {
    "kind": "pill",
@@ -139,8 +139,8 @@
    "kind": "pill",
    "label": "Menu",
    "input": -1,
-   "frame": {"x": 0.03, "y": 0.175, "w": 0.1, "h": 0.09},
-   "extended": {"x": 0.0103, "y": 0.165, "w": 0.1394, "h": 0.11}
+   "frame": {"x": 0.22, "y": 0.06, "w": 0.1, "h": 0.09},
+   "extended": {"x": 0.19, "y": 0.03, "w": 0.16, "h": 0.15}
   }
  ]
 }

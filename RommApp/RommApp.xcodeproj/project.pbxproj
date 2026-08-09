@@ -6,16 +6,66 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		BB00000000000000000018 /* Exceptions for "RommApp" folder in "LayoutEditor" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Controls/ControlLayout.swift,
+				Controls/ControllerBindings.swift,
+				Controls/ControlTheme.swift,
+				Controls/TouchControlPad.swift,
+				Resources/ControlLayouts/atari7800.json,
+				Resources/ControlLayouts/default.json,
+				Resources/ControlLayouts/gamegear.json,
+				Resources/ControlLayouts/gb.json,
+				Resources/ControlLayouts/gba.json,
+				Resources/ControlLayouts/genesis.json,
+				Resources/ControlLayouts/genesis6.json,
+				Resources/ControlLayouts/lynx.json,
+				Resources/ControlLayouts/n64.json,
+				Resources/ControlLayouts/nds.json,
+				Resources/ControlLayouts/nes.json,
+				Resources/ControlLayouts/ngpc.json,
+				Resources/ControlLayouts/pce.json,
+				Resources/ControlLayouts/pce6.json,
+				Resources/ControlLayouts/pcfx.json,
+				Resources/ControlLayouts/psp.json,
+				Resources/ControlLayouts/psx.json,
+				Resources/ControlLayouts/saturn.json,
+				Resources/ControlLayouts/sms.json,
+				Resources/ControlLayouts/snes.json,
+				Resources/ControlLayouts/threedo.json,
+				Resources/ControlLayouts/wonderswan.json,
+			);
+			target = BB00000000000000000010 /* LayoutEditor */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		BB0000000000000000000F /* RommApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				BB00000000000000000018 /* Exceptions for "RommApp" folder in "LayoutEditor" target */,
+			);
 			path = RommApp;
+			sourceTree = "<group>";
+		};
+		BB00000000000000000017 /* LayoutEditor */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LayoutEditor;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		BB00000000000000000008 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BB00000000000000000012 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -29,6 +79,7 @@
 			isa = PBXGroup;
 			children = (
 				BB0000000000000000000F /* RommApp */,
+				BB00000000000000000017 /* LayoutEditor */,
 				BB00000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -62,6 +113,25 @@
 			productName = RommApp;
 			productType = "com.apple.product-type.application";
 		};
+		BB00000000000000000010 /* LayoutEditor */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BB00000000000000000014 /* Build configuration list for PBXNativeTarget "LayoutEditor" */;
+			buildPhases = (
+				BB00000000000000000011 /* Sources */,
+				BB00000000000000000012 /* Frameworks */,
+				BB00000000000000000013 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				BB00000000000000000017 /* LayoutEditor */,
+			);
+			name = LayoutEditor;
+			productName = LayoutEditor;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -73,6 +143,9 @@
 				LastUpgradeCheck = 2660;
 				TargetAttributes = {
 					BB00000000000000000004 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+					BB00000000000000000010 = {
 						CreatedOnToolsVersion = 26.6;
 					};
 				};
@@ -92,6 +165,7 @@
 			projectRoot = "";
 			targets = (
 				BB00000000000000000004 /* RommApp */,
+				BB00000000000000000010 /* LayoutEditor */,
 			);
 		};
 /* End PBXProject section */
@@ -104,10 +178,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BB00000000000000000013 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		BB00000000000000000006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BB00000000000000000011 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -324,6 +412,64 @@
 			};
 			name = Release;
 		};
+		BB00000000000000000015 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZMUB88RZ5D;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Layout Editor";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIFileSharingEnabled = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIRequiresFullScreen = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetLayoutEditor;
+				PRODUCT_NAME = "Layout Editor";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		BB00000000000000000016 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZMUB88RZ5D;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Layout Editor";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIFileSharingEnabled = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIRequiresFullScreen = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetLayoutEditor;
+				PRODUCT_NAME = "Layout Editor";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -341,6 +487,15 @@
 			buildConfigurations = (
 				BB0000000000000000000D /* Debug */,
 				BB0000000000000000000E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BB00000000000000000014 /* Build configuration list for PBXNativeTarget "LayoutEditor" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BB00000000000000000015 /* Debug */,
+				BB00000000000000000016 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -187,6 +187,26 @@ enum NativeCoreOptions {
 
     static let genesis: [NativeCoreOption] = [genesisPad]
 
+    /// Unlike the Genesis pad, this is a genuine libretro core variable
+    /// (`RETRO_ENVIRONMENT_GET_VARIABLE`), not a controller-port device
+    /// change, confirmed via `strings` on the vendored
+    /// `libbeetle_pce_fast_ios.a`: the key and both choice strings,
+    /// `"2 Buttons"` and `"6 Buttons"`, are exactly what the core embeds.
+    /// No special-casing needed in `dictionary(for:)`, it flows through
+    /// the normal path everything else here does.
+    static let pceJoypad = NativeCoreOption(
+        key: "pce_fast_default_joypad_type_p1",
+        label: "Controller",
+        detail: "Six-button games need the six-button pad; some two-button games misread it.",
+        choices: [
+            .init(value: "2 Buttons", label: "2-button"),
+            .init(value: "6 Buttons", label: "6-button"),
+        ],
+        defaultValue: "2 Buttons"
+    )
+
+    static let pce: [NativeCoreOption] = [pceJoypad]
+
     /// Sega CD boots off a region-matched BIOS, so a disc paired with the
     /// wrong region simply does not start. Region detection is the lever
     /// that decides which one the core reaches for.
@@ -224,6 +244,7 @@ enum NativeCoreOptions {
         case .gba: return gameBoyAdvance
         case .genesis, .sega32X: return genesis
         case .segaCD: return segaCD
+        case .tg16, .tgCD: return pce
         default: return []
         }
     }
