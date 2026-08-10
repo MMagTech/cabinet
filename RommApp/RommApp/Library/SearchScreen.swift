@@ -54,17 +54,22 @@ struct SearchScreen: View {
             }
             .navigationTitle("Search")
             .searchable(text: $searchText, prompt: networkMonitor.isOffline ? "Search kept games" : "Search all games")
+            #if os(iOS)
             .searchFocused($fieldFocused)
             .onAppear { fieldFocused = true }
+            #endif
             .task(id: searchText) { await runSearch() }
             // Live, matching everywhere else Offline Mode touches
             // tonight: stale online results should not sit on screen
             // once the toggle flips, and typed text should not need to
             // be re-entered to see it re-scoped to what is kept.
             .onChange(of: networkMonitor.isOffline) { _, _ in Task { await runSearch() } }
+            // GameLaunchView is iOS-only for now; see HomeView.swift for why.
+            #if os(iOS)
             .fullScreenCover(item: $playing) { rom in
                 NavigationStack { GameLaunchView(rom: rom) }
             }
+            #endif
         }
     }
 

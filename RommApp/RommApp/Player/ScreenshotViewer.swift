@@ -42,7 +42,9 @@ struct ScreenshotViewer: View {
                 }
             }
             .navigationTitle(title)
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

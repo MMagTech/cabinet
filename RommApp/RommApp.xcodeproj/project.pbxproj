@@ -6,7 +6,88 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		10C5183AB7ADB61F260D8031 /* CoreImage.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 085D59256C4DAA9CDEBB4573 /* CoreImage.framework */; };
+		F50297785940689BEBC3D8A3 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E4B2AC95B1AB0E374EB9378B /* Foundation.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		085D59256C4DAA9CDEBB4573 /* CoreImage.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreImage.framework; path = System/Library/Frameworks/CoreImage.framework; sourceTree = SDKROOT; };
+		22568825F8A2B0F5F517C40C /* Cabinet TV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Cabinet TV.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		E4B2AC95B1AB0E374EB9378B /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+/* End PBXFileReference section */
+
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		513F6A9773DFE2CED6ED0E91 /* Exceptions for "RommApp" folder in "RommAppTV" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Controls/ControllerRemapView.swift,
+				Controls/TouchControlPad.swift,
+				Native/Archive/7zAlloc.c,
+				Native/Archive/7zArcIn.c,
+				Native/Archive/7zBuf.c,
+				Native/Archive/7zBuf2.c,
+				Native/Archive/7zCrc.c,
+				Native/Archive/7zCrcOpt.c,
+				Native/Archive/7zDec.c,
+				Native/Archive/7zFile.c,
+				Native/Archive/7zStream.c,
+				Native/Archive/adler32.c,
+				Native/Archive/Alloc.c,
+				Native/Archive/Archive.cpp,
+				Native/Archive/Bcj2.c,
+				Native/Archive/Bra.c,
+				Native/Archive/Bra86.c,
+				Native/Archive/BraIA64.c,
+				Native/Archive/CpuArch.c,
+				Native/Archive/crc32.c,
+				Native/Archive/Delta.c,
+				Native/Archive/infback.c,
+				Native/Archive/inffast.c,
+				Native/Archive/inflate.c,
+				Native/Archive/inftrees.c,
+				Native/Archive/Lzma2Dec.c,
+				Native/Archive/LzmaDec.c,
+				Native/Archive/zutil.c,
+				Native/BeetleNGP/BeetleNGPCore.mm,
+				Native/BeetleNGP/libbeetle_ngp_ios.a,
+				Native/BeetlePCEFast/BeetlePCEFastCore.mm,
+				Native/BeetlePCEFast/libbeetle_pce_fast_ios.a,
+				Native/FBNeo/FBNeoCore.mm,
+				Native/FBNeo/libfbneo_libretro_ios.a,
+				Native/FCEUmm/FCEUmmCore.mm,
+				Native/FCEUmm/libfceumm_ios.a,
+				Native/Gambatte/GambatteCore.mm,
+				Native/Gambatte/libgambatte_ios.a,
+				Native/GenesisPlusGX/GenesisPlusGXCore.mm,
+				Native/GenesisPlusGX/libgenesis_plus_gx_ios.a,
+				Native/Libretro/LibretroShaders.metal,
+				Native/MGBA/libmgba_ios.a,
+				Native/MGBA/MGBACore.mm,
+				Native/NativePlayerView.swift,
+				Native/PCSXReARMed/libpcsx_rearmed_ios.a,
+				Native/PicoDrive/libpicodrive_ios.a,
+				Native/PicoDrive/PicoDriveCore.mm,
+				Native/ProSystem/libprosystem_ios.a,
+				Native/ProSystem/ProSystemCore.mm,
+				Native/Saturn/libbeetle_saturn_ios.a,
+				Native/Saturn/SaturnCore.mm,
+				Native/Snes9x/libsnes9x_ios.a,
+				Native/Snes9x/Snes9xCore.mm,
+				Player/GameLaunchView.swift,
+				Player/PlayerView.swift,
+				Player/RomExporter.swift,
+				PrivacyInfo.xcprivacy,
+				RommApp.swift,
+				Settings/EmulatorCacheBridge.swift,
+				Settings/StorageView.swift,
+				UI/DebugView.swift,
+				UI/NativeCoresView.swift,
+				UI/OrientationLock.swift,
+				UI/SettingsView.swift,
+			);
+			target = FB4792A61D4A9C6E7864DCEB /* RommAppTV */;
+		};
 		BB00000000000000000018 /* Exceptions for "RommApp" folder in "LayoutEditor" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -39,6 +120,13 @@
 			);
 			target = BB00000000000000000010 /* LayoutEditor */;
 		};
+		C6626E28D50263B9632B46B6 /* Exceptions for "RommAppTV" folder in "RommAppTV" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = FB4792A61D4A9C6E7864DCEB /* RommAppTV */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -46,6 +134,7 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				BB00000000000000000018 /* Exceptions for "RommApp" folder in "LayoutEditor" target */,
+				513F6A9773DFE2CED6ED0E91 /* Exceptions for "RommApp" folder in "RommAppTV" target */,
 			);
 			path = RommApp;
 			sourceTree = "<group>";
@@ -55,9 +144,26 @@
 			path = LayoutEditor;
 			sourceTree = "<group>";
 		};
+		C16DDCA1D4B951A394B9FA7D /* RommAppTV */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				C6626E28D50263B9632B46B6 /* Exceptions for "RommAppTV" folder in "RommAppTV" target */,
+			);
+			path = RommAppTV;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		2DBA6A79D663E9C7A0BAC597 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F50297785940689BEBC3D8A3 /* Foundation.framework in Frameworks */,
+				10C5183AB7ADB61F260D8031 /* CoreImage.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		BB00000000000000000008 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -75,18 +181,38 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		4AE25F905859E16D5B246FD0 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				B6B71CB6DE653D2ABE64D947 /* tvOS */,
+				085D59256C4DAA9CDEBB4573 /* CoreImage.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		B6B71CB6DE653D2ABE64D947 /* tvOS */ = {
+			isa = PBXGroup;
+			children = (
+				E4B2AC95B1AB0E374EB9378B /* Foundation.framework */,
+			);
+			name = tvOS;
+			sourceTree = "<group>";
+		};
 		BB00000000000000000002 = {
 			isa = PBXGroup;
 			children = (
 				BB0000000000000000000F /* RommApp */,
 				BB00000000000000000017 /* LayoutEditor */,
+				C16DDCA1D4B951A394B9FA7D /* RommAppTV */,
 				BB00000000000000000003 /* Products */,
+				4AE25F905859E16D5B246FD0 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
 		BB00000000000000000003 /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				22568825F8A2B0F5F517C40C /* Cabinet TV.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -132,6 +258,27 @@
 			productName = LayoutEditor;
 			productType = "com.apple.product-type.application";
 		};
+		FB4792A61D4A9C6E7864DCEB /* RommAppTV */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 04B7F005F23F5849B1175D45 /* Build configuration list for PBXNativeTarget "RommAppTV" */;
+			buildPhases = (
+				6F81DB8C48BF90C4E41F051D /* Sources */,
+				2DBA6A79D663E9C7A0BAC597 /* Frameworks */,
+				8A3DCBF3E2B8311EC493B403 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				BB0000000000000000000F /* RommApp */,
+				C16DDCA1D4B951A394B9FA7D /* RommAppTV */,
+			);
+			name = RommAppTV;
+			productName = RommAppTV;
+			productReference = 22568825F8A2B0F5F517C40C /* Cabinet TV.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -166,11 +313,19 @@
 			targets = (
 				BB00000000000000000004 /* RommApp */,
 				BB00000000000000000010 /* LayoutEditor */,
+				FB4792A61D4A9C6E7864DCEB /* RommAppTV */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		8A3DCBF3E2B8311EC493B403 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		BB00000000000000000007 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -188,6 +343,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		6F81DB8C48BF90C4E41F051D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		BB00000000000000000006 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -205,6 +367,53 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
+		B25B711D6693BBC3E95729DF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZMUB88RZ5D;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RommAppTV/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet TV";
+				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/RommApp/Native/BeetleNGP",
+					"$(PROJECT_DIR)/RommApp/Native/BeetlePCEFast",
+					"$(PROJECT_DIR)/RommApp/Native/FBNeo",
+					"$(PROJECT_DIR)/RommApp/Native/FCEUmm",
+					"$(PROJECT_DIR)/RommApp/Native/Gambatte",
+					"$(PROJECT_DIR)/RommApp/Native/GenesisPlusGX",
+					"$(PROJECT_DIR)/RommApp/Native/MGBA",
+					"$(PROJECT_DIR)/RommApp/Native/PCSXReARMed",
+					"$(PROJECT_DIR)/RommApp/Native/PicoDrive",
+					"$(PROJECT_DIR)/RommApp/Native/ProSystem",
+					"$(PROJECT_DIR)/RommApp/Native/Saturn",
+					"$(PROJECT_DIR)/RommApp/Native/Snes9x",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet.tv;
+				PRODUCT_NAME = "Cabinet TV";
+				SDKROOT = appletvos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "RommAppTV/RommAppTV-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 18.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		BB0000000000000000000B /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -362,7 +571,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Archive",
 				);
 				INFOPLIST_FILE = Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet";
+				INFOPLIST_KEY_CFBundleDisplayName = Cabinet;
 				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -470,9 +679,64 @@
 			};
 			name = Release;
 		};
+		F79B1708F32E796D92796E0D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZMUB88RZ5D;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RommAppTV/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet TV Dev";
+				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/RommApp/Native/BeetleNGP",
+					"$(PROJECT_DIR)/RommApp/Native/BeetlePCEFast",
+					"$(PROJECT_DIR)/RommApp/Native/FBNeo",
+					"$(PROJECT_DIR)/RommApp/Native/FCEUmm",
+					"$(PROJECT_DIR)/RommApp/Native/Gambatte",
+					"$(PROJECT_DIR)/RommApp/Native/GenesisPlusGX",
+					"$(PROJECT_DIR)/RommApp/Native/MGBA",
+					"$(PROJECT_DIR)/RommApp/Native/PCSXReARMed",
+					"$(PROJECT_DIR)/RommApp/Native/PicoDrive",
+					"$(PROJECT_DIR)/RommApp/Native/ProSystem",
+					"$(PROJECT_DIR)/RommApp/Native/Saturn",
+					"$(PROJECT_DIR)/RommApp/Native/Snes9x",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev.tv;
+				PRODUCT_NAME = "Cabinet TV";
+				SDKROOT = appletvos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "RommAppTV/RommAppTV-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 18.0;
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		04B7F005F23F5849B1175D45 /* Build configuration list for PBXNativeTarget "RommAppTV" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B25B711D6693BBC3E95729DF /* Release */,
+				F79B1708F32E796D92796E0D /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		BB00000000000000000009 /* Build configuration list for PBXProject "RommApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

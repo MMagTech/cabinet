@@ -22,7 +22,9 @@ struct HomeView: View {
     @State private var loaded = false
     @State private var offline = false
     @State private var resuming: Rom?
+    #if os(iOS)
     @State private var directLaunch: DirectLaunch?
+    #endif
     @State private var preparingResume = false
     @ObservedObject private var quickActions = QuickActionRouter.shared
     @State private var quickPushRecents = false
@@ -31,6 +33,10 @@ struct HomeView: View {
     /// Everything the player needs to start without the launch screen in
     /// front of it. Identifiable so it can drive a `fullScreenCover` the
     /// same way `resuming` does.
+    ///
+    /// iOS-only: it exists purely to feed `PlayerView`, itself iOS-only in
+    /// this pass. See `beginResume` below for tvOS's fallback.
+    #if os(iOS)
     private struct DirectLaunch: Identifiable {
         let id = UUID()
         let rom: Rom
@@ -38,6 +44,7 @@ struct HomeView: View {
         let resumeFromAutosave: Bool
         let stateToLoad: PlayerView.StateToLoad?
     }
+    #endif
 
     var body: some View {
         NavigationStack {
@@ -108,6 +115,11 @@ struct HomeView: View {
             // in landscape the large title overlapped the first rail's
             // header outright. Inline keeps the bar itself, which the
             // settings button needs.
+            // Both the inline title mode and this toolbar (Settings link,
+            // Offline Mode toggle) are iOS-only for now: navigationBarTitle
+            // DisplayMode doesn't exist on tvOS, and SettingsView itself is
+            // iOS-only in this pass. tvOS follow-up, not solved here.
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 // Settings only. The library and search moved to the tab
@@ -148,6 +160,7 @@ struct HomeView: View {
                     }
                 }
             }
+            #endif
             .refreshable { await load() }
             // A game reached through Library, not Home's own resume flow,
             // has its own fullScreenCover and never touches `resuming`, so
@@ -166,6 +179,11 @@ struct HomeView: View {
             // 2026-08-07).
             .onChange(of: networkMonitor.isConnected) { _, _ in Task { await load() } }
             .onChange(of: networkMonitor.manualOfflineMode) { _, _ in Task { await load() } }
+            // Launch and playback both go through GameLaunchView/PlayerView,
+            // which are iOS-only for now: tvOS has no native core wired up
+            // yet (see NativeLauncher.swift) and no webview player. Follow-up
+            // work, not stubbed further here.
+            #if os(iOS)
             .fullScreenCover(item: $resuming) { rom in
                 NavigationStack { GameLaunchView(rom: rom) }
             }
@@ -177,12 +195,15 @@ struct HomeView: View {
                     stateToLoad: launch.stateToLoad
                 )
             }
+            #endif
             .onChange(of: resuming == nil) { _, playerClosed in
                 if playerClosed { Task { await load() } }
             }
+            #if os(iOS)
             .onChange(of: directLaunch == nil) { _, playerClosed in
                 if playerClosed { Task { await load() } }
             }
+            #endif
             // Home's share of a quick action, taken when, and only when,
             // this screen can actually act on it: resume needs the recents
             // fetch to have landed, favorites needs the collection known.
@@ -428,6 +449,15 @@ struct HomeView: View {
         preparingResume = true
         defer { preparingResume = false }
 
+        // The direct-launch fast path below skips the launch screen by
+        // going straight to PlayerView, which is iOS-only for now (see
+        // GameLaunchView.swift and the #if guards around it). tvOS always
+        // falls back to the launch screen instead, same as the "need a
+        // human" cases below already do.
+        #if os(tvOS)
+        resuming = rom
+        return
+        #else
         let canonicalSlug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
         let cores = CoreCatalog.cores(for: canonicalSlug)
         guard PlatformSupport.isSupported(canonicalSlug: canonicalSlug), !cores.isEmpty else {
@@ -496,6 +526,7 @@ struct HomeView: View {
         directLaunch = DirectLaunch(
             rom: rom, choices: choices, resumeFromAutosave: false, stateToLoad: .remote(bytes)
         )
+        #endif
     }
 
 
@@ -651,7 +682,7 @@ private extension View {
     /// availability check in the middle of the layout.
     @ViewBuilder
     func withoutScrollEdgeEffect() -> some View {
-        if #available(iOS 26.0, *) {
+        if #available(iOS 26.0, tvOS 26.0, *) {
             self.scrollEdgeEffectHidden()
         } else {
             self

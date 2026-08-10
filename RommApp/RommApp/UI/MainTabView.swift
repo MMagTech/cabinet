@@ -84,10 +84,14 @@ private extension View {
     /// bar simply stays put, which is that release's normal behaviour.
     @ViewBuilder
     func tabBarMinimized() -> some View {
+        #if os(iOS)
         if #available(iOS 26.0, *) {
             self.tabBarMinimizeBehavior(.onScrollDown)
         } else {
             self
         }
+        #else
+        self
+        #endif
     }
 }

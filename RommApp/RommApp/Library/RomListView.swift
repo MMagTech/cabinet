@@ -113,7 +113,9 @@ struct RomListView: View {
             }
         }
         .navigationTitle(navigationLabel)
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 // A menu, not a segmented picker. iOS 26 wraps every
@@ -159,9 +161,12 @@ struct RomListView: View {
                 await loadNextPage()
             }
         }
+        // GameLaunchView is iOS-only for now; see HomeView.swift for why.
+        #if os(iOS)
         .fullScreenCover(item: $playing) { rom in
             NavigationStack { GameLaunchView(rom: rom) }
         }
+        #endif
     }
 
     private var grid: some View {
@@ -245,11 +250,17 @@ struct RomListView: View {
                 }
 
                 footer
+                    #if os(iOS)
                     .listRowSeparator(.hidden)
+                    #endif
             }
             .listStyle(.plain)
             // Room for the rail, or the longest titles run underneath it.
             .contentMargins(.trailing, letterIndex.count > 4 ? 18 : 0, for: .scrollContent)
+            // The letter scrubber is a touch drag gesture with a haptic tap,
+            // both iOS-only; tvOS's focus-engine equivalent is real future
+            // work, not attempted here.
+            #if os(iOS)
             .overlay(alignment: .trailing) {
                 // Only when there is enough alphabet to be worth jumping
                 // around in; a six game list scrolls faster than it scrubs.
@@ -261,6 +272,7 @@ struct RomListView: View {
                     }
                 }
             }
+            #endif
         }
     }
 
@@ -349,6 +361,7 @@ struct RomListView: View {
 /// title under each letter passed. Jumping is instant rather than animated,
 /// because animating through a thousand rows reads as scrolling, and the
 /// point of a scrubber is not scrolling.
+#if os(iOS)
 private struct LetterScrubber: View {
     let letters: [String]
     let onSelect: (String) -> Void
@@ -386,3 +399,4 @@ private struct LetterScrubber: View {
         .padding(.trailing, 2)
     }
 }
+#endif

@@ -1,5 +1,10 @@
 #import "LibretroFrontend.h"
 #include "LibretroCoreAPI.h"
+// tvOS only ships a static library for PCSX ReARMed so far (the PS1
+// go/no-go performance test); the other eleven cores have never been
+// rebuilt for tvOS, so their wiring files stay iOS-only here rather than
+// failing to link against libraries that do not exist for this platform.
+#if !TARGET_OS_TV
 #import "FBNeoCore.h"
 #import "SaturnCore.h"
 #import "GambatteCore.h"
@@ -11,6 +16,7 @@
 #import "BeetleNGPCore.h"
 #import "ProSystemCore.h"
 #import "PicoDriveCore.h"
+#endif
 #import "PCSXReARMedCore.h"
 #include <string>
 #include <vector>
@@ -209,6 +215,7 @@ bool environmentCallback(unsigned cmd, void *data) {
 // one wiring file and one line here.
 const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     switch (coreID) {
+#if !TARGET_OS_TV
         case LibretroCoreIDFBNeo:
             return FBNeoCoreAPI();
         case LibretroCoreIDBeetleSaturn:
@@ -231,10 +238,13 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
             return ProSystemCoreAPI();
         case LibretroCoreIDPicoDrive:
             return PicoDriveCoreAPI();
+#endif
         case LibretroCoreIDPCSXReARMed:
             return PCSXReARMedCoreAPI();
+        default:
+            break;
     }
-    return FBNeoCoreAPI();
+    return PCSXReARMedCoreAPI();
 }
 
 } // namespace

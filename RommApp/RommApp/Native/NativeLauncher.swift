@@ -30,6 +30,13 @@ enum NativeLauncher {
     ///
     /// A kept game skips all of that: its directory already holds the ROM
     /// and firmware, so the core boots straight from it with zero network.
+    ///
+    /// tvOS only: `LibretroFrontend` currently only carries a real static
+    /// library for PCSX ReARMed (the PS1 go/no-go performance test), the
+    /// other eleven cores have never been rebuilt for tvOS. This function
+    /// itself is generic and compiles for both platforms; a tvOS caller
+    /// asking for anything but a PS1 rom hits `LaunchError.noNativeCore`
+    /// the same way an unsupported platform does on iOS today.
     @discardableResult
     @MainActor
     static func prepare(rom: Rom, session: Session) async throws -> NativeCore {
@@ -60,9 +67,11 @@ enum NativeLauncher {
         // holds at most the one game about to load.
         cleanUpTempDirectories()
 
+        #if os(iOS)
         if let keptDir = KeptGameStore.shared.launchDirectory(romId: rom.id) {
             return try activate(platform: platform, romURL: keptDir.appendingPathComponent(rom.fsName), workDir: keptDir)
         }
+        #endif
 
         let workDir = FileManager.default.temporaryDirectory.appendingPathComponent(
             "native-player-\(UUID().uuidString)", isDirectory: true
@@ -113,6 +122,7 @@ enum NativeLauncher {
     private static func extractedIfArchived(_ romURL: URL, core: NativeCore, in workDir: URL) throws -> URL {
         let ext = romURL.pathExtension.lowercased()
         guard core != .fbneo, ext == "zip" || ext == "7z" else { return romURL }
+        #if os(iOS)
         var nameBuffer = [CChar](repeating: 0, count: 1024)
         let ok = romURL.path.withCString { archivePath in
             workDir.path.withCString { destDir in
@@ -125,6 +135,12 @@ enum NativeLauncher {
             )
         }
         return workDir.appendingPathComponent(extractedName)
+        #else
+        // No archive-extraction library on tvOS yet; every core this
+        // platform actually links so far (just PCSX ReARMed) reads its
+        // format directly, so this path is unreached in practice.
+        throw LaunchError.unsupportedFormat("Archive extraction isn't available on tvOS yet.")
+        #endif
     }
 
     /// The BIOS filenames a platform's core looks for, and the exact size
