@@ -140,8 +140,6 @@
 		};
 		BB00000000000000000017 /* LayoutEditor */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = LayoutEditor;
 			sourceTree = "<group>";
 		};

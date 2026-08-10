@@ -48,6 +48,27 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     /// menu's checkmark tracks the pick without a separate state copy.
     @Published var shader: NativeShader = .sharp
 
+    /// How many draw(in:) calls actually landed in the last second, updated
+    /// once a second rather than every frame so reading it doesn't itself
+    /// perturb timing. Diagnostic only, added to chase a real report of
+    /// choppy audio and laggy video together on tvOS hardware: this number
+    /// says whether the whole pipeline (core + render + audio) is actually
+    /// keeping up with the display, not just whether the core alone can
+    /// (the original go/no-go measured core throughput only, no video or
+    /// audio overhead).
+    @Published private(set) var measuredFPS: Double = 0
+    private var fpsFrameCount = 0
+    private var fpsWindowStart: CFTimeInterval = 0
+
+    /// The single longest gap between consecutive draw(in:) calls in the
+    /// last window, milliseconds. A 1-second average can read a clean 30fps
+    /// while masking real stalls and bursts underneath; this catches the
+    /// jitter the average hides, added after a real report of choppy
+    /// gameplay that measured a stable-looking average anyway.
+    @Published private(set) var worstFrameMS: Double = 0
+    private var worstFrameDelta: CFTimeInterval = 0
+    private var lastDrawTime: CFTimeInterval = 0
+
     /// Held RetroPad ids, merged from the touch overlay and any connected
     /// game controller. Both already speak the same id space (see
     /// ControllerBindings.swift's RetroPad constants), so merging is just
@@ -136,6 +157,21 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     }
 
     func draw(in view: MTKView) {
+        let now = CACurrentMediaTime()
+        if fpsWindowStart == 0 { fpsWindowStart = now }
+        fpsFrameCount += 1
+        if lastDrawTime != 0 {
+            worstFrameDelta = max(worstFrameDelta, now - lastDrawTime)
+        }
+        lastDrawTime = now
+        if now - fpsWindowStart >= 1.0 {
+            measuredFPS = Double(fpsFrameCount) / (now - fpsWindowStart)
+            worstFrameMS = worstFrameDelta * 1000
+            fpsFrameCount = 0
+            fpsWindowStart = now
+            worstFrameDelta = 0
+        }
+
         if !paused && !awaitingSaveRAM {
             if let card = pendingSaveRAM {
                 pendingSaveRAM = nil
