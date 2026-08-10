@@ -5,8 +5,8 @@ import CoreGraphics
 /// The playable half of the PS1 go/no-go: same hardcoded rom as
 /// PS1PerfTestView (no picker, no library), but actually drawn to the
 /// screen and driven by a real controller instead of just timed. Still a
-/// throwaway test screen, not the real player: no audio, no pause menu, no
-/// save states, no way back out except the Menu button on the controller
+/// throwaway test screen, not the real player: no pause menu, no save
+/// states, no way back out except the Menu button on the controller
 /// (mapped to RetroPad.overlay's default binding) exiting this view.
 struct PS1PlayTestView: View {
     @EnvironmentObject private var session: Session
@@ -18,6 +18,7 @@ struct PS1PlayTestView: View {
     @State private var frameImage: CGImage?
     @State private var loopTask: Task<Void, Never>?
     @State private var buttonMask: UInt32 = 0
+    @State private var audio = NativeAudioPlayback()
 
     var body: some View {
         ZStack {
@@ -46,6 +47,7 @@ struct PS1PlayTestView: View {
             _ = try await NativeLauncher.prepare(rom: rom, session: session)
 
             status = "Loaded, waiting for first frame…"
+            audio.start()
             GameControllerManager.shared.send = { id, pressed in
                 guard id >= 0, id < 32 else { return }
                 if pressed {
@@ -67,6 +69,9 @@ struct PS1PlayTestView: View {
         while !Task.isCancelled {
             LibretroFrontend.shared.setButtonMask(buttonMask)
             LibretroFrontend.shared.runFrame()
+            if let audioData = LibretroFrontend.shared.drainAudio() {
+                audio.enqueue(audioData)
+            }
             if let frame = LibretroFrontend.shared.latestFrame(), let image = Self.cgImage(from: frame) {
                 frameImage = image
             }
