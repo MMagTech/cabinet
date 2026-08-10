@@ -61,7 +61,6 @@
 				Native/Gambatte/libgambatte_ios.a,
 				Native/GenesisPlusGX/GenesisPlusGXCore.mm,
 				Native/GenesisPlusGX/libgenesis_plus_gx_ios.a,
-				Native/Libretro/LibretroShaders.metal,
 				Native/MGBA/libmgba_ios.a,
 				Native/MGBA/MGBACore.mm,
 				Native/NativePlayerView.swift,
@@ -141,6 +140,8 @@
 		};
 		BB00000000000000000017 /* LayoutEditor */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = LayoutEditor;
 			sourceTree = "<group>";
 		};
