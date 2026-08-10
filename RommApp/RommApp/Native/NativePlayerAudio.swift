@@ -1,12 +1,12 @@
-#if os(tvOS)
 import AVFoundation
 
-/// tvOS port of NativePlayerView's NativePlayerAudio: feeds the core's
-/// audio batches into CoreAudio through a small ring buffer, decoupling
-/// the core's variable per-frame sample count from the fixed render
-/// callback AVAudioEngine expects. Core-agnostic, same as
-/// LibretroFrontend itself, works for any of the twelve cores.
-final class NativeAudioPlayback {
+/// Feeds the core's audio batches into CoreAudio through a small ring
+/// buffer, decoupling the core's variable per-frame sample count from the
+/// fixed render callback AVAudioEngine expects. Core-agnostic, same as
+/// LibretroFrontend itself, and shared between iOS's real player
+/// (NativePlayerView) and tvOS's test harness (PS1PlayTestView) rather
+/// than duplicated between them.
+final class NativePlayerAudio {
     private let engine = AVAudioEngine()
     private var ringBuffer: [Int16] = []
     private let lock = NSLock()
@@ -64,4 +64,3 @@ final class NativeAudioPlayback {
         lock.unlock()
     }
 }
-#endif

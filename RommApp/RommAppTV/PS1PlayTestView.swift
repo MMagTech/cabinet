@@ -18,7 +18,7 @@ struct PS1PlayTestView: View {
     @State private var frameImage: CGImage?
     @State private var loopTask: Task<Void, Never>?
     @State private var buttonMask: UInt32 = 0
-    @State private var audio = NativeAudioPlayback()
+    @State private var audio = NativePlayerAudio()
 
     var body: some View {
         ZStack {
