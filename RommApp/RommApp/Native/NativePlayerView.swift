@@ -589,10 +589,15 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     /// One pipeline per shader, built once at attach so picking a shader in
     /// the pause menu is a dictionary lookup, not a recompile.
     private var pipelines: [NativeShader: MTLRenderPipelineState] = [:]
+    /// Blits a raw RGB565 frame into `texture` on the GPU; see updateTexture.
+    private var rgb565UnpackPipeline: MTLRenderPipelineState?
     private var samplerState: MTLSamplerState!
     private var texture: MTLTexture?
     private var textureWidth: Int = 0
     private var textureHeight: Int = 0
+    /// Raw packed-pixel source for the RGB565 GPU unpack path, r16Uint so
+    /// no CPU-side interpretation happens before it reaches the shader.
+    private var rgb565SourceTexture: MTLTexture?
     private let audio = NativePlayerAudio()
 
     /// The active shader, set by the pause menu's Shader row. The next
@@ -640,6 +645,12 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
                 pipelines[candidate] = pipeline
             }
         }
+
+        let unpackDescriptor = MTLRenderPipelineDescriptor()
+        unpackDescriptor.vertexFunction = vertexFn
+        unpackDescriptor.fragmentFunction = library?.makeFunction(name: "shader_rgb565_unpack_fragment")
+        unpackDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
+        rgb565UnpackPipeline = try? device.makeRenderPipelineState(descriptor: unpackDescriptor)
 
         let samplerDescriptor = MTLSamplerDescriptor()
         samplerDescriptor.minFilter = .nearest
@@ -791,28 +802,22 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
                     region: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0,
                     withBytes: base, bytesPerRow: Int(frame.bytesPerRow)
                 )
-            case .RGB565, .RGB1555:
+            case .RGB565:
+                unpackRGB565(base: base, width: width, height: height, srcStride: Int(frame.bytesPerRow))
+            case .RGB1555:
                 if conversionBuffer.count != bytesPerRow * height {
                     conversionBuffer = [UInt8](repeating: 0, count: bytesPerRow * height)
                 }
                 let srcStride = Int(frame.bytesPerRow)
-                let is565 = frame.pixelFormat == .RGB565
                 conversionBuffer.withUnsafeMutableBytes { dst in
                     for y in 0..<height {
                         let srcRow = base.advanced(by: y * srcStride).assumingMemoryBound(to: UInt16.self)
                         let dstRow = dst.baseAddress!.advanced(by: y * bytesPerRow).assumingMemoryBound(to: UInt8.self)
                         for x in 0..<width {
                             let p = srcRow[x]
-                            let r: UInt8, g: UInt8, b: UInt8
-                            if is565 {
-                                r = UInt8((p >> 11) & 0x1F) << 3
-                                g = UInt8((p >> 5) & 0x3F) << 2
-                                b = UInt8(p & 0x1F) << 3
-                            } else {
-                                r = UInt8((p >> 10) & 0x1F) << 3
-                                g = UInt8((p >> 5) & 0x1F) << 3
-                                b = UInt8(p & 0x1F) << 3
-                            }
+                            let r = UInt8((p >> 10) & 0x1F) << 3
+                            let g = UInt8((p >> 5) & 0x1F) << 3
+                            let b = UInt8(p & 0x1F) << 3
                             dstRow[x * 4] = b
                             dstRow[x * 4 + 1] = g
                             dstRow[x * 4 + 2] = r
@@ -828,6 +833,51 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
                 break
             }
         }
+    }
+
+    /// Uploads a raw RGB565 frame untouched into an r16Uint source texture,
+    /// then runs one GPU render pass that decodes it straight into
+    /// `texture` (bgra8Unorm), replacing the old per-pixel CPU loop. Falls
+    /// back to leaving `texture` at its last contents if the pipeline
+    /// failed to build, rather than crashing.
+    private func unpackRGB565(base: UnsafeRawPointer, width: Int, height: Int, srcStride: Int) {
+        guard let rgb565UnpackPipeline, let texture else { return }
+
+        if rgb565SourceTexture == nil || rgb565SourceTexture?.width != width || rgb565SourceTexture?.height != height {
+            let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+                pixelFormat: .r16Uint, width: width, height: height, mipmapped: false
+            )
+            descriptor.usage = [.shaderRead]
+            rgb565SourceTexture = device.makeTexture(descriptor: descriptor)
+        }
+        rgb565SourceTexture?.replace(
+            region: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0,
+            withBytes: base, bytesPerRow: srcStride
+        )
+
+        guard let rgb565SourceTexture,
+              let commandBuffer = commandQueue.makeCommandBuffer()
+        else { return }
+
+        let passDescriptor = MTLRenderPassDescriptor()
+        passDescriptor.colorAttachments[0].texture = texture
+        passDescriptor.colorAttachments[0].loadAction = .dontCare
+        passDescriptor.colorAttachments[0].storeAction = .store
+
+        guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: passDescriptor) else { return }
+        let quad: [Vertex] = [
+            Vertex(position: [-1, -1], texCoord: [0, 1]),
+            Vertex(position: [1, -1], texCoord: [1, 1]),
+            Vertex(position: [-1, 1], texCoord: [0, 0]),
+            Vertex(position: [1, 1], texCoord: [1, 0]),
+        ]
+        encoder.setRenderPipelineState(rgb565UnpackPipeline)
+        encoder.setVertexBytes(quad, length: MemoryLayout<Vertex>.stride * quad.count, index: 0)
+        encoder.setFragmentTexture(rgb565SourceTexture, index: 0)
+        encoder.setFragmentSamplerState(samplerState, index: 0)
+        encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+        encoder.endEncoding()
+        commandBuffer.commit()
     }
 
     /// The current frame as a PNG for the state list's thumbnail, read

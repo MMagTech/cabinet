@@ -26,6 +26,26 @@ fragment float4 libretro_fragment(VertexOut in [[stage_in]],
     return tex.sample(samp, in.texCoord);
 }
 
+// Decodes a raw RGB565 frame straight from the GPU instead of the CPU
+// scalar loop updateTexture used to run per pixel: NativePlayerRenderer
+// uploads the packed 16-bit samples untouched into an r16Uint texture,
+// and this runs as a blit pass into the real bgra8Unorm target so every
+// existing shader downstream keeps sampling a normal float texture like
+// before. Bit layout is libretro's own RETRO_PIXEL_FORMAT_RGB565: bits
+// 15-11 red, 10-5 green, 4-0 blue.
+fragment float4 shader_rgb565_unpack_fragment(VertexOut in [[stage_in]],
+                                               texture2d<uint> tex [[texture(0)]],
+                                               sampler samp [[sampler(0)]]) {
+    uint2 size = uint2(tex.get_width(), tex.get_height());
+    uint2 coord = uint2(in.texCoord * float2(size));
+    coord = min(coord, size - 1);
+    uint packed = tex.read(coord).r;
+    float r = float((packed >> 11) & 0x1F) / 31.0;
+    float g = float((packed >> 5) & 0x3F) / 63.0;
+    float b = float(packed & 0x1F) / 31.0;
+    return float4(r, g, b, 1.0);
+}
+
 // Every shader below this line takes the source texture's pixel size (in
 // texels) as a second fragment buffer, needed to step to neighbouring
 // texels for edge and scanline work. NativePlayerRenderer supplies it.
