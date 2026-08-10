@@ -32,7 +32,9 @@ enum NativeLauncher {
     /// and firmware, so the core boots straight from it with zero network.
     @discardableResult
     @MainActor
-    static func prepare(rom: Rom, session: Session) async throws -> NativeCore {
+    static func prepare(
+        rom: Rom, session: Session, onProgress: @escaping @MainActor (Double) -> Void = { _ in }
+    ) async throws -> NativeCore {
         let canonicalSlug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
         guard let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug) else {
             throw LaunchError.noNativeCore
@@ -70,7 +72,7 @@ enum NativeLauncher {
         try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
 
         let romURL = workDir.appendingPathComponent(rom.fsName)
-        try await download(session.romContentRequest(rom), to: romURL)
+        try await download(session.romContentRequest(rom), to: romURL, onProgress: onProgress)
 
         var downloadedFirmwareURLs: [URL] = []
         if let firmwareList = try? await session.firmware(platformId: rom.platformId) {
@@ -198,8 +200,21 @@ enum NativeLauncher {
     /// ROM/firmware download in this app went through that one call;
     /// arcade sets and cartridge ROMs never got big enough to hit the
     /// ceiling, PS1 discs are the first platform here that reliably do.
-    private static func download(_ request: URLRequest, to url: URL) async throws {
-        let (tempURL, response) = try await URLSession.shared.download(for: request)
+    ///
+    /// Delegate-based rather than the plain async `download(for:)` this
+    /// used before, purely to get `didWriteData`'s byte counts for
+    /// `onProgress`: the launch button used to just spin with no signal
+    /// on a large title, indistinguishable from a stall.
+    private static func download(
+        _ request: URLRequest, to url: URL, onProgress: @escaping @MainActor (Double) -> Void = { _ in }
+    ) async throws {
+        let delegate = ProgressDelegate(onProgress: onProgress)
+        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        defer { session.finishTasksAndInvalidate() }
+        let (tempURL, response) = try await withCheckedThrowingContinuation { continuation in
+            delegate.completion = { continuation.resume(with: $0) }
+            session.downloadTask(with: request).resume()
+        }
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
             try? FileManager.default.removeItem(at: tempURL)
             throw NSError(
@@ -210,5 +225,50 @@ enum NativeLauncher {
         }
         try? FileManager.default.removeItem(at: url)
         try FileManager.default.moveItem(at: tempURL, to: url)
+    }
+
+    /// `didWriteData` fires on a background queue and the completion
+    /// handler must move the temp file before returning, since iOS
+    /// deletes it the instant that callback returns: the same constraint
+    /// `RomExporter` documents for its own copy of this pattern.
+    private final class ProgressDelegate: NSObject, URLSessionDownloadDelegate {
+        private let onProgress: @MainActor (Double) -> Void
+        var completion: ((Result<(URL, URLResponse), Error>) -> Void)?
+
+        init(onProgress: @escaping @MainActor (Double) -> Void) {
+            self.onProgress = onProgress
+        }
+
+        func urlSession(
+            _ session: URLSession, downloadTask: URLSessionDownloadTask,
+            didWriteData bytesWritten: Int64, totalBytesWritten: Int64,
+            totalBytesExpectedToWrite: Int64
+        ) {
+            guard totalBytesExpectedToWrite > 0 else { return }
+            let fraction = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
+            let onProgress = onProgress
+            Task { @MainActor in onProgress(fraction) }
+        }
+
+        func urlSession(
+            _ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL
+        ) {
+            // Copied to a stable temp path synchronously, since `location`
+            // is only guaranteed to exist for the duration of this call
+            // and the checked continuation resumes asynchronously.
+            let staged = FileManager.default.temporaryDirectory
+                .appendingPathComponent("native-download-\(UUID().uuidString)")
+            do {
+                try FileManager.default.moveItem(at: location, to: staged)
+                completion?(.success((staged, downloadTask.response ?? URLResponse())))
+            } catch {
+                completion?(.failure(error))
+            }
+        }
+
+        func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+            guard let error else { return }
+            completion?(.failure(error))
+        }
     }
 }

@@ -62,6 +62,12 @@ struct GameLaunchView: View {
     /// interrupted run, in which case the game just boots normally.
     @State private var stateToLoad: PlayerView.StateToLoad?
     @State private var preparingPlay = false
+    /// The native download's fraction complete, shown as a percentage on
+    /// the launch button in place of an indeterminate spinner: a bare
+    /// spinner gives no signal on a large title, indistinguishable from a
+    /// stall, on a phone connection that can take a while for a multi-GB
+    /// PS1 disc.
+    @State private var downloadProgress: Double = 0
     @State private var playError: String?
     /// Set when the last session of this game died without a clean exit and
     /// a fresh local autosave exists: iOS took the game, so getting back to
@@ -608,7 +614,8 @@ struct GameLaunchView: View {
             Task { await beginPlay() }
         } label: {
             if preparingPlay {
-                ProgressView()
+                Text("\(Int(downloadProgress * 100))%")
+                    .font(.headline)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 15)
             } else {
@@ -656,9 +663,12 @@ struct GameLaunchView: View {
     /// black screen with no explanation.
     private func beginNativePlay() async {
         preparingPlay = true
+        downloadProgress = 0
         defer { preparingPlay = false }
         do {
-            try await NativeLauncher.prepare(rom: rom, session: session)
+            try await NativeLauncher.prepare(rom: rom, session: session) { fraction in
+                downloadProgress = fraction
+            }
             if let selectedState {
                 // The local copy first, not as an offline fallback but
                 // as the normal path: when it is the same state, reading
