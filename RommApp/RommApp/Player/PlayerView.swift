@@ -432,7 +432,9 @@ struct PlayerView: View {
             configureAudioSession()
             UIApplication.shared.isIdleTimerDisabled = true
 
-            controllers.send = { id, down in input.send(id: id, down: down) }
+            controllers.send = { player, id, down in
+                input.send(id: id, down: down, player: player)
+            }
             // Menu means pause now, from either input world: the pad's Menu
             // pill and a controller's Menu button both freeze the game on
             // the press and open the same native menu.
@@ -441,7 +443,11 @@ struct PlayerView: View {
             // Nobody is holding anything after a disconnect, so stop the
             // game rather than letting it run on unattended. The touch
             // controls reappear on their own.
-            controllers.onDisconnect = { input.pauseGame() }
+            // Player 2 dropping leaves player 1 playing; only losing
+            // player 1's pad means nobody is holding anything.
+            controllers.onDisconnect = { player in
+                if player == 0 { input.pauseGame() }
+            }
             controllers.start()
 
             if let context = await session.playerContext(for: rom) {
@@ -504,6 +510,7 @@ struct PlayerView: View {
         return .bottomStrip(
             items: layout.items(landscape: false),
             height: controlStripHeight,
+            headroom: layout.headroom ?? 0,
             opacity: controlOpacity
         )
     }
@@ -559,7 +566,10 @@ final class PlayerInputBridge: ObservableObject {
     /// installed once at document start, so what gets compiled per press is
     /// a dozen characters rather than a hundred and ten with three property
     /// lookups. Nothing about the emulator side changes.
-    func send(id: Int, down: Bool) {
+    /// `player` is the EmulatorJS player index, 0 or 1, matching the core
+    /// port the native player uses for the same slot. Touch always passes
+    /// 0: there is no second-player touch layout.
+    func send(id: Int, down: Bool, player: Int = 0) {
         // N64's C-buttons and a twin-stick arcade game's second joystick are
         // both ordinary digital buttons on the real hardware, but EmulatorJS
         // and the core underneath it route both through the analog dispatch
@@ -571,10 +581,10 @@ final class PlayerInputBridge: ObservableObject {
         // 0x7fff, well under whatever deadzone either reads a press against,
         // and never register. See RetroPad.isAnalogAxis(id:).
         if RetroPad.isAnalogAxis(id) {
-            webView?.evaluateJavaScript("__cm(\(id),\(down ? 0x7fff : 0))")
+            webView?.evaluateJavaScript("__cm(\(player),\(id),\(down ? 0x7fff : 0))")
             return
         }
-        webView?.evaluateJavaScript("__ci(\(id),\(down ? 1 : 0))")
+        webView?.evaluateJavaScript("__ci(\(player),\(id),\(down ? 1 : 0))")
     }
 
     /// A stick's live position, x and y each -1 to 1. `ids` are
@@ -590,10 +600,10 @@ final class PlayerInputBridge: ObservableObject {
         let xMag = Int((abs(x) * scale).rounded())
         let yMag = Int((abs(y) * scale).rounded())
         webView?.evaluateJavaScript("""
-        __cm(\(ids[0]),\(x > 0 ? xMag : 0));\
-        __cm(\(ids[1]),\(x < 0 ? xMag : 0));\
-        __cm(\(ids[2]),\(y > 0 ? yMag : 0));\
-        __cm(\(ids[3]),\(y < 0 ? yMag : 0));
+        __cm(0,\(ids[0]),\(x > 0 ? xMag : 0));\
+        __cm(0,\(ids[1]),\(x < 0 ? xMag : 0));\
+        __cm(0,\(ids[2]),\(y > 0 ? yMag : 0));\
+        __cm(0,\(ids[3]),\(y < 0 ? yMag : 0));
         """)
     }
 
@@ -693,8 +703,14 @@ struct PlayerWebView: UIViewRepresentable {
         case hidden
         /// Full screen pad over the canvas, controls in the gutters.
         case overlay(items: [ControlLayout.Item], opacity: Double)
-        /// Pad below the canvas, the portrait arrangement.
-        case bottomStrip(items: [ControlLayout.Item], height: CGFloat, opacity: Double)
+        /// Pad below the canvas, the portrait arrangement. `headroom` is
+        /// extra pad height, as a fraction of `height`, for a layout too
+        /// crowded to fit the normal strip: the webview keeps the exact
+        /// frame it would have had at `height` alone, and the pad grows
+        /// upward from the bottom edge to overlap the last bit of it, the
+        /// same "controls float over the picture, opacity keeps it legible"
+        /// deal landscape already makes everywhere.
+        case bottomStrip(items: [ControlLayout.Item], height: CGFloat, headroom: Double, opacity: Double)
     }
 
     let url: URL
@@ -1289,20 +1305,20 @@ struct PlayerWebView: UIViewRepresentable {
           // being called from an evaluateJavaScript with no scope of its
           // own, and resolved fresh each call because gameManager does not
           // exist until a game loads.
-          window.__ci = function (id, down) {
+          window.__ci = function (player, id, down) {
             try {
               const e = window.EJS_emulator;
-              if (e && e.gameManager) e.gameManager.simulateInput(0, id, down);
+              if (e && e.gameManager) e.gameManager.simulateInput(player, id, down);
             } catch (x) {}
           };
 
           // The magnitude twin of __ci above, for N64's stick and C-button
           // indices (16-23), which EmulatorJS reads as analog values rather
           // than a boolean down/up. Same call, same resident reasoning.
-          window.__cm = function (id, value) {
+          window.__cm = function (player, id, value) {
             try {
               const e = window.EJS_emulator;
-              if (e && e.gameManager) e.gameManager.simulateInput(0, id, value);
+              if (e && e.gameManager) e.gameManager.simulateInput(player, id, value);
             } catch (x) {}
           };
 
@@ -1963,7 +1979,7 @@ final class PlayerContainerView: UIView {
         switch configuration {
         case .hidden:
             pad.isHidden = true
-        case .overlay(let items, let opacity), .bottomStrip(let items, _, let opacity):
+        case .overlay(let items, let opacity), .bottomStrip(let items, _, _, let opacity):
             pad.items = items
             pad.alpha = opacity
             pad.isHidden = false
@@ -1977,10 +1993,11 @@ final class PlayerContainerView: UIView {
         case .hidden, .overlay:
             webView.frame = bounds
             pad.frame = bounds
-        case .bottomStrip(_, let height, _):
+        case .bottomStrip(_, let height, let headroom, _):
             let split = max(bounds.height - height, 0)
             webView.frame = CGRect(x: 0, y: 0, width: bounds.width, height: split)
-            pad.frame = CGRect(x: 0, y: split, width: bounds.width, height: height)
+            let padHeight = height * (1 + headroom)
+            pad.frame = CGRect(x: 0, y: bounds.height - padHeight, width: bounds.width, height: padHeight)
         }
     }
 }

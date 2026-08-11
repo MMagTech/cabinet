@@ -10,6 +10,7 @@ struct SettingsView: View {
     @State private var confirmingUnpair = false
     @State private var confirmingForget = false
     @AppStorage("com.mmagtech.RommApp.controlOpacity") private var controlOpacity = 0.7
+    @AppStorage("com.mmagtech.RommApp.rumbleEnabled") private var rumbleEnabled = true
     @AppStorage(ControlTheme.key) private var controlTheme = ControlTheme.system.rawValue
     @AppStorage(PlayerAutosave.key) private var autosaveEnabled = true
     @AppStorage(PlatformLabelSource.key) private var platformLabelSourceRaw = PlatformLabelSource.platformName.rawValue
@@ -31,13 +32,26 @@ struct SettingsView: View {
                                          ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Controller")
-                        Text(controllers.isConnected
-                             ? (controllers.controllerName ?? "Connected")
-                             : "None connected")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
+                        if controllers.isConnected {
+                            // One line per connected slot, not just player 1:
+                            // this row used to show a single name back when
+                            // only one controller could ever be attached at
+                            // once, and kept doing that even after a second
+                            // player became possible.
+                            ForEach(Array(controllers.connectedNames.enumerated()), id: \.offset) { index, name in
+                                if let name {
+                                    Text("Player \(index + 1): \(name)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
+                                }
+                            }
+                        } else {
+                            Text("None connected")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     Spacer(minLength: 0)
                 }
@@ -72,10 +86,12 @@ struct SettingsView: View {
                     }
                     Slider(value: $controlOpacity, in: 0.25...1.0, step: 0.05)
                 }
+
+                Toggle("Rumble", isOn: $rumbleEnabled)
             } header: {
                 Text("Controls")
             } footer: {
-                Text("On screen controls respond to touch at any visibility.")
+                Text("On screen controls respond to touch at any visibility. Rumble fires a haptic when a game with a real rumble accessory (Drill Dozer's cartridge motor, an N64 Rumble Pak, a DualShock, Dreamcast's Jump Pack) tells the core to vibrate. Games and systems with no such hardware never trigger it.")
             }
 
             Section {

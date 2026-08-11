@@ -14,6 +14,11 @@ struct EditableLayout {
     let name: String
     var system: String
     var ergonomics: String?
+    /// Extra portrait strip height, as a fraction of the strip, mirrored
+    /// from `ControlLayout.headroom`. Nil round trips as nil rather than
+    /// zero, so a layout that never asked for headroom does not gain a
+    /// spurious `_headroom: 0` line the first time it is opened here.
+    var headroom: Double?
     var items: [EditableItem]
     /// Nil when the file never carried a landscape set. The player falls back
     /// to portrait items in that case, which works but looks wrong, so the
@@ -144,6 +149,7 @@ extension EditableLayout {
             name: name,
             system: system,
             ergonomics: root["_ergonomics"] as? String,
+            headroom: root["_headroom"] as? Double,
             items: decodeItems(root["items"]) ?? [],
             landscapeItems: decodeItems(root["landscapeItems"])
         )
@@ -195,6 +201,9 @@ extension EditableLayout {
         out += " \"system\": \(Self.quote(system)),\n"
         if let ergonomics {
             out += " \"_ergonomics\": \(Self.quote(ergonomics)),\n"
+        }
+        if let headroom {
+            out += " \"_headroom\": \(Self.number(headroom)),\n"
         }
         out += " \"items\": \(Self.emit(items, indent: 1))"
         if let landscapeItems {

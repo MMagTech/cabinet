@@ -32,14 +32,16 @@ enum NativeLauncher {
     /// and firmware, so the core boots straight from it with zero network.
     @discardableResult
     @MainActor
-    static func prepare(rom: Rom, session: Session) async throws -> NativeCore {
+    static func prepare(
+        rom: Rom, session: Session, onProgress: @escaping @MainActor (Double) -> Void = { _ in }
+    ) async throws -> NativeCore {
         let canonicalSlug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
         guard let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug) else {
             throw LaunchError.noNativeCore
         }
         let core = platform.core
 
-        // Saturn stays chd-only, deliberately, matching RomM's own
+        // Saturn and PS1 stay chd-only, deliberately, matching RomM's own
         // recommended format for CD platforms. cue/bin is real work
         // (a cue sheet plus per-track bins, multi-file download, the
         // core reading references between them) that has nothing to do
@@ -47,7 +49,15 @@ enum NativeLauncher {
         // full speed, and a cue/bin failure would be indistinguishable
         // from a real performance failure. Revisit only if a concrete
         // library needs it once the core itself is a known quantity.
-        if core == .beetleSaturn || core == .pcsxReARMed {
+        // Dreamcast joined the same restriction 2026-08-10: it has no
+        // CHD convention of its own the way PS1/Saturn do (its native
+        // formats are GDI, multi-file, or CDI), but CHD is the format
+        // the emulation community and RomM itself converged on to avoid
+        // GDI's multi-file mess, and every Dreamcast rom on the real
+        // server checked against was already .chd, so the same
+        // single-file restriction applies rather than building GDI
+        // multi-file support nothing in this library needs yet.
+        if core == .beetleSaturn || core == .pcsxReARMed || core == .flycast {
             guard !rom.hasMultipleFiles, rom.fsName.lowercased().hasSuffix(".chd") else {
                 throw LaunchError.unsupportedFormat(
                     "Only .chd is supported for \(platform.displayName) right now, not \"\(rom.fsName)\". Re-rip or re-add the game as chd."
@@ -61,6 +71,7 @@ enum NativeLauncher {
         cleanUpTempDirectories()
 
         if let keptDir = KeptGameStore.shared.launchDirectory(romId: rom.id) {
+            await restoreVMUSaveIfNeeded(rom: rom, session: session, platform: platform, workDir: keptDir)
             return try activate(platform: platform, romURL: keptDir.appendingPathComponent(rom.fsName), workDir: keptDir)
         }
 
@@ -70,7 +81,7 @@ enum NativeLauncher {
         try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
 
         let romURL = workDir.appendingPathComponent(rom.fsName)
-        try await download(session.romContentRequest(rom), to: romURL)
+        try await download(session.romContentRequest(rom), to: romURL, onProgress: onProgress)
 
         var downloadedFirmwareURLs: [URL] = []
         if let firmwareList = try? await session.firmware(platformId: rom.platformId) {
@@ -83,8 +94,65 @@ enum NativeLauncher {
         }
 
         stageFirmware(from: downloadedFirmwareURLs, in: workDir, platform: platform)
+        await restoreVMUSaveIfNeeded(rom: rom, session: session, platform: platform, workDir: workDir)
 
         return try activate(platform: platform, romURL: romURL, workDir: workDir)
+    }
+
+    /// Dreamcast only, and run before the core boots rather than after
+    /// the way PS1's own `syncMemoryCardIn` in NativePlayerView does:
+    /// Flycast reads whatever VMU file already exists on disk once,
+    /// synchronously, while `retro_load_game` sets up its Maple bus
+    /// devices, so anything placed after `loadGame` returns is already
+    /// too late, there is no RETRO_MEMORY_SAVE_RAM injection point for
+    /// this core the way there is for PS1's. The path itself is fixed
+    /// and predictable, `<workDir>/dc/vmu_save_A1.bin`: confirmed
+    /// 2026-08-11 by reading shell/libretro/oslib.cpp directly (a
+    /// separate file from the core/oslib/oslib.cpp this investigation
+    /// spent most of a session inside by mistake), where
+    /// `per_content_vmus` defaults to 0 and the plain, gameId-free path
+    /// is exactly what this core actually uses.
+    ///
+    /// Same own-card-wins-else-newest-server-card-wins logic as
+    /// `syncMemoryCardIn`, just writing a file instead of handing bytes
+    /// to the core directly, and applied uniformly to kept and
+    /// temp-directory launches alike: a kept game's own directory
+    /// already carries its last card forward for free, but a newer
+    /// save from another device still deserves the same server check
+    /// PS1 always runs regardless of Keep.
+    private static func restoreVMUSaveIfNeeded(
+        rom: Rom, session: Session, platform: NativePlatform, workDir: URL
+    ) async {
+        guard platform == .dreamcast else { return }
+        let store = MemoryCardStore.shared
+        let dcDir = workDir.appendingPathComponent("dc", isDirectory: true)
+        let target = dcDir.appendingPathComponent("vmu_save_A1.bin")
+
+        func place(_ data: Data) {
+            try? FileManager.default.createDirectory(at: dcDir, withIntermediateDirectories: true)
+            try? data.write(to: target, options: .atomic)
+        }
+
+        let local = store.localCard(romId: rom.id)
+        if store.pendingUpload(romId: rom.id), let local {
+            place(local)
+            return
+        }
+
+        if let saves = try? await session.saves(romId: rom.id) {
+            let sorted = saves.sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
+            let own = sorted.first { $0.emulator == NativeCore.flycast.emulatorTag }
+            if let own, own.updatedAt != store.serverStamp(romId: rom.id) || local == nil,
+               let bytes = try? await session.saveContent(own) {
+                store.storeDownloaded(romId: rom.id, data: bytes, serverStamp: own.updatedAt)
+                place(bytes)
+                return
+            }
+        }
+
+        if let local {
+            place(local)
+        }
     }
 
     private static func activate(platform: NativePlatform, romURL: URL, workDir: URL) throws -> NativeCore {
@@ -92,7 +160,15 @@ enum NativeLauncher {
         let loadURL = try extractedIfArchived(romURL, core: core, in: workDir)
         LibretroFrontend.shared.activateCore(core.coreID)
         LibretroFrontend.shared.setCoreOptions(NativeCoreOptionsStore.dictionary(for: platform))
-        LibretroFrontend.shared.setControllerPortDevice(NativeCoreOptionsStore.padDevice(for: platform))
+        let padDevice = NativeCoreOptionsStore.padDevice(for: platform)
+        LibretroFrontend.shared.setControllerPortDevice(padDevice, port: 0)
+        // Player 2 gets the same device type as player 1: nothing here
+        // offers picking a different pad type per player, and every
+        // platform that supports a second port treats both ports
+        // identically (e.g. PSX's two standard controller ports).
+        if platform.supportsSecondPlayer {
+            LibretroFrontend.shared.setControllerPortDevice(padDevice, port: 1)
+        }
         if let failure = LibretroFrontend.shared.loadGame(loadURL.path, systemDirectory: workDir.path) {
             throw NSError(domain: "NativeLauncher", code: 1, userInfo: [NSLocalizedDescriptionKey: failure])
         }
@@ -160,6 +236,25 @@ enum NativeLauncher {
     /// Shared with `KeptGameStore`, which runs it once at keep time so a
     /// kept game's directory is boot-ready with no work at launch.
     static func stageFirmware(from firmwareURLs: [URL], in dir: URL, platform: NativePlatform) {
+        // Flycast's Apple build looks for its boot ROM under a "dc/"
+        // subdirectory of the system directory, not the system directory
+        // itself: documented in libretro-super's flycast_libretro.info,
+        // confirmed the hard way 2026-08-10 with device console logging
+        // after the flat placement every other platform here uses
+        // produced a silent fallback to reios with no error. RomM's own
+        // filename ("dc_boot.bin") already matches what Flycast looks
+        // for, so this only needs a copy into the right subdirectory,
+        // not the name-guessing the platforms below need.
+        if platform == .dreamcast {
+            let dcDir = dir.appendingPathComponent("dc", isDirectory: true)
+            for url in firmwareURLs where url.lastPathComponent == "dc_boot.bin" {
+                try? FileManager.default.createDirectory(at: dcDir, withIntermediateDirectories: true)
+                let target = dcDir.appendingPathComponent("dc_boot.bin")
+                guard !FileManager.default.fileExists(atPath: target.path) else { continue }
+                try? FileManager.default.copyItem(at: url, to: target)
+            }
+        }
+
         guard let expected = firmwareNames[platform] else { return }
         for url in firmwareURLs {
             guard let size = try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int,
@@ -198,8 +293,21 @@ enum NativeLauncher {
     /// ROM/firmware download in this app went through that one call;
     /// arcade sets and cartridge ROMs never got big enough to hit the
     /// ceiling, PS1 discs are the first platform here that reliably do.
-    private static func download(_ request: URLRequest, to url: URL) async throws {
-        let (tempURL, response) = try await URLSession.shared.download(for: request)
+    ///
+    /// Delegate-based rather than the plain async `download(for:)` this
+    /// used before, purely to get `didWriteData`'s byte counts for
+    /// `onProgress`: the launch button used to just spin with no signal
+    /// on a large title, indistinguishable from a stall.
+    private static func download(
+        _ request: URLRequest, to url: URL, onProgress: @escaping @MainActor (Double) -> Void = { _ in }
+    ) async throws {
+        let delegate = ProgressDelegate(onProgress: onProgress)
+        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        defer { session.finishTasksAndInvalidate() }
+        let (tempURL, response) = try await withCheckedThrowingContinuation { continuation in
+            delegate.completion = { continuation.resume(with: $0) }
+            session.downloadTask(with: request).resume()
+        }
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
             try? FileManager.default.removeItem(at: tempURL)
             throw NSError(
@@ -210,5 +318,50 @@ enum NativeLauncher {
         }
         try? FileManager.default.removeItem(at: url)
         try FileManager.default.moveItem(at: tempURL, to: url)
+    }
+
+    /// `didWriteData` fires on a background queue and the completion
+    /// handler must move the temp file before returning, since iOS
+    /// deletes it the instant that callback returns: the same constraint
+    /// `RomExporter` documents for its own copy of this pattern.
+    private final class ProgressDelegate: NSObject, URLSessionDownloadDelegate {
+        private let onProgress: @MainActor (Double) -> Void
+        var completion: ((Result<(URL, URLResponse), Error>) -> Void)?
+
+        init(onProgress: @escaping @MainActor (Double) -> Void) {
+            self.onProgress = onProgress
+        }
+
+        func urlSession(
+            _ session: URLSession, downloadTask: URLSessionDownloadTask,
+            didWriteData bytesWritten: Int64, totalBytesWritten: Int64,
+            totalBytesExpectedToWrite: Int64
+        ) {
+            guard totalBytesExpectedToWrite > 0 else { return }
+            let fraction = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
+            let onProgress = onProgress
+            Task { @MainActor in onProgress(fraction) }
+        }
+
+        func urlSession(
+            _ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL
+        ) {
+            // Copied to a stable temp path synchronously, since `location`
+            // is only guaranteed to exist for the duration of this call
+            // and the checked continuation resumes asynchronously.
+            let staged = FileManager.default.temporaryDirectory
+                .appendingPathComponent("native-download-\(UUID().uuidString)")
+            do {
+                try FileManager.default.moveItem(at: location, to: staged)
+                completion?(.success((staged, downloadTask.response ?? URLResponse())))
+            } catch {
+                completion?(.failure(error))
+            }
+        }
+
+        func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+            guard let error else { return }
+            completion?(.failure(error))
+        }
     }
 }

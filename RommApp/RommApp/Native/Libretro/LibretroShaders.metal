@@ -26,6 +26,26 @@ fragment float4 libretro_fragment(VertexOut in [[stage_in]],
     return tex.sample(samp, in.texCoord);
 }
 
+// Decodes a raw RGB565 frame straight from the GPU instead of the CPU
+// scalar loop updateTexture used to run per pixel: NativePlayerRenderer
+// uploads the packed 16-bit samples untouched into an r16Uint texture,
+// and this runs as a blit pass into the real bgra8Unorm target so every
+// existing shader downstream keeps sampling a normal float texture like
+// before. Bit layout is libretro's own RETRO_PIXEL_FORMAT_RGB565: bits
+// 15-11 red, 10-5 green, 4-0 blue.
+fragment float4 shader_rgb565_unpack_fragment(VertexOut in [[stage_in]],
+                                               texture2d<uint> tex [[texture(0)]],
+                                               sampler samp [[sampler(0)]]) {
+    uint2 size = uint2(tex.get_width(), tex.get_height());
+    uint2 coord = uint2(in.texCoord * float2(size));
+    coord = min(coord, size - 1);
+    uint packed = tex.read(coord).r;
+    float r = float((packed >> 11) & 0x1F) / 31.0;
+    float g = float((packed >> 5) & 0x3F) / 63.0;
+    float b = float(packed & 0x1F) / 31.0;
+    return float4(r, g, b, 1.0);
+}
+
 // Every shader below this line takes the source texture's pixel size (in
 // texels) as a second fragment buffer, needed to step to neighbouring
 // texels for edge and scanline work. NativePlayerRenderer supplies it.
@@ -125,6 +145,51 @@ fragment float4 shader_crt_caligari_fragment(VertexOut in [[stage_in]],
     float gray = dot(blended.rgb, float3(0.299, 0.587, 0.114));
     float3 desaturated = mix(blended.rgb, float3(gray), 0.08);
     return float4(desaturated * scan, blended.a);
+}
+
+// crt-geom: bows the image outward like a curved CRT tube instead of
+// coloring/scanlining a flat rectangle, the one shader in this list that
+// reshapes the screen's geometry rather than its color. Distorts texture
+// coordinates with the same x-bends-by-y^2/y-bends-by-x^2 barrel
+// curvature libretro/slang-shaders' crt-geom.slang uses, then clips to a
+// rounded rectangle and darkens the corners, so the visible image reads
+// as a convex tube face rather than a flat panel. An earlier six-shader
+// pass on this list dropped a multi-pass crt-geom.slang port as looking
+// bad on device; this is a different, single-pass geometry-only effect
+// built from scratch, not that same shader revisited.
+fragment float4 shader_crt_geom_fragment(VertexOut in [[stage_in]],
+                                          texture2d<float> tex [[texture(0)]],
+                                          sampler samp [[sampler(0)]],
+                                          constant float2 &texelSize [[buffer(1)]]) {
+    float2 c = in.texCoord * 2.0 - 1.0;
+    const float curvature = 6.0;
+    float2 offset = c.yx / curvature;
+    c += c * offset * offset;
+    float2 uv = c * 0.5 + 0.5;
+
+    // Rounded-rect clip in the same centered space: anything outside the
+    // rounded box, corners included, is the tube's bezel, not the
+    // picture. dist is the signed distance to that rounded boundary
+    // (negative inside), reused below to fade brightness in before the
+    // hard cutoff instead of ending in a flat, shadowless edge.
+    const float cornerRadius = 0.08;
+    float2 boxHalf = float2(1.0 - cornerRadius);
+    float2 q = abs(c) - boxHalf;
+    float dist = length(max(q, 0.0)) - cornerRadius;
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || dist > 0.02) {
+        return float4(0.0, 0.0, 0.0, 1.0);
+    }
+
+    float4 color = tex.sample(samp, uv);
+    float scan = scanlineFactor(uv, texelSize, 0.35);
+    // Corner/edge shadow: ramps from full brightness well inside the
+    // rounded rect down to 45% right at its boundary, so the darkening
+    // actually reads as a shadow cast by the tube's bezel rather than a
+    // uniform tint or an invisible one-pixel edge. Layered under a mild
+    // whole-screen vignette for the rest of the curvature.
+    float edgeShadow = 1.0 - smoothstep(-0.16, 0.02, dist);
+    float vignette = mix(0.45, 1.0, edgeShadow) * (1.0 - dot(c, c) * 0.12);
+    return float4(color.rgb * scan * vignette, color.a);
 }
 
 // lcd: the generic handheld screen look for GBA/Game Gear/NGPC, none of

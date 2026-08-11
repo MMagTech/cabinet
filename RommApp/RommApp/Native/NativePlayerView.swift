@@ -1,6 +1,7 @@
 import SwiftUI
 import MetalKit
 import AVFoundation
+import QuartzCore
 
 /// Fullscreen native-player screen, core-agnostic. Drives retro_run off
 /// MTKView's own display-link-backed draw loop through LibretroFrontend,
@@ -18,9 +19,10 @@ struct NativePlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var renderer = NativePlayerRenderer()
     @ObservedObject private var controllers = GameControllerManager.shared
-    @State private var previousControllerSend: ((Int, Bool) -> Void)?
+    @State private var previousControllerSend: ((Int, Int, Bool) -> Void)?
+    @State private var previousControllerStick: ((Int, Float, Float) -> Void)?
     @State private var previousControllerMenu: (() -> Void)?
-    @State private var previousControllerDisconnect: (() -> Void)?
+    @State private var previousControllerDisconnect: ((Int) -> Void)?
     @State private var menuVisible = false
     @State private var menuStatus: String?
     @State private var menuBusy = false
@@ -95,7 +97,17 @@ struct NativePlayerView: View {
             if down { openMenu() }
             return
         }
-        renderer.setButton(id, down: down)
+        // Touch is always player 1: there is deliberately no second-player
+        // touch layout, so port 0 is the only port the overlay ever drives.
+        renderer.setButton(id, down: down, port: 0)
+    }
+
+    /// `ids` is unused here on purpose: it exists for the webview player's
+    /// per-slot EmulatorJS wiring (see ControlLayout.Item's own doc
+    /// comment), but this app has exactly one native stick, Dreamcast's,
+    /// and LibretroFrontend already knows which analog index it is.
+    private func handleStick(_ ids: [Int], x: Double, y: Double) {
+        renderer.setStick(x: x, y: y, port: 0)
     }
 
     private func openMenu() {
@@ -103,14 +115,20 @@ struct NativePlayerView: View {
         menuStatus = nil
         menuVisible = true
         captureMemoryCard()
+        captureVMUSave()
     }
 
-    /// Whether this session has a battery save to look after. Gated on the
-    /// platform rather than probing the core: PCSX ReARMed is the only
-    /// core whose wiring exports the memory API, and the pause path runs
-    /// often enough that a cheap check matters.
+    /// Whether this session has a RETRO_MEMORY_SAVE_RAM battery save to
+    /// look after through the core directly. PS1 and N64 both export
+    /// this: PCSX ReARMed's memory card and mupen64plus-nx's
+    /// SRAM/EEPROM cartridge save both answer RETRO_MEMORY_SAVE_RAM,
+    /// confirmed for N64 by the go/no-go spike's own console log
+    /// ("Save type: 2") against a real cartridge that saves. Dreamcast's
+    /// VMU save is a real battery save too, just reached a completely
+    /// different way; see `captureVMUSave()`, gated on `platform ==
+    /// .dreamcast` separately rather than folded in here.
     private var hasMemoryCard: Bool {
-        platform == .psx
+        platform == .psx || platform == .n64
     }
 
     /// The launch-time decision of which card goes into the slot: a local
@@ -120,18 +138,30 @@ struct NativePlayerView: View {
     /// device. Offline, or with nothing on the server, whatever is on disk
     /// plays. A game with no card anywhere just starts with the core's
     /// own freshly formatted one.
-    /// Whether a card image holds any actual saves: directory frames 1-15
+    /// Whether a card image holds any actual saves. PS1's 128KB memory
+    /// card has a real directory format worth checking: frames 1-15
     /// carry 0x51/0x52/0x53 in their first byte for in-use blocks, 0xA0
-    /// for free ones (the PS1 memory card spec's block allocation states).
-    /// A freshly formatted card that no game ever wrote must never outrank
-    /// a real card from the server, which is exactly what happened when a
-    /// quick native boot left an empty local card behind and blocked the
-    /// adoption path below.
+    /// for free ones (the PS1 memory card spec's block allocation
+    /// states). A freshly formatted card that no game ever wrote must
+    /// never outrank a real card from the server, which is exactly what
+    /// happened when a quick native boot left an empty local card behind
+    /// and blocked the adoption path below.
+    ///
+    /// N64's SRAM/EEPROM has no comparable directory to check and its
+    /// size varies by cartridge (mupen64plus-nx logged "Save type: 2",
+    /// EEPROM, for the go/no-go title), so a byte-format check would
+    /// either always reject real saves or always accept junk. Non-empty
+    /// and not all zero bytes, the state mupen64plus-nx writes for an
+    /// unused save rather than leaving the file absent, is the only
+    /// signal available.
     private func cardHasSaves(_ card: Data) -> Bool {
-        guard card.count == 128 * 1024 else { return false }
-        return (1...15).contains { block in
-            [0x51, 0x52, 0x53].contains(Int(card[128 * block]))
+        if platform == .psx {
+            guard card.count == 128 * 1024 else { return false }
+            return (1...15).contains { block in
+                [0x51, 0x52, 0x53].contains(Int(card[128 * block]))
+            }
         }
+        return !card.isEmpty && card.contains { $0 != 0 }
     }
 
     private func syncMemoryCardIn() async {
@@ -214,6 +244,58 @@ struct NativePlayerView: View {
         Task { await uploadMemoryCard(data) }
     }
 
+    /// Dreamcast only, and structurally different from
+    /// `captureMemoryCard()`: Flycast never exposes its VMU save through
+    /// RETRO_MEMORY_SAVE_RAM at all (confirmed against its own
+    /// retro_get_memory_data, which only ever answers
+    /// RETRO_MEMORY_SYSTEM_RAM), it writes a real file straight into the
+    /// system directory instead. That file's name comes from the disc's
+    /// own internal game id, something this app has no way to read in
+    /// advance, so this looks for whichever file ends the way Flycast's
+    /// own VMU path naming always does rather than a name this code
+    /// picks. Upload only for now, capture and back up to RomM; loading
+    /// a previously saved card back in on a fresh directory needs
+    /// knowing that filename before Flycast invents it, which needs
+    /// parsing the disc's own IP.BIN game id ourselves, not solved yet.
+    private func captureVMUSave() {
+        guard platform == .dreamcast, renderer.paused else { return }
+        guard let systemDir = LibretroFrontend.shared.systemDirectory() else {
+            print("[vmu] no systemDirectory")
+            return
+        }
+        // Same "dc/" subdirectory the BIOS needed (see stageFirmware's
+        // own comment): confirmed 2026-08-11 by pulling the app's real
+        // data container over `devicectl device copy from` and finding
+        // the actual file at workDir/dc/vmu_save_A1.bin after a real
+        // in-game save, not at the system directory's own root the way
+        // this scan first assumed.
+        let scanDir = URL(fileURLWithPath: systemDir).appendingPathComponent("dc", isDirectory: true).path
+        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: scanDir) else {
+            print("[vmu] could not list \(scanDir)")
+            return
+        }
+        print("[vmu] scanning \(scanDir): \(entries)")
+        // No leading underscore: PerGameVmu names the file
+        // "<gameId>_vmu_save_A1.bin", but Flycast falls back to the
+        // bare "vmu_save_A1.bin" (no separator at all) whenever the
+        // disc's own game id isn't available yet at the moment it
+        // names the file.
+        guard let vmuName = entries.first(where: { $0.hasSuffix("vmu_save_A1.bin") }),
+              let data = try? Data(contentsOf: URL(fileURLWithPath: scanDir).appendingPathComponent(vmuName))
+        else {
+            print("[vmu] no *vmu_save_A1.bin match")
+            return
+        }
+        guard data != lastCardData else { return }
+        lastCardData = data
+        MemoryCardStore.shared.storeSnapshot(romId: rom.id, data: data)
+        DiagnosticsLog.record(
+            context: "VMU save", message: "Found \(vmuName), \(data.count) bytes, uploading.",
+            romVersion: session.serverVersion
+        )
+        Task { await uploadMemoryCard(data) }
+    }
+
     private func uploadMemoryCard(_ data: Data) async {
         do {
             // The Cabinet marker keeps this row's filename distinct from
@@ -258,23 +340,34 @@ struct NativePlayerView: View {
                     ZStack {
                         MetalGameView(renderer: renderer)
                         if showsControls {
-                            TouchControlPad(items: layoutItems(landscape: true), send: handleInput, system: controlLayout.system, opacity: controlOpacity)
+                            TouchControlPad(items: layoutItems(landscape: true), send: handleInput, sendStick: handleStick, system: controlLayout.system, opacity: controlOpacity)
                         }
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .background(Color.black)
                 } else {
-                    // Portrait: the pad's items are normalised against a bottom
-                    // strip, not the full screen, so the canvas and pad split
-                    // the screen rather than overlap. Matches PlayerView's
-                    // .bottomStrip case exactly, same strip height. The canvas
-                    // stays below the top safe area so the island never eats
-                    // the picture; only the strip runs to the screen's edge.
-                    VStack(spacing: 0) {
+                    // Portrait: the pad's items are normalised against a
+                    // bottom strip, not the full screen, so the canvas keeps
+                    // exactly the height it always has, matching PlayerView's
+                    // .bottomStrip case exactly, same strip height. The
+                    // canvas stays below the top safe area so the island
+                    // never eats the picture.
+                    //
+                    // The pad itself can be taller than the strip it is
+                    // normalised against: `headroom` (zero for every layout
+                    // that does not ask for it, so this reproduces the old
+                    // plain split pixel for pixel) grows the pad upward from
+                    // the bottom edge to overlap the canvas's own last bit,
+                    // for a pad too crowded to fit the strip alone. Opacity
+                    // keeps the overlap legible, the same deal landscape
+                    // already makes everywhere.
+                    let padHeight = controlStripHeight * (1 + (controlLayout.headroom ?? 0))
+                    ZStack(alignment: .top) {
                         MetalGameView(renderer: renderer)
                             .frame(height: max(geometry.size.height - controlStripHeight, 0))
-                        TouchControlPad(items: layoutItems(landscape: false), send: handleInput, system: controlLayout.system, opacity: controlOpacity)
-                            .frame(height: controlStripHeight)
+                        TouchControlPad(items: layoutItems(landscape: false), send: handleInput, sendStick: handleStick, system: controlLayout.system, opacity: controlOpacity)
+                            .frame(height: padHeight)
+                            .frame(maxHeight: .infinity, alignment: .bottom)
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
                 }
@@ -312,16 +405,29 @@ struct NativePlayerView: View {
             // and locks mid-game.
             UIApplication.shared.isIdleTimerDisabled = true
             previousControllerSend = GameControllerManager.shared.send
+            previousControllerStick = GameControllerManager.shared.sendStick
             previousControllerMenu = GameControllerManager.shared.onMenu
             previousControllerDisconnect = GameControllerManager.shared.onDisconnect
-            GameControllerManager.shared.send = { [weak renderer] id, down in
-                renderer?.setButton(id, down: down)
+            GameControllerManager.shared.send = { [weak renderer] player, id, down in
+                renderer?.setButton(id, down: down, port: player)
+            }
+            // The continuous form, alongside the digitized d-pad bits
+            // .send already carries: N64 and Dreamcast read this, every
+            // other platform simply never asks LibretroFrontend for it.
+            GameControllerManager.shared.sendStick = { [weak renderer] player, x, y in
+                renderer?.setStick(x: Double(x), y: Double(y), port: player)
             }
             GameControllerManager.shared.onMenu = { openMenu() }
             // Nobody is holding anything after a disconnect, so pause into
             // the menu rather than letting the game run on unattended. Same
             // reasoning as the webview player's pauseGame on disconnect.
-            GameControllerManager.shared.onDisconnect = { openMenu() }
+            // Player 1 losing their pad stops the game, since the person
+            // who can drive the menu is now holding nothing. Player 2
+            // dropping leaves player 1 playing: pausing on them would
+            // interrupt a game the remaining player can still control.
+            GameControllerManager.shared.onDisconnect = { player in
+                if player == 0 { openMenu() }
+            }
             renderer.pendingState = initialState
             // Held before the first frame ever runs, so a PS1 game cannot
             // boot past its own card check while the card decision is
@@ -333,6 +439,7 @@ struct NativePlayerView: View {
         .onDisappear {
             UIApplication.shared.isIdleTimerDisabled = false
             GameControllerManager.shared.send = previousControllerSend
+            GameControllerManager.shared.sendStick = previousControllerStick
             GameControllerManager.shared.onMenu = previousControllerMenu
             GameControllerManager.shared.onDisconnect = previousControllerDisconnect
             // The session POST is what stamps last played; the heartbeat
@@ -354,6 +461,7 @@ struct NativePlayerView: View {
                 NativeSessionMarker.recordBackgrounded()
                 renderer.paused = true
                 captureMemoryCard()
+                captureVMUSave()
             } else if phase == .active && !menuVisible {
                 renderer.paused = false
             }
@@ -589,10 +697,15 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     /// One pipeline per shader, built once at attach so picking a shader in
     /// the pause menu is a dictionary lookup, not a recompile.
     private var pipelines: [NativeShader: MTLRenderPipelineState] = [:]
+    /// Blits a raw RGB565 frame into `texture` on the GPU; see updateTexture.
+    private var rgb565UnpackPipeline: MTLRenderPipelineState?
     private var samplerState: MTLSamplerState!
     private var texture: MTLTexture?
     private var textureWidth: Int = 0
     private var textureHeight: Int = 0
+    /// Raw packed-pixel source for the RGB565 GPU unpack path, r16Uint so
+    /// no CPU-side interpretation happens before it reaches the shader.
+    private var rgb565SourceTexture: MTLTexture?
     private let audio = NativePlayerAudio()
 
     /// The active shader, set by the pause menu's Shader row. The next
@@ -601,13 +714,24 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     /// menu's checkmark tracks the pick without a separate state copy.
     @Published var shader: NativeShader = .sharp
 
+    /// Rolling one-second measurement of draw(in:) callback rate, not the
+    /// core's own advertised frame rate: any stall inside runFrame, the
+    /// GPU encode, or the display link itself shows up here. Generic
+    /// diagnostic, not core-specific; added for the Dreamcast go/no-go
+    /// spike, where "does this actually hold real-time" needs a number,
+    /// not just a feel, but harmless to leave on for every core.
+    @Published private(set) var measuredFPS: Double = 0
+    private var fpsFrameCount = 0
+    private var fpsWindowStart: CFTimeInterval = 0
+
     /// Held RetroPad ids, merged from the touch overlay and any connected
     /// game controller. Both already speak the same id space (see
     /// ControllerBindings.swift's RetroPad constants), so merging is just
     /// a union; FBNeo only needs "is this id down right now" each frame.
-    private var heldButtons: Set<Int> = []
+    private var heldButtons: [Set<Int>] = [[], []]
 
-    func setButton(_ id: Int, down: Bool) {
+    func setButton(_ id: Int, down: Bool, port: Int) {
+        guard heldButtons.indices.contains(port) else { return }
         // 0...13 is the standard joypad; 20...23 is the twin-stick second
         // joystick's four directions (see ArcadeLayout.secondStick and
         // GameControllerManager.stick2), which LibretroFrontend answers
@@ -616,10 +740,19 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         // RetroPad.overlay (-1) isn't a game input at all.
         guard (0...13).contains(id) || (20...23).contains(id) else { return }
         if down {
-            heldButtons.insert(id)
+            heldButtons[port].insert(id)
         } else {
-            heldButtons.remove(id)
+            heldButtons[port].remove(id)
         }
+    }
+
+    /// Dreamcast's real analog stick, the one input in this app that is
+    /// a continuous value rather than a RetroPad button id. Forwarded
+    /// straight through to `LibretroFrontend`, which is the only place
+    /// that knows how to fold it into RETRO_DEVICE_ANALOG reads; nothing
+    /// about it lives in `heldButtons`.
+    func setStick(x: Double, y: Double, port: Int) {
+        LibretroFrontend.shared.setAnalogStickX(Float(x), y: Float(y), port: port)
     }
 
     func attach(to view: MTKView) {
@@ -640,6 +773,12 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
                 pipelines[candidate] = pipeline
             }
         }
+
+        let unpackDescriptor = MTLRenderPipelineDescriptor()
+        unpackDescriptor.vertexFunction = vertexFn
+        unpackDescriptor.fragmentFunction = library?.makeFunction(name: "shader_rgb565_unpack_fragment")
+        unpackDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
+        rgb565UnpackPipeline = try? device.makeRenderPipelineState(descriptor: unpackDescriptor)
 
         let samplerDescriptor = MTLSamplerDescriptor()
         samplerDescriptor.minFilter = .nearest
@@ -689,6 +828,17 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     }
 
     func draw(in view: MTKView) {
+        let now = CACurrentMediaTime()
+        if fpsWindowStart == 0 {
+            fpsWindowStart = now
+        }
+        fpsFrameCount += 1
+        if now - fpsWindowStart >= 1.0 {
+            measuredFPS = Double(fpsFrameCount) / (now - fpsWindowStart)
+            fpsFrameCount = 0
+            fpsWindowStart = now
+        }
+
         if !paused && !awaitingSaveRAM {
             if let card = pendingSaveRAM {
                 pendingSaveRAM = nil
@@ -705,8 +855,10 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
                     romVersion: nil
                 )
             }
-            let mask = heldButtons.reduce(into: UInt32(0)) { $0 |= (1 << $1) }
-            frontend.setButtonMask(mask)
+            for (port, held) in heldButtons.enumerated() {
+                let mask = held.reduce(into: UInt32(0)) { $0 |= (1 << $1) }
+                frontend.setButtonMask(mask, port: port)
+            }
             frontend.runFrame()
             framesRun += 1
             if let state = pendingState, framesRun > 60 {
@@ -791,28 +943,22 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
                     region: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0,
                     withBytes: base, bytesPerRow: Int(frame.bytesPerRow)
                 )
-            case .RGB565, .RGB1555:
+            case .RGB565:
+                unpackRGB565(base: base, width: width, height: height, srcStride: Int(frame.bytesPerRow))
+            case .RGB1555:
                 if conversionBuffer.count != bytesPerRow * height {
                     conversionBuffer = [UInt8](repeating: 0, count: bytesPerRow * height)
                 }
                 let srcStride = Int(frame.bytesPerRow)
-                let is565 = frame.pixelFormat == .RGB565
                 conversionBuffer.withUnsafeMutableBytes { dst in
                     for y in 0..<height {
                         let srcRow = base.advanced(by: y * srcStride).assumingMemoryBound(to: UInt16.self)
                         let dstRow = dst.baseAddress!.advanced(by: y * bytesPerRow).assumingMemoryBound(to: UInt8.self)
                         for x in 0..<width {
                             let p = srcRow[x]
-                            let r: UInt8, g: UInt8, b: UInt8
-                            if is565 {
-                                r = UInt8((p >> 11) & 0x1F) << 3
-                                g = UInt8((p >> 5) & 0x3F) << 2
-                                b = UInt8(p & 0x1F) << 3
-                            } else {
-                                r = UInt8((p >> 10) & 0x1F) << 3
-                                g = UInt8((p >> 5) & 0x1F) << 3
-                                b = UInt8(p & 0x1F) << 3
-                            }
+                            let r = UInt8((p >> 10) & 0x1F) << 3
+                            let g = UInt8((p >> 5) & 0x1F) << 3
+                            let b = UInt8(p & 0x1F) << 3
                             dstRow[x * 4] = b
                             dstRow[x * 4 + 1] = g
                             dstRow[x * 4 + 2] = r
@@ -828,6 +974,51 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
                 break
             }
         }
+    }
+
+    /// Uploads a raw RGB565 frame untouched into an r16Uint source texture,
+    /// then runs one GPU render pass that decodes it straight into
+    /// `texture` (bgra8Unorm), replacing the old per-pixel CPU loop. Falls
+    /// back to leaving `texture` at its last contents if the pipeline
+    /// failed to build, rather than crashing.
+    private func unpackRGB565(base: UnsafeRawPointer, width: Int, height: Int, srcStride: Int) {
+        guard let rgb565UnpackPipeline, let texture else { return }
+
+        if rgb565SourceTexture == nil || rgb565SourceTexture?.width != width || rgb565SourceTexture?.height != height {
+            let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+                pixelFormat: .r16Uint, width: width, height: height, mipmapped: false
+            )
+            descriptor.usage = [.shaderRead]
+            rgb565SourceTexture = device.makeTexture(descriptor: descriptor)
+        }
+        rgb565SourceTexture?.replace(
+            region: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0,
+            withBytes: base, bytesPerRow: srcStride
+        )
+
+        guard let rgb565SourceTexture,
+              let commandBuffer = commandQueue.makeCommandBuffer()
+        else { return }
+
+        let passDescriptor = MTLRenderPassDescriptor()
+        passDescriptor.colorAttachments[0].texture = texture
+        passDescriptor.colorAttachments[0].loadAction = .dontCare
+        passDescriptor.colorAttachments[0].storeAction = .store
+
+        guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: passDescriptor) else { return }
+        let quad: [Vertex] = [
+            Vertex(position: [-1, -1], texCoord: [0, 1]),
+            Vertex(position: [1, -1], texCoord: [1, 1]),
+            Vertex(position: [-1, 1], texCoord: [0, 0]),
+            Vertex(position: [1, 1], texCoord: [1, 0]),
+        ]
+        encoder.setRenderPipelineState(rgb565UnpackPipeline)
+        encoder.setVertexBytes(quad, length: MemoryLayout<Vertex>.stride * quad.count, index: 0)
+        encoder.setFragmentTexture(rgb565SourceTexture, index: 0)
+        encoder.setFragmentSamplerState(samplerState, index: 0)
+        encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+        encoder.endEncoding()
+        commandBuffer.commit()
     }
 
     /// The current frame as a PNG for the state list's thumbnail, read
@@ -953,11 +1144,16 @@ private final class NativePlayerAudio {
             }
             self.lock.unlock()
 
-            for buffer in buffers {
+            // Non-interleaved format: `buffers` is one mono buffer per
+            // channel (left, then right), each needing its own offset into
+            // the interleaved ring buffer. Every channel index used to
+            // read offset 0 (left) here, so every native core played
+            // left-channel-duplicated mono instead of real stereo.
+            for (channel, buffer) in buffers.enumerated() {
                 guard let data = buffer.mData?.assumingMemoryBound(to: Float32.self) else { continue }
                 for frame in 0..<framesNeeded {
                     if frame < available {
-                        data[frame] = Float32(samples[frame * 2]) / Float32(Int16.max)
+                        data[frame] = Float32(samples[frame * 2 + channel]) / Float32(Int16.max)
                     } else {
                         data[frame] = 0
                     }

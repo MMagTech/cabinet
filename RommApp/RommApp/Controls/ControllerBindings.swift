@@ -85,6 +85,64 @@ enum ControllerBindings {
     }
 }
 
+/// A second, independent way to open the pause menu, alongside whatever
+/// single button is bound to `RetroPad.overlay` (Home, by default). Home
+/// alone was not enough: iOS reserves some pads' Home button for its own
+/// accessory picker, and even where it works, a single button anyone might
+/// rest a thumb on is one accidental press from pausing a game.
+///
+/// Kept as two element names rather than folded into the ordinary bindings
+/// table, because a hotkey is fundamentally different from every other
+/// entry there: it needs both held together, not one button pointed at one
+/// input, and it applies regardless of what either button is otherwise
+/// bound to. Global rather than per-controller, unlike ordinary bindings:
+/// the actual risk this exists to avoid, a real game using the same two
+/// buttons together during normal play, comes from the game, not the pad
+/// model, so there is no reason a Xbox pad and a PS5 pad would want
+/// different choices here.
+///
+/// L3+R3, both stick clicks, is the default, matching RetroArch's own
+/// alternative to Select+Start specifically because analog trigger pairs
+/// (L2+R2) collide with real gameplay, braking and accelerating together
+/// in a racing game being the obvious case, while clicking both sticks at
+/// once has no gameplay meaning in anything this app runs.
+enum MenuHotkey {
+    private static let keyA = "com.mmagtech.RommApp.hotkey.buttonA"
+    private static let keyB = "com.mmagtech.RommApp.hotkey.buttonB"
+    /// Explicit "cleared" marker, distinct from "never configured": a plain
+    /// nil default for buttonB would be indistinguishable from someone who
+    /// deliberately removed it to make this a single-button hotkey, and the
+    /// factory default (R3) would keep coming back every launch.
+    private static let clearedMarker = "\u{0}none"
+
+    static var buttonA: String {
+        UserDefaults.standard.string(forKey: keyA) ?? GCInputLeftThumbstickButton
+    }
+
+    /// nil means single-button mode: buttonA alone opens the menu. Set
+    /// means both must be held together.
+    static var buttonB: String? {
+        let stored = UserDefaults.standard.string(forKey: keyB)
+        if stored == clearedMarker { return nil }
+        return stored ?? GCInputRightThumbstickButton
+    }
+
+    static func save(buttonA: String, buttonB: String?) {
+        UserDefaults.standard.set(buttonA, forKey: keyA)
+        UserDefaults.standard.set(buttonB ?? clearedMarker, forKey: keyB)
+    }
+
+    static func reset() {
+        UserDefaults.standard.removeObject(forKey: keyA)
+        UserDefaults.standard.removeObject(forKey: keyB)
+    }
+
+    static var isDefault: Bool {
+        UserDefaults.standard.string(forKey: keyA) == nil
+            && UserDefaults.standard.string(forKey: keyB) == nil
+    }
+}
+
 /// RetroPad ids, confirmed against the EmulatorJS 4.2.3 bundle and the
 /// standard libretro joypad ordering.
 enum RetroPad {

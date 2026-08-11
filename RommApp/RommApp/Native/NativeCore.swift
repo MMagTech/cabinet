@@ -16,6 +16,8 @@ enum NativeCore {
     case prosystem
     case picoDrive
     case pcsxReARMed
+    case flycast
+    case mupen64Plus
 
     /// The frontend's identifier for the statically linked core.
     var coreID: LibretroCoreID {
@@ -32,6 +34,8 @@ enum NativeCore {
         case .prosystem: return .prosystem
         case .picoDrive: return .picoDrive
         case .pcsxReARMed: return .pcsxReARMed
+        case .flycast: return .flycast
+        case .mupen64Plus: return .mupen64Plus
         }
     }
 
@@ -56,6 +60,8 @@ enum NativeCore {
         case .prosystem: return "prosystem-native"
         case .picoDrive: return "picodrive-native"
         case .pcsxReARMed: return "pcsx-rearmed-native"
+        case .flycast: return "flycast-native"
+        case .mupen64Plus: return "mupen64plus-native"
         }
     }
 
@@ -75,6 +81,8 @@ enum NativeCore {
         case .prosystem: return "prosystem"
         case .picoDrive: return "picoDrive"
         case .pcsxReARMed: return "pcsxReARMed"
+        case .flycast: return "flycast"
+        case .mupen64Plus: return "mupen64Plus"
         }
     }
 
@@ -115,6 +123,8 @@ enum NativePlatform: String, CaseIterable {
     case ngpc
     case atari7800
     case psx
+    case dreamcast
+    case n64
 
     var core: NativeCore {
         switch self {
@@ -131,6 +141,25 @@ enum NativePlatform: String, CaseIterable {
         case .ngpc: return .beetleNGP
         case .atari7800: return .prosystem
         case .psx: return .pcsxReARMed
+        case .dreamcast: return .flycast
+        case .n64: return .mupen64Plus
+        }
+    }
+
+    /// Whether a second local player's controller has anywhere to plug
+    /// into. Defaults to yes: consoles and arcade boards genuinely have a
+    /// second port, and arcade in particular is a core 2-player use case
+    /// (Metal Slug, Neo Geo titles), not the single-player exception it
+    /// might look like next to the twin-stick digitizing FBNeo also does.
+    /// The exception is handhelds, which physically have exactly one
+    /// player's worth of controls no matter what core drives them: Game
+    /// Boy, Game Boy Color, Game Boy Advance, Game Gear (even though it
+    /// shares Genesis Plus GX with console platforms that do get a second
+    /// port), and Neo Geo Pocket Color.
+    var supportsSecondPlayer: Bool {
+        switch self {
+        case .gb, .gbc, .gba, .gameGear, .ngpc: return false
+        default: return true
         }
     }
 
@@ -156,6 +185,8 @@ enum NativePlatform: String, CaseIterable {
         case .ngpc: return "Neo Geo Pocket Color"
         case .atari7800: return "Atari 7800"
         case .psx: return "PlayStation"
+        case .dreamcast: return "Dreamcast"
+        case .n64: return "Nintendo 64"
         }
     }
 
@@ -231,6 +262,10 @@ enum NativePlatform: String, CaseIterable {
             return .atari7800
         case "psx":
             return .psx
+        case "dc":
+            return .dreamcast
+        case "n64", "ique-player":
+            return .n64
         default:
             return nil
         }
