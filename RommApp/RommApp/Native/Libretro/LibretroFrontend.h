@@ -29,6 +29,13 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
     // Flycast has no software renderer. Passed its go/no-go 2026-08-10
     // and is wired into NativePlatform as of the same week.
     LibretroCoreIDFlycast NS_SWIFT_NAME(flycast) = 12,
+    // Interpreter-only R4300 (mupen64plus-cpucore core option forced to
+    // pure_interpreter, no dynarec, same no-JIT exception as Flycast),
+    // hardware-rendered through a real GLES3 context via GLideN64, this
+    // core's own default RDP plugin already, forced explicitly rather
+    // than trusted. Passed its go/no-go 2026-08-11 and is wired into
+    // NativePlatform as of the same week.
+    LibretroCoreIDMupen64Plus NS_SWIFT_NAME(mupen64Plus) = 13,
 };
 
 @interface LibretroFrame : NSObject
@@ -46,6 +53,16 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 @interface LibretroFrontend : NSObject
 
 @property (class, readonly) LibretroFrontend *shared;
+
+// Routes a core's rumble event to wherever it should actually land: a
+// connected physical controller's own motor, or the phone's Taptic Engine
+// as a fallback. Set once at launch (RommApp.swift) to
+// GameControllerManager.shared.fireRumble, since that decision genuinely
+// belongs to GameController/CoreHaptics, both Swift-only APIs this
+// Objective-C++ frontend has no direct access to. Never called off the
+// main thread by this class's own callback, so the handler does not need
+// to hop threads itself.
++ (void)setRumbleHandler:(void (^ _Nullable)(NSInteger port, BOOL strong, uint16_t strength))handler;
 
 // Makes this core the one every later call drives. Switching away from a
 // core with a game loaded unloads and deinitializes it first; activating

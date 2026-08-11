@@ -17,6 +17,7 @@ enum NativeCore {
     case picoDrive
     case pcsxReARMed
     case flycast
+    case mupen64Plus
 
     /// The frontend's identifier for the statically linked core.
     var coreID: LibretroCoreID {
@@ -34,6 +35,7 @@ enum NativeCore {
         case .picoDrive: return .picoDrive
         case .pcsxReARMed: return .pcsxReARMed
         case .flycast: return .flycast
+        case .mupen64Plus: return .mupen64Plus
         }
     }
 
@@ -59,6 +61,7 @@ enum NativeCore {
         case .picoDrive: return "picodrive-native"
         case .pcsxReARMed: return "pcsx-rearmed-native"
         case .flycast: return "flycast-native"
+        case .mupen64Plus: return "mupen64plus-native"
         }
     }
 
@@ -79,6 +82,7 @@ enum NativeCore {
         case .picoDrive: return "picoDrive"
         case .pcsxReARMed: return "pcsxReARMed"
         case .flycast: return "flycast"
+        case .mupen64Plus: return "mupen64Plus"
         }
     }
 
@@ -120,6 +124,7 @@ enum NativePlatform: String, CaseIterable {
     case atari7800
     case psx
     case dreamcast
+    case n64
 
     var core: NativeCore {
         switch self {
@@ -137,6 +142,7 @@ enum NativePlatform: String, CaseIterable {
         case .atari7800: return .prosystem
         case .psx: return .pcsxReARMed
         case .dreamcast: return .flycast
+        case .n64: return .mupen64Plus
         }
     }
 
@@ -163,6 +169,7 @@ enum NativePlatform: String, CaseIterable {
         case .atari7800: return "Atari 7800"
         case .psx: return "PlayStation"
         case .dreamcast: return "Dreamcast"
+        case .n64: return "Nintendo 64"
         }
     }
 
@@ -240,6 +247,8 @@ enum NativePlatform: String, CaseIterable {
             return .psx
         case "dc":
             return .dreamcast
+        case "n64", "ique-player":
+            return .n64
         default:
             return nil
         }

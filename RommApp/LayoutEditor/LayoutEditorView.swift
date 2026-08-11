@@ -5,12 +5,13 @@ import UIKit
 /// actually draw it.
 ///
 /// The geometry here is copied from `NativePlayerView.body` deliberately, and
-/// has to stay copied: portrait splits the screen into a canvas above a 330pt
-/// control strip and normalises the pad against *the strip*, landscape
-/// overlays the pad on the whole screen and normalises against *the screen*.
-/// Get that wrong and every number the editor produces is wrong by the ratio
-/// between the two, which is exactly the class of mistake that made editing
-/// these files by hand unpleasant in the first place.
+/// has to stay copied: portrait keeps a canvas above a 330pt control strip
+/// and normalises the pad against *the strip, plus its own headroom* when a
+/// layout asks for one, landscape overlays the pad on the whole screen and
+/// normalises against *the screen*. Get that wrong and every number the
+/// editor produces is wrong by the ratio between the two, which is exactly
+/// the class of mistake that made editing these files by hand unpleasant in
+/// the first place.
 struct LayoutEditorView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -29,12 +30,19 @@ struct LayoutEditorView: View {
     /// which is every layout this editor opens.
     private static let stripHeight: CGFloat = 330
 
+    /// Mirrors both players' `padHeight` exactly: zero headroom reproduces
+    /// `stripHeight` unchanged, so every layout that has never asked for
+    /// headroom edits at the same size it always has.
+    private var padPortraitHeight: CGFloat {
+        Self.stripHeight * (1 + (layout.headroom ?? 0))
+    }
+
     var body: some View {
         GeometryReader { geo in
             let landscape = geo.size.width > geo.size.height
             let padSize = landscape
                 ? geo.size
-                : CGSize(width: geo.size.width, height: Self.stripHeight)
+                : CGSize(width: geo.size.width, height: padPortraitHeight)
 
             // Portrait's controls live in the bottom strip only, so a
             // top-pinned toolbar never covers anything. Landscape's controls
@@ -52,11 +60,12 @@ struct LayoutEditorView: View {
                     }
                     .frame(width: geo.size.width, height: geo.size.height)
                 } else {
-                    VStack(spacing: 0) {
+                    ZStack(alignment: .top) {
                         ScreenBackdrop(layout: layout.name)
                             .frame(height: max(geo.size.height - Self.stripHeight, 0))
                         pad(size: padSize, landscape: false)
-                            .frame(height: Self.stripHeight)
+                            .frame(height: padPortraitHeight)
+                            .frame(maxHeight: .infinity, alignment: .bottom)
                     }
                     .frame(width: geo.size.width, height: geo.size.height)
                 }

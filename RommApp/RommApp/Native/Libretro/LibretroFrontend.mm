@@ -13,6 +13,8 @@
 #import "PicoDriveCore.h"
 #import "PCSXReARMedCore.h"
 #import "FlycastCore.h"
+#import "N64Core.h"
+#import <UIKit/UIKit.h>
 #import <OpenGLES/EAGL.h>
 #import <OpenGLES/ES3/gl.h>
 #import <OpenGLES/ES3/glext.h>
@@ -81,6 +83,20 @@ NSDictionary<NSString *, NSString *> *gOptions = nil;
 // GET_VARIABLE hands out a borrowed pointer, so the string it points into
 // has to outlive the call; cores copy the value immediately by convention,
 // but the buffer must at least survive until the next lookup.
+//
+// Rumble: a core can call set_rumble_state every frame while an effect
+// holds, not just on the transition, so this only fires a haptic on the
+// actual off-to-on edge per (port, effect), the same "the motor turns on
+// once" behaviour real hardware has, not a per-frame buzz. Gated by the
+// same Settings toggle key SettingsView reads, checked fresh on every
+// call rather than cached, since the player can flip it mid-game.
+std::mutex gRumbleMutex;
+bool gRumbleWasOn[4][2] = {}; // [port][RETRO_RUMBLE_STRONG/WEAK]
+// Set by +[LibretroFrontend setRumbleHandler:], routed to
+// GameControllerManager.fireRumble at launch. Nil until RommApp.swift
+// wires it, which is why rumbleSetState below still carries its own
+// direct UIImpactFeedbackGenerator fallback for that brief window.
+static void (^gRumbleHandler)(NSInteger port, BOOL strong, uint16_t strength) = nil;
 std::string gLastVariableValue;
 
 std::atomic<uint32_t> gButtonMask{0};
@@ -346,6 +362,47 @@ int16_t inputState(unsigned port, unsigned device, unsigned index, unsigned id) 
     return 0;
 }
 
+// Fires a blunt UIKit impact haptic on the off-to-on edge of a rumble
+// effect. Cores call this from the emulation thread, sometimes every
+// frame while an effect holds, so gRumbleWasOn tracks state to fire once
+// per edge rather than once per call; UIImpactFeedbackGenerator also
+// needs the main thread. RETRO_RUMBLE_STRONG maps to .heavy, WEAK to
+// .light, a real if approximate translation of libretro's two-motor
+// model onto the single, undifferentiated Taptic Engine every iPhone
+// actually has, not a full CHHapticEngine intensity curve: the simpler
+// API for a first version, per this project's own weekend-sized bias.
+bool rumbleSetState(unsigned port, enum retro_rumble_effect effect, uint16_t strength) {
+    if (port >= 4 || effect > RETRO_RUMBLE_WEAK) {
+        return false;
+    }
+    if (![[NSUserDefaults standardUserDefaults] boolForKey:@"com.mmagtech.RommApp.rumbleEnabled"]) {
+        return true; // honored, as "stay off"
+    }
+    bool isOn = strength > 0;
+    bool wasOn;
+    {
+        std::lock_guard<std::mutex> lock(gRumbleMutex);
+        wasOn = gRumbleWasOn[port][effect];
+        gRumbleWasOn[port][effect] = isOn;
+    }
+    if (isOn && !wasOn) {
+        BOOL strong = effect == RETRO_RUMBLE_STRONG;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (gRumbleHandler) {
+                gRumbleHandler(port, strong, strength);
+                return;
+            }
+            // Handler not wired yet (a rumble fired before app launch
+            // finished setting it): fall back to a phone haptic directly
+            // rather than silently dropping the event.
+            UIImpactFeedbackStyle style = strong ? UIImpactFeedbackStyleHeavy : UIImpactFeedbackStyleLight;
+            UIImpactFeedbackGenerator *generator = [[UIImpactFeedbackGenerator alloc] initWithStyle:style];
+            [generator impactOccurred];
+        });
+    }
+    return true;
+}
+
 void logCallback(enum retro_log_level level, const char *fmt, ...) {
     char buffer[1024];
     va_list args;
@@ -405,6 +462,14 @@ bool environmentCallback(unsigned cmd, void *data) {
             }
             gLastVariableValue = value.UTF8String;
             variable->value = gLastVariableValue.c_str();
+            return true;
+        }
+        case RETRO_ENVIRONMENT_GET_RUMBLE_INTERFACE: {
+            auto *rumble = (struct retro_rumble_interface *)data;
+            if (!rumble) {
+                return false;
+            }
+            rumble->set_rumble_state = rumbleSetState;
             return true;
         }
         case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE:
@@ -468,6 +533,8 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
             return PCSXReARMedCoreAPI();
         case LibretroCoreIDFlycast:
             return FlycastCoreAPI();
+        case LibretroCoreIDMupen64Plus:
+            return N64CoreAPI();
     }
     return FBNeoCoreAPI();
 }
@@ -481,6 +548,10 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{ instance = [[LibretroFrontend alloc] init]; });
     return instance;
+}
+
++ (void)setRumbleHandler:(void (^)(NSInteger port, BOOL strong, uint16_t strength))handler {
+    gRumbleHandler = handler;
 }
 
 - (void)activateCore:(LibretroCoreID)coreID {
@@ -553,17 +624,6 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     }
     gGameLoaded = false;
 
-    if (!gInitialized) {
-        gCore->set_environment(environmentCallback);
-        gCore->init();
-        gCore->set_video_refresh(videoRefresh);
-        gCore->set_audio_sample(audioSample);
-        gCore->set_audio_sample_batch(audioSampleBatch);
-        gCore->set_input_poll(inputPoll);
-        gCore->set_input_state(inputState);
-        gInitialized = true;
-    }
-
     // Reset to libretro's own documented default (0RGB1555) before this
     // load, not left however the last core's SET_PIXEL_FORMAT call (or
     // lack of one) happened to leave it. FBNeo and Saturn both request
@@ -577,7 +637,31 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     // no crash, just a black screen. Found 2026-08-08 the same way as
     // the audio crash, a real device test with correct controls and
     // input but nothing on screen.
+    //
+    // The reset has to happen BEFORE retro_init, not after: libretro
+    // documents SET_PIXEL_FORMAT as callable from retro_load_game or
+    // retro_get_system_av_info, but mGBA calls it once inside retro_init
+    // (its libretro.c:1369-1382) and never again. This reset used to sit
+    // after the init block below, silently wiping mGBA's real RGB565
+    // declaration and leaving its frames decoded as RGB1555, a one-bit
+    // green misalignment that showed as every GBA game's hues shifted
+    // (blue reading magenta) against the same game in the web player.
+    // Found 2026-08-11 by working the whole chain backward from real
+    // frame dumps: mGBA's bytes and this frontend's RGB1555 decode were
+    // each internally consistent, only the format label between them was
+    // wrong.
     gPixelFormat = LibretroPixelFormatRGB1555;
+
+    if (!gInitialized) {
+        gCore->set_environment(environmentCallback);
+        gCore->init();
+        gCore->set_video_refresh(videoRefresh);
+        gCore->set_audio_sample(audioSample);
+        gCore->set_audio_sample_batch(audioSampleBatch);
+        gCore->set_input_poll(inputPoll);
+        gCore->set_input_state(inputState);
+        gInitialized = true;
+    }
 
     struct retro_game_info info = {};
     std::string path = romPath.fileSystemRepresentation;

@@ -98,7 +98,8 @@ enum ArcadeLayout {
         return ControlLayout(
             system: "arcade:\(profile.profile):\(max(0, min(profile.buttons, 6)))",
             items: items,
-            landscapeItems: landscapeItems(for: profile)
+            landscapeItems: landscapeItems(for: profile),
+            headroom: nil
         )
     }
 

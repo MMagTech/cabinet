@@ -16,6 +16,7 @@
 				Controls/TouchControlPad.swift,
 				Resources/ControlLayouts/atari7800.json,
 				Resources/ControlLayouts/default.json,
+				Resources/ControlLayouts/dreamcast.json,
 				Resources/ControlLayouts/gamegear.json,
 				Resources/ControlLayouts/gb.json,
 				Resources/ControlLayouts/gba.json,

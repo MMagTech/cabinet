@@ -504,6 +504,7 @@ struct PlayerView: View {
         return .bottomStrip(
             items: layout.items(landscape: false),
             height: controlStripHeight,
+            headroom: layout.headroom ?? 0,
             opacity: controlOpacity
         )
     }
@@ -693,8 +694,14 @@ struct PlayerWebView: UIViewRepresentable {
         case hidden
         /// Full screen pad over the canvas, controls in the gutters.
         case overlay(items: [ControlLayout.Item], opacity: Double)
-        /// Pad below the canvas, the portrait arrangement.
-        case bottomStrip(items: [ControlLayout.Item], height: CGFloat, opacity: Double)
+        /// Pad below the canvas, the portrait arrangement. `headroom` is
+        /// extra pad height, as a fraction of `height`, for a layout too
+        /// crowded to fit the normal strip: the webview keeps the exact
+        /// frame it would have had at `height` alone, and the pad grows
+        /// upward from the bottom edge to overlap the last bit of it, the
+        /// same "controls float over the picture, opacity keeps it legible"
+        /// deal landscape already makes everywhere.
+        case bottomStrip(items: [ControlLayout.Item], height: CGFloat, headroom: Double, opacity: Double)
     }
 
     let url: URL
@@ -1963,7 +1970,7 @@ final class PlayerContainerView: UIView {
         switch configuration {
         case .hidden:
             pad.isHidden = true
-        case .overlay(let items, let opacity), .bottomStrip(let items, _, let opacity):
+        case .overlay(let items, let opacity), .bottomStrip(let items, _, _, let opacity):
             pad.items = items
             pad.alpha = opacity
             pad.isHidden = false
@@ -1977,10 +1984,11 @@ final class PlayerContainerView: UIView {
         case .hidden, .overlay:
             webView.frame = bounds
             pad.frame = bounds
-        case .bottomStrip(_, let height, _):
+        case .bottomStrip(_, let height, let headroom, _):
             let split = max(bounds.height - height, 0)
             webView.frame = CGRect(x: 0, y: 0, width: bounds.width, height: split)
-            pad.frame = CGRect(x: 0, y: split, width: bounds.width, height: height)
+            let padHeight = height * (1 + headroom)
+            pad.frame = CGRect(x: 0, y: bounds.height - padHeight, width: bounds.width, height: padHeight)
         }
     }
 }

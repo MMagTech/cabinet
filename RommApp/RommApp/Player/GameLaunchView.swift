@@ -992,8 +992,8 @@ struct GameLaunchView: View {
     private var playerCard: some View {
         LaunchCard(title: "Player", systemImage: "play.rectangle.on.rectangle") {
             Picker("Player", selection: $selectedBackend) {
-                Text("Web player").tag(LaunchChoices.PlayerBackend.webview)
-                Text("Native (beta)").tag(LaunchChoices.PlayerBackend.native)
+                Text("Web").tag(LaunchChoices.PlayerBackend.webview)
+                Text("Native").tag(LaunchChoices.PlayerBackend.native)
             }
             .pickerStyle(.segmented)
 

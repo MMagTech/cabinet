@@ -156,6 +156,21 @@ enum NativeCoreOptions {
     /// them together, so without this those effects render as flicker.
     static let gameBoyAdvance: [NativeCoreOption] = [
         NativeCoreOption(
+            key: "mgba_color_correction",
+            label: "Screen colours",
+            detail: "The GBA and GBA SP's LCD did not reproduce colour the way a raw pixel dump does. Confirmed on device 2026-08-11: turning this on visibly shifted hues wrong compared to the same scene in the web player (blue reading as magenta), not subtly, so it defaults off pending a real fix. Verify against the web player before trusting this setting.",
+            // Values are the core's own: "GBA", "GBC", "Auto", or anything
+            // else (mapped from "Off" here) for a raw, uncorrected dump.
+            // "GBC" is deliberately not offered: this list only ever loads
+            // GBA carts, never GBC ones, which is Gambatte's system.
+            choices: [
+                .init(value: "Off", label: "Off"),
+                .init(value: "GBA", label: "GBA / GBA SP"),
+                .init(value: "Auto", label: "Auto"),
+            ],
+            defaultValue: "Off"
+        ),
+        NativeCoreOption(
             key: "mgba_interframe_blending",
             label: "Interframe blending",
             detail: "Blends consecutive frames. Games that flicker sprites for transparency need this to look right.",
@@ -335,6 +350,55 @@ enum NativeCoreOptionsStore {
             // 32X, for touch and physical controllers alike.
             let sixButton = padDevice(for: .sega32X) == NativePadDevice.sixButton
             return ["picodrive_input1": sixButton ? "6 button pad" : "3 button pad"]
+        case .n64:
+            // Forced, not a Settings choice: this app's cores run in the
+            // main process with no JIT entitlement, so the CPU core must
+            // stay the pure interpreter (mupen64plus-cpucore's dynarec
+            // choices would crash), and the RDP plugin is pinned to
+            // GLideN64, the only one of the core's three RDP plugins with
+            // a GLES3 hardware-render path this frontend supports.
+            // MaxTxCacheSize must be sent explicitly: GLideN64's texture
+            // cache size global defaults to 0 in the core's own source
+            // (spikes/cores/mupen64plus/src/libretro/libretro.c), not the
+            // 8000 shown in its options table, which only takes effect if
+            // a frontend answers this key. Left unset, an empty cache
+            // compared against a max of 0 reads as already full and the
+            // first texture ever added crashes on an invalid free
+            // (GLideN64/src/Textures.cpp's _checkCacheSize/_addTexture),
+            // confirmed on real hardware during the go/no-go spike.
+            // alt-map is forced to "True" too: without it, the core's
+            // default C-button reading digitizes RETRO_DEVICE_INDEX_
+            // ANALOG_RIGHT instead of reading plain RetroPad bits
+            // (confirmed in emulate_game_controller_via_libretro.c's
+            // inputGetKeys_default), a second analog stick this frontend
+            // has no support for and n64.json's touch layout does not
+            // drive. With it on, C-buttons and A/B/L/R/Z all resolve to
+            // ordinary RetroPad ids the way the rest of this app already
+            // reads input, matching n64.json's own ids exactly.
+            return [
+                "mupen64plus-cpucore": "pure_interpreter",
+                "mupen64plus-rdp-plugin": "gliden64",
+                "mupen64plus-MaxTxCacheSize": "8000",
+                "mupen64plus-alt-map": "True",
+                "mupen64plus-pak1": "memory",
+                // The real bug behind "the stick doesn't move my
+                // character": astick_sensitivity is a plain C global in
+                // the core, zero-initialized, only ever assigned if this
+                // frontend answers GET_VARIABLE for this exact key
+                // (libretro.c line ~844). We never had, so it stayed 0,
+                // and inputGetKeys_reuse's own math is
+                // `radius *= 80.0 / ASTICK_MAX * (astick_sensitivity / 100.0)`,
+                // multiplying every stick reading by exactly zero
+                // regardless of real deflection. Confirmed against a full
+                // real-device trace: touch input and the core's own
+                // inputState query both carried correct nonzero values
+                // the whole time, so the value never even reached the
+                // game to move anything. "100" is the core's own
+                // documented default (libretro_core_options.h), same
+                // gap-class as the missing pak1 default above.
+                "mupen64plus-astick-sensitivity": "100",
+                "mupen64plus-astick-deadzone": "15",
+            ]
         default:
             return [:]
         }
@@ -356,7 +420,16 @@ enum NativeCoreOptionsStore {
     /// inputState correctly, but Flycast had no controller plugged into
     /// the port those bits were meant for.
     static func padDevice(for platform: NativePlatform) -> UInt32 {
-        if platform == .dreamcast { return 1 }
+        // Same class of bug Dreamcast already hit: leaving this at 0
+        // means setControllerPortDevice's caller never calls the core's
+        // set_controller_port_device at all (see LibretroFrontend.mm,
+        // gPortDevice != 0 guard), so mupen64plus-libretro-nx's own
+        // controller[0].control->Present never gets set to 1 by us. The
+        // core's default RETRO_DEVICE_JOYPAD/default case both set
+        // Present = 1 the same way, so passing it explicitly rather than
+        // leaving the port unconfigured is the fix, confirmed against
+        // retro_set_controller_port_device in the core's own source.
+        if platform == .dreamcast || platform == .n64 { return 1 }
         let option = NativeCoreOptions.genesisPad
         guard NativeCoreOptions.options(for: platform).contains(where: { $0.key == option.key })
         else { return 0 }

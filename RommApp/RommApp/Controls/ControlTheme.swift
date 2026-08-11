@@ -81,12 +81,18 @@ enum ControlTheme: String, CaseIterable {
             case RetroPad.y: return .psSquare
             default: return nil
             }
-        // The N64 pad's blue A and green B. The C cluster is drawn as a
-        // d-pad, which takes no tint, so its yellow stays aspirational.
+        // The N64 pad's blue A, green B, and yellow C cluster.
+        //
+        // Matched on the raw ids n64.json actually sends, not the generic
+        // RetroPad.a/b/x/l/r constants: N64's real A and B are bound to
+        // RetroPad's B and Y slots to match what mupen64plus-libretro-nx
+        // reads (0/1), and the four C-buttons ride X/A/L/R (9/8/10/11)
+        // rather than a second analog stick, per that file's own comment.
         case "n64":
             switch input {
-            case RetroPad.a: return .n64Blue
-            case RetroPad.b: return .n64Green
+            case 0: return .n64Blue
+            case 1: return .n64Green
+            case 9, 8, 10, 11: return .n64Yellow
             default: return nil
             }
         // The NES brick's two red squares, same colour on purpose, like
@@ -154,6 +160,7 @@ private extension UIColor {
     static let psSquare = UIColor(red: 0.93, green: 0.48, blue: 0.70, alpha: 1)
     static let n64Blue = UIColor(red: 0.28, green: 0.47, blue: 0.94, alpha: 1)
     static let n64Green = UIColor(red: 0.30, green: 0.78, blue: 0.40, alpha: 1)
+    static let n64Yellow = UIColor(red: 0.96, green: 0.78, blue: 0.20, alpha: 1)
     static let nesRed = UIColor(red: 0.86, green: 0.24, blue: 0.22, alpha: 1)
 
     static let punchLight = UIColor(red: 0.98, green: 0.76, blue: 0.30, alpha: 1)

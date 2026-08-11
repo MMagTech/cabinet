@@ -39,6 +39,8 @@ from the commits below.
 | FinalBurn Neo | Arcade | Free for non-commercial use, plus MAME's terms | [libretro/FBNeo](https://github.com/libretro/FBNeo) | `2444fbe3ddab` |
 | Beetle Saturn | Saturn | GPL v2 | [libretro/beetle-saturn-libretro](https://github.com/libretro/beetle-saturn-libretro) | `84461434f249` |
 | PCSX ReARMed | PlayStation | GPL v2 | [libretro/pcsx_rearmed](https://github.com/libretro/pcsx_rearmed) | `da2cb8ecd17f` |
+| Flycast | Dreamcast | GPL v2 | [flyinghead/flycast](https://github.com/flyinghead/flycast) | `a172e0001351` |
+| mupen64plus-libretro-nx (bundles GLideN64) | Nintendo 64 | GPL v2 | [libretro/mupen64plus-libretro-nx](https://github.com/libretro/mupen64plus-libretro-nx) | `f275caf4b2bf` |
 | Snes9x | SNES | Free for non-commercial use | [libretro/snes9x](https://github.com/libretro/snes9x) | `ed750a49d058` |
 | FCEUmm | NES | GPL v2 | [libretro/libretro-fceumm](https://github.com/libretro/libretro-fceumm) | `b5e3566515c2` |
 | Gambatte | Game Boy, Game Boy Color | GPL v2 | [libretro/gambatte-libretro](https://github.com/libretro/gambatte-libretro) | `96174369b3c3` |

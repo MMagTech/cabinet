@@ -1,6 +1,8 @@
 import Combine
+import CoreHaptics
 import GameController
 import SwiftUI
+import UIKit
 
 /// Physical controllers, captured natively with GameController rather than
 /// the webview's Gamepad API, per the scope doc. The web side is suppressed
@@ -50,7 +52,11 @@ final class GameControllerManager: ObservableObject {
     private var observers: [NSObjectProtocol] = []
     private var triggerDown: [String: Bool] = [:]
     private weak var pad: GCExtendedGamepad?
+    /// Kept alongside `pad` for rumble: `GCExtendedGamepad` carries no
+    /// haptics API of its own, only the owning `GCController` does.
+    private weak var controller: GCController?
     private var bindings: [String: Int] = ControllerBindings.defaults
+    private var hapticEngines: [GCHapticsLocality: CHHapticEngine] = [:]
 
     var storageKey: String { controllerName ?? "unknown" }
 
@@ -112,6 +118,8 @@ final class GameControllerManager: ObservableObject {
         unsupportedController = nil
 
         pad = gamepad
+        self.controller = controller
+        hapticEngines = [:]
         isConnected = true
         controllerName = controller.vendorName
         bindings = ControllerBindings.effective(for: controller.vendorName ?? "unknown")
@@ -269,7 +277,58 @@ final class GameControllerManager: ObservableObject {
         isConnected = false
         controllerName = nil
         availableButtons = []
+        hapticEngines = [:]
         onDisconnect?()
+    }
+
+    // MARK: Rumble
+
+    /// Routes a core's rumble event to the connected controller's own motor
+    /// when there is one, falling back to the phone's Taptic Engine when
+    /// there is not (no controller connected, or its haptics setup fails).
+    /// `GCExtendedGamepad` carries no haptics API, only the owning
+    /// `GCController` does, which is why this needs `controller` kept
+    /// alongside `pad` rather than reusing what button handling already has.
+    /// Called from LibretroFrontend's rumble callback via the handler block
+    /// wired in RommApp.swift at launch, already hopped to the main thread
+    /// there since CHHapticEngine and UIImpactFeedbackGenerator both need it.
+    func fireRumble(port: Int, strong: Bool, strength: UInt16) {
+        let intensity = Float(strength) / Float(UInt16.max)
+        guard intensity > 0 else { return }
+        guard let controller, let haptics = controller.haptics,
+              let engine = hapticEngine(from: haptics)
+        else {
+            firePhoneHaptic(strong: strong)
+            return
+        }
+        do {
+            let event = CHHapticEvent(eventType: .hapticTransient, parameters: [
+                CHHapticEventParameter(parameterID: .hapticIntensity, value: intensity),
+                CHHapticEventParameter(parameterID: .hapticSharpness, value: strong ? 1.0 : 0.3),
+            ], relativeTime: 0)
+            let pattern = try CHHapticPattern(events: [event], parameters: [])
+            let player = try engine.makePlayer(with: pattern)
+            try engine.start()
+            try player.start(atTime: CHHapticTimeImmediate)
+        } catch {
+            firePhoneHaptic(strong: strong)
+        }
+    }
+
+    /// One engine per locality, kept alive rather than rebuilt per rumble
+    /// event: `CHHapticEngine.start()` is cheap to call again on an already
+    /// running engine, but creating a fresh one every haptic is not free,
+    /// and this can fire many times a second during a sustained effect.
+    private func hapticEngine(from haptics: GCDeviceHaptics) -> CHHapticEngine? {
+        if let existing = hapticEngines[.default] { return existing }
+        guard let engine = haptics.createEngine(withLocality: .default) else { return nil }
+        hapticEngines[.default] = engine
+        return engine
+    }
+
+    private func firePhoneHaptic(strong: Bool) {
+        let generator = UIImpactFeedbackGenerator(style: strong ? .heavy : .light)
+        generator.impactOccurred()
     }
 
     /// Drops every input on disconnect, or a direction held at the moment the

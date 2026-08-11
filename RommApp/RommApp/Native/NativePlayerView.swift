@@ -116,13 +116,16 @@ struct NativePlayerView: View {
     }
 
     /// Whether this session has a RETRO_MEMORY_SAVE_RAM battery save to
-    /// look after through the core directly. PS1 only: PCSX ReARMed is
-    /// the only core whose wiring exports that memory API. Dreamcast's
+    /// look after through the core directly. PS1 and N64 both export
+    /// this: PCSX ReARMed's memory card and mupen64plus-nx's
+    /// SRAM/EEPROM cartridge save both answer RETRO_MEMORY_SAVE_RAM,
+    /// confirmed for N64 by the go/no-go spike's own console log
+    /// ("Save type: 2") against a real cartridge that saves. Dreamcast's
     /// VMU save is a real battery save too, just reached a completely
     /// different way; see `captureVMUSave()`, gated on `platform ==
     /// .dreamcast` separately rather than folded in here.
     private var hasMemoryCard: Bool {
-        platform == .psx
+        platform == .psx || platform == .n64
     }
 
     /// The launch-time decision of which card goes into the slot: a local
@@ -132,18 +135,30 @@ struct NativePlayerView: View {
     /// device. Offline, or with nothing on the server, whatever is on disk
     /// plays. A game with no card anywhere just starts with the core's
     /// own freshly formatted one.
-    /// Whether a card image holds any actual saves: directory frames 1-15
+    /// Whether a card image holds any actual saves. PS1's 128KB memory
+    /// card has a real directory format worth checking: frames 1-15
     /// carry 0x51/0x52/0x53 in their first byte for in-use blocks, 0xA0
-    /// for free ones (the PS1 memory card spec's block allocation states).
-    /// A freshly formatted card that no game ever wrote must never outrank
-    /// a real card from the server, which is exactly what happened when a
-    /// quick native boot left an empty local card behind and blocked the
-    /// adoption path below.
+    /// for free ones (the PS1 memory card spec's block allocation
+    /// states). A freshly formatted card that no game ever wrote must
+    /// never outrank a real card from the server, which is exactly what
+    /// happened when a quick native boot left an empty local card behind
+    /// and blocked the adoption path below.
+    ///
+    /// N64's SRAM/EEPROM has no comparable directory to check and its
+    /// size varies by cartridge (mupen64plus-nx logged "Save type: 2",
+    /// EEPROM, for the go/no-go title), so a byte-format check would
+    /// either always reject real saves or always accept junk. Non-empty
+    /// and not all zero bytes, the state mupen64plus-nx writes for an
+    /// unused save rather than leaving the file absent, is the only
+    /// signal available.
     private func cardHasSaves(_ card: Data) -> Bool {
-        guard card.count == 128 * 1024 else { return false }
-        return (1...15).contains { block in
-            [0x51, 0x52, 0x53].contains(Int(card[128 * block]))
+        if platform == .psx {
+            guard card.count == 128 * 1024 else { return false }
+            return (1...15).contains { block in
+                [0x51, 0x52, 0x53].contains(Int(card[128 * block]))
+            }
         }
+        return !card.isEmpty && card.contains { $0 != 0 }
     }
 
     private func syncMemoryCardIn() async {
@@ -328,17 +343,28 @@ struct NativePlayerView: View {
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .background(Color.black)
                 } else {
-                    // Portrait: the pad's items are normalised against a bottom
-                    // strip, not the full screen, so the canvas and pad split
-                    // the screen rather than overlap. Matches PlayerView's
-                    // .bottomStrip case exactly, same strip height. The canvas
-                    // stays below the top safe area so the island never eats
-                    // the picture; only the strip runs to the screen's edge.
-                    VStack(spacing: 0) {
+                    // Portrait: the pad's items are normalised against a
+                    // bottom strip, not the full screen, so the canvas keeps
+                    // exactly the height it always has, matching PlayerView's
+                    // .bottomStrip case exactly, same strip height. The
+                    // canvas stays below the top safe area so the island
+                    // never eats the picture.
+                    //
+                    // The pad itself can be taller than the strip it is
+                    // normalised against: `headroom` (zero for every layout
+                    // that does not ask for it, so this reproduces the old
+                    // plain split pixel for pixel) grows the pad upward from
+                    // the bottom edge to overlap the canvas's own last bit,
+                    // for a pad too crowded to fit the strip alone. Opacity
+                    // keeps the overlap legible, the same deal landscape
+                    // already makes everywhere.
+                    let padHeight = controlStripHeight * (1 + (controlLayout.headroom ?? 0))
+                    ZStack(alignment: .top) {
                         MetalGameView(renderer: renderer)
                             .frame(height: max(geometry.size.height - controlStripHeight, 0))
                         TouchControlPad(items: layoutItems(landscape: false), send: handleInput, sendStick: handleStick, system: controlLayout.system, opacity: controlOpacity)
-                            .frame(height: controlStripHeight)
+                            .frame(height: padHeight)
+                            .frame(maxHeight: .infinity, alignment: .bottom)
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
                 }
