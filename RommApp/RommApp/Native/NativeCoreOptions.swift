@@ -342,7 +342,21 @@ enum NativeCoreOptionsStore {
 
     /// The RetroPad device port 0 should present, or 0 to leave the core's
     /// own default in place.
+    ///
+    /// Dreamcast needs an explicit RETRO_DEVICE_JOYPAD (1) here, unlike
+    /// every other core, which all default to a real controller already
+    /// plugged in on their own. Flycast's own Maple bus default is no
+    /// controller at all (MapleMainDevices defaults to MDT_None in
+    /// shell/libretro/option.cpp) until something calls
+    /// retro_set_controller_port_device, which is standard libretro
+    /// behaviour, a well-configured frontend is expected to always
+    /// negotiate the device, not something Flycast gets wrong. Found
+    /// 2026-08-11 from a BIOS screen whose Start prompt never responded:
+    /// touch input and haptics both worked, RetroPad bits reached
+    /// inputState correctly, but Flycast had no controller plugged into
+    /// the port those bits were meant for.
     static func padDevice(for platform: NativePlatform) -> UInt32 {
+        if platform == .dreamcast { return 1 }
         let option = NativeCoreOptions.genesisPad
         guard NativeCoreOptions.options(for: platform).contains(where: { $0.key == option.key })
         else { return 0 }

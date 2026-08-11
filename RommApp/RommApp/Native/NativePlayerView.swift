@@ -99,17 +99,28 @@ struct NativePlayerView: View {
         renderer.setButton(id, down: down)
     }
 
+    /// `ids` is unused here on purpose: it exists for the webview player's
+    /// per-slot EmulatorJS wiring (see ControlLayout.Item's own doc
+    /// comment), but this app has exactly one native stick, Dreamcast's,
+    /// and LibretroFrontend already knows which analog index it is.
+    private func handleStick(_ ids: [Int], x: Double, y: Double) {
+        renderer.setStick(x: x, y: y)
+    }
+
     private func openMenu() {
         renderer.paused = true
         menuStatus = nil
         menuVisible = true
         captureMemoryCard()
+        captureVMUSave()
     }
 
-    /// Whether this session has a battery save to look after. Gated on the
-    /// platform rather than probing the core: PCSX ReARMed is the only
-    /// core whose wiring exports the memory API, and the pause path runs
-    /// often enough that a cheap check matters.
+    /// Whether this session has a RETRO_MEMORY_SAVE_RAM battery save to
+    /// look after through the core directly. PS1 only: PCSX ReARMed is
+    /// the only core whose wiring exports that memory API. Dreamcast's
+    /// VMU save is a real battery save too, just reached a completely
+    /// different way; see `captureVMUSave()`, gated on `platform ==
+    /// .dreamcast` separately rather than folded in here.
     private var hasMemoryCard: Bool {
         platform == .psx
     }
@@ -215,6 +226,58 @@ struct NativePlayerView: View {
         Task { await uploadMemoryCard(data) }
     }
 
+    /// Dreamcast only, and structurally different from
+    /// `captureMemoryCard()`: Flycast never exposes its VMU save through
+    /// RETRO_MEMORY_SAVE_RAM at all (confirmed against its own
+    /// retro_get_memory_data, which only ever answers
+    /// RETRO_MEMORY_SYSTEM_RAM), it writes a real file straight into the
+    /// system directory instead. That file's name comes from the disc's
+    /// own internal game id, something this app has no way to read in
+    /// advance, so this looks for whichever file ends the way Flycast's
+    /// own VMU path naming always does rather than a name this code
+    /// picks. Upload only for now, capture and back up to RomM; loading
+    /// a previously saved card back in on a fresh directory needs
+    /// knowing that filename before Flycast invents it, which needs
+    /// parsing the disc's own IP.BIN game id ourselves, not solved yet.
+    private func captureVMUSave() {
+        guard platform == .dreamcast, renderer.paused else { return }
+        guard let systemDir = LibretroFrontend.shared.systemDirectory() else {
+            print("[vmu] no systemDirectory")
+            return
+        }
+        // Same "dc/" subdirectory the BIOS needed (see stageFirmware's
+        // own comment): confirmed 2026-08-11 by pulling the app's real
+        // data container over `devicectl device copy from` and finding
+        // the actual file at workDir/dc/vmu_save_A1.bin after a real
+        // in-game save, not at the system directory's own root the way
+        // this scan first assumed.
+        let scanDir = URL(fileURLWithPath: systemDir).appendingPathComponent("dc", isDirectory: true).path
+        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: scanDir) else {
+            print("[vmu] could not list \(scanDir)")
+            return
+        }
+        print("[vmu] scanning \(scanDir): \(entries)")
+        // No leading underscore: PerGameVmu names the file
+        // "<gameId>_vmu_save_A1.bin", but Flycast falls back to the
+        // bare "vmu_save_A1.bin" (no separator at all) whenever the
+        // disc's own game id isn't available yet at the moment it
+        // names the file.
+        guard let vmuName = entries.first(where: { $0.hasSuffix("vmu_save_A1.bin") }),
+              let data = try? Data(contentsOf: URL(fileURLWithPath: scanDir).appendingPathComponent(vmuName))
+        else {
+            print("[vmu] no *vmu_save_A1.bin match")
+            return
+        }
+        guard data != lastCardData else { return }
+        lastCardData = data
+        MemoryCardStore.shared.storeSnapshot(romId: rom.id, data: data)
+        DiagnosticsLog.record(
+            context: "VMU save", message: "Found \(vmuName), \(data.count) bytes, uploading.",
+            romVersion: session.serverVersion
+        )
+        Task { await uploadMemoryCard(data) }
+    }
+
     private func uploadMemoryCard(_ data: Data) async {
         do {
             // The Cabinet marker keeps this row's filename distinct from
@@ -259,7 +322,7 @@ struct NativePlayerView: View {
                     ZStack {
                         MetalGameView(renderer: renderer)
                         if showsControls {
-                            TouchControlPad(items: layoutItems(landscape: true), send: handleInput, system: controlLayout.system, opacity: controlOpacity)
+                            TouchControlPad(items: layoutItems(landscape: true), send: handleInput, sendStick: handleStick, system: controlLayout.system, opacity: controlOpacity)
                         }
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
@@ -274,7 +337,7 @@ struct NativePlayerView: View {
                     VStack(spacing: 0) {
                         MetalGameView(renderer: renderer)
                             .frame(height: max(geometry.size.height - controlStripHeight, 0))
-                        TouchControlPad(items: layoutItems(landscape: false), send: handleInput, system: controlLayout.system, opacity: controlOpacity)
+                        TouchControlPad(items: layoutItems(landscape: false), send: handleInput, sendStick: handleStick, system: controlLayout.system, opacity: controlOpacity)
                             .frame(height: controlStripHeight)
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
@@ -355,6 +418,7 @@ struct NativePlayerView: View {
                 NativeSessionMarker.recordBackgrounded()
                 renderer.paused = true
                 captureMemoryCard()
+                captureVMUSave()
             } else if phase == .active && !menuVisible {
                 renderer.paused = false
             }
@@ -636,6 +700,15 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         } else {
             heldButtons.remove(id)
         }
+    }
+
+    /// Dreamcast's real analog stick, the one input in this app that is
+    /// a continuous value rather than a RetroPad button id. Forwarded
+    /// straight through to `LibretroFrontend`, which is the only place
+    /// that knows how to fold it into RETRO_DEVICE_ANALOG reads; nothing
+    /// about it lives in `heldButtons`.
+    func setStick(x: Double, y: Double) {
+        LibretroFrontend.shared.setAnalogStickX(Float(x), y: Float(y))
     }
 
     func attach(to view: MTKView) {

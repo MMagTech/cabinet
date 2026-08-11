@@ -147,6 +147,51 @@ fragment float4 shader_crt_caligari_fragment(VertexOut in [[stage_in]],
     return float4(desaturated * scan, blended.a);
 }
 
+// crt-geom: bows the image outward like a curved CRT tube instead of
+// coloring/scanlining a flat rectangle, the one shader in this list that
+// reshapes the screen's geometry rather than its color. Distorts texture
+// coordinates with the same x-bends-by-y^2/y-bends-by-x^2 barrel
+// curvature libretro/slang-shaders' crt-geom.slang uses, then clips to a
+// rounded rectangle and darkens the corners, so the visible image reads
+// as a convex tube face rather than a flat panel. An earlier six-shader
+// pass on this list dropped a multi-pass crt-geom.slang port as looking
+// bad on device; this is a different, single-pass geometry-only effect
+// built from scratch, not that same shader revisited.
+fragment float4 shader_crt_geom_fragment(VertexOut in [[stage_in]],
+                                          texture2d<float> tex [[texture(0)]],
+                                          sampler samp [[sampler(0)]],
+                                          constant float2 &texelSize [[buffer(1)]]) {
+    float2 c = in.texCoord * 2.0 - 1.0;
+    const float curvature = 6.0;
+    float2 offset = c.yx / curvature;
+    c += c * offset * offset;
+    float2 uv = c * 0.5 + 0.5;
+
+    // Rounded-rect clip in the same centered space: anything outside the
+    // rounded box, corners included, is the tube's bezel, not the
+    // picture. dist is the signed distance to that rounded boundary
+    // (negative inside), reused below to fade brightness in before the
+    // hard cutoff instead of ending in a flat, shadowless edge.
+    const float cornerRadius = 0.08;
+    float2 boxHalf = float2(1.0 - cornerRadius);
+    float2 q = abs(c) - boxHalf;
+    float dist = length(max(q, 0.0)) - cornerRadius;
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || dist > 0.02) {
+        return float4(0.0, 0.0, 0.0, 1.0);
+    }
+
+    float4 color = tex.sample(samp, uv);
+    float scan = scanlineFactor(uv, texelSize, 0.35);
+    // Corner/edge shadow: ramps from full brightness well inside the
+    // rounded rect down to 45% right at its boundary, so the darkening
+    // actually reads as a shadow cast by the tube's bezel rather than a
+    // uniform tint or an invisible one-pixel edge. Layered under a mild
+    // whole-screen vignette for the rest of the curvature.
+    float edgeShadow = 1.0 - smoothstep(-0.16, 0.02, dist);
+    float vignette = mix(0.45, 1.0, edgeShadow) * (1.0 - dot(c, c) * 0.12);
+    return float4(color.rgb * scan * vignette, color.a);
+}
+
 // lcd: the generic handheld screen look for GBA/Game Gear/NGPC, none of
 // which were ever displayed on a CRT. Reimplements the real math (not a
 // copy) of libretro/slang-shaders' lcd3x.slang, itself explicitly public

@@ -21,6 +21,7 @@
 #include <vector>
 #include <mutex>
 #include <atomic>
+#include <algorithm>
 #include <cstdarg>
 #include <cstdio>
 
@@ -84,12 +85,18 @@ std::string gLastVariableValue;
 
 std::atomic<uint32_t> gButtonMask{0};
 std::atomic<uint32_t> gRotation{0};
+// Dreamcast's left analog stick, -1 to 1, the only continuous (not
+// digital-in-full-deflection-out) input any core here reads. See
+// -setAnalogStickX:y: and inputState's RETRO_DEVICE_INDEX_ANALOG_LEFT
+// case.
+std::atomic<float> gAnalogLeftX{0};
+std::atomic<float> gAnalogLeftY{0};
 
-// Flycast go/no-go spike: the only core here with no software renderer at
-// all, so it needs a real GLES context via libretro's hardware-render
-// interface instead of the plain memory-buffer path every other core
-// uses. Kept file-static like the rest of this frontend's state, one
-// core active at a time.
+// Flycast: the only core here with no software renderer at all, so it
+// needs a real GLES context via libretro's hardware-render interface
+// instead of the plain memory-buffer path every other core uses. Kept
+// file-static like the rest of this frontend's state, one core active
+// at a time.
 EAGLContext *gGLContext = nil;
 struct retro_hw_render_callback gHWRender = {};
 bool gUsesHWRender = false;
@@ -325,6 +332,16 @@ int16_t inputState(unsigned port, unsigned device, unsigned index, unsigned id) 
             if ((mask >> 22) & 1) return 0x7fff;
             if ((mask >> 23) & 1) return -0x7fff;
         }
+    }
+    // Dreamcast's real analog stick, a true continuous value from
+    // -setAnalogStickX:y:, not a digitized mask bit like every other
+    // stick this frontend reads. y is already down-positive, matching
+    // libretro's own convention, no flip needed here either.
+    if (device == RETRO_DEVICE_ANALOG && index == RETRO_DEVICE_INDEX_ANALOG_LEFT) {
+        float value = id == RETRO_DEVICE_ID_ANALOG_X ? gAnalogLeftX.load(std::memory_order_relaxed)
+                    : id == RETRO_DEVICE_ID_ANALOG_Y ? gAnalogLeftY.load(std::memory_order_relaxed)
+                    : 0.0f;
+        return (int16_t)(std::clamp(value, -1.0f, 1.0f) * 0x7fff);
     }
     return 0;
 }
@@ -603,6 +620,21 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
         gCore->set_controller_port_device(0, gPortDevice);
     }
 
+    // Flycast only: its own retro_set_controller_port_device (see
+    // shell/libretro/libretro.cpp) waits on first run for every one of
+    // the four Maple ports to be explicitly set before it will do
+    // anything else, expansion slot setup (where the VMU lives)
+    // included. This app is single-controller by design and never
+    // touches ports 1-3, so that gate never opened and no VMU was ever
+    // wired up, no error, just a save screen that quietly did nothing.
+    // RETRO_DEVICE_NONE (0) on the unused ports is what satisfies the
+    // gate without pretending a controller is plugged in where none is.
+    if (gCoreID == LibretroCoreIDFlycast) {
+        gCore->set_controller_port_device(1, 0);
+        gCore->set_controller_port_device(2, 0);
+        gCore->set_controller_port_device(3, 0);
+    }
+
     struct retro_system_av_info avInfo = {};
     gCore->get_system_av_info(&avInfo);
     {
@@ -662,6 +694,10 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     }
 
     return nil;
+}
+
+- (nullable NSString *)systemDirectory {
+    return gSystemDirectory.empty() ? nil : [NSString stringWithUTF8String:gSystemDirectory.c_str()];
 }
 
 - (void)runFrame {
@@ -728,6 +764,11 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
 
 - (void)setButtonMask:(uint32_t)mask {
     gButtonMask.store(mask, std::memory_order_relaxed);
+}
+
+- (void)setAnalogStickX:(float)x y:(float)y {
+    gAnalogLeftX.store(x, std::memory_order_relaxed);
+    gAnalogLeftY.store(y, std::memory_order_relaxed);
 }
 
 - (uint32_t)rotation {

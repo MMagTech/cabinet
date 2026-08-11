@@ -9,7 +9,11 @@ import Foundation
 /// actually apply to by `NativeShader.available(for:)`, not offered
 /// everywhere like the original six. A choice stored under a dropped
 /// shader's old raw value simply fails the enum init and falls back to
-/// Sharp.
+/// Sharp. `crtGeom` joined 2026-08-11, console/arcade only via the same
+/// `available(for:)` gating the handheld pair uses in the other
+/// direction; despite the name collision, it is a new single-pass
+/// curved-screen effect built from scratch, not the multi-pass
+/// crt-geom.slang port dropped on 2026-08-07.
 enum NativeShader: String, CaseIterable, Identifiable {
     case sharp
     case sabr
@@ -18,6 +22,7 @@ enum NativeShader: String, CaseIterable, Identifiable {
     case crtMattias
     case crtBeam
     case crtCaligari
+    case crtGeom
     case lcd
     case gameBoy
 
@@ -32,6 +37,7 @@ enum NativeShader: String, CaseIterable, Identifiable {
         case .crtMattias: return "CRT (mattias)"
         case .crtBeam: return "CRT (beam)"
         case .crtCaligari: return "CRT (caligari)"
+        case .crtGeom: return "CRT (curved)"
         case .lcd: return "LCD"
         case .gameBoy: return "Game Boy"
         }
@@ -49,6 +55,7 @@ enum NativeShader: String, CaseIterable, Identifiable {
         case .crtMattias: return "shader_crt_mattias_fragment"
         case .crtBeam: return "shader_crt_beam_fragment"
         case .crtCaligari: return "shader_crt_caligari_fragment"
+        case .crtGeom: return "shader_crt_geom_fragment"
         case .lcd: return "shader_lcd_fragment"
         case .gameBoy: return "shader_gameboy_fragment"
         }

@@ -27,7 +27,7 @@ struct DebugView: View {
     @State private var artworkBytes: Int64 = 0
     // TODO: this repo is not final. Update once the real one is settled,
     // this one is just where development has lived so far.
-    private static let repo = "MMagTech/romm-ios"
+    private static let repo = "MMagTech/cabinet"
 
     var body: some View {
         List {
@@ -72,52 +72,16 @@ struct DebugView: View {
                 Text("Most connection problems trace back to a pairing that's missing a scope.")
             }
 
-            if !DiagnosticsLog.recent.isEmpty {
-                Section {
-                    ForEach(DiagnosticsLog.recent) { entry in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("\(entry.context): \(entry.message)")
-                                .font(.caption)
-                            Text(entry.timestamp, style: .relative)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    Button("Clear", role: .destructive) { DiagnosticsLog.clear() }
-                } header: {
-                    Text("Recent errors")
-                } footer: {
-                    Text("The last few things that didn't work, wherever in the app they happened.")
-                }
-            }
-
-            if !BridgeConsoleLog.recent.isEmpty {
-                Section {
-                    Button("Clear", role: .destructive) { BridgeConsoleLog.clear() }
-                } header: {
-                    Text("Cache bridge log")
-                } footer: {
-                    Text("\(BridgeConsoleLog.recent.count) lines from the last Storage or keep use, included in Copy diagnostics.")
-                }
-            }
-
-            if !PlayerNetworkLog.recent.isEmpty {
-                Section {
-                    Button("Clear", role: .destructive) { PlayerNetworkLog.clear() }
-                } header: {
-                    Text("Player network log")
-                } footer: {
-                    Text("Every request the last game's player made, included in Copy diagnostics. A cached game shows one HEAD line for its /content/ URL; a GET after it means the cache missed. Debug build only.")
-                }
-            }
-
-            Section {
-                NavigationLink("Dreamcast go/no-go (Flycast spike)") {
-                    DreamcastSpikeView()
-                }
-            } footer: {
-                Text("Interpreter-only Flycast, GLES hardware rendered. Not a real platform yet, just answering whether the core holds real-time on this phone.")
-            }
+            // Recent errors, the cache bridge log and the player network
+            // log used to each get their own browsable Section here, with
+            // a Clear button apiece. Hidden 2026-08-11: nobody was ever
+            // using them from the UI, every real diagnosis so far went
+            // through a live device console instead. `diagnosticsText`
+            // below reads the same three stores directly, so Copy
+            // diagnostics and Report a bug still carry everything these
+            // sections used to show, just without a screen for browsing
+            // or clearing them individually. Bring a section back if a
+            // real need for browsing-without-copying ever shows up.
 
             Section {
                 Button {

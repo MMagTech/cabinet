@@ -100,7 +100,12 @@ struct LaunchChoices {
         // count against, since GameLaunchView never shows one. This is
         // the one line to remove if RomM's own Saturn core is ever
         // fixed and a real choice becomes worth offering again.
-        if canonicalSlug == "saturn" { return .native }
+        //
+        // Dreamcast forces native for a different reason, RomM has no
+        // webview core for it at all (`libretro_slug` is null on the
+        // platform), not merely a broken one, so there is nothing to
+        // pick between.
+        if canonicalSlug == "saturn" || canonicalSlug == "dc" { return .native }
         guard NativeCore.core(for: rom, canonicalSlug: canonicalSlug) != nil else { return .webview }
         if let stored = UserDefaults.standard.string(forKey: "romm.backend.rom.\(rom.id)"),
            let backend = PlayerBackend(rawValue: stored) {

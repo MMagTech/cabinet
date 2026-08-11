@@ -1,0 +1,144 @@
+{
+ "system": "dreamcast",
+ "_ergonomics": "Face buttons drawn at their real Dreamcast diamond positions (Y top, X left, B right, A bottom, the same shape Xbox later copied), but Flycast's own libretro mapping swaps A/B and X/Y onto the RetroPad slots: its A slot reads as the Dreamcast's B, its B slot reads as the Dreamcast's A, and the same swap applies to X/Y. Confirmed against shell/libretro/libretro.cpp's own input descriptor table, not assumed. The `input` values below are already corrected for that swap; do not 'fix' them to match the label without re-checking the source. No Select: the real pad has none. L/R are single analog triggers (RetroPad L2/R2, not L1/R1, since Flycast reads them there), no stacked pair like PS1's. D-pad above, stick below, stacked on the left the way real Dreamcast emulators (RDC/Revive) draw it, both L/R and Start/Menu pulled up near the very top of the strip to match. Second pass after the first one shipped a d-pad too small to read as a cross: TouchControlPad.drawDpad's fixed 6pt corner radius on each arm dominates and breaks the plus shape once the frame drops much below ~100pt square, not an aspect-ratio problem as first suspected.",
+ "items": [
+  {
+   "kind": "dpad",
+   "inputs": [4, 5, 6, 7],
+   "frame": {"x": 0.06, "y": 0.13, "w": 0.26, "h": 0.32},
+   "extended": {"x": 0.02, "y": 0.09, "w": 0.34, "h": 0.4}
+  },
+  {
+   "kind": "stick",
+   "inputs": [16, 17, 18, 19],
+   "frame": {"x": 0.03, "y": 0.44, "w": 0.4, "h": 0.54},
+   "extended": {"x": 0.0, "y": 0.4, "w": 0.46, "h": 0.6}
+  },
+  {
+   "kind": "button",
+   "label": "A",
+   "input": 0,
+   "frame": {"x": 0.665, "y": 0.63, "w": 0.15, "h": 0.19},
+   "extended": {"x": 0.634, "y": 0.5942, "w": 0.2119, "h": 0.2615}
+  },
+  {
+   "kind": "button",
+   "label": "B",
+   "input": 8,
+   "frame": {"x": 0.805, "y": 0.47, "w": 0.15, "h": 0.19},
+   "extended": {"x": 0.774, "y": 0.4342, "w": 0.2119, "h": 0.2615}
+  },
+  {
+   "kind": "button",
+   "label": "Y",
+   "input": 9,
+   "frame": {"x": 0.665, "y": 0.31, "w": 0.15, "h": 0.19},
+   "extended": {"x": 0.634, "y": 0.2742, "w": 0.2119, "h": 0.2615}
+  },
+  {
+   "kind": "button",
+   "label": "X",
+   "input": 1,
+   "frame": {"x": 0.525, "y": 0.47, "w": 0.15, "h": 0.19},
+   "extended": {"x": 0.494, "y": 0.4342, "w": 0.2119, "h": 0.2615}
+  },
+  {
+   "kind": "pill",
+   "label": "L",
+   "input": 12,
+   "frame": {"x": 0.02, "y": 0.005, "w": 0.14, "h": 0.08},
+   "extended": {"x": 0.0, "y": 0.0, "w": 0.2, "h": 0.13}
+  },
+  {
+   "kind": "pill",
+   "label": "R",
+   "input": 13,
+   "frame": {"x": 0.84, "y": 0.005, "w": 0.14, "h": 0.08},
+   "extended": {"x": 0.81, "y": 0.0, "w": 0.19, "h": 0.13}
+  },
+  {
+   "kind": "pill",
+   "label": "Start",
+   "input": 3,
+   "frame": {"x": 0.4, "y": 0.005, "w": 0.2, "h": 0.09},
+   "extended": {"x": 0.3795, "y": 0.0, "w": 0.241, "h": 0.12}
+  },
+  {
+   "kind": "pill",
+   "label": "Menu",
+   "input": -1,
+   "frame": {"x": 0.4, "y": 0.11, "w": 0.2, "h": 0.09},
+   "extended": {"x": 0.3795, "y": 0.09, "w": 0.241, "h": 0.12}
+  }
+ ],
+ "landscapeItems": [
+  {
+   "kind": "dpad",
+   "inputs": [4, 5, 6, 7],
+   "frame": {"x": 0.03, "y": 0.28, "w": 0.11, "h": 0.23},
+   "extended": {"x": 0.0, "y": 0.25, "w": 0.15, "h": 0.29}
+  },
+  {
+   "kind": "stick",
+   "inputs": [16, 17, 18, 19],
+   "frame": {"x": 0.02, "y": 0.53, "w": 0.19, "h": 0.42},
+   "extended": {"x": 0.0, "y": 0.49, "w": 0.23, "h": 0.48}
+  },
+  {
+   "kind": "button",
+   "label": "A",
+   "input": 0,
+   "frame": {"x": 0.8124, "y": 0.61, "w": 0.0702, "h": 0.16},
+   "extended": {"x": 0.783, "y": 0.59, "w": 0.1289, "h": 0.2}
+  },
+  {
+   "kind": "button",
+   "label": "B",
+   "input": 8,
+   "frame": {"x": 0.8874, "y": 0.49, "w": 0.0702, "h": 0.16},
+   "extended": {"x": 0.858, "y": 0.47, "w": 0.1139, "h": 0.2}
+  },
+  {
+   "kind": "button",
+   "label": "Y",
+   "input": 9,
+   "frame": {"x": 0.8124, "y": 0.37, "w": 0.0702, "h": 0.16},
+   "extended": {"x": 0.783, "y": 0.35, "w": 0.1289, "h": 0.2}
+  },
+  {
+   "kind": "button",
+   "label": "X",
+   "input": 1,
+   "frame": {"x": 0.7474, "y": 0.49, "w": 0.0702, "h": 0.16},
+   "extended": {"x": 0.718, "y": 0.47, "w": 0.1289, "h": 0.2}
+  },
+  {
+   "kind": "pill",
+   "label": "L",
+   "input": 12,
+   "frame": {"x": 0.02, "y": 0.03, "w": 0.09, "h": 0.08},
+   "extended": {"x": 0.0, "y": 0.0, "w": 0.15, "h": 0.14}
+  },
+  {
+   "kind": "pill",
+   "label": "R",
+   "input": 13,
+   "frame": {"x": 0.89, "y": 0.03, "w": 0.09, "h": 0.08},
+   "extended": {"x": 0.86, "y": 0.0, "w": 0.14, "h": 0.14}
+  },
+  {
+   "kind": "pill",
+   "label": "Start",
+   "input": 3,
+   "frame": {"x": 0.8777, "y": 0.195, "w": 0.0845, "h": 0.06},
+   "extended": {"x": 0.858, "y": 0.185, "w": 0.1239, "h": 0.08}
+  },
+  {
+   "kind": "pill",
+   "label": "Menu",
+   "input": -1,
+   "frame": {"x": 0.0377, "y": 0.195, "w": 0.0845, "h": 0.06},
+   "extended": {"x": 0.018, "y": 0.185, "w": 0.1239, "h": 0.08}
+  }
+ ]
+}

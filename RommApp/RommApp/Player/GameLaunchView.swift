@@ -350,19 +350,25 @@ struct GameLaunchView: View {
     /// decides the library's Supported/Unsupported split. Reused here so
     /// Play cannot stay live for a platform the library already calls
     /// unsupported, the zero-core dead end this download feature replaces.
+    /// Calls through rather than re-deriving `!isComputerPlatform &&
+    /// !cores.isEmpty` locally: that copy silently fell out of sync with
+    /// the real check when it grew native-core awareness, exactly the
+    /// class of bug a single source of truth is supposed to prevent.
     private var isPlatformSupported: Bool {
-        !isComputerPlatform && !cores.isEmpty
+        PlatformSupport.isSupported(canonicalSlug: canonicalSlug)
     }
 
     /// Whether a real Web player / Native picker is offered, matching
     /// `LaunchChoices.defaultBackend`'s own rule: any platform with a
-    /// native core except Saturn, whose webview core is confirmed broken
-    /// rather than merely untested. Everywhere this is true, `playerCard`
-    /// replaces the standalone `coreCard`/`firmwareCard` pair, since those
-    /// two only exist to configure the webview for games with no choice
-    /// to make about which player runs them at all.
+    /// native core except Saturn, whose webview core is confirmed broken,
+    /// and Dreamcast, which has no webview core at all. Everywhere this
+    /// is true, `playerCard` replaces the standalone
+    /// `coreCard`/`firmwareCard` pair, since those two only exist to
+    /// configure the webview for games with no choice to make about
+    /// which player runs them at all.
     private var showsPlayerPicker: Bool {
-        NativeCore.core(for: rom, canonicalSlug: canonicalSlug) != nil && canonicalSlug != "saturn"
+        NativeCore.core(for: rom, canonicalSlug: canonicalSlug) != nil
+            && canonicalSlug != "saturn" && canonicalSlug != "dc"
     }
 
     /// One visible action, no exceptions: a game with the keep toggle

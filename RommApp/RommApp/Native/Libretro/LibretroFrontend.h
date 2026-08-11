@@ -24,11 +24,10 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
     LibretroCoreIDProSystem NS_SWIFT_NAME(prosystem) = 9,
     LibretroCoreIDPicoDrive NS_SWIFT_NAME(picoDrive) = 10,
     LibretroCoreIDPCSXReARMed NS_SWIFT_NAME(pcsxReARMed) = 11,
-    // Dreamcast go/no-go spike, debug-menu only: interpreter-only SH4
-    // (no dynarec, same no-JIT exception as Saturn/PS1), hardware-rendered
-    // through a real GLES3 context since Flycast has no software renderer.
-    // Not wired into NativePlatform/RomM's launch flow until it proves
-    // out on real hardware.
+    // Interpreter-only SH4 (no dynarec, same no-JIT exception as
+    // Saturn/PS1), hardware-rendered through a real GLES3 context since
+    // Flycast has no software renderer. Passed its go/no-go 2026-08-10
+    // and is wired into NativePlatform as of the same week.
     LibretroCoreIDFlycast NS_SWIFT_NAME(flycast) = 12,
 };
 
@@ -72,6 +71,14 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 // Returns nil on success, or an error description on failure.
 - (nullable NSString *)loadGame:(NSString *)romPath systemDirectory:(NSString *)systemDirectory;
 
+// The directory passed to the last -loadGame:systemDirectory: call. Some
+// cores manage their own save files on disk rather than exposing them
+// through RETRO_MEMORY_SAVE_RAM (Flycast's VMU saves are the first case
+// here), so a caller that needs to find those files needs this path;
+// NativeLauncher itself only ever threads it into loadGame, nothing kept
+// it around for later.
+- (nullable NSString *)systemDirectory;
+
 // Runs exactly one emulated frame. Call this from a display-link-driven
 // loop; each call may produce a new video frame and some audio samples.
 - (void)runFrame;
@@ -99,6 +106,15 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 // frame before -runFrame with touch pad and game controller state merged
 // by the caller. Single player/port only, still.
 - (void)setButtonMask:(uint32_t)mask;
+
+// Left analog stick position, -1 to 1 on each axis, y-positive down
+// (matching screen y and libretro's own RETRO_DEVICE_ID_ANALOG_Y
+// convention, confirmed against TouchControlPad's identical sign
+// choice for the touch stick). Call once per frame alongside
+// -setButtonMask:. Dreamcast is the first core here to read this;
+// the digital-only right stick FBNeo's twin-stick games use lives
+// entirely in -setButtonMask:'s own bits instead.
+- (void)setAnalogStickX:(float)x y:(float)y;
 
 // Display rotation the core requested, in 90-degree counter-clockwise
 // steps (0-3). Vertical arcade boards render sideways and rely on the
