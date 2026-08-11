@@ -1,6 +1,7 @@
 import SwiftUI
 import MetalKit
 import AVFoundation
+import QuartzCore
 
 /// Fullscreen native-player screen, core-agnostic. Drives retro_run off
 /// MTKView's own display-link-backed draw loop through LibretroFrontend,
@@ -606,6 +607,16 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     /// menu's checkmark tracks the pick without a separate state copy.
     @Published var shader: NativeShader = .sharp
 
+    /// Rolling one-second measurement of draw(in:) callback rate, not the
+    /// core's own advertised frame rate: any stall inside runFrame, the
+    /// GPU encode, or the display link itself shows up here. Generic
+    /// diagnostic, not core-specific; added for the Dreamcast go/no-go
+    /// spike, where "does this actually hold real-time" needs a number,
+    /// not just a feel, but harmless to leave on for every core.
+    @Published private(set) var measuredFPS: Double = 0
+    private var fpsFrameCount = 0
+    private var fpsWindowStart: CFTimeInterval = 0
+
     /// Held RetroPad ids, merged from the touch overlay and any connected
     /// game controller. Both already speak the same id space (see
     /// ControllerBindings.swift's RetroPad constants), so merging is just
@@ -700,6 +711,17 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     }
 
     func draw(in view: MTKView) {
+        let now = CACurrentMediaTime()
+        if fpsWindowStart == 0 {
+            fpsWindowStart = now
+        }
+        fpsFrameCount += 1
+        if now - fpsWindowStart >= 1.0 {
+            measuredFPS = Double(fpsFrameCount) / (now - fpsWindowStart)
+            fpsFrameCount = 0
+            fpsWindowStart = now
+        }
+
         if !paused && !awaitingSaveRAM {
             if let card = pendingSaveRAM {
                 pendingSaveRAM = nil

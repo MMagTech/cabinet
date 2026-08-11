@@ -12,6 +12,11 @@
 #import "ProSystemCore.h"
 #import "PicoDriveCore.h"
 #import "PCSXReARMedCore.h"
+#import "FlycastCore.h"
+#import <OpenGLES/EAGL.h>
+#import <OpenGLES/ES3/gl.h>
+#import <OpenGLES/ES3/glext.h>
+#include <dlfcn.h>
 #include <string>
 #include <vector>
 #include <mutex>
@@ -80,7 +85,193 @@ std::string gLastVariableValue;
 std::atomic<uint32_t> gButtonMask{0};
 std::atomic<uint32_t> gRotation{0};
 
+// Flycast go/no-go spike: the only core here with no software renderer at
+// all, so it needs a real GLES context via libretro's hardware-render
+// interface instead of the plain memory-buffer path every other core
+// uses. Kept file-static like the rest of this frontend's state, one
+// core active at a time.
+EAGLContext *gGLContext = nil;
+struct retro_hw_render_callback gHWRender = {};
+bool gUsesHWRender = false;
+GLuint gFBO = 0;
+GLuint gColorTexture = 0;
+GLuint gDepthRenderbuffer = 0;
+GLuint gFBOWidth = 0;
+GLuint gFBOHeight = 0;
+// Surfaced through -hwRenderDiagnostics for the Dreamcast spike UI, since
+// there is no easy console log access from a real device without Xcode
+// attached: cheaper to make the pipeline state visible in-app than to
+// guess at it from behavior alone (e.g. "audio plays, screen is black"
+// is consistent with several different failure points).
+std::string gHWDiagnostic = "not requested";
+// Setup (FBO creation, context_reset) happens once at load and would
+// otherwise get overwritten by the per-frame readback diagnostic within
+// a second, hiding exactly the information most useful for a first-boot
+// failure. Kept separate and shown alongside it instead.
+std::string gHWSetupDiagnostic;
+std::atomic<uint32_t> gHWFrameCount{0};
+// Debug-only: whether the core ever actually asked for
+// reicast_threaded_rendering via GET_VARIABLE, distinguishing "we sent an
+// override the core never read" from "the override was read and had no
+// effect". Some cores skip GET_VARIABLE entirely for a key the frontend
+// never acknowledged registering (SET_VARIABLES/SET_CORE_OPTIONS, which
+// this frontend's environmentCallback does not answer), silently keeping
+// their own hardcoded default regardless of what gOptions holds.
+std::atomic<bool> gThreadedRenderingQueried{false};
+
+uintptr_t hwGetCurrentFramebuffer(void) {
+    return gFBO;
+}
+
+// Standard GL entry points are already linked straight into this binary
+// via OpenGLES.framework, so a plain dlsym against the running process
+// resolves them; no dynamic loader indirection needed the way EGL/GLX
+// platforms require.
+retro_proc_address_t hwGetProcAddress(const char *sym) {
+    return (retro_proc_address_t)dlsym(RTLD_DEFAULT, sym);
+}
+
+// (Re)builds the offscreen FBO Flycast renders into, sized to the core's
+// reported geometry. Color attachment is a real GL_TEXTURE_2D, not a
+// renderbuffer: matched to Provenance's own shipping thin libretro
+// frontend (PVThinLibretroFrontend.mm's setupHardwareContextFBOWidth:),
+// the one concrete, currently-working reference available for this exact
+// core. A renderbuffer-backed color attachment is a legal FBO per spec,
+// but every fix that assumed the two FBOs' formats and sizes matching
+// convention was "close enough" failed identically on real hardware, and
+// this is the one structural difference from a proven-working
+// implementation rather than another guess at GL state.
+void setupHWFramebuffer(GLuint width, GLuint height) {
+    if (gFBO != 0 && gFBOWidth == width && gFBOHeight == height) {
+        return;
+    }
+    if (gFBO != 0) {
+        glDeleteFramebuffers(1, &gFBO);
+        gFBO = 0;
+    }
+    if (gColorTexture != 0) {
+        glDeleteTextures(1, &gColorTexture);
+        gColorTexture = 0;
+    }
+    if (gDepthRenderbuffer != 0) {
+        glDeleteRenderbuffers(1, &gDepthRenderbuffer);
+        gDepthRenderbuffer = 0;
+    }
+
+    glGenFramebuffers(1, &gFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, gFBO);
+
+    glGenTextures(1, &gColorTexture);
+    glBindTexture(GL_TEXTURE_2D, gColorTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gColorTexture, 0);
+
+    if (gHWRender.depth || gHWRender.stencil) {
+        glGenRenderbuffers(1, &gDepthRenderbuffer);
+        glBindRenderbuffer(GL_RENDERBUFFER, gDepthRenderbuffer);
+        GLenum format = gHWRender.stencil ? GL_DEPTH24_STENCIL8 : GL_DEPTH_COMPONENT24;
+        glRenderbufferStorage(GL_RENDERBUFFER, format, width, height);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, gDepthRenderbuffer);
+        if (gHWRender.stencil) {
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, gDepthRenderbuffer);
+        }
+    }
+
+    gFBOWidth = width;
+    gFBOHeight = height;
+
+    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    char buf[128];
+    snprintf(buf, sizeof(buf), "FBO %ux%u status=0x%04X (%s)", width, height, status,
+              status == GL_FRAMEBUFFER_COMPLETE ? "complete" : "INCOMPLETE");
+    gHWSetupDiagnostic = buf;
+}
+
 void videoRefresh(const void *data, unsigned width, unsigned height, size_t pitch) {
+    if (data == RETRO_HW_FRAME_BUFFER_VALID) {
+        // The frame is already sitting in gFBO on the GPU; read it back
+        // once as BGRA (matching this frontend's existing XRGB8888 byte
+        // layout, so the Metal display path needs no separate case for
+        // it) instead of one glReadPixels call per row. GL's framebuffer
+        // origin is bottom-left, everything else here assumes top-left,
+        // so the row order is reversed on the way into gFrameBytes.
+        if (!gGLContext || width == 0 || height == 0) {
+            return;
+        }
+        std::lock_guard<std::mutex> lock(gFrameMutex);
+        size_t bytesPerRow = (size_t)width * 4;
+        size_t needed = bytesPerRow * height;
+        if (gFrameBytes.size() != needed) {
+            gFrameBytes.resize(needed);
+        }
+        // Drained before touching GL ourselves: glGetError returns and
+        // clears one error at a time in the order they occurred, so a
+        // single call after our own readback can actually be reporting
+        // something Flycast's own draw calls left pending earlier in this
+        // same frame, not a fault in the readback itself. Separating the
+        // two was needed after the GL_INVALID_OPERATION seen here turned
+        // out to survive fixing the actual readback bug (GL_BGRA_EXT was
+        // not a valid glReadPixels format/type pair on this hardware).
+        GLenum preExistingErr = GL_NO_ERROR;
+        GLenum e;
+        while ((e = glGetError()) != GL_NO_ERROR) {
+            preExistingErr = e;
+        }
+
+        // GL_RGBA/GL_UNSIGNED_BYTE, not GL_BGRA_EXT: not a guaranteed-
+        // valid glReadPixels format/type pair on every GLES3
+        // implementation. R/B is swapped by hand below instead, since
+        // RGBA/UNSIGNED_BYTE is the one combination every implementation
+        // is required to accept.
+        std::vector<uint8_t> flipped(needed);
+        glBindFramebuffer(GL_FRAMEBUFFER, gFBO);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, flipped.data());
+        GLenum readbackErr = glGetError();
+        for (unsigned y = 0; y < height; y++) {
+            const uint8_t *srcRow = flipped.data() + (height - 1 - y) * bytesPerRow;
+            uint8_t *dstRow = gFrameBytes.data() + y * bytesPerRow;
+            for (unsigned x = 0; x < width; x++) {
+                dstRow[x * 4 + 0] = srcRow[x * 4 + 2]; // B
+                dstRow[x * 4 + 1] = srcRow[x * 4 + 1]; // G
+                dstRow[x * 4 + 2] = srcRow[x * 4 + 0]; // R
+                dstRow[x * 4 + 3] = srcRow[x * 4 + 3]; // A
+            }
+        }
+        gFrameWidth = width;
+        gFrameHeight = height;
+        gFrameBytesPerRow = (uint32_t)bytesPerRow;
+        gPixelFormat = LibretroPixelFormatXRGB8888;
+        gFrameDirty = true;
+
+        uint32_t frameCount = gHWFrameCount.fetch_add(1, std::memory_order_relaxed) + 1;
+        if (frameCount <= 3 || frameCount % 300 == 0) {
+            // Every byte, not a sparse sample: a mostly-black scene with
+            // a few real accent pixels (a HUD element, a loading spinner)
+            // would pass a sampled "is any byte non-zero" check while
+            // still looking solid black on screen, which is exactly the
+            // ambiguity that made the first version of this diagnostic
+            // less useful than it looked.
+            uint32_t nonZeroBytes = 0;
+            uint8_t maxByte = 0;
+            for (uint8_t b : flipped) {
+                if (b != 0) {
+                    nonZeroBytes++;
+                    if (b > maxByte) maxByte = b;
+                }
+            }
+            char buf[224];
+            snprintf(buf, sizeof(buf),
+                      "read %ux%u frame #%u, %u/%zu bytes non-zero (max=%u), "
+                      "preErr=0x%04X readbackErr=0x%04X",
+                      width, height, frameCount, nonZeroBytes, flipped.size(), maxByte,
+                      preExistingErr, readbackErr);
+            gHWDiagnostic = buf;
+        }
+        return;
+    }
     if (!data || width == 0 || height == 0) {
         return; // duplicate-frame signal, nothing changed
     }
@@ -186,6 +377,9 @@ bool environmentCallback(unsigned cmd, void *data) {
             if (!variable || !variable->key) {
                 return false;
             }
+            if (!strcmp(variable->key, "reicast_threaded_rendering")) {
+                gThreadedRenderingQueried.store(true, std::memory_order_relaxed);
+            }
             std::lock_guard<std::mutex> lock(gOptionsMutex);
             NSString *value = gOptions[[NSString stringWithUTF8String:variable->key]];
             if (!value) {
@@ -200,6 +394,28 @@ bool environmentCallback(unsigned cmd, void *data) {
             // Options only change between loads, never mid-game.
             *(bool *)data = false;
             return true;
+        case RETRO_ENVIRONMENT_SET_HW_RENDER: {
+            // Flycast go/no-go spike: only GLES is supported here, nothing
+            // else in this frontend has ever needed a GPU context. The
+            // actual EAGLContext/FBO are created after load_game succeeds,
+            // once the core's geometry is known; this only records what
+            // the core asked for and hands back the two callbacks it needs.
+            auto *hw = (struct retro_hw_render_callback *)data;
+            if (!hw) {
+                return false;
+            }
+            if (hw->context_type != RETRO_HW_CONTEXT_OPENGLES2 &&
+                hw->context_type != RETRO_HW_CONTEXT_OPENGLES3) {
+                return false;
+            }
+            hw->get_current_framebuffer = hwGetCurrentFramebuffer;
+            hw->get_proc_address = hwGetProcAddress;
+            gHWRender = *hw;
+            gUsesHWRender = true;
+            gHWDiagnostic = hw->context_type == RETRO_HW_CONTEXT_OPENGLES3
+                ? "requested GLES3, context not yet created" : "requested GLES2, context not yet created";
+            return true;
+        }
         default:
             return false;
     }
@@ -233,6 +449,8 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
             return PicoDriveCoreAPI();
         case LibretroCoreIDPCSXReARMed:
             return PCSXReARMedCoreAPI();
+        case LibretroCoreIDFlycast:
+            return FlycastCoreAPI();
     }
     return FBNeoCoreAPI();
 }
@@ -275,6 +493,8 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     }
     gButtonMask.store(0, std::memory_order_relaxed);
     gRotation.store(0, std::memory_order_relaxed);
+    gUsesHWRender = false;
+    gHWRender = {};
 }
 
 - (void)setCoreOptions:(NSDictionary<NSString *, NSString *> *)options {
@@ -392,11 +612,83 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     gAspectRatio.store(avInfo.geometry.aspect_ratio > 0 ? avInfo.geometry.aspect_ratio : 0.0,
                         std::memory_order_relaxed);
 
+    if (gUsesHWRender) {
+        // base_width/base_height, not max_width/max_height: Flycast
+        // renders into its own internal target sized to the actual frame
+        // and composites into this externally-provided FBO every frame
+        // via glBlitFramebuffer (PostProcessor::render in postprocess.cpp).
+        // Sizing ours to the core's inflated maximum (853x853 here, versus
+        // an actual 640x480 frame) made every one of those blits a
+        // mismatched-size blit between two differently-sized FBOs, which
+        // GLES3 drivers can validate more strictly than desktop GL and
+        // reject outright; that produced a GL_INVALID_OPERATION on every
+        // single frame on real hardware. A too-small FBO would silently
+        // clip, but this core's own max is far larger than anything it
+        // actually renders at, so matching its real per-frame geometry is
+        // the correct size here regardless.
+        GLuint width = avInfo.geometry.base_width;
+        GLuint height = avInfo.geometry.base_height;
+        if (width == 0) width = 640;
+        if (height == 0) height = 480;
+
+        // Always try GLES3 first, regardless of what context_type the
+        // core actually requested: found on real hardware that Flycast
+        // asks for GLES2 here, not because its own code needs GLES2, but
+        // because libretro-common's GLSM hardcodes RETRO_HW_CONTEXT_
+        // OPENGLES2 on iOS whenever HAVE_OPENGLES is defined, regardless
+        // of the core's own HAVE_OPENGLES3 build flags. Flycast's actual
+        // shaders use GLES3-only syntax (in/out, texture()), and it does
+        // its own runtime capability detection via glGetString(GL_VERSION)
+        // rather than trusting the requested context_type, so creating a
+        // real GLES3 context here (when the device supports it) makes
+        // Flycast correctly detect and use the GLES3 path its own
+        // compiled code actually needs. A GLES2-only device would need
+        // the fallback; every real device this app targets supports GLES3.
+        EAGLRenderingAPI api = kEAGLRenderingAPIOpenGLES3;
+        if (!gGLContext || gGLContext.API != api) {
+            gGLContext = [[EAGLContext alloc] initWithAPI:api];
+        }
+        [EAGLContext setCurrentContext:gGLContext];
+        setupHWFramebuffer(width, height);
+        char resetBuf[64];
+        if (gHWRender.context_reset) {
+            gHWRender.context_reset();
+            GLenum err = glGetError();
+            snprintf(resetBuf, sizeof(resetBuf), ", context_reset called, glError=0x%04X", err);
+        } else {
+            snprintf(resetBuf, sizeof(resetBuf), ", core set no context_reset callback");
+        }
+        gHWSetupDiagnostic += resetBuf;
+    }
+
     return nil;
 }
 
 - (void)runFrame {
     if (gInitialized && gGameLoaded) {
+        if (gUsesHWRender && gGLContext) {
+            // Nothing else in this app touches GLES, so this should
+            // already be current, but making it current is cheap and
+            // guards against something else on this thread having
+            // changed it between frames.
+            [EAGLContext setCurrentContext:gGLContext];
+            // Flycast is built against libretro-common's GLSM ("GL State
+            // Machine"), which normally sits between a full frontend like
+            // RetroArch and the core, replaying a handful of GL defaults
+            // fresh at the top of every retro_run before the core's own
+            // drawing runs. A bare frontend like this one gets none of
+            // that for free and has to set the same defaults by hand:
+            // Provenance's own thin libretro frontend documents exactly
+            // this same gap (PVThinLibretroFrontend.mm) for the same
+            // reason, GLideN64 silently rendering solid-color fills
+            // without it. GL_UNPACK_ALIGNMENT defaults to 4; Dreamcast's
+            // PVR texture formats commonly upload rows that aren't a
+            // multiple of 4 bytes, which some GL drivers reject outright
+            // rather than silently reinterpreting.
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glBindFramebuffer(GL_FRAMEBUFFER, gFBO);
+            glViewport(0, 0, gFBOWidth, gFBOHeight);
+        }
         gCore->run();
     }
 }
@@ -474,6 +766,15 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
         return nil;
     }
     return [NSData dataWithBytes:bytes length:size];
+}
+
+- (nullable NSString *)hwRenderDiagnostics {
+    if (!gUsesHWRender) {
+        return nil;
+    }
+    std::string combined = gHWSetupDiagnostic + "\n" + gHWDiagnostic + "\nthreadedRenderingQueried="
+        + (gThreadedRenderingQueried.load(std::memory_order_relaxed) ? "yes" : "NO");
+    return [NSString stringWithUTF8String:combined.c_str()];
 }
 
 - (BOOL)loadSaveRAM:(NSData *)data {

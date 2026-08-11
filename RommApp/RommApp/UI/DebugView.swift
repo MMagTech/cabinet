@@ -112,6 +112,14 @@ struct DebugView: View {
             }
 
             Section {
+                NavigationLink("Dreamcast go/no-go (Flycast spike)") {
+                    DreamcastSpikeView()
+                }
+            } footer: {
+                Text("Interpreter-only Flycast, GLES hardware rendered. Not a real platform yet, just answering whether the core holds real-time on this phone.")
+            }
+
+            Section {
                 Button {
                     showingRepairBridge = true
                     repairing = true

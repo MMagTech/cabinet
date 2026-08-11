@@ -24,6 +24,12 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
     LibretroCoreIDProSystem NS_SWIFT_NAME(prosystem) = 9,
     LibretroCoreIDPicoDrive NS_SWIFT_NAME(picoDrive) = 10,
     LibretroCoreIDPCSXReARMed NS_SWIFT_NAME(pcsxReARMed) = 11,
+    // Dreamcast go/no-go spike, debug-menu only: interpreter-only SH4
+    // (no dynarec, same no-JIT exception as Saturn/PS1), hardware-rendered
+    // through a real GLES3 context since Flycast has no software renderer.
+    // Not wired into NativePlatform/RomM's launch flow until it proves
+    // out on real hardware.
+    LibretroCoreIDFlycast NS_SWIFT_NAME(flycast) = 12,
 };
 
 @interface LibretroFrame : NSObject
@@ -117,6 +123,11 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 // mutates this buffer inside retro_run, so only touch it from the
 // thread driving runFrame.
 - (nullable NSData *)saveRAM;
+
+// Debug-only: the hardware-render pipeline's own state, for cores like
+// Flycast that have no software renderer to fall back on. nil for every
+// other core, which never sets it. See LibretroCoreIDFlycast.
+- (nullable NSString *)hwRenderDiagnostics;
 
 // Copies bytes into the core's save RAM buffer, the standard libretro
 // frontend contract for restoring battery saves: call it after the game
