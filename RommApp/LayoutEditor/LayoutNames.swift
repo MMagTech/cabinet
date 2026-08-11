@@ -17,6 +17,7 @@ struct LayoutName {
     static let all: [LayoutName] = [
         LayoutName(file: "atari7800", title: "Atari 7800", slugs: "atari7800"),
         LayoutName(file: "default", title: "Fallback pad", slugs: "anything with no fixed digital pad this app can honestly draw"),
+        LayoutName(file: "dreamcast", title: "Dreamcast", slugs: "dc"),
         LayoutName(file: "gamegear", title: "Sega Game Gear", slugs: "gamegear"),
         LayoutName(file: "gb", title: "Game Boy", slugs: "gb, gbc, dmg, and the Light/Pocket revisions"),
         LayoutName(file: "gba", title: "Game Boy Advance", slugs: "gba, SP, Micro"),

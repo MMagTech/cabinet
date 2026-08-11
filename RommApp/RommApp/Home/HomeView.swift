@@ -25,7 +25,9 @@ struct HomeView: View {
     #if os(iOS)
     @State private var directLaunch: DirectLaunch?
     #endif
+    @State private var nativeDirectLaunch: NativeDirectLaunch?
     @State private var preparingResume = false
+    @ObservedObject private var keptStore = KeptGameStore.shared
     @ObservedObject private var quickActions = QuickActionRouter.shared
     @State private var quickPushRecents = false
     @State private var quickPushFavorites = false
@@ -45,6 +47,20 @@ struct HomeView: View {
         let stateToLoad: PlayerView.StateToLoad?
     }
     #endif
+
+    /// The native equivalent of `DirectLaunch`. Separate rather than one
+    /// shared shape with optional fields either player never uses: native
+    /// has no `resumeFromAutosave` concept (that is webview's injected
+    /// autosave script, see `SessionMarker`) and takes state as raw bytes
+    /// rather than `PlayerView.StateToLoad`'s local/remote distinction,
+    /// `NativeLauncher.prepare` already handles the on-device-vs-download
+    /// question before this is ever built.
+    private struct NativeDirectLaunch: Identifiable {
+        let id = UUID()
+        let rom: Rom
+        let core: NativeCore
+        let initialState: Data?
+    }
 
     var body: some View {
         NavigationStack {
@@ -201,6 +217,14 @@ struct HomeView: View {
             }
             #if os(iOS)
             .onChange(of: directLaunch == nil) { _, playerClosed in
+                if playerClosed { Task { await load() } }
+            }
+            #endif
+            #if os(iOS)
+            .fullScreenCover(item: $nativeDirectLaunch) { launch in
+                NativePlayerView(rom: launch.rom, core: launch.core, initialState: launch.initialState)
+            }
+            .onChange(of: nativeDirectLaunch == nil) { _, playerClosed in
                 if playerClosed { Task { await load() } }
             }
             #endif
@@ -465,6 +489,20 @@ struct HomeView: View {
             return
         }
 
+        // Resume honors whichever backend this game actually last played
+        // on, same as the full launch screen already does via
+        // `LaunchChoices.defaultBackend`. Hardcoding webview here used to
+        // silently replay a stale choice for any platform that graduated
+        // to native since it was last played (Dreamcast and N64 both did,
+        // 2026-08-10/11), and risked resuming a native save into the
+        // webview's own player, or the reverse, since the two do not share
+        // a save format.
+        let backend = LaunchChoices.defaultBackend(rom: rom, canonicalSlug: canonicalSlug)
+        if backend == .native, let nativeCore = NativeCore.core(for: rom, canonicalSlug: canonicalSlug) {
+            await beginNativeResume(rom, core: nativeCore)
+            return
+        }
+
         let core = LaunchChoices.defaultCore(rom: rom, canonicalSlug: canonicalSlug, from: cores)
         let firmware = (try? await session.firmware(platformId: rom.platformId)) ?? []
         let firmwareId = LaunchChoices.defaultFirmware(platformId: rom.platformId, from: firmware)?.id
@@ -529,6 +567,44 @@ struct HomeView: View {
         #endif
     }
 
+    /// The native counterpart to the newest-state resolution above, minus
+    /// the `SessionMarker`/`ManualSave` autosave branches: those exist for
+    /// the webview's own injected autosave script, which native has no
+    /// equivalent of, so native resume compares only server states against
+    /// whatever is already on the device, same as `GameLaunchView`'s own
+    /// native launch path does.
+    private func beginNativeResume(_ rom: Rom, core: NativeCore) async {
+        do {
+            try await NativeLauncher.prepare(rom: rom, session: session)
+        } catch {
+            resuming = rom
+            return
+        }
+
+        guard let states = try? await session.states(romId: rom.id) else {
+            resuming = rom
+            return
+        }
+        guard !states.isEmpty else {
+            nativeDirectLaunch = NativeDirectLaunch(rom: rom, core: core, initialState: nil)
+            return
+        }
+        let newest = states.max { ($0.updatedAt ?? "") < ($1.updatedAt ?? "") }!
+
+        // The copy already on this phone first: reading it costs nothing,
+        // and a network round trip only slows down a game already sitting
+        // on the device, matching `GameLaunchView.beginNativePlay`'s own
+        // reasoning.
+        if let local = keptStore.localState(for: rom.id), local.stateId == newest.id {
+            nativeDirectLaunch = NativeDirectLaunch(rom: rom, core: core, initialState: local.data)
+            return
+        }
+        guard let bytes = try? await session.stateContent(newest) else {
+            resuming = rom
+            return
+        }
+        nativeDirectLaunch = NativeDirectLaunch(rom: rom, core: core, initialState: bytes)
+    }
 
     /// `seeAll` is the full list this rail is a preview of. Nil only
     /// transiently, before that destination has finished loading (the

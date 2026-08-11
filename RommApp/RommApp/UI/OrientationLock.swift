@@ -61,6 +61,18 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         QuickAction.register()
+        // @AppStorage only writes its default into UserDefaults the first
+        // time the view holding it is instantiated, but rumbleSetState
+        // reads this key directly from Objective-C++ before Settings has
+        // necessarily ever been opened. Without this, `boolForKey:` on a
+        // key that has never been set returns NO, Foundation's own
+        // default, not this app's, so rumble is silently off until
+        // someone happens to visit Settings once. Register it here
+        // instead, before anything can read it.
+        UserDefaults.standard.register(defaults: ["com.mmagtech.RommApp.rumbleEnabled": true])
+        LibretroFrontend.setRumbleHandler { port, strong, strength in
+            GameControllerManager.shared.fireRumble(port: port, strong: strong, strength: strength)
+        }
         return true
     }
 

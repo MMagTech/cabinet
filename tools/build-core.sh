@@ -151,7 +151,14 @@ else
     # file built for iOS"). Shimming the actual cc/c++ binaries on PATH
     # injects -fno-common into every real compiler invocation while
     # leaving whatever CC/CXX string each Makefile computed untouched.
-    WRAP=$SPIKE/ccwrap
+    # Absolute, not $SPIKE/ccwrap: `make -C` changes the process's own
+    # working directory before running any recipe, and a relative PATH
+    # entry stops resolving to this directory the moment that happens,
+    # falling through silently to the real system compiler with no
+    # error and no -fno-common. Found 2026-08-10 chasing why a fresh
+    # FCEUmm rebuild still shipped 92 unscoped common symbols despite
+    # this wrapper existing and working correctly in isolation.
+    WRAP="$(pwd)/$SPIKE/ccwrap"
     mkdir -p "$WRAP"
     XCRUN_SDK=iphoneos
     [ "$PLATFORM" = tvos ] && XCRUN_SDK=appletvos

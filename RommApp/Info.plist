@@ -18,5 +18,11 @@
 	     Connect. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- Without this, iOS reserves a controller's Guide/Home button for its
+	     own accessory picker instead of delivering it to
+	     GCExtendedGamepad.buttonHome, which is what GameControllerManager
+	     binds to the overlay menu. -->
+	<key>GCSupportsControllerUserInteraction</key>
+	<true/>
 </dict>
 </plist>

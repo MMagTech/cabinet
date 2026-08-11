@@ -24,6 +24,18 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
     LibretroCoreIDProSystem NS_SWIFT_NAME(prosystem) = 9,
     LibretroCoreIDPicoDrive NS_SWIFT_NAME(picoDrive) = 10,
     LibretroCoreIDPCSXReARMed NS_SWIFT_NAME(pcsxReARMed) = 11,
+    // Interpreter-only SH4 (no dynarec, same no-JIT exception as
+    // Saturn/PS1), hardware-rendered through a real GLES3 context since
+    // Flycast has no software renderer. Passed its go/no-go 2026-08-10
+    // and is wired into NativePlatform as of the same week.
+    LibretroCoreIDFlycast NS_SWIFT_NAME(flycast) = 12,
+    // Interpreter-only R4300 (mupen64plus-cpucore core option forced to
+    // pure_interpreter, no dynarec, same no-JIT exception as Flycast),
+    // hardware-rendered through a real GLES3 context via GLideN64, this
+    // core's own default RDP plugin already, forced explicitly rather
+    // than trusted. Passed its go/no-go 2026-08-11 and is wired into
+    // NativePlatform as of the same week.
+    LibretroCoreIDMupen64Plus NS_SWIFT_NAME(mupen64Plus) = 13,
 };
 
 @interface LibretroFrame : NSObject
@@ -42,6 +54,16 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 
 @property (class, readonly) LibretroFrontend *shared;
 
+// Routes a core's rumble event to wherever it should actually land: a
+// connected physical controller's own motor, or the phone's Taptic Engine
+// as a fallback. Set once at launch (RommApp.swift) to
+// GameControllerManager.shared.fireRumble, since that decision genuinely
+// belongs to GameController/CoreHaptics, both Swift-only APIs this
+// Objective-C++ frontend has no direct access to. Never called off the
+// main thread by this class's own callback, so the handler does not need
+// to hop threads itself.
++ (void)setRumbleHandler:(void (^ _Nullable)(NSInteger port, BOOL strong, uint16_t strength))handler;
+
 // Makes this core the one every later call drives. Switching away from a
 // core with a game loaded unloads and deinitializes it first; activating
 // the already-active core changes nothing, so callers can activate
@@ -54,17 +76,27 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 // live here.
 - (void)setCoreOptions:(NSDictionary<NSString *, NSString *> *)options;
 
-// The device type port 0 is told to present, applied right after the game
+// The device type a port is told to present, applied right after the game
 // loads. Not a core variable: Genesis Plus GX picks 3-button versus
 // 6-button through retro_set_controller_port_device, so it cannot ride
 // along in the options dictionary. 0 leaves the core's own default alone.
-- (void)setControllerPortDevice:(unsigned)device;
+// `port` is 0 or 1; callers only set port 1 on platforms with a real
+// second port to plug into.
+- (void)setControllerPortDevice:(unsigned)device port:(NSInteger)port;
 
 // romPath: full path to the game file (zip for arcade, chd for CD systems).
 // systemDirectory: where the core looks up BIOS files by name, the same
 // convention as RetroArch's system directory.
 // Returns nil on success, or an error description on failure.
 - (nullable NSString *)loadGame:(NSString *)romPath systemDirectory:(NSString *)systemDirectory;
+
+// The directory passed to the last -loadGame:systemDirectory: call. Some
+// cores manage their own save files on disk rather than exposing them
+// through RETRO_MEMORY_SAVE_RAM (Flycast's VMU saves are the first case
+// here), so a caller that needs to find those files needs this path;
+// NativeLauncher itself only ever threads it into loadGame, nothing kept
+// it around for later.
+- (nullable NSString *)systemDirectory;
 
 // Runs exactly one emulated frame. Call this from a display-link-driven
 // loop; each call may produce a new video frame and some audio samples.
@@ -91,8 +123,20 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 // RetroPad id constants, which already line up with libretro's
 // RETRO_DEVICE_ID_JOYPAD_* ordering) is currently held. Call once per
 // frame before -runFrame with touch pad and game controller state merged
-// by the caller. Single player/port only, still.
-- (void)setButtonMask:(uint32_t)mask;
+// by the caller. `port` is the local player slot, 0 or 1; each port keeps
+// its own state, so player 2 never aliases onto the twin-stick bits
+// player 1's mask carries. Out-of-range ports are ignored.
+- (void)setButtonMask:(uint32_t)mask port:(NSInteger)port;
+
+// Left analog stick position, -1 to 1 on each axis, y-positive down
+// (matching screen y and libretro's own RETRO_DEVICE_ID_ANALOG_Y
+// convention, confirmed against TouchControlPad's identical sign
+// choice for the touch stick). Call once per frame alongside
+// -setButtonMask:. Dreamcast is the first core here to read this;
+// the digital-only right stick FBNeo's twin-stick games use lives
+// entirely in -setButtonMask:'s own bits instead. Same port rules as
+// -setButtonMask:port:.
+- (void)setAnalogStickX:(float)x y:(float)y port:(NSInteger)port;
 
 // Display rotation the core requested, in 90-degree counter-clockwise
 // steps (0-3). Vertical arcade boards render sideways and rely on the
@@ -117,6 +161,11 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 // mutates this buffer inside retro_run, so only touch it from the
 // thread driving runFrame.
 - (nullable NSData *)saveRAM;
+
+// Debug-only: the hardware-render pipeline's own state, for cores like
+// Flycast that have no software renderer to fall back on. nil for every
+// other core, which never sets it. See LibretroCoreIDFlycast.
+- (nullable NSString *)hwRenderDiagnostics;
 
 // Copies bytes into the core's save RAM buffer, the standard libretro
 // frontend contract for restoring battery saves: call it after the game

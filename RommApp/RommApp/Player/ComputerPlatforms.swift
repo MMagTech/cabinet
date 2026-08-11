@@ -33,9 +33,12 @@ enum ComputerPlatforms {
 }
 
 /// Whether this app can actually put a game on screen: a real gamepad
-/// platform with at least one EmulatorJS core, everything else, keyboard
-/// machines and zero-core platforms like Dreamcast or Flash alike, is
+/// platform with at least one EmulatorJS core or a native core, everything
+/// else, keyboard machines and zero-core platforms like Flash, is
 /// unsupported and offered a download instead of a dead Play button.
+/// Dreamcast used to be the canonical zero-core example here; it stopped
+/// being one 2026-08-10 once a native core existed for it with no webview
+/// core to match, which this check didn't originally account for.
 ///
 /// The single source of truth for that split, shared by the library's
 /// Supported/Unsupported sections and the launch screen's own Play guard,
@@ -43,6 +46,10 @@ enum ComputerPlatforms {
 enum PlatformSupport {
     static func isSupported(canonicalSlug: String) -> Bool {
         guard !ComputerPlatforms.contains(canonicalSlug) else { return false }
-        return !CoreCatalog.cores(for: canonicalSlug).isEmpty
+        if !CoreCatalog.cores(for: canonicalSlug).isEmpty { return true }
+        // isArcade: false, not a real lookup: every arcade slug already
+        // carries webview cores in cores.json and returns true above, so
+        // this only ever matters for non-arcade slugs anyway.
+        return NativeCore.core(bySlug: canonicalSlug, isArcade: false) != nil
     }
 }

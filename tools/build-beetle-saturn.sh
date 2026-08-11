@@ -28,11 +28,13 @@ case "$PLATFORM" in
 ios)
     SDK=$(xcrun -sdk iphoneos --show-sdk-path)
     MINVERSION_FLAG=-miphoneos-version-min=18.0
-    MAKE_PLATFORM=ios-arm64 ;;
+    MAKE_PLATFORM=ios-arm64
+    XCRUN_SDK=iphoneos ;;
 tvos)
     SDK=$(xcrun -sdk appletvos --show-sdk-path)
     MINVERSION_FLAG=-mappletvos-version-min=18.0
-    MAKE_PLATFORM=tvos-arm64 ;;
+    MAKE_PLATFORM=tvos-arm64
+    XCRUN_SDK=appletvos ;;
 *)
     echo "unknown platform: $PLATFORM (expected ios or tvos)" >&2; exit 1 ;;
 esac
@@ -55,7 +57,27 @@ if [ ! -d "$SRC" ]; then
     git clone --depth 1 https://github.com/libretro/beetle-saturn-libretro.git "$SRC"
 fi
 
-make -C "$SRC" platform=$MAKE_PLATFORM -j"$(sysctl -n hw.ncpu)"
+# -fno-common: an uninitialized non-static global compiles as a
+# tentative-definition "common" symbol by default, and this build's own
+# -exported_symbols_list step does not localize commons at all, so a name
+# this core happens to share with another core silently shares one memory
+# address instead of colliding at link time. Shimmed via PATH, absolute,
+# not relative: `make -C` changes the process's own working directory
+# before running any recipe, and a relative PATH entry stops resolving
+# once that happens. See tools/build-core.sh's matching comment; this
+# script predates that one and never got the same fix until it was found
+# missing here entirely (0 commons had never been verified for Saturn).
+WRAP="$(pwd)/$SPIKE/ccwrap"
+mkdir -p "$WRAP"
+real_cc=$(xcrun -sdk "$XCRUN_SDK" -find clang)
+real_cxx=$(xcrun -sdk "$XCRUN_SDK" -find clang++)
+printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cc" > "$WRAP/cc"
+printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cc" > "$WRAP/clang"
+printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cxx" > "$WRAP/c++"
+printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cxx" > "$WRAP/clang++"
+chmod +x "$WRAP"/*
+
+PATH="$WRAP:$PATH" make -C "$SRC" platform=$MAKE_PLATFORM -j"$(sysctl -n hw.ncpu)"
 
 DYLIB=$(find "$SRC" -maxdepth 1 -name '*.dylib' | head -1)
 [ -n "$DYLIB" ] || { echo "no dylib produced" >&2; exit 1; }

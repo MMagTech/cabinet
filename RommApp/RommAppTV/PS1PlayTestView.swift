@@ -59,7 +59,7 @@ struct PS1PlayTestView: View {
             _ = try await NativeLauncher.prepare(rom: rom, session: session)
 
             let renderer = PS1ThreadedRenderer()
-            GameControllerManager.shared.send = { id, pressed in
+            GameControllerManager.shared.send = { _, id, pressed in
                 renderer.setButton(id, down: pressed)
             }
             GameControllerManager.shared.onMenu = { dismiss() }

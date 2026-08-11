@@ -112,6 +112,20 @@ struct LicensesView: View {
             file: "pcsx-rearmed"
         ),
         Entry(
+            id: "flycast",
+            name: "Flycast",
+            role: "Native Dreamcast core",
+            summary: "GPL version 2.",
+            file: "flycast"
+        ),
+        Entry(
+            id: "mupen64plus",
+            name: "mupen64plus-libretro-nx (bundles GLideN64)",
+            role: "Native Nintendo 64 core",
+            summary: "GPL version 2. GLideN64, the RDP plugin this build uses, is bundled inside the same repository and is separately GPL version 2 as well.",
+            file: "mupen64plus"
+        ),
+        Entry(
             id: "libretro-common",
             name: "libretro-common",
             role: "Emulator interface",

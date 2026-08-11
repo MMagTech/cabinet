@@ -17,6 +17,14 @@ struct ControlLayout: Decodable {
     /// gutters flanking the centred canvas. Optional: a layout without them
     /// falls back to portrait items, which will look wrong but still work.
     let landscapeItems: [Item]?
+    /// Extra portrait strip height, as a fraction of the normal strip, for
+    /// pads too crowded to fit in it (N64's stick, d-pad, four face buttons,
+    /// C cluster and three shoulders is a lot more than a two button Game
+    /// Boy pad). Zero for every layout that does not opt in, which keeps
+    /// their coordinates exactly what they have always meant: this only
+    /// grows the strip a layout is normalised against when the layout asks
+    /// for it, so nothing else in the library shifts.
+    let headroom: Double?
 
     func items(landscape: Bool) -> [Item] {
         // Nil coalescing alone would hand back an empty landscape array as
@@ -146,6 +154,8 @@ struct ControlLayout: Decodable {
             name = "ngpc"
         case "atari7800":
             name = "atari7800"
+        case "dc":
+            name = "dreamcast"
         default:
             name = "default"
         }

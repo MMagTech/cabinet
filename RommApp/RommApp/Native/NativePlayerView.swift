@@ -1,6 +1,7 @@
 import SwiftUI
 import MetalKit
 import AVFoundation
+import QuartzCore
 
 /// Fullscreen native-player screen, core-agnostic. Drives retro_run off
 /// MTKView's own display-link-backed draw loop through LibretroFrontend,
@@ -18,9 +19,10 @@ struct NativePlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var renderer = NativePlayerRenderer()
     @ObservedObject private var controllers = GameControllerManager.shared
-    @State private var previousControllerSend: ((Int, Bool) -> Void)?
+    @State private var previousControllerSend: ((Int, Int, Bool) -> Void)?
+    @State private var previousControllerStick: ((Int, Float, Float) -> Void)?
     @State private var previousControllerMenu: (() -> Void)?
-    @State private var previousControllerDisconnect: (() -> Void)?
+    @State private var previousControllerDisconnect: ((Int) -> Void)?
     @State private var menuVisible = false
     @State private var menuStatus: String?
     @State private var menuBusy = false
@@ -95,7 +97,17 @@ struct NativePlayerView: View {
             if down { openMenu() }
             return
         }
-        renderer.setButton(id, down: down)
+        // Touch is always player 1: there is deliberately no second-player
+        // touch layout, so port 0 is the only port the overlay ever drives.
+        renderer.setButton(id, down: down, port: 0)
+    }
+
+    /// `ids` is unused here on purpose: it exists for the webview player's
+    /// per-slot EmulatorJS wiring (see ControlLayout.Item's own doc
+    /// comment), but this app has exactly one native stick, Dreamcast's,
+    /// and LibretroFrontend already knows which analog index it is.
+    private func handleStick(_ ids: [Int], x: Double, y: Double) {
+        renderer.setStick(x: x, y: y, port: 0)
     }
 
     private func openMenu() {
@@ -103,14 +115,20 @@ struct NativePlayerView: View {
         menuStatus = nil
         menuVisible = true
         captureMemoryCard()
+        captureVMUSave()
     }
 
-    /// Whether this session has a battery save to look after. Gated on the
-    /// platform rather than probing the core: PCSX ReARMed is the only
-    /// core whose wiring exports the memory API, and the pause path runs
-    /// often enough that a cheap check matters.
+    /// Whether this session has a RETRO_MEMORY_SAVE_RAM battery save to
+    /// look after through the core directly. PS1 and N64 both export
+    /// this: PCSX ReARMed's memory card and mupen64plus-nx's
+    /// SRAM/EEPROM cartridge save both answer RETRO_MEMORY_SAVE_RAM,
+    /// confirmed for N64 by the go/no-go spike's own console log
+    /// ("Save type: 2") against a real cartridge that saves. Dreamcast's
+    /// VMU save is a real battery save too, just reached a completely
+    /// different way; see `captureVMUSave()`, gated on `platform ==
+    /// .dreamcast` separately rather than folded in here.
     private var hasMemoryCard: Bool {
-        platform == .psx
+        platform == .psx || platform == .n64
     }
 
     /// The launch-time decision of which card goes into the slot: a local
@@ -120,18 +138,30 @@ struct NativePlayerView: View {
     /// device. Offline, or with nothing on the server, whatever is on disk
     /// plays. A game with no card anywhere just starts with the core's
     /// own freshly formatted one.
-    /// Whether a card image holds any actual saves: directory frames 1-15
+    /// Whether a card image holds any actual saves. PS1's 128KB memory
+    /// card has a real directory format worth checking: frames 1-15
     /// carry 0x51/0x52/0x53 in their first byte for in-use blocks, 0xA0
-    /// for free ones (the PS1 memory card spec's block allocation states).
-    /// A freshly formatted card that no game ever wrote must never outrank
-    /// a real card from the server, which is exactly what happened when a
-    /// quick native boot left an empty local card behind and blocked the
-    /// adoption path below.
+    /// for free ones (the PS1 memory card spec's block allocation
+    /// states). A freshly formatted card that no game ever wrote must
+    /// never outrank a real card from the server, which is exactly what
+    /// happened when a quick native boot left an empty local card behind
+    /// and blocked the adoption path below.
+    ///
+    /// N64's SRAM/EEPROM has no comparable directory to check and its
+    /// size varies by cartridge (mupen64plus-nx logged "Save type: 2",
+    /// EEPROM, for the go/no-go title), so a byte-format check would
+    /// either always reject real saves or always accept junk. Non-empty
+    /// and not all zero bytes, the state mupen64plus-nx writes for an
+    /// unused save rather than leaving the file absent, is the only
+    /// signal available.
     private func cardHasSaves(_ card: Data) -> Bool {
-        guard card.count == 128 * 1024 else { return false }
-        return (1...15).contains { block in
-            [0x51, 0x52, 0x53].contains(Int(card[128 * block]))
+        if platform == .psx {
+            guard card.count == 128 * 1024 else { return false }
+            return (1...15).contains { block in
+                [0x51, 0x52, 0x53].contains(Int(card[128 * block]))
+            }
         }
+        return !card.isEmpty && card.contains { $0 != 0 }
     }
 
     private func syncMemoryCardIn() async {
@@ -214,6 +244,58 @@ struct NativePlayerView: View {
         Task { await uploadMemoryCard(data) }
     }
 
+    /// Dreamcast only, and structurally different from
+    /// `captureMemoryCard()`: Flycast never exposes its VMU save through
+    /// RETRO_MEMORY_SAVE_RAM at all (confirmed against its own
+    /// retro_get_memory_data, which only ever answers
+    /// RETRO_MEMORY_SYSTEM_RAM), it writes a real file straight into the
+    /// system directory instead. That file's name comes from the disc's
+    /// own internal game id, something this app has no way to read in
+    /// advance, so this looks for whichever file ends the way Flycast's
+    /// own VMU path naming always does rather than a name this code
+    /// picks. Upload only for now, capture and back up to RomM; loading
+    /// a previously saved card back in on a fresh directory needs
+    /// knowing that filename before Flycast invents it, which needs
+    /// parsing the disc's own IP.BIN game id ourselves, not solved yet.
+    private func captureVMUSave() {
+        guard platform == .dreamcast, renderer.paused else { return }
+        guard let systemDir = LibretroFrontend.shared.systemDirectory() else {
+            print("[vmu] no systemDirectory")
+            return
+        }
+        // Same "dc/" subdirectory the BIOS needed (see stageFirmware's
+        // own comment): confirmed 2026-08-11 by pulling the app's real
+        // data container over `devicectl device copy from` and finding
+        // the actual file at workDir/dc/vmu_save_A1.bin after a real
+        // in-game save, not at the system directory's own root the way
+        // this scan first assumed.
+        let scanDir = URL(fileURLWithPath: systemDir).appendingPathComponent("dc", isDirectory: true).path
+        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: scanDir) else {
+            print("[vmu] could not list \(scanDir)")
+            return
+        }
+        print("[vmu] scanning \(scanDir): \(entries)")
+        // No leading underscore: PerGameVmu names the file
+        // "<gameId>_vmu_save_A1.bin", but Flycast falls back to the
+        // bare "vmu_save_A1.bin" (no separator at all) whenever the
+        // disc's own game id isn't available yet at the moment it
+        // names the file.
+        guard let vmuName = entries.first(where: { $0.hasSuffix("vmu_save_A1.bin") }),
+              let data = try? Data(contentsOf: URL(fileURLWithPath: scanDir).appendingPathComponent(vmuName))
+        else {
+            print("[vmu] no *vmu_save_A1.bin match")
+            return
+        }
+        guard data != lastCardData else { return }
+        lastCardData = data
+        MemoryCardStore.shared.storeSnapshot(romId: rom.id, data: data)
+        DiagnosticsLog.record(
+            context: "VMU save", message: "Found \(vmuName), \(data.count) bytes, uploading.",
+            romVersion: session.serverVersion
+        )
+        Task { await uploadMemoryCard(data) }
+    }
+
     private func uploadMemoryCard(_ data: Data) async {
         do {
             // The Cabinet marker keeps this row's filename distinct from
@@ -258,23 +340,34 @@ struct NativePlayerView: View {
                     ZStack {
                         MetalGameView(renderer: renderer)
                         if showsControls {
-                            TouchControlPad(items: layoutItems(landscape: true), send: handleInput, system: controlLayout.system, opacity: controlOpacity)
+                            TouchControlPad(items: layoutItems(landscape: true), send: handleInput, sendStick: handleStick, system: controlLayout.system, opacity: controlOpacity)
                         }
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .background(Color.black)
                 } else {
-                    // Portrait: the pad's items are normalised against a bottom
-                    // strip, not the full screen, so the canvas and pad split
-                    // the screen rather than overlap. Matches PlayerView's
-                    // .bottomStrip case exactly, same strip height. The canvas
-                    // stays below the top safe area so the island never eats
-                    // the picture; only the strip runs to the screen's edge.
-                    VStack(spacing: 0) {
+                    // Portrait: the pad's items are normalised against a
+                    // bottom strip, not the full screen, so the canvas keeps
+                    // exactly the height it always has, matching PlayerView's
+                    // .bottomStrip case exactly, same strip height. The
+                    // canvas stays below the top safe area so the island
+                    // never eats the picture.
+                    //
+                    // The pad itself can be taller than the strip it is
+                    // normalised against: `headroom` (zero for every layout
+                    // that does not ask for it, so this reproduces the old
+                    // plain split pixel for pixel) grows the pad upward from
+                    // the bottom edge to overlap the canvas's own last bit,
+                    // for a pad too crowded to fit the strip alone. Opacity
+                    // keeps the overlap legible, the same deal landscape
+                    // already makes everywhere.
+                    let padHeight = controlStripHeight * (1 + (controlLayout.headroom ?? 0))
+                    ZStack(alignment: .top) {
                         MetalGameView(renderer: renderer)
                             .frame(height: max(geometry.size.height - controlStripHeight, 0))
-                        TouchControlPad(items: layoutItems(landscape: false), send: handleInput, system: controlLayout.system, opacity: controlOpacity)
-                            .frame(height: controlStripHeight)
+                        TouchControlPad(items: layoutItems(landscape: false), send: handleInput, sendStick: handleStick, system: controlLayout.system, opacity: controlOpacity)
+                            .frame(height: padHeight)
+                            .frame(maxHeight: .infinity, alignment: .bottom)
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
                 }
@@ -312,16 +405,29 @@ struct NativePlayerView: View {
             // and locks mid-game.
             UIApplication.shared.isIdleTimerDisabled = true
             previousControllerSend = GameControllerManager.shared.send
+            previousControllerStick = GameControllerManager.shared.sendStick
             previousControllerMenu = GameControllerManager.shared.onMenu
             previousControllerDisconnect = GameControllerManager.shared.onDisconnect
-            GameControllerManager.shared.send = { [weak renderer] id, down in
-                renderer?.setButton(id, down: down)
+            GameControllerManager.shared.send = { [weak renderer] player, id, down in
+                renderer?.setButton(id, down: down, port: player)
+            }
+            // The continuous form, alongside the digitized d-pad bits
+            // .send already carries: N64 and Dreamcast read this, every
+            // other platform simply never asks LibretroFrontend for it.
+            GameControllerManager.shared.sendStick = { [weak renderer] player, x, y in
+                renderer?.setStick(x: Double(x), y: Double(y), port: player)
             }
             GameControllerManager.shared.onMenu = { openMenu() }
             // Nobody is holding anything after a disconnect, so pause into
             // the menu rather than letting the game run on unattended. Same
             // reasoning as the webview player's pauseGame on disconnect.
-            GameControllerManager.shared.onDisconnect = { openMenu() }
+            // Player 1 losing their pad stops the game, since the person
+            // who can drive the menu is now holding nothing. Player 2
+            // dropping leaves player 1 playing: pausing on them would
+            // interrupt a game the remaining player can still control.
+            GameControllerManager.shared.onDisconnect = { player in
+                if player == 0 { openMenu() }
+            }
             renderer.pendingState = initialState
             // Held before the first frame ever runs, so a PS1 game cannot
             // boot past its own card check while the card decision is
@@ -333,6 +439,7 @@ struct NativePlayerView: View {
         .onDisappear {
             UIApplication.shared.isIdleTimerDisabled = false
             GameControllerManager.shared.send = previousControllerSend
+            GameControllerManager.shared.sendStick = previousControllerStick
             GameControllerManager.shared.onMenu = previousControllerMenu
             GameControllerManager.shared.onDisconnect = previousControllerDisconnect
             // The session POST is what stamps last played; the heartbeat
@@ -354,6 +461,7 @@ struct NativePlayerView: View {
                 NativeSessionMarker.recordBackgrounded()
                 renderer.paused = true
                 captureMemoryCard()
+                captureVMUSave()
             } else if phase == .active && !menuVisible {
                 renderer.paused = false
             }

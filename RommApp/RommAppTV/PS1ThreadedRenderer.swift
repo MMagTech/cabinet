@@ -130,7 +130,7 @@ final class PS1ThreadedRenderer: NSObject, ObservableObject, MTKViewDelegate {
             let mask = heldButtons.reduce(into: UInt32(0)) { $0 |= (1 << $1) }
             buttonLock.unlock()
 
-            frontend.setButtonMask(mask)
+            frontend.setButtonMask(mask, port: 0)
             frontend.runFrame()
 
             if let audioData = frontend.drainAudio() {

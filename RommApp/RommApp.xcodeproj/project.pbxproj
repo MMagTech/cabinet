@@ -57,12 +57,16 @@
 				Native/FBNeo/libfbneo_libretro_ios.a,
 				Native/FCEUmm/FCEUmmCore.mm,
 				Native/FCEUmm/libfceumm_ios.a,
+				Native/Flycast/FlycastCore.mm,
+				Native/Flycast/libflycast_ios.a,
 				Native/Gambatte/GambatteCore.mm,
 				Native/Gambatte/libgambatte_ios.a,
 				Native/GenesisPlusGX/GenesisPlusGXCore.mm,
 				Native/GenesisPlusGX/libgenesis_plus_gx_ios.a,
 				Native/MGBA/libmgba_ios.a,
 				Native/MGBA/MGBACore.mm,
+				Native/Mupen64Plus/libmupen64plus_ios.a,
+				Native/Mupen64Plus/N64Core.mm,
 				Native/NativePlayerView.swift,
 				Native/PCSXReARMed/libpcsx_rearmed_ios.a,
 				Native/PicoDrive/libpicodrive_ios.a,
@@ -96,6 +100,7 @@
 				Controls/TouchControlPad.swift,
 				Resources/ControlLayouts/atari7800.json,
 				Resources/ControlLayouts/default.json,
+				Resources/ControlLayouts/dreamcast.json,
 				Resources/ControlLayouts/gamegear.json,
 				Resources/ControlLayouts/gb.json,
 				Resources/ControlLayouts/gba.json,
@@ -371,6 +376,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
@@ -517,6 +523,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/MGBA",
 					"$(PROJECT_DIR)/RommApp/Native/PicoDrive",
 					"$(PROJECT_DIR)/RommApp/Native/PCSXReARMed",
+					"$(PROJECT_DIR)/RommApp/Native/Flycast",
 				);
 				MARKETING_VERSION = 0.1;
 				OTHER_LDFLAGS = (
@@ -594,6 +601,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/MGBA",
 					"$(PROJECT_DIR)/RommApp/Native/PicoDrive",
 					"$(PROJECT_DIR)/RommApp/Native/PCSXReARMed",
+					"$(PROJECT_DIR)/RommApp/Native/Flycast",
 				);
 				MARKETING_VERSION = 0.1;
 				OTHER_LDFLAGS = (
@@ -683,6 +691,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;

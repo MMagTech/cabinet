@@ -62,6 +62,12 @@ struct GameLaunchView: View {
     /// interrupted run, in which case the game just boots normally.
     @State private var stateToLoad: PlayerView.StateToLoad?
     @State private var preparingPlay = false
+    /// The native download's fraction complete, shown as a percentage on
+    /// the launch button in place of an indeterminate spinner: a bare
+    /// spinner gives no signal on a large title, indistinguishable from a
+    /// stall, on a phone connection that can take a while for a multi-GB
+    /// PS1 disc.
+    @State private var downloadProgress: Double = 0
     @State private var playError: String?
     /// Set when the last session of this game died without a clean exit and
     /// a fresh local autosave exists: iOS took the game, so getting back to
@@ -344,19 +350,25 @@ struct GameLaunchView: View {
     /// decides the library's Supported/Unsupported split. Reused here so
     /// Play cannot stay live for a platform the library already calls
     /// unsupported, the zero-core dead end this download feature replaces.
+    /// Calls through rather than re-deriving `!isComputerPlatform &&
+    /// !cores.isEmpty` locally: that copy silently fell out of sync with
+    /// the real check when it grew native-core awareness, exactly the
+    /// class of bug a single source of truth is supposed to prevent.
     private var isPlatformSupported: Bool {
-        !isComputerPlatform && !cores.isEmpty
+        PlatformSupport.isSupported(canonicalSlug: canonicalSlug)
     }
 
     /// Whether a real Web player / Native picker is offered, matching
     /// `LaunchChoices.defaultBackend`'s own rule: any platform with a
-    /// native core except Saturn, whose webview core is confirmed broken
-    /// rather than merely untested. Everywhere this is true, `playerCard`
-    /// replaces the standalone `coreCard`/`firmwareCard` pair, since those
-    /// two only exist to configure the webview for games with no choice
-    /// to make about which player runs them at all.
+    /// native core except Saturn, whose webview core is confirmed broken,
+    /// and Dreamcast, which has no webview core at all. Everywhere this
+    /// is true, `playerCard` replaces the standalone
+    /// `coreCard`/`firmwareCard` pair, since those two only exist to
+    /// configure the webview for games with no choice to make about
+    /// which player runs them at all.
     private var showsPlayerPicker: Bool {
-        NativeCore.core(for: rom, canonicalSlug: canonicalSlug) != nil && canonicalSlug != "saturn"
+        NativeCore.core(for: rom, canonicalSlug: canonicalSlug) != nil
+            && canonicalSlug != "saturn" && canonicalSlug != "dc"
     }
 
     /// One visible action, no exceptions: a game with the keep toggle
@@ -608,7 +620,8 @@ struct GameLaunchView: View {
             Task { await beginPlay() }
         } label: {
             if preparingPlay {
-                ProgressView()
+                Text("\(Int(downloadProgress * 100))%")
+                    .font(.headline)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 15)
             } else {
@@ -656,9 +669,12 @@ struct GameLaunchView: View {
     /// black screen with no explanation.
     private func beginNativePlay() async {
         preparingPlay = true
+        downloadProgress = 0
         defer { preparingPlay = false }
         do {
-            try await NativeLauncher.prepare(rom: rom, session: session)
+            try await NativeLauncher.prepare(rom: rom, session: session) { fraction in
+                downloadProgress = fraction
+            }
             if let selectedState {
                 // The local copy first, not as an offline fallback but
                 // as the normal path: when it is the same state, reading
@@ -976,8 +992,8 @@ struct GameLaunchView: View {
     private var playerCard: some View {
         LaunchCard(title: "Player", systemImage: "play.rectangle.on.rectangle") {
             Picker("Player", selection: $selectedBackend) {
-                Text("Web player").tag(LaunchChoices.PlayerBackend.webview)
-                Text("Native (beta)").tag(LaunchChoices.PlayerBackend.native)
+                Text("Web").tag(LaunchChoices.PlayerBackend.webview)
+                Text("Native").tag(LaunchChoices.PlayerBackend.native)
             }
             .pickerStyle(.segmented)
 

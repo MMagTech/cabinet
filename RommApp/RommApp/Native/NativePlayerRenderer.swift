@@ -73,9 +73,10 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     /// game controller. Both already speak the same id space (see
     /// ControllerBindings.swift's RetroPad constants), so merging is just
     /// a union; FBNeo only needs "is this id down right now" each frame.
-    private var heldButtons: Set<Int> = []
+    private var heldButtons: [Set<Int>] = [[], []]
 
-    func setButton(_ id: Int, down: Bool) {
+    func setButton(_ id: Int, down: Bool, port: Int) {
+        guard heldButtons.indices.contains(port) else { return }
         // 0...13 is the standard joypad; 20...23 is the twin-stick second
         // joystick's four directions (see ArcadeLayout.secondStick and
         // GameControllerManager.stick2), which LibretroFrontend answers
@@ -84,10 +85,19 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         // RetroPad.overlay (-1) isn't a game input at all.
         guard (0...13).contains(id) || (20...23).contains(id) else { return }
         if down {
-            heldButtons.insert(id)
+            heldButtons[port].insert(id)
         } else {
-            heldButtons.remove(id)
+            heldButtons[port].remove(id)
         }
+    }
+
+    /// Dreamcast's real analog stick, the one input in this app that is
+    /// a continuous value rather than a RetroPad button id. Forwarded
+    /// straight through to `LibretroFrontend`, which is the only place
+    /// that knows how to fold it into RETRO_DEVICE_ANALOG reads; nothing
+    /// about it lives in `heldButtons`.
+    func setStick(x: Double, y: Double, port: Int) {
+        LibretroFrontend.shared.setAnalogStickX(Float(x), y: Float(y), port: port)
     }
 
     func attach(to view: MTKView) {
@@ -188,8 +198,10 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
                     romVersion: nil
                 )
             }
-            let mask = heldButtons.reduce(into: UInt32(0)) { $0 |= (1 << $1) }
-            frontend.setButtonMask(mask)
+            for (port, held) in heldButtons.enumerated() {
+                let mask = held.reduce(into: UInt32(0)) { $0 |= (1 << $1) }
+                frontend.setButtonMask(mask, port: port)
+            }
             frontend.runFrame()
             framesRun += 1
             if let state = pendingState, framesRun > 60 {

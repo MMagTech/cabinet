@@ -290,7 +290,8 @@ final class ControlPadView: UIView {
             let tint = theme.tint(system: system, input: item.input)
             switch item.kind {
             case .dpad:
-                drawDpad(in: frame, inputs: item.inputs ?? [])
+                let dpadTint = theme.tint(system: system, input: item.inputs?.first)
+                drawDpad(in: frame, inputs: item.inputs ?? [], label: item.label, tint: dpadTint)
             case .button:
                 drawRoundButton(
                     in: frame, label: item.label, tint: tint,
@@ -359,7 +360,7 @@ final class ControlPadView: UIView {
         )
     }
 
-    private func drawDpad(in frame: CGRect, inputs: [Int]) {
+    private func drawDpad(in frame: CGRect, inputs: [Int], label: String? = nil, tint: UIColor? = nil) {
         let armThickness = frame.width * 0.34
         let cross = UIBezierPath()
 
@@ -380,12 +381,22 @@ final class ControlPadView: UIView {
         cross.append(UIBezierPath(roundedRect: vertical, cornerRadius: 6))
 
         let anyActive = inputs.contains(where: pressed.contains)
-        let colors = style(active: anyActive)
+        let colors = style(active: anyActive, tint: tint)
         colors.fill.setFill()
         cross.fill()
         colors.stroke.setStroke()
         cross.lineWidth = 1.5
         cross.stroke()
+
+        // A cluster distinct enough from the real d-pad to name (N64's C
+        // buttons, tinted yellow) gets its label centred over the cross,
+        // rather than one arm, since no single direction owns it.
+        if let label {
+            drawLabel(
+                label, in: frame, fontSize: armThickness * 0.55,
+                color: labelColor(tint: tint)
+            )
+        }
 
         // A subtle nub on the pressed direction, so the pad reads as alive.
         guard inputs.count == 4 else { return }
