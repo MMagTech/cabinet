@@ -13,6 +13,11 @@ playing last, so you are back in the game in one tap.
 
 ## What you get
 
+**Real emulation, not a wrapped browser.** Most systems run on emulator cores
+built directly into the app, not a webview pointed at RomM's own player. Full
+speed, full screen, and no connection needed once a game is kept on your
+phone.
+
 **Straight back into your game.** No menus to navigate. The app opens where you
 left off.
 
@@ -21,7 +26,7 @@ the phone you are holding and the way you are holding it. Diagonals work.
 Buttons are easier to hit than they look.
 
 **Your controller just works.** Connect any controller your iPhone supports and
-play.
+play. Pair a second one for couch co-op, no setup required.
 
 **Play anywhere.** Most systems can be kept on your phone and played with no
 signal and no server at all. On a plane, on the subway, anywhere.
@@ -34,10 +39,14 @@ memory card.
 
 ## What you can play
 
-Arcade, PlayStation, Saturn, SNES, NES, Nintendo 64, Game Boy, Game Boy Color,
-Game Boy Advance, DS, Genesis, Sega CD, 32X, Master System, Game Gear, PSP,
-TurboGrafx-16, TurboGrafx-CD, Neo Geo Pocket Color, Atari 7800, Lynx,
-WonderSwan, 3DO and more.
+**Native, full speed, works offline once kept on your phone:** Arcade,
+PlayStation, Saturn, Dreamcast, Nintendo 64, SNES, NES, Game Boy, Game Boy
+Color, Game Boy Advance, Genesis, Sega CD, 32X, Master System, Game Gear,
+TurboGrafx-16, TurboGrafx-CD, Neo Geo Pocket Color, Atari 7800.
+
+**Everything else your RomM server supports** — DS, PSP, Lynx, WonderSwan,
+3DO and more — plays through RomM's own web player inside the app. Those
+need a connection.
 
 ## What you need
 
