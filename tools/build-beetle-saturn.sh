@@ -31,7 +31,27 @@ if [ ! -d "$SRC" ]; then
     git clone --depth 1 https://github.com/libretro/beetle-saturn-libretro.git "$SRC"
 fi
 
-make -C "$SRC" platform=ios-arm64 -j"$(sysctl -n hw.ncpu)"
+# -fno-common: an uninitialized non-static global compiles as a
+# tentative-definition "common" symbol by default, and this build's own
+# -exported_symbols_list step does not localize commons at all, so a name
+# this core happens to share with another core silently shares one memory
+# address instead of colliding at link time. Shimmed via PATH, absolute,
+# not relative: `make -C` changes the process's own working directory
+# before running any recipe, and a relative PATH entry stops resolving
+# once that happens. See tools/build-core.sh's matching comment; this
+# script predates that one and never got the same fix until it was found
+# missing here entirely (0 commons had never been verified for Saturn).
+WRAP="$(pwd)/$SPIKE/ccwrap"
+mkdir -p "$WRAP"
+real_cc=$(xcrun -sdk iphoneos -find clang)
+real_cxx=$(xcrun -sdk iphoneos -find clang++)
+printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cc" > "$WRAP/cc"
+printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cc" > "$WRAP/clang"
+printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cxx" > "$WRAP/c++"
+printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cxx" > "$WRAP/clang++"
+chmod +x "$WRAP"/*
+
+PATH="$WRAP:$PATH" make -C "$SRC" platform=ios-arm64 -j"$(sysctl -n hw.ncpu)"
 
 cc -arch arm64 -isysroot "$SDK" -miphoneos-version-min=18.0 -O2 \
     -I"$SRC" -c "$SPIKE/bsat_wrapper.c" -o "$SPIKE/bsat_wrapper.o"
