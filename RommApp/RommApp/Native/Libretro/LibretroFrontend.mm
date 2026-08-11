@@ -640,8 +640,21 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     // not only when the core itself changes.
     if (gInitialized && gGameLoaded) {
         gCore->unload_game();
-        gCore->deinit();
-        gInitialized = false;
+        // FBNeo is the one exception to "deinit before every fresh init":
+        // a second retro_deinit call in the same process (its own
+        // BurnLibExit) hits a bad free and takes the whole app down,
+        // confirmed on a real device 2026-08-11 by playing an arcade game,
+        // quitting, and playing the same or another one again without
+        // leaving the app. FBNeo was never actually run through this
+        // same-core-relaunch path when the full-deinit fix above was
+        // written and verified against Genesis Plus GX and Beetle PCE
+        // Fast; it does not tolerate what those two needed. Plain
+        // unload_game without deinit is what this whole block did before
+        // that fix, and is still what FBNeo gets.
+        if (gCoreID != LibretroCoreIDFBNeo) {
+            gCore->deinit();
+            gInitialized = false;
+        }
     }
     gGameLoaded = false;
 
