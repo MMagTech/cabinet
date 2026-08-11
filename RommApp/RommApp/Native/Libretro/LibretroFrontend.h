@@ -76,11 +76,13 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 // live here.
 - (void)setCoreOptions:(NSDictionary<NSString *, NSString *> *)options;
 
-// The device type port 0 is told to present, applied right after the game
+// The device type a port is told to present, applied right after the game
 // loads. Not a core variable: Genesis Plus GX picks 3-button versus
 // 6-button through retro_set_controller_port_device, so it cannot ride
 // along in the options dictionary. 0 leaves the core's own default alone.
-- (void)setControllerPortDevice:(unsigned)device;
+// `port` is 0 or 1; callers only set port 1 on platforms with a real
+// second port to plug into.
+- (void)setControllerPortDevice:(unsigned)device port:(NSInteger)port;
 
 // romPath: full path to the game file (zip for arcade, chd for CD systems).
 // systemDirectory: where the core looks up BIOS files by name, the same
@@ -121,8 +123,10 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 // RetroPad id constants, which already line up with libretro's
 // RETRO_DEVICE_ID_JOYPAD_* ordering) is currently held. Call once per
 // frame before -runFrame with touch pad and game controller state merged
-// by the caller. Single player/port only, still.
-- (void)setButtonMask:(uint32_t)mask;
+// by the caller. `port` is the local player slot, 0 or 1; each port keeps
+// its own state, so player 2 never aliases onto the twin-stick bits
+// player 1's mask carries. Out-of-range ports are ignored.
+- (void)setButtonMask:(uint32_t)mask port:(NSInteger)port;
 
 // Left analog stick position, -1 to 1 on each axis, y-positive down
 // (matching screen y and libretro's own RETRO_DEVICE_ID_ANALOG_Y
@@ -130,8 +134,9 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 // choice for the touch stick). Call once per frame alongside
 // -setButtonMask:. Dreamcast is the first core here to read this;
 // the digital-only right stick FBNeo's twin-stick games use lives
-// entirely in -setButtonMask:'s own bits instead.
-- (void)setAnalogStickX:(float)x y:(float)y;
+// entirely in -setButtonMask:'s own bits instead. Same port rules as
+// -setButtonMask:port:.
+- (void)setAnalogStickX:(float)x y:(float)y port:(NSInteger)port;
 
 // Display rotation the core requested, in 90-degree counter-clockwise
 // steps (0-3). Vertical arcade boards render sideways and rely on the

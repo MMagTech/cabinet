@@ -20,43 +20,84 @@ final class GameControllerManager: ObservableObject {
     /// whichever screen attached last would silently steal every press.
     static let shared = GameControllerManager()
 
+    /// Local players. Two, deliberately: player 2 is Bluetooth only, there
+    /// is no second-player touch layout, and no system here supports more
+    /// than two on a single device in a way worth building for.
+    static let maxPlayers = 2
+
+    /// Everything that belongs to one player's controller. Kept per slot
+    /// rather than as manager-wide fields so the two pads are genuinely
+    /// independent: one disconnecting must not release the other's held
+    /// buttons, and two different controller models each need their own
+    /// bindings resolved from their own vendor name.
+    private final class Slot {
+        weak var controller: GCController?
+        weak var pad: GCExtendedGamepad?
+        var name: String?
+        var bindings: [String: Int] = ControllerBindings.defaults
+        var pressedInputs: Set<Int> = []
+        var triggerDown: [String: Bool] = [:]
+        var hapticEngines: [GCHapticsLocality: CHHapticEngine] = [:]
+        var availableButtons: [String] = []
+        /// Raw element names currently held, tracked independent of any
+        /// RetroPad binding: the hotkey combo needs to know about L3/R3
+        /// even though neither is bound to a game input by default.
+        var heldElementNames: Set<String> = []
+        /// True from the moment both hotkey buttons are down until either
+        /// releases, so a held combo opens the menu once, not once per
+        /// input event for as long as it stays held.
+        var hotkeyArmed = false
+    }
+
     private var started = false
-    /// A controller is attached and driving the game.
+    private var slots: [Slot?] = Array(repeating: nil, count: GameControllerManager.maxPlayers)
+
+    /// A controller is attached and driving the game. True when any slot is
+    /// filled, so existing single-player callers keep their meaning.
     @Published private(set) var isConnected = false
     /// The attached controller's name, for showing which pad is in charge.
+    /// Player 1's, since that is the pad every existing screen means.
     @Published private(set) var controllerName: String?
-    /// Inputs currently held, so disconnect can release them. Deliberately
-    /// not @Published: it changes on every button edge, and publishing it
-    /// re-rendered PlayerView on every press mid game. Nothing displays it
-    /// since the controller test screen was removed.
-    private var pressedInputs: Set<Int> = []
-    /// Every button this controller reports, by element name, so a remap
-    /// screen can show what actually exists rather than what was assumed.
+    /// Names by player slot, nil where no controller is attached, so a
+    /// screen can show both players rather than only whoever connected
+    /// first.
+    @Published private(set) var connectedNames: [String?] = Array(repeating: nil, count: GameControllerManager.maxPlayers)
+    /// Every button player 1's controller reports, by element name, so a
+    /// remap screen can show what actually exists rather than what was
+    /// assumed. Remapping stays a player-1 concern.
     @Published private(set) var availableButtons: [String] = []
     /// Set when a controller is paired but does not present a standard
     /// gamepad, which no app can drive and no remapping can rescue.
     @Published private(set) var unsupportedController: String?
 
-    /// Sends a RetroPad input id and its state to the emulator.
-    var send: ((Int, Bool) -> Void)?
+    /// Sends a player slot, a RetroPad input id, and its state to the
+    /// emulator. The slot is the core port for native play and the
+    /// EmulatorJS player index for webview play; both count from 0.
+    var send: ((Int, Int, Bool) -> Void)?
+    /// A player's left stick position, x and y each -1 to 1, alongside the
+    /// digitized d-pad bits `send` already carries: only Dreamcast and N64
+    /// read this continuous form (RETRO_DEVICE_INDEX_ANALOG_LEFT), the rest
+    /// simply never ask for it, so this fires unconditionally rather than
+    /// needing to know per platform which cores want it. Was previously
+    /// wired only from the touch overlay's stick, which is why a physical
+    /// controller's left stick never drove N64 movement at all: N64 mostly
+    /// ignores the digitized d-pad bits sent already, and needs the real
+    /// analog value to move.
+    var sendStick: ((Int, Float, Float) -> Void)?
     /// Called when the pad's overlay button is pressed.
     var onMenu: (() -> Void)?
     /// Called when a controller disconnects mid game, so play can pause
     /// rather than continuing untouched while nobody is holding anything.
-    var onDisconnect: (() -> Void)?
+    /// Carries the slot that dropped: losing player 2's pad is a different
+    /// event from losing player 1's, and saying "controller disconnected"
+    /// for both reads as player 1's problem either way.
+    var onDisconnect: ((Int) -> Void)?
 
     /// While set, presses are reported here instead of driving the game, so
     /// the remap screen can learn which physical button someone pressed.
     var captureHandler: ((String) -> Void)?
 
     private var observers: [NSObjectProtocol] = []
-    private var triggerDown: [String: Bool] = [:]
-    private weak var pad: GCExtendedGamepad?
-    /// Kept alongside `pad` for rumble: `GCExtendedGamepad` carries no
-    /// haptics API of its own, only the owning `GCController` does.
-    private weak var controller: GCController?
-    private var bindings: [String: Int] = ControllerBindings.defaults
-    private var hapticEngines: [GCHapticsLocality: CHHapticEngine] = [:]
 
     var storageKey: String { controllerName ?? "unknown" }
 
@@ -73,18 +114,23 @@ final class GameControllerManager: ObservableObject {
 
         observers.append(NotificationCenter.default.addObserver(
             forName: .GCControllerDidDisconnect, object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in self?.handleDisconnect() }
+        ) { [weak self] note in
+            let controller = note.object as? GCController
+            Task { @MainActor in self?.handleDisconnect(controller) }
         })
 
-        if let existing = GCController.controllers().first(where: { !Self.isSimulatorPhantom($0) }) {
+        // Connection order decides the slot, and every already-paired pad
+        // is attached, not just the first: a controller connected before
+        // the app launched is as much player 2 as one connected after.
+        for existing in GCController.controllers() where !Self.isSimulatorPhantom(existing) {
             attach(existing)
         }
     }
 
-    /// Rebuilds handlers after the remap screen changes a binding.
+    /// Rebuilds handlers after the remap screen changes a binding. Player 1
+    /// only, matching where remapping is offered.
     func reloadBindings() {
-        guard let controller = GCController.controllers().first else { return }
+        guard let controller = slots.first??.controller else { return }
         attach(controller)
     }
 
@@ -105,31 +151,49 @@ final class GameControllerManager: ObservableObject {
         #endif
     }
 
+    /// The slot a controller already occupies, or the lowest free one.
+    /// Lowest-free is what makes slots stable across a disconnect: if
+    /// player 1 drops, player 2 keeps slot 1 and stays player 2 rather
+    /// than being silently promoted mid-game, and the next pad to connect
+    /// takes the empty slot 0.
+    private func slotIndex(for controller: GCController) -> Int? {
+        if let existing = slots.firstIndex(where: { $0?.controller === controller }) {
+            return existing
+        }
+        return slots.firstIndex(where: { $0 == nil })
+    }
+
     private func attach(_ controller: GCController) {
         guard !Self.isSimulatorPhantom(controller) else { return }
         guard let gamepad = controller.extendedGamepad else {
             // Paired and visible to iOS, but not as a standard gamepad. Say
             // so rather than appearing to see nothing at all, because the
             // two look identical from the outside and have different fixes.
+            // The Siri Remote and other non-extended profiles land here on
+            // purpose: nothing here is playable on them.
             unsupportedController = controller.vendorName ?? "This controller"
-            isConnected = false
             return
         }
+        // Every slot full: a third pad is simply not a player. Not an
+        // error worth surfacing, there is nowhere for it to go.
+        guard let index = slotIndex(for: controller) else { return }
         unsupportedController = nil
 
-        pad = gamepad
-        self.controller = controller
-        hapticEngines = [:]
-        isConnected = true
-        controllerName = controller.vendorName
-        bindings = ControllerBindings.effective(for: controller.vendorName ?? "unknown")
+        let slot = slots[index] ?? Slot()
+        slots[index] = slot
+        slot.pad = gamepad
+        slot.controller = controller
+        slot.name = controller.vendorName
+        slot.hapticEngines = [:]
+        slot.bindings = ControllerBindings.effective(for: controller.vendorName ?? "unknown")
+        publishConnection()
 
         // Directions come from the d-pad and the left stick, always, with no
         // binding involved. They are never the thing that goes missing.
-        gamepad.dpad.up.pressedChangedHandler = direction(RetroPad.up)
-        gamepad.dpad.down.pressedChangedHandler = direction(RetroPad.down)
-        gamepad.dpad.left.pressedChangedHandler = direction(RetroPad.left)
-        gamepad.dpad.right.pressedChangedHandler = direction(RetroPad.right)
+        gamepad.dpad.up.pressedChangedHandler = direction(RetroPad.up, player: index)
+        gamepad.dpad.down.pressedChangedHandler = direction(RetroPad.down, player: index)
+        gamepad.dpad.left.pressedChangedHandler = direction(RetroPad.left, player: index)
+        gamepad.dpad.right.pressedChangedHandler = direction(RetroPad.right, player: index)
         // Handlers fire on the main queue (GCController's default
         // handlerQueue), so they call straight through. An earlier version
         // wrapped every edge, and every 120Hz stick sample, in its own
@@ -137,7 +201,7 @@ final class GameControllerManager: ObservableObject {
         // allocation and a runloop deferral per input, pure added latency
         // on the path where latency matters most.
         gamepad.leftThumbstick.valueChangedHandler = { [weak self] _, x, y in
-            MainActor.assumeIsolated { self?.stick(x: x, y: y) }
+            MainActor.assumeIsolated { self?.stick(x: x, y: y, player: index) }
         }
         // A twin-stick arcade game's second joystick, ids 20-23, the same
         // ones the on-screen pad's own second stick already drives (see
@@ -146,8 +210,11 @@ final class GameControllerManager: ObservableObject {
         // cabinet's second stick is a joystick, not a true analog stick,
         // and both players' bridges treat it that way already. This was
         // simply never wired: only the click button existed before.
+        // Safe per player now that each port owns its own mask: bits 20-23
+        // of player 2's mask are player 2's own right stick, and cannot
+        // alias onto the twin-stick bits FBNeo reads from player 1.
         gamepad.rightThumbstick.valueChangedHandler = { [weak self] _, x, y in
-            MainActor.assumeIsolated { self?.stick2(x: x, y: y) }
+            MainActor.assumeIsolated { self?.stick2(x: x, y: y, player: index) }
         }
 
         // Bind the standard buttons by their canonical names. The elements
@@ -188,97 +255,151 @@ final class GameControllerManager: ObservableObject {
             // assuming, since some pads report pressure on face buttons.
             if button.isAnalog {
                 button.valueChangedHandler = { [weak self] _, value, _ in
-                    MainActor.assumeIsolated { self?.analog(name, value: value) }
+                    MainActor.assumeIsolated { self?.analog(name, value: value, player: index) }
                 }
             } else {
                 button.pressedChangedHandler = { [weak self] _, _, pressed in
-                    MainActor.assumeIsolated { self?.button(name, pressed: pressed) }
+                    MainActor.assumeIsolated { self?.button(name, pressed: pressed, player: index) }
                 }
             }
         }
-        availableButtons = candidates.map(\.0)
+        slot.availableButtons = candidates.map(\.0)
+        if index == 0 { availableButtons = slot.availableButtons }
     }
 
     /// A physical button changed. In capture mode it names itself for the
     /// remap screen; otherwise it drives whatever it is bound to.
-    private func button(_ name: String, pressed: Bool) {
+    /// Capture is a player-1 concern: the remap screen is reached from
+    /// Settings and always means "the pad I am holding", so a stray press
+    /// on player 2's pad must not hijack what is being learned.
+    private func button(_ name: String, pressed: Bool, player: Int) {
+        // Tracked even while capturing or unbound: the hotkey combo is
+        // independent of the ordinary bindings table, and needs to know
+        // about a press regardless of what else is happening with it.
+        updateHotkeyState(name: name, pressed: pressed, player: player)
+
         if let capture = captureHandler {
-            if pressed { capture(name) }
+            if pressed, player == 0 { capture(name) }
             return
         }
-        guard let id = bindings[name] else { return }
+        guard let slot = slots[player], let id = slot.bindings[name] else { return }
 
         // The overlay is not a game input, so it fires on press and is never
-        // forwarded to the emulator.
+        // forwarded to the emulator. Either player can open the menu: both
+        // are sitting in front of the same screen.
         if id == RetroPad.overlay {
             if pressed { onMenu?() }
             return
         }
-        emit(id, pressed)
+        emit(id, pressed, player: player)
+    }
+
+    /// The pause menu's second door, alongside whatever single button is
+    /// bound to `RetroPad.overlay`. Fires on the edge into "both held", not
+    /// on every event while they stay down, and rearms only once either
+    /// releases, so a sustained hold cannot reopen a just-closed menu.
+    /// Runs even mid-capture and for otherwise-unbound buttons, since L3/R3
+    /// carry no ordinary binding by default and the two must be tracked
+    /// regardless of what capture or the bindings table are doing.
+    private func updateHotkeyState(name: String, pressed: Bool, player: Int) {
+        guard let slot = slots[player] else { return }
+        if pressed {
+            slot.heldElementNames.insert(name)
+        } else {
+            slot.heldElementNames.remove(name)
+            slot.hotkeyArmed = false
+        }
+        // buttonB nil means single-button mode: buttonA alone is enough.
+        let armedCondition = slot.heldElementNames.contains(MenuHotkey.buttonA)
+            && (MenuHotkey.buttonB.map { slot.heldElementNames.contains($0) } ?? true)
+        guard armedCondition, !slot.hotkeyArmed, captureHandler == nil else { return }
+        slot.hotkeyArmed = true
+        onMenu?()
     }
 
     /// Analog buttons, meaning triggers, need a threshold with hysteresis or
     /// a resting finger chatters the input on and off.
-    private func analog(_ name: String, value: Float) {
-        let wasDown = triggerDown[name] ?? false
+    private func analog(_ name: String, value: Float, player: Int) {
+        guard let slot = slots[player] else { return }
+        let wasDown = slot.triggerDown[name] ?? false
         let isDown = wasDown ? value > 0.25 : value > 0.35
         guard isDown != wasDown else { return }
-        triggerDown[name] = isDown
-        button(name, pressed: isDown)
+        slot.triggerDown[name] = isDown
+        button(name, pressed: isDown, player: player)
     }
 
-    private func direction(_ id: Int) -> GCControllerButtonValueChangedHandler {
+    private func direction(_ id: Int, player: Int) -> GCControllerButtonValueChangedHandler {
         { [weak self] _, _, pressed in
             MainActor.assumeIsolated {
                 guard self?.captureHandler == nil else { return }
-                self?.emit(id, pressed)
+                self?.emit(id, pressed, player: player)
             }
         }
     }
 
-    private func stick(x: Float, y: Float) {
+    private func stick(x: Float, y: Float, player: Int) {
         guard captureHandler == nil else { return }
         let threshold: Float = 0.5
-        emit(RetroPad.left, x < -threshold)
-        emit(RetroPad.right, x > threshold)
-        emit(RetroPad.down, y < -threshold)
-        emit(RetroPad.up, y > threshold)
+        emit(RetroPad.left, x < -threshold, player: player)
+        emit(RetroPad.right, x > threshold, player: player)
+        emit(RetroPad.down, y < -threshold, player: player)
+        emit(RetroPad.up, y > threshold, player: player)
+        sendStick?(player, x, y)
     }
 
     /// Same digitizing as the left stick, ids 23/22/21/20 (up/down/left/
     /// right) instead of the standard RetroPad directions: see
     /// ArcadeLayout.secondStick for why those specific numbers and where
     /// they lead downstream in each player.
-    private func stick2(x: Float, y: Float) {
+    private func stick2(x: Float, y: Float, player: Int) {
         guard captureHandler == nil else { return }
         let threshold: Float = 0.5
-        emit(21, x < -threshold)
-        emit(20, x > threshold)
-        emit(22, y < -threshold)
-        emit(23, y > threshold)
+        emit(21, x < -threshold, player: player)
+        emit(20, x > threshold, player: player)
+        emit(22, y < -threshold, player: player)
+        emit(23, y > threshold, player: player)
     }
 
     /// Routes an input to the game, edges only: the stick handler above
     /// fires per sample, up to 120 a second, and most samples change no
     /// direction. Sending only on change keeps a held stick from
     /// streaming identical evaluateJavaScript calls into the webview.
-    private func emit(_ id: Int, _ down: Bool) {
+    private func emit(_ id: Int, _ down: Bool, player: Int) {
+        guard let slot = slots[player] else { return }
         if down {
-            guard pressedInputs.insert(id).inserted else { return }
+            guard slot.pressedInputs.insert(id).inserted else { return }
         } else {
-            guard pressedInputs.remove(id) != nil else { return }
+            guard slot.pressedInputs.remove(id) != nil else { return }
         }
-        send?(id, down)
+        send?(player, id, down)
     }
 
-    private func handleDisconnect() {
-        guard GCController.controllers().allSatisfy(Self.isSimulatorPhantom) else { return }
-        releaseAll()
-        isConnected = false
-        controllerName = nil
-        availableButtons = []
-        hapticEngines = [:]
-        onDisconnect?()
+    /// Frees only the slot whose controller actually went away, so losing
+    /// one pad leaves the other player untouched and still in their own
+    /// slot. GameController does not tell us which slot, only which
+    /// controller, hence the identity match.
+    private func handleDisconnect(_ controller: GCController?) {
+        guard let index = slots.firstIndex(where: { slot in
+            guard let slot else { return false }
+            if let controller { return slot.controller === controller }
+            // No controller on the notification: fall back to whichever
+            // slot's pad has since gone nil.
+            return slot.controller == nil
+        }) else { return }
+
+        releaseAll(player: index)
+        slots[index] = nil
+        publishConnection()
+        onDisconnect?(index)
+    }
+
+    /// Mirrors slot state onto the published properties every existing
+    /// screen already reads.
+    private func publishConnection() {
+        isConnected = slots.contains { $0 != nil }
+        controllerName = slots.first??.name
+        connectedNames = slots.map { $0?.name }
+        if slots[0] == nil { availableButtons = [] }
     }
 
     // MARK: Rumble
@@ -295,10 +416,15 @@ final class GameControllerManager: ObservableObject {
     func fireRumble(port: Int, strong: Bool, strength: UInt16) {
         let intensity = Float(strength) / Float(UInt16.max)
         guard intensity > 0 else { return }
-        guard let controller, let haptics = controller.haptics,
-              let engine = hapticEngine(from: haptics)
+        guard slots.indices.contains(port) else { return }
+        guard let slot = slots[port], let controller = slot.controller,
+              let haptics = controller.haptics,
+              let engine = hapticEngine(from: haptics, slot: slot)
         else {
-            firePhoneHaptic(strong: strong)
+            // The phone is player 1's device, so only player 1's rumble
+            // falls back to it. Buzzing the handset for player 2's pad
+            // would be felt by the wrong person entirely.
+            if port == 0 { firePhoneHaptic(strong: strong) }
             return
         }
         do {
@@ -311,7 +437,7 @@ final class GameControllerManager: ObservableObject {
             try engine.start()
             try player.start(atTime: CHHapticTimeImmediate)
         } catch {
-            firePhoneHaptic(strong: strong)
+            if port == 0 { firePhoneHaptic(strong: strong) }
         }
     }
 
@@ -319,10 +445,10 @@ final class GameControllerManager: ObservableObject {
     /// event: `CHHapticEngine.start()` is cheap to call again on an already
     /// running engine, but creating a fresh one every haptic is not free,
     /// and this can fire many times a second during a sustained effect.
-    private func hapticEngine(from haptics: GCDeviceHaptics) -> CHHapticEngine? {
-        if let existing = hapticEngines[.default] { return existing }
+    private func hapticEngine(from haptics: GCDeviceHaptics, slot: Slot) -> CHHapticEngine? {
+        if let existing = slot.hapticEngines[.default] { return existing }
         guard let engine = haptics.createEngine(withLocality: .default) else { return nil }
-        hapticEngines[.default] = engine
+        slot.hapticEngines[.default] = engine
         return engine
     }
 
@@ -333,36 +459,46 @@ final class GameControllerManager: ObservableObject {
 
     /// Drops every input on disconnect, or a direction held at the moment the
     /// pad died would stay held forever.
-    private func releaseAll() {
-        for id in pressedInputs { send?(id, false) }
-        pressedInputs.removeAll()
-        triggerDown.removeAll()
+    private func releaseAll(player: Int) {
+        guard let slot = slots[player] else { return }
+        for id in slot.pressedInputs { send?(player, id, false) }
+        slot.pressedInputs.removeAll()
+        slot.triggerDown.removeAll()
+        slot.hapticEngines = [:]
     }
 
     // MARK: Remapping
 
+    /// Remapping edits player 1's pad, the one whoever opened Settings is
+    /// holding. Player 2's bindings still resolve from their own vendor
+    /// name, so a different model in slot 2 keeps its correct defaults.
+    private var player1Bindings: [String: Int] {
+        get { slots[0]?.bindings ?? ControllerBindings.defaults }
+        set { slots[0]?.bindings = newValue }
+    }
+
     /// The element name currently bound to an input, if any.
     func boundButton(for id: Int) -> String? {
-        bindings.first { $0.value == id }?.key
+        player1Bindings.first { $0.value == id }?.key
     }
 
     /// The input a physical button currently drives, if any.
     func bindings(for name: String) -> Int? {
-        bindings[name]
+        player1Bindings[name]
     }
 
     /// Points a physical button at an input, clearing whatever else claimed
     /// either side so one press can never fire two inputs.
     func bind(button name: String, to id: Int) {
-        bindings = bindings.filter { $0.key != name && $0.value != id }
-        bindings[name] = id
-        ControllerBindings.save(bindings, for: storageKey)
+        player1Bindings = player1Bindings.filter { $0.key != name && $0.value != id }
+        player1Bindings[name] = id
+        ControllerBindings.save(player1Bindings, for: storageKey)
         reloadBindings()
     }
 
     /// Replaces the whole map at once, which is what choosing a preset means.
     func applyBindings(_ map: [String: Int]) {
-        bindings = map
+        player1Bindings = map
         ControllerBindings.save(map, for: storageKey)
         reloadBindings()
     }
@@ -370,18 +506,18 @@ final class GameControllerManager: ObservableObject {
     /// Whether the current map is exactly this one, so the preset rows can
     /// show which arrangement is in effect and neither once it is edited.
     func matchesBindings(_ map: [String: Int]) -> Bool {
-        bindings == map
+        player1Bindings == map
     }
 
     func clearBinding(for id: Int) {
-        bindings = bindings.filter { $0.value != id }
-        ControllerBindings.save(bindings, for: storageKey)
+        player1Bindings = player1Bindings.filter { $0.value != id }
+        ControllerBindings.save(player1Bindings, for: storageKey)
         reloadBindings()
     }
 
     func resetBindings() {
         ControllerBindings.reset(for: storageKey)
-        bindings = ControllerBindings.defaults
+        player1Bindings = ControllerBindings.defaults
         reloadBindings()
     }
 

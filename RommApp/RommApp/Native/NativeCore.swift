@@ -146,6 +146,23 @@ enum NativePlatform: String, CaseIterable {
         }
     }
 
+    /// Whether a second local player's controller has anywhere to plug
+    /// into. Defaults to yes: consoles and arcade boards genuinely have a
+    /// second port, and arcade in particular is a core 2-player use case
+    /// (Metal Slug, Neo Geo titles), not the single-player exception it
+    /// might look like next to the twin-stick digitizing FBNeo also does.
+    /// The exception is handhelds, which physically have exactly one
+    /// player's worth of controls no matter what core drives them: Game
+    /// Boy, Game Boy Color, Game Boy Advance, Game Gear (even though it
+    /// shares Genesis Plus GX with console platforms that do get a second
+    /// port), and Neo Geo Pocket Color.
+    var supportsSecondPlayer: Bool {
+        switch self {
+        case .gb, .gbc, .gba, .gameGear, .ngpc: return false
+        default: return true
+        }
+    }
+
     /// What the row in Settings > Native cores says. Platform names, not
     /// core names: the person changing a Sega CD option is thinking about
     /// Sega CD, not about which binary happens to serve it.

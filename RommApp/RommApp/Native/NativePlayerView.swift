@@ -19,9 +19,10 @@ struct NativePlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var renderer = NativePlayerRenderer()
     @ObservedObject private var controllers = GameControllerManager.shared
-    @State private var previousControllerSend: ((Int, Bool) -> Void)?
+    @State private var previousControllerSend: ((Int, Int, Bool) -> Void)?
+    @State private var previousControllerStick: ((Int, Float, Float) -> Void)?
     @State private var previousControllerMenu: (() -> Void)?
-    @State private var previousControllerDisconnect: (() -> Void)?
+    @State private var previousControllerDisconnect: ((Int) -> Void)?
     @State private var menuVisible = false
     @State private var menuStatus: String?
     @State private var menuBusy = false
@@ -96,7 +97,9 @@ struct NativePlayerView: View {
             if down { openMenu() }
             return
         }
-        renderer.setButton(id, down: down)
+        // Touch is always player 1: there is deliberately no second-player
+        // touch layout, so port 0 is the only port the overlay ever drives.
+        renderer.setButton(id, down: down, port: 0)
     }
 
     /// `ids` is unused here on purpose: it exists for the webview player's
@@ -104,7 +107,7 @@ struct NativePlayerView: View {
     /// comment), but this app has exactly one native stick, Dreamcast's,
     /// and LibretroFrontend already knows which analog index it is.
     private func handleStick(_ ids: [Int], x: Double, y: Double) {
-        renderer.setStick(x: x, y: y)
+        renderer.setStick(x: x, y: y, port: 0)
     }
 
     private func openMenu() {
@@ -402,16 +405,29 @@ struct NativePlayerView: View {
             // and locks mid-game.
             UIApplication.shared.isIdleTimerDisabled = true
             previousControllerSend = GameControllerManager.shared.send
+            previousControllerStick = GameControllerManager.shared.sendStick
             previousControllerMenu = GameControllerManager.shared.onMenu
             previousControllerDisconnect = GameControllerManager.shared.onDisconnect
-            GameControllerManager.shared.send = { [weak renderer] id, down in
-                renderer?.setButton(id, down: down)
+            GameControllerManager.shared.send = { [weak renderer] player, id, down in
+                renderer?.setButton(id, down: down, port: player)
+            }
+            // The continuous form, alongside the digitized d-pad bits
+            // .send already carries: N64 and Dreamcast read this, every
+            // other platform simply never asks LibretroFrontend for it.
+            GameControllerManager.shared.sendStick = { [weak renderer] player, x, y in
+                renderer?.setStick(x: Double(x), y: Double(y), port: player)
             }
             GameControllerManager.shared.onMenu = { openMenu() }
             // Nobody is holding anything after a disconnect, so pause into
             // the menu rather than letting the game run on unattended. Same
             // reasoning as the webview player's pauseGame on disconnect.
-            GameControllerManager.shared.onDisconnect = { openMenu() }
+            // Player 1 losing their pad stops the game, since the person
+            // who can drive the menu is now holding nothing. Player 2
+            // dropping leaves player 1 playing: pausing on them would
+            // interrupt a game the remaining player can still control.
+            GameControllerManager.shared.onDisconnect = { player in
+                if player == 0 { openMenu() }
+            }
             renderer.pendingState = initialState
             // Held before the first frame ever runs, so a PS1 game cannot
             // boot past its own card check while the card decision is
@@ -423,6 +439,7 @@ struct NativePlayerView: View {
         .onDisappear {
             UIApplication.shared.isIdleTimerDisabled = false
             GameControllerManager.shared.send = previousControllerSend
+            GameControllerManager.shared.sendStick = previousControllerStick
             GameControllerManager.shared.onMenu = previousControllerMenu
             GameControllerManager.shared.onDisconnect = previousControllerDisconnect
             // The session POST is what stamps last played; the heartbeat
@@ -711,9 +728,10 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     /// game controller. Both already speak the same id space (see
     /// ControllerBindings.swift's RetroPad constants), so merging is just
     /// a union; FBNeo only needs "is this id down right now" each frame.
-    private var heldButtons: Set<Int> = []
+    private var heldButtons: [Set<Int>] = [[], []]
 
-    func setButton(_ id: Int, down: Bool) {
+    func setButton(_ id: Int, down: Bool, port: Int) {
+        guard heldButtons.indices.contains(port) else { return }
         // 0...13 is the standard joypad; 20...23 is the twin-stick second
         // joystick's four directions (see ArcadeLayout.secondStick and
         // GameControllerManager.stick2), which LibretroFrontend answers
@@ -722,9 +740,9 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         // RetroPad.overlay (-1) isn't a game input at all.
         guard (0...13).contains(id) || (20...23).contains(id) else { return }
         if down {
-            heldButtons.insert(id)
+            heldButtons[port].insert(id)
         } else {
-            heldButtons.remove(id)
+            heldButtons[port].remove(id)
         }
     }
 
@@ -733,8 +751,8 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     /// straight through to `LibretroFrontend`, which is the only place
     /// that knows how to fold it into RETRO_DEVICE_ANALOG reads; nothing
     /// about it lives in `heldButtons`.
-    func setStick(x: Double, y: Double) {
-        LibretroFrontend.shared.setAnalogStickX(Float(x), y: Float(y))
+    func setStick(x: Double, y: Double, port: Int) {
+        LibretroFrontend.shared.setAnalogStickX(Float(x), y: Float(y), port: port)
     }
 
     func attach(to view: MTKView) {
@@ -837,8 +855,10 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
                     romVersion: nil
                 )
             }
-            let mask = heldButtons.reduce(into: UInt32(0)) { $0 |= (1 << $1) }
-            frontend.setButtonMask(mask)
+            for (port, held) in heldButtons.enumerated() {
+                let mask = held.reduce(into: UInt32(0)) { $0 |= (1 << $1) }
+                frontend.setButtonMask(mask, port: port)
+            }
             frontend.runFrame()
             framesRun += 1
             if let state = pendingState, framesRun > 60 {

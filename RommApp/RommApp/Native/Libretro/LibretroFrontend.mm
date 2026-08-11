@@ -48,7 +48,11 @@ namespace {
 
 const LibretroCoreAPI *gCore = nullptr;
 LibretroCoreID gCoreID = LibretroCoreIDFBNeo;
-unsigned gPortDevice = 0;
+// Sized below kMaxPorts's own declaration, near gButtonMask, since both
+// share the same port-count constant; declared here because they're set
+// well before that point in the file and used at loadGame: time.
+unsigned gPortDevice[2] = {0, 0};
+bool gPortDeviceSet[2] = {false, false};
 bool gInitialized = false;
 bool gGameLoaded = false;
 
@@ -99,14 +103,20 @@ bool gRumbleWasOn[4][2] = {}; // [port][RETRO_RUMBLE_STRONG/WEAK]
 static void (^gRumbleHandler)(NSInteger port, BOOL strong, uint16_t strength) = nil;
 std::string gLastVariableValue;
 
-std::atomic<uint32_t> gButtonMask{0};
+// Two ports, one per local player. Each port owns its whole input state
+// rather than sharing bits of one word: FBNeo's twin-stick digitizing
+// (bits 20-23 below) belongs to player 1's second joystick, and folding a
+// second player into spare bits of the same mask would alias directly
+// onto it. Shaped like gRumbleWasOn, which was already port-indexed.
+constexpr size_t kMaxPorts = 2;
+std::atomic<uint32_t> gButtonMask[kMaxPorts];
 std::atomic<uint32_t> gRotation{0};
 // Dreamcast's left analog stick, -1 to 1, the only continuous (not
 // digital-in-full-deflection-out) input any core here reads. See
 // -setAnalogStickX:y: and inputState's RETRO_DEVICE_INDEX_ANALOG_LEFT
 // case.
-std::atomic<float> gAnalogLeftX{0};
-std::atomic<float> gAnalogLeftY{0};
+std::atomic<float> gAnalogLeftX[kMaxPorts];
+std::atomic<float> gAnalogLeftY[kMaxPorts];
 
 // Flycast: the only core here with no software renderer at all, so it
 // needs a real GLES context via libretro's hardware-render interface
@@ -325,10 +335,10 @@ size_t audioSampleBatch(const int16_t *data, size_t frames) {
 void inputPoll(void) {}
 
 int16_t inputState(unsigned port, unsigned device, unsigned index, unsigned id) {
-    if (port != 0) {
+    if (port >= kMaxPorts) {
         return 0;
     }
-    uint32_t mask = gButtonMask.load(std::memory_order_relaxed);
+    uint32_t mask = gButtonMask[port].load(std::memory_order_relaxed);
     if (device == RETRO_DEVICE_JOYPAD) {
         return id <= 13 ? (mask >> id) & 1 : 0;
     }
@@ -354,8 +364,8 @@ int16_t inputState(unsigned port, unsigned device, unsigned index, unsigned id) 
     // stick this frontend reads. y is already down-positive, matching
     // libretro's own convention, no flip needed here either.
     if (device == RETRO_DEVICE_ANALOG && index == RETRO_DEVICE_INDEX_ANALOG_LEFT) {
-        float value = id == RETRO_DEVICE_ID_ANALOG_X ? gAnalogLeftX.load(std::memory_order_relaxed)
-                    : id == RETRO_DEVICE_ID_ANALOG_Y ? gAnalogLeftY.load(std::memory_order_relaxed)
+        float value = id == RETRO_DEVICE_ID_ANALOG_X ? gAnalogLeftX[port].load(std::memory_order_relaxed)
+                    : id == RETRO_DEVICE_ID_ANALOG_Y ? gAnalogLeftY[port].load(std::memory_order_relaxed)
                     : 0.0f;
         return (int16_t)(std::clamp(value, -1.0f, 1.0f) * 0x7fff);
     }
@@ -579,7 +589,16 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
         std::lock_guard<std::mutex> lock(gAudioMutex);
         gAudioSamples.clear();
     }
-    gButtonMask.store(0, std::memory_order_relaxed);
+    for (size_t p = 0; p < kMaxPorts; p++) {
+        gButtonMask[p].store(0, std::memory_order_relaxed);
+        gAnalogLeftX[p].store(0, std::memory_order_relaxed);
+        gAnalogLeftY[p].store(0, std::memory_order_relaxed);
+        // Cleared per activation, or a platform that skips port 1 (a
+        // handheld, say) after one that used it would inherit the
+        // previous game's stale device type on a port it never asked for.
+        gPortDeviceSet[p] = false;
+        gPortDevice[p] = 0;
+    }
     gRotation.store(0, std::memory_order_relaxed);
     gUsesHWRender = false;
     gHWRender = {};
@@ -590,8 +609,10 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     gOptions = [options copy];
 }
 
-- (void)setControllerPortDevice:(unsigned)device {
-    gPortDevice = device;
+- (void)setControllerPortDevice:(unsigned)device port:(NSInteger)port {
+    if (port < 0 || (size_t)port >= kMaxPorts) { return; }
+    gPortDevice[port] = device;
+    gPortDeviceSet[port] = true;
 }
 
 - (nullable NSString *)loadGame:(NSString *)romPath systemDirectory:(NSString *)systemDirectory {
@@ -700,21 +721,25 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     }
     gGameLoaded = true;
 
-    if (gPortDevice != 0) {
-        gCore->set_controller_port_device(0, gPortDevice);
+    for (size_t p = 0; p < kMaxPorts; p++) {
+        if (gPortDeviceSet[p] && gPortDevice[p] != 0) {
+            gCore->set_controller_port_device((unsigned)p, gPortDevice[p]);
+        }
     }
 
     // Flycast only: its own retro_set_controller_port_device (see
     // shell/libretro/libretro.cpp) waits on first run for every one of
     // the four Maple ports to be explicitly set before it will do
     // anything else, expansion slot setup (where the VMU lives)
-    // included. This app is single-controller by design and never
-    // touches ports 1-3, so that gate never opened and no VMU was ever
-    // wired up, no error, just a save screen that quietly did nothing.
-    // RETRO_DEVICE_NONE (0) on the unused ports is what satisfies the
-    // gate without pretending a controller is plugged in where none is.
+    // included. Port 1 now carries a real second player when the loop
+    // above set it, so only ports 2-3 (which this app never drives) get
+    // explicitly told RETRO_DEVICE_NONE to satisfy the gate; leaving
+    // port 1 alone here is what stops this from stepping on the second
+    // controller's own port-device call.
     if (gCoreID == LibretroCoreIDFlycast) {
-        gCore->set_controller_port_device(1, 0);
+        if (!gPortDeviceSet[1]) {
+            gCore->set_controller_port_device(1, 0);
+        }
         gCore->set_controller_port_device(2, 0);
         gCore->set_controller_port_device(3, 0);
     }
@@ -846,13 +871,15 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     return gAspectRatio.load(std::memory_order_relaxed);
 }
 
-- (void)setButtonMask:(uint32_t)mask {
-    gButtonMask.store(mask, std::memory_order_relaxed);
+- (void)setButtonMask:(uint32_t)mask port:(NSInteger)port {
+    if (port < 0 || (size_t)port >= kMaxPorts) { return; }
+    gButtonMask[port].store(mask, std::memory_order_relaxed);
 }
 
-- (void)setAnalogStickX:(float)x y:(float)y {
-    gAnalogLeftX.store(x, std::memory_order_relaxed);
-    gAnalogLeftY.store(y, std::memory_order_relaxed);
+- (void)setAnalogStickX:(float)x y:(float)y port:(NSInteger)port {
+    if (port < 0 || (size_t)port >= kMaxPorts) { return; }
+    gAnalogLeftX[port].store(x, std::memory_order_relaxed);
+    gAnalogLeftY[port].store(y, std::memory_order_relaxed);
 }
 
 - (uint32_t)rotation {

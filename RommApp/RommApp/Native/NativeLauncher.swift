@@ -160,7 +160,15 @@ enum NativeLauncher {
         let loadURL = try extractedIfArchived(romURL, core: core, in: workDir)
         LibretroFrontend.shared.activateCore(core.coreID)
         LibretroFrontend.shared.setCoreOptions(NativeCoreOptionsStore.dictionary(for: platform))
-        LibretroFrontend.shared.setControllerPortDevice(NativeCoreOptionsStore.padDevice(for: platform))
+        let padDevice = NativeCoreOptionsStore.padDevice(for: platform)
+        LibretroFrontend.shared.setControllerPortDevice(padDevice, port: 0)
+        // Player 2 gets the same device type as player 1: nothing here
+        // offers picking a different pad type per player, and every
+        // platform that supports a second port treats both ports
+        // identically (e.g. PSX's two standard controller ports).
+        if platform.supportsSecondPlayer {
+            LibretroFrontend.shared.setControllerPortDevice(padDevice, port: 1)
+        }
         if let failure = LibretroFrontend.shared.loadGame(loadURL.path, systemDirectory: workDir.path) {
             throw NSError(domain: "NativeLauncher", code: 1, userInfo: [NSLocalizedDescriptionKey: failure])
         }
