@@ -1003,11 +1003,16 @@ private final class NativePlayerAudio {
             }
             self.lock.unlock()
 
-            for buffer in buffers {
+            // Non-interleaved format: `buffers` is one mono buffer per
+            // channel (left, then right), each needing its own offset into
+            // the interleaved ring buffer. Every channel index used to
+            // read offset 0 (left) here, so every native core played
+            // left-channel-duplicated mono instead of real stereo.
+            for (channel, buffer) in buffers.enumerated() {
                 guard let data = buffer.mData?.assumingMemoryBound(to: Float32.self) else { continue }
                 for frame in 0..<framesNeeded {
                     if frame < available {
-                        data[frame] = Float32(samples[frame * 2]) / Float32(Int16.max)
+                        data[frame] = Float32(samples[frame * 2 + channel]) / Float32(Int16.max)
                     } else {
                         data[frame] = 0
                     }
