@@ -20,10 +20,16 @@ design and the reasoning behind it, and most decisions in it are already settled
   "Cabinet for tvOS 0.x.x-alpha". The two platforms do not have to release
   together or share version numbers. The two oldest iOS tags (`v0.1.0-alpha`
   and `v0.2.0-alpha`) predate this convention and keep their names.
-- To cut a release: archive the scheme (`RommApp` for iOS, `RommAppTV` for
-  tvOS) with `xcodebuild archive` and `CODE_SIGNING_ALLOWED=NO`, copy the
-  built `.app` into a `Payload/` folder and zip it as an unsigned `.ipa`,
-  then `gh release create` with the tag and `gh release upload` the IPA.
+- To cut a release, in order: first set the target's `MARKETING_VERSION` in
+  the project to match the tag being cut, and bump `CURRENT_PROJECT_VERSION`
+  if the build will also go to TestFlight (Apple requires a unique build
+  number per upload). Verify the project version matches the tag before
+  tagging; the iOS 0.2.0-alpha release shipped reporting "0.1" because this
+  step was skipped. Then archive the scheme (`RommApp` for iOS, `RommAppTV`
+  for tvOS) with `xcodebuild archive` and `CODE_SIGNING_ALLOWED=NO`, copy
+  the built `.app` into a `Payload/` folder and zip it as an unsigned
+  `.ipa`, then `gh release create` with the tag and `gh release upload` the
+  IPA.
 - The old squash-merge-only rule is retired. Decided 2026-08-09, at launch: the
   history is public and complete on purpose, including the messy parts. Do not
   squash it away or propose hiding branches.
