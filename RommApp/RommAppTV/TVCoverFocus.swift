@@ -175,3 +175,24 @@ struct RowFocusStyle: ButtonStyle {
         }
     }
 }
+
+extension View {
+    /// The opaque backdrop a `fullScreenCover` needs on tvOS, which paints
+    /// none of its own (without this, the screen underneath shows straight
+    /// through, and the two read as one garbled screen). A subtle dark
+    /// gradient rather than flat `Color.black`: the account switcher and
+    /// PIN screens have no game art to blur into an ambient backdrop the
+    /// way `TVGameLaunchView`'s black base does, and flat black with
+    /// nothing over it reads as a dead, unfinished screen next to
+    /// everything else in this app's glass-on-dark look.
+    func tvModalBackdrop() -> some View {
+        background(
+            LinearGradient(
+                colors: [Color(white: 0.13), Color(white: 0.08)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+        )
+    }
+}

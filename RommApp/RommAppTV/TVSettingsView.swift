@@ -17,6 +17,11 @@ struct TVSettingsView: View {
     @EnvironmentObject private var session: Session
     @ObservedObject private var controllers = GameControllerManager.shared
     @State private var confirmingSignOut = false
+    @State private var showingAccountSwitcher = false
+    @State private var settingPIN = false
+
+    @AppStorage("com.mmagtech.RommAppTV.requirePINToSwitch") private var requirePIN = false
+    @AppStorage("com.mmagtech.RommAppTV.switchPIN") private var storedPIN = ""
 
     var body: some View {
         NavigationStack {
@@ -25,6 +30,36 @@ struct TVSettingsView: View {
                 // repeating it directly underneath is an iOS habit that
                 // buys nothing on a TV. Same reasoning as TVLibraryView.
                 VStack(alignment: .leading, spacing: 40) {
+                    section("Accounts") {
+                        if let label = TVProfileStore.activeProfile?.label {
+                            infoRow(label: "Current profile", value: label)
+                        }
+                        Button {
+                            showingAccountSwitcher = true
+                        } label: {
+                            actionRow(title: "Switch or add a profile", detail: nil, chevron: true)
+                        }
+                        .buttonStyle(RowFocusStyle())
+                        Toggle(isOn: $requirePIN) {
+                            actionRow(
+                                title: "Require a PIN to switch",
+                                detail: storedPIN.isEmpty ? "Set a PIN below first" : nil,
+                                chevron: false
+                            )
+                        }
+                        .toggleStyle(.switch)
+                        .disabled(storedPIN.isEmpty)
+                        Button {
+                            settingPIN = true
+                        } label: {
+                            actionRow(
+                                title: storedPIN.isEmpty ? "Set a PIN" : "Change PIN",
+                                detail: nil, chevron: true
+                            )
+                        }
+                        .buttonStyle(RowFocusStyle())
+                    }
+
                     section("Controllers") {
                         ForEach(Array(controllers.connectedNames.enumerated()), id: \.offset) { index, name in
                             if let name {
@@ -73,11 +108,28 @@ struct TVSettingsView: View {
                 .padding(.vertical, 50)
             }
             .task { controllers.start() }
+            .task {
+                // Cheap no-op past "nothing to fetch": backfills a
+                // profile that predates avatar/username fetching, same
+                // as the Home chip, for whoever opens Settings without
+                // visiting Home first in a session.
+                if let profile = TVProfileStore.activeProfile {
+                    TVProfileStore.enrichIfNeeded(profile)
+                }
+            }
             .alert("Sign out?", isPresented: $confirmingSignOut) {
                 Button("Sign out", role: .destructive) { session.forgetServer() }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("You'll need to pair this Apple TV with your server again.")
+            }
+            .fullScreenCover(isPresented: $showingAccountSwitcher) {
+                TVAccountSwitcherView()
+            }
+            .fullScreenCover(isPresented: $settingPIN) {
+                TVSetPINView { newPIN in
+                    storedPIN = newPIN
+                }
             }
         }
     }

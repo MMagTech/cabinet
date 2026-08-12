@@ -286,7 +286,11 @@ private struct SafariView: UIViewControllerRepresentable {
 /// Renders the approval URL as a QR code so a phone camera can jump straight
 /// to it instead of someone typing a URL with a remote. `CIFilter`'s
 /// built-in generator, no new dependency.
-private struct QRCodeView: View {
+// Not private: TVAccountSwitcher.swift's own "add a profile" pairing flow
+// reuses this exact renderer rather than a second copy. Still tvOS-only,
+// still inside this file's #if os(tvOS) block, so nothing about iOS
+// visibility changes.
+struct QRCodeView: View {
     let url: URL
 
     var body: some View {

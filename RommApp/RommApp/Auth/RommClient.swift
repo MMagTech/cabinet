@@ -99,6 +99,24 @@ actor RommClient {
         }
     }
 
+    /// tvOS account switching only, for right now: defaults a newly paired
+    /// profile's label to whoever is actually signed in rather than the
+    /// server address. `me.read` is already in `RommScopes.required`, so
+    /// every token this app ever holds can already call this.
+    func currentUser() async throws -> RommUser {
+        try await send(request(path: "/api/users/me"), decoding: RommUser.self)
+    }
+
+    /// tvOS account switching only: the same account's avatar photo, so a
+    /// profile can show the real picture instead of a generic person
+    /// icon, confirmed live as a direct image response (not `avatar_path`,
+    /// a relative path this same call's user object also carries but
+    /// that a plain asset fetch cannot resolve the way `assetData` does
+    /// for a cover's timestamped path).
+    func avatarData(userId: Int) async throws -> Data {
+        try await assetData(path: "/api/users/\(userId)/avatar")
+    }
+
     // MARK: Library
 
     func platforms() async throws -> [Platform] {

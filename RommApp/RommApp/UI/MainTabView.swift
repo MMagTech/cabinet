@@ -26,6 +26,19 @@ struct MainTabView: View {
     @ObservedObject private var networkMonitor = NetworkMonitor.shared
 
     var body: some View {
+        tabs
+    }
+    // Tried drawing the tvOS account chip as a `ZStack` overlay here so it
+    // stayed visible across every tab instead of only Home. Reverted: the
+    // system tab bar manages its own focus internally, and once you
+    // navigated right onto an overlay drawn merely above it, going back
+    // left couldn't re-enter that closed hierarchy, a genuine dead end
+    // (confirmed on device). The chip lives back on `HomeView` only now,
+    // as a real sibling in that screen's own content flow, reachable by
+    // pressing up from the hero with no cross-hierarchy focus hop
+    // involved. See `HomeView.wideLayout`.
+
+    private var tabs: some View {
         TabView(selection: $selection) {
             Tab("Home", systemImage: "house", value: AppTab.home) {
                 HomeView()

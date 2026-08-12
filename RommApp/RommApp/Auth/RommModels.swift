@@ -53,6 +53,18 @@ struct DeviceAuthToken: Decodable {
     }
 }
 
+/// `GET /api/users/me`. Just the fields tvOS account switching actually
+/// wants: the username, so a newly paired profile can default its label
+/// to who is actually signed in rather than the server address, and the
+/// id, needed to fetch that same user's avatar from `/api/users/{id}/avatar`,
+/// a real image endpoint confirmed live (200, image/png) against
+/// romm.mmagtech.com, distinct from `avatar_path`, which is a relative
+/// path this user object also carries but that endpoint resolves directly.
+struct RommUser: Decodable {
+    let id: Int
+    let username: String
+}
+
 struct Platform: Decodable, Identifiable, Hashable {
     let id: Int
     let name: String?

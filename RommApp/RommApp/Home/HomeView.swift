@@ -31,6 +31,15 @@ struct HomeView: View {
     @ObservedObject private var quickActions = QuickActionRouter.shared
     @State private var quickPushRecents = false
     @State private var quickPushFavorites = false
+    #if os(tvOS)
+    /// Ties the hero's own .prefersDefaultFocus(true, in:) to the account
+    /// chip's row above it: without a shared scope, landing on Home let
+    /// tvOS's default-focus heuristic pick the chip instead (the first
+    /// focusable thing in reading order once it moved above the hero),
+    /// which also meant the hero's own focus-driven zoom never played on
+    /// arrival, since it was never actually focused.
+    @Namespace private var homeFocus
+    #endif
 
     /// Everything the player needs to start without the launch screen in
     /// front of it. Identifiable so it can drive a `fullScreenCover` the
@@ -285,7 +294,44 @@ struct HomeView: View {
     /// on and the shape Apple's own TV app uses.
     private func wideLayout(height: CGFloat) -> some View {
         #if os(tvOS)
-        return ScrollView {
+        // The chip is an overlay, not a sibling row that pushes
+        // `tvContent` down: as a `VStack` sibling with
+        // `.ignoresSafeArea(edges: .top)`, it reserved real layout height
+        // for the safe area it was ignoring on top of its own content
+        // height (measured on device: about 225pt total), silently
+        // pushing the hero and Recent's caption down by that much. An
+        // overlay never reserves space from `tvContent`, which fixes
+        // that: `tvContent` gets the full, real `height`.
+        //
+        // This position is correct and settled; do not move the chip
+        // again chasing remote reachability. Two things were tried and
+        // reverted specifically because they displaced it from here: a
+        // global overlay on `MainTabView` (visible on every tab, but a
+        // dead end navigating back out of it into the system tab bar's
+        // own closed focus hierarchy) and a content-flow sibling on this
+        // screen positioned lower, below the tab bar (reachable, but not
+        // where it belongs visually). Account-switching reachability
+        // needs its own answer that doesn't move this.
+        return ZStack(alignment: .topTrailing) {
+            tvContent(height: height)
+
+            HStack {
+                Spacer()
+                TVAccountChip()
+            }
+            .padding(.top, 50)
+            .padding(.trailing, 60)
+            .ignoresSafeArea(edges: .top)
+        }
+        .focusScope(homeFocus)
+        #else
+        return legacyWideLayout(height: height)
+        #endif
+    }
+
+    #if os(tvOS)
+    private func tvContent(height: CGFloat) -> some View {
+        ScrollView {
             // Sized so Recent's own cover and title fit above the fold
             // alongside the hero on first landing. The original 0.42/460
             // hero, plus the row's full padding, pushed Recent's caption
@@ -306,7 +352,7 @@ struct HomeView: View {
                 if recent.count > 1 {
                     rotationRow("Recent", Array(recent.dropFirst()), seeAll: .recentlyPlayed)
                 } else if loaded, recent.isEmpty {
-                    emptyState
+                    tvEmptyState
                 }
                 if !favorites.isEmpty {
                     rotationRow(
@@ -315,10 +361,33 @@ struct HomeView: View {
                 }
             }
             .padding(.horizontal, 60)
-            .padding(.vertical, 16)
+            .padding(.top, 0)
+            .padding(.bottom, 16)
         }
-        #else
-        return HStack(alignment: .top, spacing: 20) {
+    }
+
+    /// The iOS `emptyState` is phone copy in phone type: "on the go" only
+    /// means anything for a device you carry, and its `.title3`/`.callout`
+    /// sizing was never meant to sit alone on a 4K canvas. This is that
+    /// same moment (a profile with nothing recent) written and sized for a
+    /// TV instead of reused verbatim from the phone.
+    private var tvEmptyState: some View {
+        VStack(alignment: .center, spacing: 12) {
+            Text("Nothing to resume yet")
+                .font(.title2.bold())
+                .multilineTextAlignment(.center)
+            Text("Pick something from Library and it'll be here next time.")
+                .font(.title3)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, minHeight: 300, alignment: .center)
+    }
+    #endif
+
+    #if !os(tvOS)
+    private func legacyWideLayout(height: CGFloat) -> some View {
+        HStack(alignment: .top, spacing: 20) {
             if let hero = recent.first {
                 heroCard(for: hero, height: max(200, height - 40), wide: true)
                     .frame(maxWidth: 320)
@@ -361,8 +430,8 @@ struct HomeView: View {
         // bar something to sit over, which is the only way its material
         // ever shows: glass over nothing just renders as a white pill.
         .ignoresSafeArea(.container, edges: .bottom)
-        #endif
     }
+    #endif
 
     // MARK: Pieces
 
@@ -455,6 +524,14 @@ struct HomeView: View {
                 .shadow(radius: 10, y: 5)
         }
         .buttonStyle(.plain)
+        #if os(tvOS)
+        // Landing on Home focuses the hero, not the account chip above
+        // it, tied to homeFocus so this arbitrates against that chip
+        // specifically rather than tvOS's own default-focus heuristic
+        // guessing (which started picking the chip once it moved above
+        // the hero in reading order).
+        .prefersDefaultFocus(true, in: homeFocus)
+        #endif
         // A second, real button rather than decoration inside the first.
         // Resume means resume: it goes straight back into the game with
         // the choices already remembered for it, since the scope doc's

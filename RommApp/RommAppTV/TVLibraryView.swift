@@ -32,12 +32,19 @@ struct TVLibraryView: View {
     /// section header) was not, on its own, enough to make tvOS land focus
     /// there on arrival; `.prefersDefaultFocus` is a hint evaluated against
     /// a heuristic, not a guarantee, and it was still losing to the grid.
-    /// Driving it explicitly with `@FocusState` instead: `.task` below
-    /// forces focus onto the switcher every time this screen appears, on
-    /// first arrival from the tab bar and again on returning from a pushed
-    /// platform's rom list, since `NavigationStack` re-runs a popped root
-    /// view's appearance work.
+    /// Driving it explicitly with `@FocusState` instead, on `onAppear`.
     @FocusState private var focusedSwitch: Browsing?
+    /// Forcing focus onto the switcher is only needed the first time this
+    /// screen appears: `NavigationStack` re-runs a popped root view's
+    /// `onAppear`, and without this guard every reappearance re-grabbed
+    /// focus, including leaving Library for Search or Home via the tab bar
+    /// and coming back, which yanked focus back down to the switcher
+    /// instead of wherever the system's own back-navigation would have put
+    /// it. Reappearing from a pushed platform's rom list still lands focus
+    /// correctly without help, the same way any other screen's back
+    /// navigation does; this flag only covers the one case that genuinely
+    /// needed the override, the very first landing from a fresh app launch.
+    @State private var hasForcedInitialFocus = false
 
     /// `RomListView.Source` carries whole `Platform`/`Collection` values
     /// and is not Hashable, so it cannot drive navigationDestination(item:)
@@ -122,6 +129,8 @@ struct TVLibraryView: View {
             }
         }
         .onAppear {
+            guard !hasForcedInitialFocus else { return }
+            hasForcedInitialFocus = true
             focusedSwitch = browsing
         }
         .task {
