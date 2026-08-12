@@ -369,9 +369,9 @@
 					"$(PROJECT_DIR)/RommApp/Native/Flycast",
 					"$(PROJECT_DIR)/RommApp/Native/Mupen64Plus",
 				);
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 0.1.0;
 				OTHER_LDFLAGS = "-lz";
-				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet.tv;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet;
 				PRODUCT_NAME = "Cabinet TV";
 				SDKROOT = appletvos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
