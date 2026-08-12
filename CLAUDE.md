@@ -72,3 +72,22 @@ endpoint shapes. Prefer checking it over assuming RomM's API from memory.
 - Generate the API client from `openapi.json`. That is exactly why the existing
   third party iOS client breaks across RomM versions. Six hand written calls.
 - Commit `tools/*.xml` or `tools/profiles.json`. Derived data, regenerate it.
+
+## tvOS conventions
+
+This applies to tvOS work only; none of it changes anything about iOS.
+
+- Never give a focusable `Button` on tvOS `.buttonStyle(.plain)` or
+  `.buttonStyle(.card)`, even for a row that looks unstyled without one.
+  Both paint a real system focus effect (`.plain` included, not just `.card`)
+  that overrides or sits on top of any custom `.background` the row already
+  has, and neither reserves headroom for its own focus-scale growth, so a
+  focused row can grow into its neighbour. Use one of this project's own
+  `ButtonStyle`s from `TVCoverFocus.swift` (`CoverFocusStyle` for cover art,
+  `TextFocusStyle` for a short text link or pill, `RowFocusStyle` for a
+  full-width settings-style row) or a new one built the same way, never a
+  bare system style.
+- Never use `.navigationTitle` on tvOS. It paints over content instead of
+  reserving space above it. Put the title as a plain `Text` inside the
+  screen's own scroll content instead, the pattern every existing tvOS
+  screen already uses.

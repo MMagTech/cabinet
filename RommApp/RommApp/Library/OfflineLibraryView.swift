@@ -81,7 +81,11 @@ struct OfflineLibraryView: View {
                     Text(networkMonitor.offlineReason.label)
                 }
             }
+            #if os(iOS)
             .listStyle(.insetGrouped)
+            #else
+            .listStyle(.plain)
+            #endif
         }
     }
 }

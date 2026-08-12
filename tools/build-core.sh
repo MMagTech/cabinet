@@ -4,13 +4,32 @@
 # merged relocatable object whose only exported symbols are
 # <prefix>_retro_* forwarders, so any number of cores can link into one
 # binary without their retro_* names (or bundled zlib and friends)
-# colliding. Usage: tools/build-core.sh <core-name>
+# colliding. Usage: tools/build-core.sh <core-name> [ios|tvos]
+#
+# The platform argument defaults to ios. tvos is opt-in per core: it only
+# works for a core whose own Makefile already has a tvos-arm64 (or
+# equivalent) platform case, checked directly rather than assumed. As of
+# this comment only pcsx_rearmed has been confirmed to have one; treat
+# every other core's tvOS support as unverified until checked the same way.
 set -e
 
 cd "$(dirname "$0")/.."
 NAME=$1
-SDK=$(xcrun -sdk iphoneos --show-sdk-path)
+PLATFORM=${2:-ios}
 JOBS=$(sysctl -n hw.ncpu)
+
+case "$PLATFORM" in
+ios)
+    SDK=$(xcrun -sdk iphoneos --show-sdk-path)
+    MINVERSION_FLAG=-miphoneos-version-min=18.0
+    MAKE_PLATFORM=ios-arm64 ;;
+tvos)
+    SDK=$(xcrun -sdk appletvos --show-sdk-path)
+    MINVERSION_FLAG=-mappletvos-version-min=18.0
+    MAKE_PLATFORM=tvos-arm64 ;;
+*)
+    echo "unknown platform: $PLATFORM (expected ios or tvos)" >&2; exit 1 ;;
+esac
 
 case "$NAME" in
 gambatte)
@@ -41,18 +60,31 @@ picodrive)
     PREFIX=pico; REPO=https://github.com/libretro/picodrive.git
     MAKEDIR=.; MAKEFILE=Makefile.libretro; OUT=PicoDrive; LIB=libpicodrive_ios.a ;;
 pcsx_rearmed)
-    # platform=ios-arm64 forces DYNAREC=0 in this core's own Makefile,
-    # a pure interpreter build, the same no-JIT exception Beetle Saturn
-    # already proved out for its SH-2 core. Confirm on-device speed
-    # before treating PS1 as shipped; this is a go/no-go, not a batch
-    # build like the other nine cores.
+    # platform=ios-arm64 (or tvos-arm64) forces DYNAREC=0 in this core's
+    # own Makefile, a pure interpreter build, the same no-JIT exception
+    # Beetle Saturn already proved out for its SH-2 core. Confirm on-device
+    # speed before treating PS1 as shipped on either platform; this is a
+    # go/no-go, not a batch build like the other nine cores.
     PREFIX=psx; REPO=https://github.com/libretro/pcsx_rearmed.git
     MAKEDIR=.; MAKEFILE=Makefile.libretro; OUT=PCSXReARMed; LIB=libpcsx_rearmed_ios.a ;;
 *)
     echo "unknown core: $NAME" >&2; exit 1 ;;
 esac
 
+if [ "$PLATFORM" = tvos ]; then
+    LIB=$(echo "$LIB" | sed 's/_ios\.a$/_tvos.a/')
+fi
+
+# A separate spike/source checkout per platform: these Makefiles drop .o
+# files next to the .c files they came from rather than into a
+# platform-specific build directory, so reusing one checkout across two
+# platforms would silently link a mix of iOS and tvOS objects into
+# whichever platform builds second. A fresh clone costs disk, not
+# correctness.
 SPIKE=spikes/cores/$NAME
+if [ "$PLATFORM" != ios ]; then
+    SPIKE=spikes/cores/${NAME}-${PLATFORM}
+fi
 SRC=$SPIKE/src
 OUTDIR=RommApp/RommApp/Native/$OUT
 
@@ -61,11 +93,31 @@ if [ ! -d "$SRC" ]; then
     git clone --depth 1 --recurse-submodules --shallow-submodules "$REPO" "$SRC"
 fi
 
+# Beetle PCE Fast's bundled zlib-1.2.11 lost the "!defined(__APPLE__)" guard
+# on its classic-Mac-OS fdopen() stub at some point upstream. TARGET_OS_MAC
+# is defined on every Apple platform, so the stub now fires unconditionally
+# and corrupts stdio.h's real fdopen() declaration under a modern SDK,
+# breaking both iOS and tvOS builds, not something new about tvOS. Patch it
+# back rather than build a permanently-broken core.
+ZUTIL_H="$SRC/deps/zlib-1.2.11/zutil.h"
+if [ -f "$ZUTIL_H" ]; then
+    sed -i '' 's/#if defined(MACOS) || defined(TARGET_OS_MAC)$/#if (defined(MACOS) || defined(TARGET_OS_MAC)) \&\& !defined(__APPLE__)/' "$ZUTIL_H"
+fi
+
 if [ "$MAKEFILE" = cmake ]; then
     # mGBA dropped Makefile.libretro; its CMake build has a libretro
-    # target instead.
+    # target instead. Unlike the Makefile-based cores, mGBA's own
+    # CMakeLists.txt has no explicit tvOS handling; this relies entirely
+    # on CMake's own generic Apple-platform support (CMAKE_SYSTEM_NAME=tvOS
+    # picks the appletvos SDK the same way CMAKE_SYSTEM_NAME=iOS picks
+    # iphoneos), not on anything mGBA's maintainers tested for tvOS
+    # themselves. Confirmed working 2026-08-10, but treat this core's tvOS
+    # support as less battle-tested than the ones with a real upstream
+    # tvos-arm64 Makefile case.
+    CMAKE_SYSTEM_NAME=iOS
+    [ "$PLATFORM" = tvos ] && CMAKE_SYSTEM_NAME=tvOS
     cmake -S "$SRC" -B "$SPIKE/build" \
-        -DCMAKE_SYSTEM_NAME=iOS \
+        -DCMAKE_SYSTEM_NAME=$CMAKE_SYSTEM_NAME \
         -DCMAKE_OSX_ARCHITECTURES=arm64 \
         -DCMAKE_OSX_DEPLOYMENT_TARGET=18.0 \
         -DBUILD_LIBRETRO=ON -DBUILD_QT=OFF -DBUILD_SDL=OFF \
@@ -108,14 +160,16 @@ else
     # this wrapper existing and working correctly in isolation.
     WRAP="$(pwd)/$SPIKE/ccwrap"
     mkdir -p "$WRAP"
-    real_cc=$(xcrun -sdk iphoneos -find clang)
-    real_cxx=$(xcrun -sdk iphoneos -find clang++)
+    XCRUN_SDK=iphoneos
+    [ "$PLATFORM" = tvos ] && XCRUN_SDK=appletvos
+    real_cc=$(xcrun -sdk "$XCRUN_SDK" -find clang)
+    real_cxx=$(xcrun -sdk "$XCRUN_SDK" -find clang++)
     printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cc" > "$WRAP/cc"
     printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cc" > "$WRAP/clang"
     printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cxx" > "$WRAP/c++"
     printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cxx" > "$WRAP/clang++"
     chmod +x "$WRAP"/*
-    PATH="$WRAP:$PATH" make -C "$SRC/$MAKEDIR" -f "$MAKEFILE" platform=ios-arm64 -j"$JOBS"
+    PATH="$WRAP:$PATH" make -C "$SRC/$MAKEDIR" -f "$MAKEFILE" platform=$MAKE_PLATFORM -j"$JOBS"
 fi
 
 DYLIB=$(find "$SRC" -name '*_ios.dylib' | head -1)
@@ -131,7 +185,7 @@ sed "s/bsat_/${PREFIX}_/g" spikes/BeetleSaturnStatic/bsat_wrapper.c \
     | sed 's|#include "libretro-common/include/libretro.h"|#include "libretro.h"|' \
     > "$WRAP"
 
-cc -arch arm64 -isysroot "$SDK" -miphoneos-version-min=18.0 -O2 \
+cc -arch arm64 -isysroot "$SDK" "$MINVERSION_FLAG" -O2 \
     -I"RommApp/RommApp/Native/Libretro" -c "$WRAP" -o "$SPIKE/wrapper.o"
 
 # Export exactly what the wrapper defines, nothing else. Deriving the

@@ -51,6 +51,27 @@ final class Session: ObservableObject {
         restore()
     }
 
+    /// Swaps in a different account's server and token, and reloads as if
+    /// the app had freshly launched against it.
+    ///
+    /// tvOS-only in practice: it exists for account switching there
+    /// (`TVProfileStore`), which keeps every paired profile's own token in
+    /// its own separate Keychain entry, and calls this to make one of them
+    /// the active one. `Keychain.save(token:forHost:)` is the same public
+    /// call pairing itself already makes; this does not change Keychain's
+    /// format or how iOS reads it, and `serverKey`/`restore()` stay private
+    /// to this class rather than duplicated as string literals in a second
+    /// file. Nothing on iOS calls this today; iOS has no concept of
+    /// switching which RomM account is active mid-session.
+    func activateProfile(serverURL url: URL, token: String) throws {
+        guard let host = url.host else {
+            throw RommError.transport("That server address has no host.")
+        }
+        try Keychain.save(token: token, forHost: host)
+        UserDefaults.standard.set(url.absoluteString, forKey: serverKey)
+        restore()
+    }
+
     // MARK: Restoring a previous pairing
 
     private func restore() {
@@ -361,12 +382,16 @@ final class Session: ObservableObject {
         collectionId: Int? = nil,
         searchTerm: String? = nil,
         limit: Int = 60,
-        offset: Int = 0
+        offset: Int = 0,
+        orderBy: String = "name",
+        orderDir: String = "asc",
+        matchedOnly: Bool = false
     ) async throws -> RomPage {
         guard let client else { throw RommError.transport("No server selected.") }
         return try await client.roms(
             platformId: platformId, collectionId: collectionId,
-            searchTerm: searchTerm, limit: limit, offset: offset
+            searchTerm: searchTerm, limit: limit, offset: offset,
+            orderBy: orderBy, orderDir: orderDir, matchedOnly: matchedOnly
         )
     }
 

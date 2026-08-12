@@ -19,13 +19,26 @@ import SwiftUI
 /// principle is untouched. That rule is about what Home shows, not about
 /// how many taps deep the library sits.
 struct MainTabView: View {
-    enum AppTab: Hashable { case home, library, search }
+    enum AppTab: Hashable { case home, library, search, settings }
 
     @State private var selection: AppTab = .home
     @ObservedObject private var quickActions = QuickActionRouter.shared
     @ObservedObject private var networkMonitor = NetworkMonitor.shared
 
     var body: some View {
+        tabs
+    }
+    // Tried drawing the tvOS account chip as a `ZStack` overlay here so it
+    // stayed visible across every tab instead of only Home. Reverted: the
+    // system tab bar manages its own focus internally, and once you
+    // navigated right onto an overlay drawn merely above it, going back
+    // left couldn't re-enter that closed hierarchy, a genuine dead end
+    // (confirmed on device). The chip lives back on `HomeView` only now,
+    // as a real sibling in that screen's own content flow, reachable by
+    // pressing up from the hero with no cross-hierarchy focus hop
+    // involved. See `HomeView.wideLayout`.
+
+    private var tabs: some View {
         TabView(selection: $selection) {
             Tab("Home", systemImage: "house", value: AppTab.home) {
                 HomeView()
@@ -38,7 +51,15 @@ struct MainTabView: View {
             // 2026-08-07: "if both tabs are the same why two").
             if !networkMonitor.isOffline {
                 Tab("Library", systemImage: "square.grid.2x2", value: AppTab.library) {
+                    // tvOS gets its own library screen rather than
+                    // LibraryScreen: that one is a List whose Platforms /
+                    // Collections switch lives in a toolbar, and neither
+                    // survives on a TV. See TVLibraryView's own note.
+                    #if os(tvOS)
+                    TVLibraryView()
+                    #else
                     NavigationStack { LibraryScreen() }
+                    #endif
                 }
             }
             // The dedicated search role, not just a third ordinary tab:
@@ -48,6 +69,20 @@ struct MainTabView: View {
             Tab(value: AppTab.search, role: .search) {
                 SearchScreen()
             }
+            // Settings is a real tab on tvOS, where iOS keeps it a toolbar
+            // button on Home. That split is deliberate rather than
+            // inconsistent: iOS's reasoning was reach, a toolbar corner
+            // suits something visited a few times a month. A TV has no
+            // toolbar and no thumb, every destination costs the same
+            // number of clicks from the tab bar, so the cheap corner iOS
+            // was protecting does not exist here. Controller mapping also
+            // matters far more on this platform, since a pad is the only
+            // way to play at all.
+            #if os(tvOS)
+            Tab("Settings", systemImage: "gearshape", value: AppTab.settings) {
+                TVSettingsView()
+            }
+            #endif
         }
         .tabBarMinimized()
         // This layer's share of a quick action is only choosing the tab.
@@ -84,10 +119,14 @@ private extension View {
     /// bar simply stays put, which is that release's normal behaviour.
     @ViewBuilder
     func tabBarMinimized() -> some View {
+        #if os(iOS)
         if #available(iOS 26.0, *) {
             self.tabBarMinimizeBehavior(.onScrollDown)
         } else {
             self
         }
+        #else
+        self
+        #endif
     }
 }

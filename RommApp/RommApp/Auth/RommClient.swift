@@ -99,6 +99,24 @@ actor RommClient {
         }
     }
 
+    /// tvOS account switching only, for right now: defaults a newly paired
+    /// profile's label to whoever is actually signed in rather than the
+    /// server address. `me.read` is already in `RommScopes.required`, so
+    /// every token this app ever holds can already call this.
+    func currentUser() async throws -> RommUser {
+        try await send(request(path: "/api/users/me"), decoding: RommUser.self)
+    }
+
+    /// tvOS account switching only: the same account's avatar photo, so a
+    /// profile can show the real picture instead of a generic person
+    /// icon, confirmed live as a direct image response (not `avatar_path`,
+    /// a relative path this same call's user object also carries but
+    /// that a plain asset fetch cannot resolve the way `assetData` does
+    /// for a cover's timestamped path).
+    func avatarData(userId: Int) async throws -> Data {
+        try await assetData(path: "/api/users/\(userId)/avatar")
+    }
+
     // MARK: Library
 
     func platforms() async throws -> [Platform] {
@@ -236,19 +254,36 @@ actor RommClient {
 
     /// One page of games, optionally narrowed to a platform or a search term.
     /// Search runs on the server, matching the scope doc.
+    /// `orderBy`/`orderDir` default to the alphabetical ordering every
+    /// existing caller already got, so adding them changes nothing for
+    /// anyone who does not pass them. The library's platform tiles pass
+    /// `created_at`/`desc` to show what was added to a platform most
+    /// recently, confirmed supported by RomM's own /api/roms parameters.
     func roms(
         platformId: Int? = nil,
         collectionId: Int? = nil,
         searchTerm: String? = nil,
         limit: Int = 60,
-        offset: Int = 0
+        offset: Int = 0,
+        orderBy: String = "name",
+        orderDir: String = "asc",
+        matchedOnly: Bool = false
     ) async throws -> RomPage {
         var query = [
             URLQueryItem(name: "limit", value: String(limit)),
             URLQueryItem(name: "offset", value: String(offset)),
-            URLQueryItem(name: "order_by", value: "name"),
-            URLQueryItem(name: "order_dir", value: "asc"),
+            URLQueryItem(name: "order_by", value: orderBy),
+            URLQueryItem(name: "order_dir", value: orderDir),
         ]
+        // RomM's own "matched" flag means the game resolved against a
+        // metadata provider, and on this server that is exactly the set
+        // with cover art: checked across Arcade, Game Boy, Dreamcast and
+        // Genesis, every matched game had a cover and every unmatched one
+        // did not. Filtering server side beats fetching a window and
+        // discarding the gaps.
+        if matchedOnly {
+            query.append(URLQueryItem(name: "matched", value: "true"))
+        }
         if let platformId {
             query.append(URLQueryItem(name: "platform_ids", value: String(platformId)))
         }

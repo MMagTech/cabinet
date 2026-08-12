@@ -190,7 +190,9 @@ struct LicensesView: View {
             }
         }
         .navigationTitle("Licenses")
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
     }
 }
 
@@ -214,12 +216,16 @@ private struct LicenseTextView: View {
                 Text(licenseText)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
+                    #if os(iOS)
                     .textSelection(.enabled)
+                    #endif
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
         }
         .navigationTitle(entry.name)
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
     }
 }

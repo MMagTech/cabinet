@@ -54,8 +54,10 @@ struct SearchScreen: View {
             }
             .navigationTitle("Search")
             .searchable(text: $searchText, prompt: networkMonitor.isOffline ? "Search kept games" : "Search all games")
+            #if os(iOS)
             .searchFocused($fieldFocused)
             .onAppear { fieldFocused = true }
+            #endif
             .task(id: searchText) { await runSearch() }
             // Live, matching everywhere else Offline Mode touches
             // tonight: stale online results should not sit on screen
@@ -63,7 +65,11 @@ struct SearchScreen: View {
             // be re-entered to see it re-scoped to what is kept.
             .onChange(of: networkMonitor.isOffline) { _, _ in Task { await runSearch() } }
             .fullScreenCover(item: $playing) { rom in
+                #if os(iOS)
                 NavigationStack { GameLaunchView(rom: rom) }
+                #else
+                TVGameLaunchView(rom: rom)
+                #endif
             }
         }
     }
@@ -76,13 +82,17 @@ struct SearchScreen: View {
                 } label: {
                     HStack(spacing: 12) {
                         CoverImage(path: rom.pathCoverSmall, title: rom.displayName)
-                            .frame(width: 40, height: 53)
+                            .frame(
+                                width: TenFoot.isTV ? 90 : 40,
+                                height: TenFoot.isTV ? 120 : 53
+                            )
                             .clipShape(.rect(cornerRadius: 6))
                         VStack(alignment: .leading, spacing: 2) {
                             Text(rom.displayName)
+                                .font(TenFoot.isTV ? .title3 : .body)
                                 .lineLimit(1)
                             Text(rom.platformLabel(source: labelSource, platformNames: session.platformNames))
-                                .font(.caption)
+                                .font(TenFoot.isTV ? .callout : .caption)
                                 .foregroundStyle(.secondary)
                         }
                     }

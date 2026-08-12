@@ -178,7 +178,11 @@ struct ControllerRemapView: View {
             }
         }
         .navigationTitle("Buttons")
+        // navigationBarTitleDisplayMode is iOS-only; tvOS has no
+        // navigation bar to size in the first place.
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .task { controllers.start() }
         .onDisappear { controllers.captureHandler = nil }
         .overlay {

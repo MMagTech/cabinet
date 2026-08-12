@@ -1,6 +1,7 @@
 #!/bin/sh
-# Builds RommApp/RommApp/Native/Saturn/libbeetle_saturn_ios.a from the
-# libretro Beetle Saturn sources.
+# Builds RommApp/RommApp/Native/Saturn/libbeetle_saturn_<platform>.a from
+# the libretro Beetle Saturn sources. Usage: tools/build-beetle-saturn.sh
+# [ios|tvos], defaults to ios.
 #
 # The shape of the output matters more than the compile: FBNeo already
 # links under the standard retro_* symbol names and two cores cannot
@@ -21,10 +22,35 @@
 set -e
 
 cd "$(dirname "$0")/.."
+PLATFORM=${1:-ios}
+
+case "$PLATFORM" in
+ios)
+    SDK=$(xcrun -sdk iphoneos --show-sdk-path)
+    MINVERSION_FLAG=-miphoneos-version-min=18.0
+    MAKE_PLATFORM=ios-arm64
+    XCRUN_SDK=iphoneos ;;
+tvos)
+    SDK=$(xcrun -sdk appletvos --show-sdk-path)
+    MINVERSION_FLAG=-mappletvos-version-min=18.0
+    MAKE_PLATFORM=tvos-arm64
+    XCRUN_SDK=appletvos ;;
+*)
+    echo "unknown platform: $PLATFORM (expected ios or tvos)" >&2; exit 1 ;;
+esac
+
+# bsat_wrapper.c is hand-written, not part of the cloned repo, and lives
+# in the original ios spike directory regardless of which platform is
+# building; only the clone itself needs a separate directory per platform
+# to avoid mixing iOS and tvOS .o files.
+WRAPPER_SRC=spikes/BeetleSaturnStatic/bsat_wrapper.c
 SPIKE=spikes/BeetleSaturnStatic
+if [ "$PLATFORM" != ios ]; then
+    SPIKE=spikes/BeetleSaturnStatic-${PLATFORM}
+fi
 SRC=$SPIKE/beetle-saturn-libretro
 OUT=RommApp/RommApp/Native/Saturn
-SDK=$(xcrun -sdk iphoneos --show-sdk-path)
+LIB=libbeetle_saturn_${PLATFORM}.a
 
 if [ ! -d "$SRC" ]; then
     mkdir -p "$SPIKE"
@@ -43,20 +69,23 @@ fi
 # missing here entirely (0 commons had never been verified for Saturn).
 WRAP="$(pwd)/$SPIKE/ccwrap"
 mkdir -p "$WRAP"
-real_cc=$(xcrun -sdk iphoneos -find clang)
-real_cxx=$(xcrun -sdk iphoneos -find clang++)
+real_cc=$(xcrun -sdk "$XCRUN_SDK" -find clang)
+real_cxx=$(xcrun -sdk "$XCRUN_SDK" -find clang++)
 printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cc" > "$WRAP/cc"
 printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cc" > "$WRAP/clang"
 printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cxx" > "$WRAP/c++"
 printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cxx" > "$WRAP/clang++"
 chmod +x "$WRAP"/*
 
-PATH="$WRAP:$PATH" make -C "$SRC" platform=ios-arm64 -j"$(sysctl -n hw.ncpu)"
+PATH="$WRAP:$PATH" make -C "$SRC" platform=$MAKE_PLATFORM -j"$(sysctl -n hw.ncpu)"
 
-cc -arch arm64 -isysroot "$SDK" -miphoneos-version-min=18.0 -O2 \
-    -I"$SRC" -c "$SPIKE/bsat_wrapper.c" -o "$SPIKE/bsat_wrapper.o"
+DYLIB=$(find "$SRC" -maxdepth 1 -name '*.dylib' | head -1)
+[ -n "$DYLIB" ] || { echo "no dylib produced" >&2; exit 1; }
 
-nm -g "$SRC/mednafen_saturn_libretro_ios.dylib" 2>/dev/null \
+cc -arch arm64 -isysroot "$SDK" "$MINVERSION_FLAG" -O2 \
+    -I"$SRC" -c "$WRAPPER_SRC" -o "$SPIKE/bsat_wrapper.o"
+
+nm -g "$DYLIB" 2>/dev/null \
     | awk '/ T _retro_/{print $NF}' | sed 's/^_retro_/_bsat_retro_/' | sort -u \
     > "$SPIKE/bsat_exports.txt"
 
@@ -67,6 +96,6 @@ ld -r -arch arm64 -syslibroot "$SDK" \
     -o "$SPIKE/beetle_saturn_combined.o"
 
 mkdir -p "$OUT"
-rm -f "$OUT/libbeetle_saturn_ios.a"
-ar rcs "$OUT/libbeetle_saturn_ios.a" "$SPIKE/beetle_saturn_combined.o"
-echo "Wrote $OUT/libbeetle_saturn_ios.a"
+rm -f "$OUT/$LIB"
+ar rcs "$OUT/$LIB" "$SPIKE/beetle_saturn_combined.o"
+echo "Wrote $OUT/$LIB"

@@ -1,5 +1,14 @@
 #import "LibretroFrontend.h"
 #include "LibretroCoreAPI.h"
+// The fourteen per-core static libraries are built for real tvOS/iOS
+// hardware (arm64-apple-tvos), not for a simulator, and rebuilding
+// emulator cores for a simulator target buys nothing: performance there
+// is meaningless and the cores would still be a separate set of
+// artefacts to keep in sync. So a simulator build deliberately carries no
+// cores at all and exists purely for UI work, which is most of what
+// anyone iterates on anyway. Everything above this line, the frontend
+// itself, still compiles, so nothing else in the app needs to know.
+#if !TARGET_OS_SIMULATOR
 #import "FBNeoCore.h"
 #import "SaturnCore.h"
 #import "GambatteCore.h"
@@ -12,8 +21,10 @@
 #import "ProSystemCore.h"
 #import "PicoDriveCore.h"
 #import "PCSXReARMedCore.h"
-#import "FlycastCore.h"
 #import "N64Core.h"
+#import "FlycastCore.h"
+#endif
+
 #import <UIKit/UIKit.h>
 #import <OpenGLES/EAGL.h>
 #import <OpenGLES/ES3/gl.h>
@@ -404,10 +415,15 @@ bool rumbleSetState(unsigned port, enum retro_rumble_effect effect, uint16_t str
             }
             // Handler not wired yet (a rumble fired before app launch
             // finished setting it): fall back to a phone haptic directly
-            // rather than silently dropping the event.
+            // rather than silently dropping the event. tvOS has no Taptic
+            // Engine to fall back to; a rumble that beats the handler wire-up
+            // there is simply dropped, same as it would be on an iPhone with
+            // haptics off.
+#if !TARGET_OS_TV
             UIImpactFeedbackStyle style = strong ? UIImpactFeedbackStyleHeavy : UIImpactFeedbackStyleLight;
             UIImpactFeedbackGenerator *generator = [[UIImpactFeedbackGenerator alloc] initWithStyle:style];
             [generator impactOccurred];
+#endif
         });
     }
     return true;
@@ -516,6 +532,12 @@ bool environmentCallback(unsigned cmd, void *data) {
 // The one place a core id becomes a function table. Adding a core means
 // one wiring file and one line here.
 const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
+#if TARGET_OS_SIMULATOR
+    // No cores in a simulator build; every launch path fails cleanly
+    // before it gets here (see NativePlatform.platform(bySlug:)).
+    (void)coreID;
+    return nullptr;
+#else
     switch (coreID) {
         case LibretroCoreIDFBNeo:
             return FBNeoCoreAPI();
@@ -541,12 +563,15 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
             return PicoDriveCoreAPI();
         case LibretroCoreIDPCSXReARMed:
             return PCSXReARMedCoreAPI();
-        case LibretroCoreIDFlycast:
-            return FlycastCoreAPI();
         case LibretroCoreIDMupen64Plus:
             return N64CoreAPI();
+        case LibretroCoreIDFlycast:
+            return FlycastCoreAPI();
+        default:
+            break;
     }
-    return FBNeoCoreAPI();
+    return PCSXReARMedCoreAPI();
+#endif
 }
 
 } // namespace

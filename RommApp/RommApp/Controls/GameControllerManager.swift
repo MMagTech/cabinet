@@ -101,6 +101,33 @@ final class GameControllerManager: ObservableObject {
 
     var storageKey: String { controllerName ?? "unknown" }
 
+    #if os(tvOS)
+    /// Whether a running game owns the Menu button.
+    ///
+    /// tvOS gives Menu a system meaning (pop navigation, and at the root,
+    /// leave the app). Binding it through GameController takes it away
+    /// from the system for as long as the binding exists, and this
+    /// manager's bindings are installed once and never torn down. So
+    /// after playing a single game, Menu stopped popping anywhere in the
+    /// app and quit outright instead: selecting a platform in the library
+    /// and pressing Menu dropped you to the Apple TV home screen rather
+    /// than back to the platform list.
+    ///
+    /// A game genuinely does want Menu (it is Start on most pads), so this
+    /// is a gate rather than a removal: the player screen claims it on
+    /// appear and gives it back on disappear. Everywhere else the system
+    /// keeps it and back navigation works.
+    var capturesMenuButton = false {
+        didSet {
+            guard capturesMenuButton != oldValue else { return }
+            for (index, slot) in slots.enumerated() {
+                guard let gamepad = slot?.controller?.extendedGamepad else { continue }
+                bindMenuButton(gamepad, player: index)
+            }
+        }
+    }
+    #endif
+
     func start() {
         guard !started else { return }
         started = true
@@ -231,7 +258,6 @@ final class GameControllerManager: ObservableObject {
             (GCInputRightShoulder, gamepad.rightShoulder),
             (GCInputLeftTrigger, gamepad.leftTrigger),
             (GCInputRightTrigger, gamepad.rightTrigger),
-            (GCInputButtonMenu, gamepad.buttonMenu),
         ]
         // These are optional on the profile: a compact pad may have none of
         // them, which is exactly why remapping exists.
@@ -263,8 +289,33 @@ final class GameControllerManager: ObservableObject {
                 }
             }
         }
-        slot.availableButtons = candidates.map(\.0)
+        // Menu is bound separately, through the helper below, because on
+        // tvOS whether this app should own it at all depends on whether a
+        // game is running. Still advertised as available either way, so
+        // the remap screen can offer it.
+        bindMenuButton(gamepad, player: index)
+        slot.availableButtons = candidates.map(\.0) + [GCInputButtonMenu]
         if index == 0 { availableButtons = slot.availableButtons }
+    }
+
+    /// Installs, or on tvOS deliberately withholds, the Menu button handler.
+    ///
+    /// On iOS this is unconditional and behaves exactly as it always has.
+    /// On tvOS the handler only goes on while a game is running: see
+    /// `capturesMenuButton` for why holding it the rest of the time broke
+    /// back navigation everywhere in the app.
+    private func bindMenuButton(_ gamepad: GCExtendedGamepad, player index: Int) {
+        #if os(tvOS)
+        guard capturesMenuButton else {
+            gamepad.buttonMenu.pressedChangedHandler = nil
+            return
+        }
+        #endif
+        gamepad.buttonMenu.pressedChangedHandler = { [weak self] _, _, pressed in
+            MainActor.assumeIsolated {
+                self?.button(GCInputButtonMenu, pressed: pressed, player: index)
+            }
+        }
     }
 
     /// A physical button changed. In capture mode it names itself for the
@@ -453,8 +504,12 @@ final class GameControllerManager: ObservableObject {
     }
 
     private func firePhoneHaptic(strong: Bool) {
+        // No phone to fall back to on tvOS; a rumble that misses every
+        // connected controller's own haptics is simply dropped there.
+        #if !os(tvOS)
         let generator = UIImpactFeedbackGenerator(style: strong ? .heavy : .light)
         generator.impactOccurred()
+        #endif
     }
 
     /// Drops every input on disconnect, or a direction held at the moment the

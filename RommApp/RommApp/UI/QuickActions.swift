@@ -15,6 +15,11 @@ import UIKit
 enum QuickAction: String {
     case resume, search, favorites, recents
 
+    // Home screen quick actions do not exist on tvOS: there is no icon to
+    // long press. The type stays shared so `QuickActionRouter` compiles
+    // and reads the same on both platforms, only `pending` just never gets
+    // set to anything on tvOS.
+    #if os(iOS)
     static func register() {
         UIApplication.shared.shortcutItems = [
             UIApplicationShortcutItem(
@@ -35,6 +40,7 @@ enum QuickAction: String {
             ),
         ]
     }
+    #endif
 }
 
 /// The pending action, observed by whichever screen can complete it.
@@ -58,6 +64,7 @@ final class QuickActionRouter: ObservableObject {
 /// this class as the scene delegate and the two callbacks below are the
 /// entire UIKit surface: one for taps while the app is running, one for
 /// taps that cold start it.
+#if os(iOS)
 final class QuickActionSceneDelegate: NSObject, UIWindowSceneDelegate {
     func scene(
         _ scene: UIScene, willConnectTo session: UISceneSession,
@@ -77,3 +84,4 @@ final class QuickActionSceneDelegate: NSObject, UIWindowSceneDelegate {
         completionHandler(true)
     }
 }
+#endif

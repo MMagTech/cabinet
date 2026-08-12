@@ -94,6 +94,22 @@ struct RomListView: View {
     }
 
     var body: some View {
+        #if os(tvOS)
+        // Every path that reaches a game list on tvOS lands on the grid
+        // built for a TV, rather than this screen's iOS chrome (a toolbar
+        // view-mode menu that renders as a floating pill over the artwork,
+        // a navigationTitle that paints over it, a letter scrubber meant
+        // for a thumb). Handing off here rather than at each call site
+        // means Home's rails, the library, search and the offline list all
+        // get it without any of them having to know.
+        TVRomGridView(source: source)
+        #else
+        iosBody
+        #endif
+    }
+
+    #if !os(tvOS)
+    private var iosBody: some View {
         Group {
             if error == .offline {
                 OfflineNotice { await reload() }
@@ -113,7 +129,9 @@ struct RomListView: View {
             }
         }
         .navigationTitle(navigationLabel)
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 // A menu, not a segmented picker. iOS 26 wraps every
@@ -163,12 +181,13 @@ struct RomListView: View {
             NavigationStack { GameLaunchView(rom: rom) }
         }
     }
+    #endif
 
     private var grid: some View {
         ScrollView {
             LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 110), spacing: 12)],
-                spacing: 12
+                columns: [GridItem(.adaptive(minimum: TenFoot.gridCoverMinimum), spacing: TenFoot.gridSpacing)],
+                spacing: TenFoot.gridSpacing
             ) {
                 ForEach(roms) { rom in
                     Button {
@@ -183,7 +202,7 @@ struct RomListView: View {
                                 .downloadBadge(romId: rom.id)
 
                             Text(rom.displayName)
-                                .font(.caption)
+                                .font(TenFoot.captionFont)
                                 .lineLimit(1)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .foregroundStyle(
@@ -245,11 +264,17 @@ struct RomListView: View {
                 }
 
                 footer
+                    #if os(iOS)
                     .listRowSeparator(.hidden)
+                    #endif
             }
             .listStyle(.plain)
             // Room for the rail, or the longest titles run underneath it.
             .contentMargins(.trailing, letterIndex.count > 4 ? 18 : 0, for: .scrollContent)
+            // The letter scrubber is a touch drag gesture with a haptic tap,
+            // both iOS-only; tvOS's focus-engine equivalent is real future
+            // work, not attempted here.
+            #if os(iOS)
             .overlay(alignment: .trailing) {
                 // Only when there is enough alphabet to be worth jumping
                 // around in; a six game list scrolls faster than it scrubs.
@@ -261,6 +286,7 @@ struct RomListView: View {
                     }
                 }
             }
+            #endif
         }
     }
 
@@ -349,6 +375,7 @@ struct RomListView: View {
 /// title under each letter passed. Jumping is instant rather than animated,
 /// because animating through a thousand rows reads as scrolling, and the
 /// point of a scrubber is not scrolling.
+#if os(iOS)
 private struct LetterScrubber: View {
     let letters: [String]
     let onSelect: (String) -> Void
@@ -386,3 +413,4 @@ private struct LetterScrubber: View {
         .padding(.trailing, 2)
     }
 }
+#endif

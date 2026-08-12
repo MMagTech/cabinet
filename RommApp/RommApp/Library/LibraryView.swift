@@ -46,7 +46,9 @@ struct LibraryScreen: View {
         // than stacking both: the tab bar already says Library, so a large
         // title would only repeat it while pushing the list further down.
         .navigationTitle("Library")
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Picker("Browse by", selection: $browsing) {
@@ -68,9 +70,12 @@ struct LibraryScreen: View {
         // it once a connection returns.
         .onChange(of: networkMonitor.isConnected) { _, _ in Task { await loadPlatforms() } }
         .onChange(of: networkMonitor.manualOfflineMode) { _, _ in Task { await loadPlatforms() } }
+        // GameLaunchView is iOS-only for now; see HomeView.swift for why.
+        #if os(iOS)
         .fullScreenCover(item: $playing) { rom in
             NavigationStack { GameLaunchView(rom: rom) }
         }
+        #endif
     }
 
     // MARK: Platforms
@@ -130,7 +135,11 @@ struct LibraryScreen: View {
             }
             // Inset rows read as cards floating under the bars, where the
             // full width plain style ran straight into them.
+            #if os(iOS)
             .listStyle(.insetGrouped)
+            #else
+            .listStyle(.plain)
+            #endif
             .refreshable { await loadPlatforms() }
         }
     }
@@ -226,7 +235,11 @@ struct LibraryScreen: View {
                 }
             }
         }
+        #if os(iOS)
         .listStyle(.insetGrouped)
+        #else
+        .listStyle(.plain)
+        #endif
         .refreshable { await loadCollections() }
     }
 

@@ -30,6 +30,13 @@ enum NativeLauncher {
     ///
     /// A kept game skips all of that: its directory already holds the ROM
     /// and firmware, so the core boots straight from it with zero network.
+    ///
+    /// tvOS only: `LibretroFrontend` currently only carries a real static
+    /// library for PCSX ReARMed (the PS1 go/no-go performance test), the
+    /// other eleven cores have never been rebuilt for tvOS. This function
+    /// itself is generic and compiles for both platforms; a tvOS caller
+    /// asking for anything but a PS1 rom hits `LaunchError.noNativeCore`
+    /// the same way an unsupported platform does on iOS today.
     @discardableResult
     @MainActor
     static func prepare(
@@ -70,15 +77,45 @@ enum NativeLauncher {
         // holds at most the one game about to load.
         cleanUpTempDirectories()
 
+        #if os(iOS)
         if let keptDir = KeptGameStore.shared.launchDirectory(romId: rom.id) {
             await restoreVMUSaveIfNeeded(rom: rom, session: session, platform: platform, workDir: keptDir)
             return try activate(platform: platform, romURL: keptDir.appendingPathComponent(rom.fsName), workDir: keptDir)
         }
+        #endif
 
+        #if os(tvOS)
+        // A soft, evictable cache, not a kept-games equivalent: tvOS's own
+        // storage tier is explicitly built for exactly this ("Caching and
+        // Purgeable Memory" / the App Programming Guide for tvOS both
+        // describe writing into the cache directory and letting the OS
+        // decide when to reclaim it, system-wide across every app, not
+        // per-app). Every tvOS launch used to redownload into a fresh
+        // temp directory deleted unconditionally on exit, so replaying a
+        // game already on Recent or Favorites cost a full download every
+        // single time even though nothing about the file had changed. A
+        // stable directory keyed by rom id, left in place instead of
+        // wiped, means a repeat play skips the network entirely (ROM and
+        // firmware both, since firmware already staged here from the
+        // first run needs no re-fetch either) until the OS actually
+        // reclaims the space, at which point this falls straight back to
+        // downloading fresh with no special handling needed.
+        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("native-rom-cache", isDirectory: true)
+            .appendingPathComponent(String(rom.id), isDirectory: true)
+        let cachedROMURL = cacheDir.appendingPathComponent(rom.fsName)
+        if FileManager.default.fileExists(atPath: cachedROMURL.path) {
+            await restoreVMUSaveIfNeeded(rom: rom, session: session, platform: platform, workDir: cacheDir)
+            return try activate(platform: platform, romURL: cachedROMURL, workDir: cacheDir)
+        }
+        let workDir = cacheDir
+        try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
+        #else
         let workDir = FileManager.default.temporaryDirectory.appendingPathComponent(
             "native-player-\(UUID().uuidString)", isDirectory: true
         )
         try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
+        #endif
 
         let romURL = workDir.appendingPathComponent(rom.fsName)
         try await download(session.romContentRequest(rom), to: romURL, onProgress: onProgress)
@@ -156,6 +193,16 @@ enum NativeLauncher {
     }
 
     private static func activate(platform: NativePlatform, romURL: URL, workDir: URL) throws -> NativeCore {
+        #if targetEnvironment(simulator)
+        // A simulator build links no cores: they are built for real
+        // hardware and rebuilding emulator cores for a simulator proves
+        // nothing, since performance there is meaningless. The block sits
+        // here, at the point of actually starting a core, rather than in
+        // platform resolution, so the rest of the app still knows
+        // perfectly well which platforms are supported and the library
+        // does not label every one of them unplayable.
+        throw LaunchError.unsupportedFormat("Games can't run in the Simulator. Use a real Apple TV.")
+        #else
         let core = platform.core
         let loadURL = try extractedIfArchived(romURL, core: core, in: workDir)
         LibretroFrontend.shared.activateCore(core.coreID)
@@ -173,6 +220,7 @@ enum NativeLauncher {
             throw NSError(domain: "NativeLauncher", code: 1, userInfo: [NSLocalizedDescriptionKey: failure])
         }
         return core
+        #endif
     }
 
     /// Every cartridge-style core here expects a raw ROM, either a path it

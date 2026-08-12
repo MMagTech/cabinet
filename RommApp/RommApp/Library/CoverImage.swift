@@ -9,6 +9,12 @@ import SwiftUI
 struct CoverImage: View {
     let path: String?
     let title: String
+    /// Whether a missing or failed cover draws the titled placeholder.
+    /// Defaults to true, so every existing caller behaves exactly as
+    /// before. tvOS's library tiles pass false: there the art sits on the
+    /// app's own coloured panel, and a grey placeholder box reads as a
+    /// broken tile rather than as a game with no art.
+    var showsPlaceholder: Bool = true
     /// Fill for grids and rails, where every tile has to be the same shape.
     /// Fit for the Home hero, which shows the whole image rather than a
     /// crop of it.
@@ -24,6 +30,8 @@ struct CoverImage: View {
                 Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: contentMode)
+            } else if !showsPlaceholder {
+                Color.clear
             } else {
                 // Arcade sets often have no art at all. A titled placeholder
                 // keeps the tile identifiable instead of a gray void.
