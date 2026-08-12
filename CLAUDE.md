@@ -12,7 +12,18 @@ design and the reasoning behind it, and most decisions in it are already settled
 
 ## Git conventions
 
-- Work on `dev`. `main` is the release branch and carries the full history.
+- Work on `dev`. Both platforms live there, iOS and tvOS. `main` is the release
+  branch and carries the full history. The old separate `tvos` branch is
+  retired, merged into `main` on 2026-08-12. Do not recreate it.
+- Releases are per platform, tagged independently on `main`: `ios-v0.x.x-alpha`
+  and `tvos-v0.x.x-alpha`, titled "Cabinet for iOS 0.x.x-alpha" and
+  "Cabinet for tvOS 0.x.x-alpha". The two platforms do not have to release
+  together or share version numbers. The two oldest iOS tags (`v0.1.0-alpha`
+  and `v0.2.0-alpha`) predate this convention and keep their names.
+- To cut a release: archive the scheme (`RommApp` for iOS, `RommAppTV` for
+  tvOS) with `xcodebuild archive` and `CODE_SIGNING_ALLOWED=NO`, copy the
+  built `.app` into a `Payload/` folder and zip it as an unsigned `.ipa`,
+  then `gh release create` with the tag and `gh release upload` the IPA.
 - The old squash-merge-only rule is retired. Decided 2026-08-09, at launch: the
   history is public and complete on purpose, including the messy parts. Do not
   squash it away or propose hiding branches.
@@ -43,6 +54,19 @@ fullscreen, native input and offline play. That split is settled; do not
 propose moving a dynarec-dependent system into the app process.
 
 Home is resume first, not a library grid. One tap back into the last game.
+
+## Platform boundaries
+
+- tvOS code lives in `RommApp/RommAppTV/`. iOS and shared code live in
+  `RommApp/RommApp/`. During tvOS work, do not edit iOS or shared files
+  without calling it out explicitly first. The reverse applies to iOS work.
+- When tvOS needs logic that lives in an iOS-only file, extract it to a
+  shared file both targets compile. Never copy-paste it into the tvOS target.
+- iOS and tvOS do not have feature parity. Do not assume a feature exists on
+  one platform because it exists on the other. Check the file's own doc
+  comments first.
+- Any change to a persisted local data format needs a non-destructive
+  migration path decided at the same time, not discovered as data loss later.
 
 ## Things that are settled
 
