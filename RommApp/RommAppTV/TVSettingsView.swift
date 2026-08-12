@@ -39,7 +39,20 @@ struct TVSettingsView: View {
                         } label: {
                             actionRow(title: "Buttons", detail: "Map any button to any input", chevron: true)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(RowFocusStyle())
+                    }
+
+                    section("Emulation") {
+                        NavigationLink {
+                            TVNativeCoresView()
+                        } label: {
+                            actionRow(
+                                title: "Native cores",
+                                detail: "Speed and accuracy options for the cores that run natively",
+                                chevron: true
+                            )
+                        }
+                        .buttonStyle(RowFocusStyle())
                     }
 
                     section("Server") {
@@ -51,7 +64,7 @@ struct TVSettingsView: View {
                         } label: {
                             actionRow(title: "Sign out", detail: nil, chevron: false, destructive: true)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(RowFocusStyle())
                     }
                 }
                 .frame(maxWidth: 1100, alignment: .leading)
@@ -79,6 +92,25 @@ struct TVSettingsView: View {
         }
     }
 
+    /// Real Liquid Glass on tvOS 26, not the flat `.ultraThinMaterial`
+    /// this screen used before: the same "translucency standing in for
+    /// glass" pattern replaced everywhere else in the app today (the
+    /// switcher pills, the Recent/Favorites chips, the save-state
+    /// buttons, the pause menu), just missed here since this screen
+    /// hadn't been touched yet. tvOS 18 keeps the flat material fall
+    /// back, since `glassEffect` doesn't exist there.
+    @ViewBuilder
+    static func rowGlassBackground() -> some View {
+        if #available(tvOS 26.0, *) {
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.clear)
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+        } else {
+            RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial)
+        }
+    }
+    private func rowBackground() -> some View { Self.rowGlassBackground() }
+
     private func infoRow(label: String, value: String) -> some View {
         HStack {
             Text(label).font(.title3)
@@ -90,7 +122,7 @@ struct TVSettingsView: View {
         .padding(.horizontal, 32)
         .padding(.vertical, 22)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.ultraThinMaterial.opacity(0.5), in: .rect(cornerRadius: 16))
+        .background { rowBackground() }
     }
 
     private func actionRow(
@@ -117,7 +149,7 @@ struct TVSettingsView: View {
         .padding(.horizontal, 32)
         .padding(.vertical, 22)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.ultraThinMaterial, in: .rect(cornerRadius: 16))
+        .background { rowBackground() }
     }
 }
 #endif

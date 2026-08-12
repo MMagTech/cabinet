@@ -124,3 +124,54 @@ struct TextFocusStyle: ButtonStyle {
         }
     }
 }
+
+/// Focus for a full-width settings-style row (Settings' own action/info
+/// rows, Native Cores' platform list): a real glass background that is
+/// always visible, not just conjured on focus, plus a modest tint and
+/// scale when focused.
+///
+/// `.plain` looked like the safe choice for these rows since it has no
+/// visible plate when unstyled, but tvOS's own default focus effect for
+/// `.plain` is not "no effect": it paints a solid white plate over
+/// whatever background the row already has, and its own scale growth
+/// reserves no headroom, so a focused row can grow wide enough to
+/// overlap its neighbour. Both symptoms are the exact ones
+/// `CoverFocusStyle`/`TextFocusStyle` already exist to avoid; this is
+/// the same fix for a row that needs a background at rest, not only
+/// when focused.
+struct RowFocusStyle: ButtonStyle {
+    var cornerRadius: CGFloat = 16
+
+    func makeBody(configuration: Configuration) -> some View {
+        FocusBody(configuration: configuration, cornerRadius: cornerRadius)
+    }
+
+    private struct FocusBody: View {
+        let configuration: Configuration
+        let cornerRadius: CGFloat
+        @Environment(\.isFocused) private var isFocused
+
+        var body: some View {
+            configuration.label
+                .background {
+                    if #available(tvOS 26.0, *) {
+                        RoundedRectangle(cornerRadius: cornerRadius)
+                            .fill(.clear)
+                            .glassEffect(
+                                isFocused ? .regular.tint(.white.opacity(0.22)) : .regular,
+                                in: RoundedRectangle(cornerRadius: cornerRadius)
+                            )
+                    } else {
+                        RoundedRectangle(cornerRadius: cornerRadius)
+                            .fill(isFocused ? AnyShapeStyle(.white.opacity(0.18)) : AnyShapeStyle(.ultraThinMaterial))
+                    }
+                }
+                // A restrained scale, matching the rest of the app's own
+                // focus effects, not the system default's larger jump
+                // that had no reserved headroom and grew into the next
+                // row.
+                .scaleEffect(isFocused ? 1.03 : 1.0)
+                .animation(.easeOut(duration: 0.18), value: isFocused)
+        }
+    }
+}

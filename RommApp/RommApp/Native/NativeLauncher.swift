@@ -84,10 +84,38 @@ enum NativeLauncher {
         }
         #endif
 
+        #if os(tvOS)
+        // A soft, evictable cache, not a kept-games equivalent: tvOS's own
+        // storage tier is explicitly built for exactly this ("Caching and
+        // Purgeable Memory" / the App Programming Guide for tvOS both
+        // describe writing into the cache directory and letting the OS
+        // decide when to reclaim it, system-wide across every app, not
+        // per-app). Every tvOS launch used to redownload into a fresh
+        // temp directory deleted unconditionally on exit, so replaying a
+        // game already on Recent or Favorites cost a full download every
+        // single time even though nothing about the file had changed. A
+        // stable directory keyed by rom id, left in place instead of
+        // wiped, means a repeat play skips the network entirely (ROM and
+        // firmware both, since firmware already staged here from the
+        // first run needs no re-fetch either) until the OS actually
+        // reclaims the space, at which point this falls straight back to
+        // downloading fresh with no special handling needed.
+        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("native-rom-cache", isDirectory: true)
+            .appendingPathComponent(String(rom.id), isDirectory: true)
+        let cachedROMURL = cacheDir.appendingPathComponent(rom.fsName)
+        if FileManager.default.fileExists(atPath: cachedROMURL.path) {
+            await restoreVMUSaveIfNeeded(rom: rom, session: session, platform: platform, workDir: cacheDir)
+            return try activate(platform: platform, romURL: cachedROMURL, workDir: cacheDir)
+        }
+        let workDir = cacheDir
+        try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
+        #else
         let workDir = FileManager.default.temporaryDirectory.appendingPathComponent(
             "native-player-\(UUID().uuidString)", isDirectory: true
         )
         try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
+        #endif
 
         let romURL = workDir.appendingPathComponent(rom.fsName)
         try await download(session.romContentRequest(rom), to: romURL, onProgress: onProgress)
