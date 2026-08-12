@@ -94,6 +94,22 @@ struct RomListView: View {
     }
 
     var body: some View {
+        #if os(tvOS)
+        // Every path that reaches a game list on tvOS lands on the grid
+        // built for a TV, rather than this screen's iOS chrome (a toolbar
+        // view-mode menu that renders as a floating pill over the artwork,
+        // a navigationTitle that paints over it, a letter scrubber meant
+        // for a thumb). Handing off here rather than at each call site
+        // means Home's rails, the library, search and the offline list all
+        // get it without any of them having to know.
+        TVRomGridView(source: source)
+        #else
+        iosBody
+        #endif
+    }
+
+    #if !os(tvOS)
+    private var iosBody: some View {
         Group {
             if error == .offline {
                 OfflineNotice { await reload() }
@@ -161,19 +177,17 @@ struct RomListView: View {
                 await loadNextPage()
             }
         }
-        // GameLaunchView is iOS-only for now; see HomeView.swift for why.
-        #if os(iOS)
         .fullScreenCover(item: $playing) { rom in
             NavigationStack { GameLaunchView(rom: rom) }
         }
-        #endif
     }
+    #endif
 
     private var grid: some View {
         ScrollView {
             LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 110), spacing: 12)],
-                spacing: 12
+                columns: [GridItem(.adaptive(minimum: TenFoot.gridCoverMinimum), spacing: TenFoot.gridSpacing)],
+                spacing: TenFoot.gridSpacing
             ) {
                 ForEach(roms) { rom in
                     Button {
@@ -188,7 +202,7 @@ struct RomListView: View {
                                 .downloadBadge(romId: rom.id)
 
                             Text(rom.displayName)
-                                .font(.caption)
+                                .font(TenFoot.captionFont)
                                 .lineLimit(1)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .foregroundStyle(

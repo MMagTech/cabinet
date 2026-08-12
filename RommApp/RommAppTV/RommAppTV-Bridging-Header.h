@@ -1,11 +1,10 @@
-// tvOS's own bridging header, trimmed from RommApp/RommApp/Native/RommApp-Bridging-Header.h.
+// tvOS's own bridging header, the sibling of
+// RommApp/RommApp/Native/RommApp-Bridging-Header.h.
 //
-// Only LibretroFrontend.h is pulled in, for the LibretroCoreID enum that
-// NativeCore.swift's `coreID` property returns (NativeCore.swift is shared
-// with tvOS since KeptGameStore depends on it). The Objective-C++
-// implementation behind that header (LibretroFrontend.mm) and the twelve
-// per-core static libraries are iOS-only in this pass, so nothing here
-// actually needs to resolve at link time. Archive.h is left out entirely:
-// its one caller, NativeLauncher's archive extraction path, is guarded
-// #if os(iOS) for the same reason.
+// LibretroFrontend.h carries the LibretroCoreID enum NativeCore.swift's
+// `coreID` property returns, and the frontend interface TVPlayerView
+// drives. Archive.h carries archive_extract_first_file, which
+// NativeLauncher needs for every cartridge platform RomM serves zipped
+// (most of them): both now build for tvOS, so both belong here.
 #import "../RommApp/Native/Libretro/LibretroFrontend.h"
+#import "../RommApp/Native/Archive/Archive.h"

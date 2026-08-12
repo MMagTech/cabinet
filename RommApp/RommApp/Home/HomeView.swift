@@ -195,14 +195,18 @@ struct HomeView: View {
             // 2026-08-07).
             .onChange(of: networkMonitor.isConnected) { _, _ in Task { await load() } }
             .onChange(of: networkMonitor.manualOfflineMode) { _, _ in Task { await load() } }
-            // Launch and playback both go through GameLaunchView/PlayerView,
-            // which are iOS-only for now: tvOS has no native core wired up
-            // yet (see NativeLauncher.swift) and no webview player. Follow-up
-            // work, not stubbed further here.
-            #if os(iOS)
+            // GameLaunchView/PlayerView are the webview launch path, iOS-only:
+            // tvOS has no webview player and never will (see CLAUDE.md's JIT
+            // boundary). Native launch (nativeDirectLaunch, below) is the one
+            // tvOS actually has, PS1 only for now.
             .fullScreenCover(item: $resuming) { rom in
+                #if os(iOS)
                 NavigationStack { GameLaunchView(rom: rom) }
+                #else
+                TVGameLaunchView(rom: rom)
+                #endif
             }
+            #if os(iOS)
             .fullScreenCover(item: $directLaunch) { launch in
                 PlayerView(
                     rom: launch.rom,
@@ -220,14 +224,16 @@ struct HomeView: View {
                 if playerClosed { Task { await load() } }
             }
             #endif
-            #if os(iOS)
             .fullScreenCover(item: $nativeDirectLaunch) { launch in
+                #if os(iOS)
                 NativePlayerView(rom: launch.rom, core: launch.core, initialState: launch.initialState)
+                #else
+                TVPlayerView(rom: launch.rom, core: launch.core, initialState: launch.initialState)
+                #endif
             }
             .onChange(of: nativeDirectLaunch == nil) { _, playerClosed in
                 if playerClosed { Task { await load() } }
             }
-            #endif
             // Home's share of a quick action, taken when, and only when,
             // this screen can actually act on it: resume needs the recents
             // fetch to have landed, favorites needs the collection known.
@@ -238,11 +244,11 @@ struct HomeView: View {
             .onChange(of: session.favoriteCollection) { _, _ in consumeQuickAction() }
             .onAppear { consumeQuickAction() }
             .navigationDestination(isPresented: $quickPushRecents) {
-                RomListView(source: .recentlyPlayed)
+                romList(.recentlyPlayed)
             }
             .navigationDestination(isPresented: $quickPushFavorites) {
                 if let favorites = session.favoriteCollection {
-                    RomListView(source: .collection(favorites))
+                    romList(.collection(favorites))
                 }
             }
         }
@@ -270,8 +276,49 @@ struct HomeView: View {
 
     /// Landscape: the hero takes the left, everything else stacks to its
     /// right, so nothing is pushed off a screen that is short but wide.
+    ///
+    /// tvOS never takes this narrow-hero-beside-a-column shape at all: a
+    /// TV is always landscape, and a card boxed into 320pt on a 4K-wide
+    /// canvas read as a phone layout stretched onto the wrong screen. It
+    /// gets its own top-to-bottom shape instead, full-width banner over
+    /// full-width shelves, the same structure Home's own mockups settled
+    /// on and the shape Apple's own TV app uses.
     private func wideLayout(height: CGFloat) -> some View {
-        HStack(alignment: .top, spacing: 20) {
+        #if os(tvOS)
+        return ScrollView {
+            // Sized so Recent's own cover and title fit above the fold
+            // alongside the hero on first landing. The original 0.42/460
+            // hero, plus the row's full padding, pushed Recent's caption
+            // text past the bottom edge on a 1080pt-tall screen; a first
+            // pass at 0.34/380 still cut it off on real hardware, because
+            // a physical TV's overscan safe area eats more vertical room
+            // than the simulator's raw framebuffer capture shows. 0.28/300
+            // fit with margin to spare, then 0.34/360 still left a visible
+            // gap below Recent's caption on real hardware. Grown again to
+            // close that remaining gap, with its own breathing room below
+            // the hero rather than sharing the same tight spacing Recent
+            // and Favorites use between each other.
+            VStack(alignment: .leading, spacing: 16) {
+                if let hero = recent.first {
+                    heroCard(for: hero, height: min(height * 0.40, 420), wide: true)
+                        .padding(.bottom, 20)
+                }
+                if recent.count > 1 {
+                    rotationRow("Recent", Array(recent.dropFirst()), seeAll: .recentlyPlayed)
+                } else if loaded, recent.isEmpty {
+                    emptyState
+                }
+                if !favorites.isEmpty {
+                    rotationRow(
+                        "Favorites", favorites, seeAll: session.favoriteCollection.map { .collection($0) }
+                    )
+                }
+            }
+            .padding(.horizontal, 60)
+            .padding(.vertical, 16)
+        }
+        #else
+        return HStack(alignment: .top, spacing: 20) {
             if let hero = recent.first {
                 heroCard(for: hero, height: max(200, height - 40), wide: true)
                     .frame(maxWidth: 320)
@@ -314,9 +361,23 @@ struct HomeView: View {
         // bar something to sit over, which is the only way its material
         // ever shows: glass over nothing just renders as a white pill.
         .ignoresSafeArea(.container, edges: .bottom)
+        #endif
     }
 
     // MARK: Pieces
+
+    /// The full list behind a rail. tvOS gets its own grid rather than
+    /// `RomListView`: that screen's title, toolbar view-mode menu and
+    /// letter scrubber are all iOS chrome, and its navigationTitle painted
+    /// itself over the artwork on a TV. See TVRomGridView's own note.
+    @ViewBuilder
+    private func romList(_ source: RomListView.Source) -> some View {
+        #if os(tvOS)
+        TVRomGridView(source: source)
+        #else
+        RomListView(source: source)
+        #endif
+    }
 
     /// Box art, always, the same visual language as every other card in
     /// the app. The hero used to show a captured game frame when one
@@ -614,51 +675,76 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 12) {
             if let seeAll {
                 NavigationLink {
-                    RomListView(source: seeAll)
+                    romList(seeAll)
                 } label: {
                     HStack(spacing: 4) {
                         Text(title)
-                            .font(.headline)
+                            .font(TenFoot.sectionHeaderFont)
                             .foregroundStyle(.primary)
                         Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
+                            .font(TenFoot.isTV ? .title3.weight(.semibold) : .caption.weight(.semibold))
                             .foregroundStyle(.tertiary)
                     }
                 }
+                // Neither .plain nor .borderless on tvOS: .plain grows a
+                // solid white card that overlapped the hero above it, and
+                // .borderless draws a rounded plate that became a grey disc
+                // sitting on top of the chevron and the title's last
+                // letter. TextFocusStyle tints and lifts the label and
+                // draws nothing behind it.
+                #if os(tvOS)
+                .buttonStyle(TextFocusStyle())
+                #else
                 .buttonStyle(.plain)
-                .padding(.horizontal, 20)
+                #endif
+                .padding(.horizontal, TenFoot.contentInset)
             } else {
                 Text(title)
-                    .font(.headline)
-                    .padding(.horizontal, 20)
+                    .font(TenFoot.sectionHeaderFont)
+                    .padding(.horizontal, TenFoot.contentInset)
             }
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
+                // Padding, not decoration: a focused card scales up past
+                // its own frame, and without headroom the top and bottom of
+                // the grown card are clipped against the row's bounds.
+                HStack(spacing: TenFoot.shelfSpacing) {
                     ForEach(roms) { rom in
-                        Button {
-                            resuming = rom
-                        } label: {
-                            VStack(alignment: .leading, spacing: 6) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            // Only the artwork goes inside the button. On
+                            // tvOS a focused .plain button draws the system
+                            // card treatment around its whole label, so a
+                            // caption inside it gets swallowed by that white
+                            // card instead of sitting under the art the way
+                            // the Apple TV app's own shelves read.
+                            Button {
+                                resuming = rom
+                            } label: {
                                 CoverImage(path: rom.pathCoverSmall, title: rom.displayName)
-                                    .frame(width: 100, height: 133)
+                                    .frame(width: TenFoot.shelfCoverWidth, height: TenFoot.shelfCoverHeight)
                                     .clipShape(.rect(cornerRadius: 10))
-                                    .compatibilityBadge(romId: rom.id, compact: true)
-                                    .favoriteBadge(romId: rom.id, compact: true)
-                                    .downloadBadge(romId: rom.id, compact: true)
-                                Text(rom.displayName)
-                                    .font(.caption)
-                                    .lineLimit(1)
-                                    .frame(width: 100, alignment: .leading)
-                                    .foregroundStyle(
-                                        compatibility.isMarked(rom.id) ? .secondary : .primary
-                                    )
+                                    .compatibilityBadge(romId: rom.id, compact: !TenFoot.isTV)
+                                    .favoriteBadge(romId: rom.id, compact: !TenFoot.isTV)
+                                    .downloadBadge(romId: rom.id, compact: !TenFoot.isTV)
                             }
+                            #if os(tvOS)
+                            .buttonStyle(CoverFocusStyle(cornerRadius: 10))
+                            #else
+                            .buttonStyle(.plain)
+                            #endif
+                            .gameContextMenu(rom: rom)
+
+                            Text(rom.displayName)
+                                .font(TenFoot.captionFont)
+                                .lineLimit(1)
+                                .frame(width: TenFoot.shelfCoverWidth, alignment: .leading)
+                                .foregroundStyle(
+                                    compatibility.isMarked(rom.id) ? .secondary : .primary
+                                )
                         }
-                        .buttonStyle(.plain)
-                        .gameContextMenu(rom: rom)
                     }
                 }
+                .padding(.vertical, TenFoot.isTV ? 24 : 0)
             }
             // Covers dissolve at the rail's leading edge rather than being
             // sliced in half by it. A screen edge is a boundary the eye
@@ -680,7 +766,7 @@ struct HomeView: View {
                     endPoint: .trailing
                 )
             }
-            .contentMargins(.horizontal, 20, for: .scrollContent)
+            .contentMargins(.horizontal, TenFoot.contentInset, for: .scrollContent)
         }
     }
 

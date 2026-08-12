@@ -1,10 +1,14 @@
 #import "LibretroFrontend.h"
 #include "LibretroCoreAPI.h"
-// tvOS only ships a static library for PCSX ReARMed so far (the PS1
-// go/no-go performance test); the other eleven cores have never been
-// rebuilt for tvOS, so their wiring files stay iOS-only here rather than
-// failing to link against libraries that do not exist for this platform.
-#if !TARGET_OS_TV
+// The fourteen per-core static libraries are built for real tvOS/iOS
+// hardware (arm64-apple-tvos), not for a simulator, and rebuilding
+// emulator cores for a simulator target buys nothing: performance there
+// is meaningless and the cores would still be a separate set of
+// artefacts to keep in sync. So a simulator build deliberately carries no
+// cores at all and exists purely for UI work, which is most of what
+// anyone iterates on anyway. Everything above this line, the frontend
+// itself, still compiles, so nothing else in the app needs to know.
+#if !TARGET_OS_SIMULATOR
 #import "FBNeoCore.h"
 #import "SaturnCore.h"
 #import "GambatteCore.h"
@@ -16,10 +20,11 @@
 #import "BeetleNGPCore.h"
 #import "ProSystemCore.h"
 #import "PicoDriveCore.h"
-#import "FlycastCore.h"
-#import "N64Core.h"
-#endif
 #import "PCSXReARMedCore.h"
+#import "N64Core.h"
+#import "FlycastCore.h"
+#endif
+
 #import <UIKit/UIKit.h>
 #import <OpenGLES/EAGL.h>
 #import <OpenGLES/ES3/gl.h>
@@ -527,8 +532,13 @@ bool environmentCallback(unsigned cmd, void *data) {
 // The one place a core id becomes a function table. Adding a core means
 // one wiring file and one line here.
 const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
+#if TARGET_OS_SIMULATOR
+    // No cores in a simulator build; every launch path fails cleanly
+    // before it gets here (see NativePlatform.platform(bySlug:)).
+    (void)coreID;
+    return nullptr;
+#else
     switch (coreID) {
-#if !TARGET_OS_TV
         case LibretroCoreIDFBNeo:
             return FBNeoCoreAPI();
         case LibretroCoreIDBeetleSaturn:
@@ -551,17 +561,17 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
             return ProSystemCoreAPI();
         case LibretroCoreIDPicoDrive:
             return PicoDriveCoreAPI();
-        case LibretroCoreIDFlycast:
-            return FlycastCoreAPI();
-        case LibretroCoreIDMupen64Plus:
-            return N64CoreAPI();
-#endif
         case LibretroCoreIDPCSXReARMed:
             return PCSXReARMedCoreAPI();
+        case LibretroCoreIDMupen64Plus:
+            return N64CoreAPI();
+        case LibretroCoreIDFlycast:
+            return FlycastCoreAPI();
         default:
             break;
     }
     return PCSXReARMedCoreAPI();
+#endif
 }
 
 } // namespace

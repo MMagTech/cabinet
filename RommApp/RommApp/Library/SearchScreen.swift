@@ -64,12 +64,13 @@ struct SearchScreen: View {
             // once the toggle flips, and typed text should not need to
             // be re-entered to see it re-scoped to what is kept.
             .onChange(of: networkMonitor.isOffline) { _, _ in Task { await runSearch() } }
-            // GameLaunchView is iOS-only for now; see HomeView.swift for why.
-            #if os(iOS)
             .fullScreenCover(item: $playing) { rom in
+                #if os(iOS)
                 NavigationStack { GameLaunchView(rom: rom) }
+                #else
+                TVGameLaunchView(rom: rom)
+                #endif
             }
-            #endif
         }
     }
 
@@ -81,13 +82,17 @@ struct SearchScreen: View {
                 } label: {
                     HStack(spacing: 12) {
                         CoverImage(path: rom.pathCoverSmall, title: rom.displayName)
-                            .frame(width: 40, height: 53)
+                            .frame(
+                                width: TenFoot.isTV ? 90 : 40,
+                                height: TenFoot.isTV ? 120 : 53
+                            )
                             .clipShape(.rect(cornerRadius: 6))
                         VStack(alignment: .leading, spacing: 2) {
                             Text(rom.displayName)
+                                .font(TenFoot.isTV ? .title3 : .body)
                                 .lineLimit(1)
                             Text(rom.platformLabel(source: labelSource, platformNames: session.platformNames))
-                                .font(.caption)
+                                .font(TenFoot.isTV ? .callout : .caption)
                                 .foregroundStyle(.secondary)
                         }
                     }

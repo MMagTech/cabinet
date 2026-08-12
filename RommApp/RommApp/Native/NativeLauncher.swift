@@ -165,6 +165,16 @@ enum NativeLauncher {
     }
 
     private static func activate(platform: NativePlatform, romURL: URL, workDir: URL) throws -> NativeCore {
+        #if targetEnvironment(simulator)
+        // A simulator build links no cores: they are built for real
+        // hardware and rebuilding emulator cores for a simulator proves
+        // nothing, since performance there is meaningless. The block sits
+        // here, at the point of actually starting a core, rather than in
+        // platform resolution, so the rest of the app still knows
+        // perfectly well which platforms are supported and the library
+        // does not label every one of them unplayable.
+        throw LaunchError.unsupportedFormat("Games can't run in the Simulator. Use a real Apple TV.")
+        #else
         let core = platform.core
         let loadURL = try extractedIfArchived(romURL, core: core, in: workDir)
         LibretroFrontend.shared.activateCore(core.coreID)
@@ -182,6 +192,7 @@ enum NativeLauncher {
             throw NSError(domain: "NativeLauncher", code: 1, userInfo: [NSLocalizedDescriptionKey: failure])
         }
         return core
+        #endif
     }
 
     /// Every cartridge-style core here expects a raw ROM, either a path it
@@ -198,7 +209,6 @@ enum NativeLauncher {
     private static func extractedIfArchived(_ romURL: URL, core: NativeCore, in workDir: URL) throws -> URL {
         let ext = romURL.pathExtension.lowercased()
         guard core != .fbneo, ext == "zip" || ext == "7z" else { return romURL }
-        #if os(iOS)
         var nameBuffer = [CChar](repeating: 0, count: 1024)
         let ok = romURL.path.withCString { archivePath in
             workDir.path.withCString { destDir in
@@ -211,12 +221,6 @@ enum NativeLauncher {
             )
         }
         return workDir.appendingPathComponent(extractedName)
-        #else
-        // No archive-extraction library on tvOS yet; every core this
-        // platform actually links so far (just PCSX ReARMed) reads its
-        // format directly, so this path is unreached in practice.
-        throw LaunchError.unsupportedFormat("Archive extraction isn't available on tvOS yet.")
-        #endif
     }
 
     /// The BIOS filenames a platform's core looks for, and the exact size

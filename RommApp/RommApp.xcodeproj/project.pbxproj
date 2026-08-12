@@ -21,62 +21,22 @@
 		513F6A9773DFE2CED6ED0E91 /* Exceptions for "RommApp" folder in "RommAppTV" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				Controls/ControllerRemapView.swift,
 				Controls/TouchControlPad.swift,
-				Native/Archive/7zAlloc.c,
-				Native/Archive/7zArcIn.c,
-				Native/Archive/7zBuf.c,
-				Native/Archive/7zBuf2.c,
-				Native/Archive/7zCrc.c,
-				Native/Archive/7zCrcOpt.c,
-				Native/Archive/7zDec.c,
-				Native/Archive/7zFile.c,
-				Native/Archive/7zStream.c,
-				Native/Archive/adler32.c,
-				Native/Archive/Alloc.c,
-				Native/Archive/Archive.cpp,
-				Native/Archive/Bcj2.c,
-				Native/Archive/Bra.c,
-				Native/Archive/Bra86.c,
-				Native/Archive/BraIA64.c,
-				Native/Archive/CpuArch.c,
-				Native/Archive/crc32.c,
-				Native/Archive/Delta.c,
-				Native/Archive/infback.c,
-				Native/Archive/inffast.c,
-				Native/Archive/inflate.c,
-				Native/Archive/inftrees.c,
-				Native/Archive/Lzma2Dec.c,
-				Native/Archive/LzmaDec.c,
-				Native/Archive/zutil.c,
-				Native/BeetleNGP/BeetleNGPCore.mm,
 				Native/BeetleNGP/libbeetle_ngp_ios.a,
-				Native/BeetlePCEFast/BeetlePCEFastCore.mm,
 				Native/BeetlePCEFast/libbeetle_pce_fast_ios.a,
-				Native/FBNeo/FBNeoCore.mm,
 				Native/FBNeo/libfbneo_libretro_ios.a,
-				Native/FCEUmm/FCEUmmCore.mm,
 				Native/FCEUmm/libfceumm_ios.a,
-				Native/Flycast/FlycastCore.mm,
 				Native/Flycast/libflycast_ios.a,
-				Native/Gambatte/GambatteCore.mm,
 				Native/Gambatte/libgambatte_ios.a,
-				Native/GenesisPlusGX/GenesisPlusGXCore.mm,
 				Native/GenesisPlusGX/libgenesis_plus_gx_ios.a,
 				Native/MGBA/libmgba_ios.a,
-				Native/MGBA/MGBACore.mm,
 				Native/Mupen64Plus/libmupen64plus_ios.a,
-				Native/Mupen64Plus/N64Core.mm,
 				Native/NativePlayerView.swift,
 				Native/PCSXReARMed/libpcsx_rearmed_ios.a,
 				Native/PicoDrive/libpicodrive_ios.a,
-				Native/PicoDrive/PicoDriveCore.mm,
 				Native/ProSystem/libprosystem_ios.a,
-				Native/ProSystem/ProSystemCore.mm,
 				Native/Saturn/libbeetle_saturn_ios.a,
-				Native/Saturn/SaturnCore.mm,
 				Native/Snes9x/libsnes9x_ios.a,
-				Native/Snes9x/Snes9xCore.mm,
 				Player/GameLaunchView.swift,
 				Player/PlayerView.swift,
 				Player/RomExporter.swift,
@@ -381,6 +341,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=appletvsimulator*]" = "*_tvos.a *Core.mm";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RommAppTV/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet TV";
@@ -405,8 +366,11 @@
 					"$(PROJECT_DIR)/RommApp/Native/ProSystem",
 					"$(PROJECT_DIR)/RommApp/Native/Saturn",
 					"$(PROJECT_DIR)/RommApp/Native/Snes9x",
+					"$(PROJECT_DIR)/RommApp/Native/Flycast",
+					"$(PROJECT_DIR)/RommApp/Native/Mupen64Plus",
 				);
 				MARKETING_VERSION = 0.1;
+				OTHER_LDFLAGS = "-lz";
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet.tv;
 				PRODUCT_NAME = "Cabinet TV";
 				SDKROOT = appletvos;
@@ -524,6 +488,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/PicoDrive",
 					"$(PROJECT_DIR)/RommApp/Native/PCSXReARMed",
 					"$(PROJECT_DIR)/RommApp/Native/Flycast",
+					"$(PROJECT_DIR)/RommApp/Native/Mupen64Plus",
 				);
 				MARKETING_VERSION = 0.1;
 				OTHER_LDFLAGS = (
@@ -602,6 +567,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/PicoDrive",
 					"$(PROJECT_DIR)/RommApp/Native/PCSXReARMed",
 					"$(PROJECT_DIR)/RommApp/Native/Flycast",
+					"$(PROJECT_DIR)/RommApp/Native/Mupen64Plus",
 				);
 				MARKETING_VERSION = 0.1;
 				OTHER_LDFLAGS = (
@@ -696,6 +662,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=appletvsimulator*]" = "*_tvos.a *Core.mm";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RommAppTV/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet TV Dev";
@@ -720,8 +687,11 @@
 					"$(PROJECT_DIR)/RommApp/Native/ProSystem",
 					"$(PROJECT_DIR)/RommApp/Native/Saturn",
 					"$(PROJECT_DIR)/RommApp/Native/Snes9x",
+					"$(PROJECT_DIR)/RommApp/Native/Flycast",
+					"$(PROJECT_DIR)/RommApp/Native/Mupen64Plus",
 				);
 				MARKETING_VERSION = 0.1;
+				OTHER_LDFLAGS = "-lz";
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev.tv;
 				PRODUCT_NAME = "Cabinet TV";
 				SDKROOT = appletvos;

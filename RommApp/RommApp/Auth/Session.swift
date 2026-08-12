@@ -361,12 +361,16 @@ final class Session: ObservableObject {
         collectionId: Int? = nil,
         searchTerm: String? = nil,
         limit: Int = 60,
-        offset: Int = 0
+        offset: Int = 0,
+        orderBy: String = "name",
+        orderDir: String = "asc",
+        matchedOnly: Bool = false
     ) async throws -> RomPage {
         guard let client else { throw RommError.transport("No server selected.") }
         return try await client.roms(
             platformId: platformId, collectionId: collectionId,
-            searchTerm: searchTerm, limit: limit, offset: offset
+            searchTerm: searchTerm, limit: limit, offset: offset,
+            orderBy: orderBy, orderDir: orderDir, matchedOnly: matchedOnly
         )
     }
 

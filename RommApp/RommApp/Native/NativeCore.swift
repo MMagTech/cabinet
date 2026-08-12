@@ -223,6 +223,10 @@ enum NativePlatform: String, CaseIterable {
     /// callers with no live rom or session, only a slug persisted at keep
     /// time, can still resolve correctly while fully offline.
     static func platform(bySlug slug: String, isArcade: Bool) -> NativePlatform? {
+        resolvedPlatform(bySlug: slug, isArcade: isArcade)
+    }
+
+    private static func resolvedPlatform(bySlug slug: String, isArcade: Bool) -> NativePlatform? {
         if isArcade { return .arcade }
         switch slug {
         case "saturn":

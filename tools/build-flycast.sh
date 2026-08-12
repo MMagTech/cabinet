@@ -1,6 +1,6 @@
 #!/bin/sh
-# Builds RommApp/RommApp/Native/Flycast/libflycast_ios.a from the
-# upstream Flycast sources.
+# Builds RommApp/RommApp/Native/Flycast/libflycast_$PLATFORM.a from the
+# upstream Flycast sources. Usage: build-flycast.sh [ios|tvos]
 #
 # Same shape of output as build-beetle-saturn.sh: a single merged
 # relocatable object whose only exported symbols are dc_retro_*
@@ -24,6 +24,13 @@
 # nothing at runtime since GLES3 is what LibretroFrontend actually
 # requests via RETRO_ENVIRONMENT_SET_HW_RENDER.
 #
+# -DIOS stays on for tvOS too: it only gates Flycast's own platform/
+# shell layer (windowing, input), none of which this app reaches since
+# it builds LIBRETRO=ON, core only, driven entirely through the
+# libretro API and this app's own LibretroFrontend.mm GL context, the
+# same way the iOS build already works without touching Flycast's shell
+# at all.
+#
 # libflycast-resources.a (cmrc-embedded fonts/shaders) is deliberately
 # left out of the merge: the go/no-go build didn't link it and ran
 # fine on real hardware, so whatever resources.cpp.o needs from it
@@ -31,12 +38,29 @@
 set -e
 
 cd "$(dirname "$0")/.."
+PLATFORM=${1:-ios}
 SPIKE=spikes/cores/flycast
 SRC=$SPIKE/src
-BUILD=$SPIKE/build
+BUILD=$SPIKE/build-$PLATFORM
 OUT=RommApp/RommApp/Native/Flycast
-SDK=$(xcrun -sdk iphoneos --show-sdk-path)
 JOBS=$(sysctl -n hw.ncpu)
+
+case "$PLATFORM" in
+ios)
+    SDK=$(xcrun -sdk iphoneos --show-sdk-path)
+    OSX_SYSROOT=iphoneos
+    MINVERSION_FLAG=-miphoneos-version-min=18.0
+    DEPLOYMENT_TARGET=18.0
+    SYSTEM_NAME=iOS ;;
+tvos)
+    SDK=$(xcrun -sdk appletvos --show-sdk-path)
+    OSX_SYSROOT=appletvos
+    MINVERSION_FLAG=-mappletvos-version-min=18.0
+    DEPLOYMENT_TARGET=18.0
+    SYSTEM_NAME=tvOS ;;
+*)
+    echo "unknown platform: $PLATFORM (expected ios or tvos)" >&2; exit 1 ;;
+esac
 
 if [ ! -d "$SRC" ]; then
     mkdir -p "$SPIKE"
@@ -44,15 +68,35 @@ if [ ! -d "$SRC" ]; then
 fi
 
 FLAGS="-fno-common -DTARGET_NO_REC -DIOS"
+
+# tvOS masquerades as iOS to Flycast's own build, via -DIOS=ON below.
+# Flycast keys every GLES decision off CMake's `IOS` variable, which CMake
+# itself only sets for CMAKE_SYSTEM_NAME=iOS, never tvOS. Without it the
+# tvOS build silently falls through to the desktop-GL branch: GLES/GLES3/
+# HAVE_OPENGLES/HAVE_OPENGLES3 all stay undefined, libretro-common's
+# glsym.h then includes glsym_gl.h instead of glsym_es3.h, and the build
+# dies in a wall of desktop-GL typedef redefinitions. Same shape of bug
+# as the GLSM-hardcodes-GLES2 one the Dreamcast go/no-go turned up, just
+# in the opposite direction.
+#
+# TARGET_IPHONE comes along with it, and is wanted for its own reason:
+# core/types.h guards its JITWriteProtect helper with
+# `#ifndef TARGET_IPHONE`, and the fallback branch calls
+# pthread_jit_write_protect_np, which is flatly unavailable on tvOS (hard
+# compile error). Safe either way: this is an interpreter-only build
+# (-DTARGET_NO_REC), so nothing ever asks to make JIT pages writable.
+IOS_FLAG=OFF
+[ "$PLATFORM" = tvos ] && IOS_FLAG=ON
 cmake -S "$SRC" -B "$BUILD" -G "Unix Makefiles" \
-    -DCMAKE_SYSTEM_NAME=iOS \
-    -DCMAKE_OSX_SYSROOT=iphoneos \
+    -DCMAKE_SYSTEM_NAME=$SYSTEM_NAME \
+    -DCMAKE_OSX_SYSROOT=$OSX_SYSROOT \
     -DCMAKE_OSX_ARCHITECTURES=arm64 \
-    -DCMAKE_OSX_DEPLOYMENT_TARGET=18.0 \
+    -DCMAKE_OSX_DEPLOYMENT_TARGET=$DEPLOYMENT_TARGET \
     -DCMAKE_BUILD_TYPE=Release \
     -DLIBRETRO=ON \
     -DUSE_OPENGL=ON \
     -DUSE_VULKAN=ON \
+    ${IOS_FLAG:+-DIOS=$IOS_FLAG} \
     -DCMAKE_C_FLAGS="$FLAGS" \
     -DCMAKE_CXX_FLAGS="$FLAGS"
 
@@ -96,13 +140,13 @@ void *dc_retro_get_memory_data(unsigned id) { return retro_get_memory_data(id); 
 size_t dc_retro_get_memory_size(unsigned id) { return retro_get_memory_size(id); }
 EOF
 
-cc -arch arm64 -isysroot "$SDK" -miphoneos-version-min=18.0 -O2 \
+cc -arch arm64 -isysroot "$SDK" $MINVERSION_FLAG -O2 \
     -I"$SRC/core/deps/libretro-common/include" -I"$SRC/shell/libretro" -I"$SRC/core" \
-    -c "$SPIKE/dc_wrapper.c" -o "$SPIKE/dc_wrapper.o"
+    -c "$SPIKE/dc_wrapper.c" -o "$SPIKE/dc_wrapper-$PLATFORM.o"
 
 nm -g "$BUILD/flycast_libretro.dylib" 2>/dev/null \
     | awk '/ T _retro_/{print $NF}' | sed 's/^_retro_/_dc_retro_/' | sort -u \
-    > "$SPIKE/exports.txt"
+    > "$SPIKE/exports-$PLATFORM.txt"
 
 # Swept from the whole build tree, not just flycast_libretro.dir:
 # CMake pulls in its own static-lib subtargets (libzip, at last check)
@@ -114,13 +158,14 @@ nm -g "$BUILD/flycast_libretro.dylib" 2>/dev/null \
 # builds under core/deps/lzma, same symbol names, so both in one
 # ld -r collide. flycast_libretro.dir's own copy is the one everything
 # actually links against.
-find "$BUILD" -name '*.o' -not -path '*/lzma-24.05/*' > "$SPIKE/objects.txt"
+find "$BUILD" -name '*.o' -not -path '*/lzma-24.05/*' > "$SPIKE/objects-$PLATFORM.txt"
 ld -r -arch arm64 -syslibroot "$SDK" \
-    "$SPIKE/dc_wrapper.o" $(cat "$SPIKE/objects.txt") \
-    -exported_symbols_list "$SPIKE/exports.txt" \
-    -o "$SPIKE/combined.o"
+    "$SPIKE/dc_wrapper-$PLATFORM.o" $(cat "$SPIKE/objects-$PLATFORM.txt") \
+    -exported_symbols_list "$SPIKE/exports-$PLATFORM.txt" \
+    -o "$SPIKE/combined-$PLATFORM.o"
 
 mkdir -p "$OUT"
-rm -f "$OUT/libflycast_ios.a"
-ar rcs "$OUT/libflycast_ios.a" "$SPIKE/combined.o"
-echo "Wrote $OUT/libflycast_ios.a"
+LIB="libflycast_$PLATFORM.a"
+rm -f "$OUT/$LIB"
+ar rcs "$OUT/$LIB" "$SPIKE/combined-$PLATFORM.o"
+echo "Wrote $OUT/$LIB"

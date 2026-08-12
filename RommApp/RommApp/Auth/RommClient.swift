@@ -236,19 +236,36 @@ actor RommClient {
 
     /// One page of games, optionally narrowed to a platform or a search term.
     /// Search runs on the server, matching the scope doc.
+    /// `orderBy`/`orderDir` default to the alphabetical ordering every
+    /// existing caller already got, so adding them changes nothing for
+    /// anyone who does not pass them. The library's platform tiles pass
+    /// `created_at`/`desc` to show what was added to a platform most
+    /// recently, confirmed supported by RomM's own /api/roms parameters.
     func roms(
         platformId: Int? = nil,
         collectionId: Int? = nil,
         searchTerm: String? = nil,
         limit: Int = 60,
-        offset: Int = 0
+        offset: Int = 0,
+        orderBy: String = "name",
+        orderDir: String = "asc",
+        matchedOnly: Bool = false
     ) async throws -> RomPage {
         var query = [
             URLQueryItem(name: "limit", value: String(limit)),
             URLQueryItem(name: "offset", value: String(offset)),
-            URLQueryItem(name: "order_by", value: "name"),
-            URLQueryItem(name: "order_dir", value: "asc"),
+            URLQueryItem(name: "order_by", value: orderBy),
+            URLQueryItem(name: "order_dir", value: orderDir),
         ]
+        // RomM's own "matched" flag means the game resolved against a
+        // metadata provider, and on this server that is exactly the set
+        // with cover art: checked across Arcade, Game Boy, Dreamcast and
+        // Genesis, every matched game had a cover and every unmatched one
+        // did not. Filtering server side beats fetching a window and
+        // discarding the gaps.
+        if matchedOnly {
+            query.append(URLQueryItem(name: "matched", value: "true"))
+        }
         if let platformId {
             query.append(URLQueryItem(name: "platform_ids", value: String(platformId)))
         }
