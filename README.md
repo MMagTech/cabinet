@@ -15,6 +15,11 @@ playing last, so you are back in the game in one tap.
 
 ![A game in landscape](docs/images/landscape.png)
 
+| | |
+|:---:|:---:|
+| ![Apple TV Home](docs/images/tv-home.png) | ![Apple TV Library](docs/images/tv-library.png) |
+| ![Browsing arcade games on Apple TV](docs/images/tv-arcade.png) | ![Launching a game on Apple TV](docs/images/tv-game.png) |
+
 ## What you get
 
 **Real emulation, not a wrapped browser.** Every system on Apple TV, and most
