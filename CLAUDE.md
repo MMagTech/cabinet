@@ -95,6 +95,12 @@ version of this idea. Decided deliberately, not a gap to fill in later.
   accepted at face value, rather than deciding quietly either way.
 - Any change to a persisted local data format needs a non-destructive
   migration path decided at the same time, not discovered as data loss later.
+- A native core that works on iOS is assumed to belong on tvOS too, by
+  default. tvOS not getting one needs a real reason, a spike test or an
+  actual finding, not silence. This is a fixed direction on purpose,
+  unlike the UI/UX rule above; cores start on iOS and tvOS inherits.
+  Details, and where to record an exception or platform-specific tuning,
+  live in `docs/building.md`.
 
 ## Things that are settled
 

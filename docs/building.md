@@ -65,23 +65,56 @@ not part of either app, and it is not in the released build. You can ignore it.
 The fourteen native cores in `RommApp/RommApp/Native/*/lib*.a` are prebuilt and
 committed, so a normal build does not compile them.
 
-If you want to rebuild one yourself, `tools/build-core.sh` does it. It clones
-the upstream libretro repository into `spikes/`, builds it for iOS, and produces
-a single relocatable object whose only exported symbols are prefixed
-`<prefix>_retro_*`. That prefixing matters: without it, fourteen cores that each
-export `retro_run` and bundle their own copy of zlib cannot link into one
-binary.
+If you want to rebuild one yourself, `tools/build-core.sh <core> [ios|tvos]`
+does it, iOS by default. It clones the upstream libretro repository into
+`spikes/`, builds it for the platform given, and produces a single
+relocatable object whose only exported symbols are prefixed
+`<prefix>_retro_*`. That prefixing matters: without it, fourteen cores that
+each export `retro_run` and bundle their own copy of zlib cannot link into
+one binary.
 
 ```sh
-tools/build-core.sh gambatte
+tools/build-core.sh gambatte tvos
 ```
 
 Every core's upstream repository and the exact commit its library was built from
 is listed in [licenses.md](licenses.md).
 
 FinalBurn Neo and Beetle Saturn have their own scripts, `tools/build-beetle-saturn.sh`
-and the FBNeo path inside `spikes/FBNeoStatic`, because they were built before
-the generic script existed.
+and `tools/build-fbneo.sh`, both also platform-aware, because they were built
+before the generic script existed.
+
+### Cores and tvOS
+
+A core that works on iOS is assumed to belong on tvOS too, by default,
+built with the same script and a `tvos` argument instead of `ios`. That
+only actually succeeds if the core's own upstream project has a tvOS
+build target in the first place, which doubles as the real "does this
+even work here" check, not a blind assumption. All fourteen cores clear
+that bar today.
+
+If a core genuinely cannot make the jump, or needs real tvOS-specific
+work to run well once it does, that is a legitimate outcome, not a bug,
+but it needs to be a recorded one: note it here, with the reason, rather
+than leaving a missing `_tvos.a` unexplained. One real precedent so far,
+though it did not end up needing a platform split: a rendering
+performance problem was found and fixed on tvOS (moving RGB565 decoding
+from CPU to GPU, `NativePlayerRenderer.swift`), and because the fix
+landed in that shared file with no platform check at all, iOS benefits
+from it too, automatically. Fixing at the shared layer, when a problem
+found on one platform can be, is the preferred outcome over a
+platform-only patch.
+
+No core has needed an actual platform-only exception yet. When one does,
+this section is where that reasoning belongs.
+
+On the Xcode project side: the `Native/<core>` folders hold both an
+`_ios.a` and a `_tvos.a` build of a core, and the shared `NativeCore.swift`
+enum has no platform awareness at all today, it assumes whatever it lists
+exists everywhere. If a core is ever added that genuinely cannot exist on
+one platform, that gap needs a real code-level answer, not just an absent
+file, since nothing today stops the app from trying to link a binary that
+was never built.
 
 ## Other tools
 
