@@ -28,17 +28,23 @@ those still need the iOS 26 SDK to compile. On Xcode 16 the build fails on
    code, you approve it in RomM's web interface under your profile, and that is
    the pairing done. No password is ever typed into the app.
 
-## You have to build to a real device
+## The simulator builds, but cannot really run a game
 
-The simulator will not work. The emulator cores ship as static libraries built
-for `arm64` iOS hardware, and they are linked unconditionally, so a simulator
-build fails at the link step.
+Both targets link and run in the Simulator: the twelve native cores are
+device-only static libraries, so they are excluded per SDK
+(`EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]` /
+`[sdk=appletvsimulator*]`) rather than linked unconditionally. That is
+enough for UI work, screens, layout, navigation, without a physical
+device.
 
-This is not only a build detail. `WKWebView`'s WebContent process carries the
-dynamic code signing entitlement on real hardware, which is what lets the
-WebAssembly cores in RomM's web player run with a JIT. The simulator does not
-model that, so even if it linked, the thing you would be testing is not the
-thing that ships.
+It is not enough to actually play anything. `NativeLauncher` throws a
+friendly error rather than trying to load a core that is not there. And
+`WKWebView`'s WebContent process carries the dynamic code signing
+entitlement only on real hardware, which is what lets the WebAssembly
+cores in RomM's web player run with a JIT. The simulator does not model
+that either, so even where a core did link, the thing you would be
+testing is not the thing that ships. Verifying emulation, native or web,
+still needs a real device.
 
 ## Two targets
 

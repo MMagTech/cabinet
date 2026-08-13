@@ -61,6 +61,13 @@ propose moving a dynarec-dependent system into the app process.
 
 Home is resume first, not a library grid. One tap back into the last game.
 
+iOS's one ambient, content-derived background lives on the game launch
+screen, the game's own cover blurred behind it, the same contained way
+Music treats Now Playing. Do not spread that into iOS's app-shell chrome,
+lists, tab bar, settings; that reads as skinning rather than the
+platform's own idiom, and tvOS already owns the always-ambient shell
+version of this idea. Decided deliberately, not a gap to fill in later.
+
 ## Platform boundaries
 
 - tvOS code lives in `RommApp/RommAppTV/`. iOS and shared code live in
@@ -94,6 +101,9 @@ a task depends on one, say so and confirm before assuming.
 
 The instance is at `your-romm-server.example` and `/api/docs` is authoritative for
 endpoint shapes. Prefer checking it over assuming RomM's API from memory.
+RomM has no dedicated API version and ships fast with no changelog; see
+`docs/checking-romm-compatibility.md` before assuming a new RomM release
+did not change something Cabinet depends on.
 
 ## Do not
 
