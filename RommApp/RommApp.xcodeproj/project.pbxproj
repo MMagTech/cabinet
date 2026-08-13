@@ -491,6 +491,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Mupen64Plus",
 				);
 				MARKETING_VERSION = 0.1;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = "*_ios.a *Core.mm";
 				OTHER_LDFLAGS = (
 					"-lfbneo_libretro_ios",
 					"-lbeetle_saturn_ios",
@@ -506,6 +507,7 @@
 					"-lpcsx_rearmed_ios",
 					"-lc++",
 				);
+				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = "-lc++";
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev;
 				PRODUCT_NAME = Cabinet;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -570,6 +572,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Mupen64Plus",
 				);
 				MARKETING_VERSION = 0.1;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = "*_ios.a *Core.mm";
 				OTHER_LDFLAGS = (
 					"-lfbneo_libretro_ios",
 					"-lbeetle_saturn_ios",
@@ -585,6 +588,7 @@
 					"-lpcsx_rearmed_ios",
 					"-lc++",
 				);
+				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = "-lc++";
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet;
 				PRODUCT_NAME = Cabinet;
 				SWIFT_EMIT_LOC_STRINGS = YES;

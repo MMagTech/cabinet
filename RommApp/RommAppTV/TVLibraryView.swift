@@ -338,111 +338,22 @@ struct TVLibraryView: View {
         }
     }
 
-    /// The day the art was last rolled, as a whole number of days. Rolling
-    /// once a day rather than per launch is what makes the tiles cacheable:
-    /// the same two covers are requested all day, so after the first view
-    /// they come straight from CoverCache's disk store and appear instantly
-    /// instead of popping in. Truly random-per-launch would request art the
-    /// app had never cached every single time, which is the flicker this is
-    /// built to avoid.
-    private var today: Int {
-        Int(Date().timeIntervalSince1970 / 86_400)
-    }
-
-    /// Bumped whenever the art selection logic changes. Without it a
-    /// stored pick from an earlier build keeps being restored for the rest
-    /// of the day and the new logic never runs, which is exactly how a
-    /// fixed Atari 7800 tile kept coming back with one cover.
-    private static let artSchema = 2
-    private static let storedArtKey = "com.mmagtech.RommApp.tv.tileArt.v\(artSchema)"
-    private static let storedDayKey = "com.mmagtech.RommApp.tv.tileArtDay.v\(artSchema)"
-
-    /// How many covers a finished tile carries. Anything short of this is
-    /// treated as an incomplete result: not stored, and refetched next
-    /// launch rather than cached as though it were correct.
-    private static let coversPerTile = 2
-
-    /// Cover paths chosen on a previous launch. Restored before any network
-    /// call so tiles are painted from the disk cache immediately; only a
-    /// genuinely new roll (a new day, or a platform never seen) has to wait
-    /// on the server. Paths are short strings, a few KB for a whole
-    /// library, which matters because tvOS gives an app only 500 KB of real
-    /// persistent storage.
+    /// The whole picking and caching mechanism lives in `LibraryTileArt`,
+    /// shared with iOS since its library adopted the same artwork tiles.
+    /// The "tv" namespace keeps this screen on the exact storage keys it
+    /// has always used, so nothing about a stored pick changes.
     private func restoreStoredArt() {
-        let defaults = UserDefaults.standard
-        guard defaults.integer(forKey: Self.storedDayKey) == today,
-              let stored = defaults.dictionary(forKey: Self.storedArtKey) as? [String: [String]]
-        else { return }
-        // Only complete entries come back. A half filled tile from a
-        // failed request must not be treated as settled for the day.
-        mosaics = stored.filter { $0.value.count >= Self.coversPerTile }
+        mosaics = LibraryTileArt.restore(namespace: "tv")
     }
 
-    private func persistArt() {
-        let defaults = UserDefaults.standard
-        defaults.set(
-            mosaics.filter { $0.value.count >= Self.coversPerTile },
-            forKey: Self.storedArtKey
-        )
-        defaults.set(today, forKey: Self.storedDayKey)
-    }
-
-    /// Two covers per tile, chosen at a random offset into the platform
-    /// rather than from its first page, so a 141 game arcade set shows
-    /// genuine deep cuts instead of whatever sorts first alphabetically.
-    ///
-    /// Seeded by (id, day) rather than actually random: the pick has to be
-    /// stable for the whole day or the caching above buys nothing. Same
-    /// visible effect, none of the flicker.
     private func loadArt() async {
-        // Per tile, not all or nothing. The old guard skipped the entire
-        // load the moment anything had been restored, so a tile that came
-        // back incomplete stayed incomplete until the next day.
-        let havePlatforms = platforms.filter { mosaics["p\($0.id)"] == nil }
-        let haveCollections = collections.filter { mosaics["c\($0.id)"] == nil }
-        guard !havePlatforms.isEmpty || !haveCollections.isEmpty else { return }
-
-        await withTaskGroup(of: (String, [String]).self) { group in
-            for platform in havePlatforms {
-                group.addTask {
-                    let offset = Self.seededOffset(id: platform.id, day: today, count: platform.romCount)
-                    // matchedOnly means every game returned has art, so
-                    // two requested is two shown. Previously this asked
-                    // for a window of six and skipped the ones with no
-                    // cover, which still left a half empty tile whenever
-                    // a window happened to hold several in a row.
-                    let page = try? await session.roms(
-                        platformId: platform.id, limit: 2, offset: offset, matchedOnly: true
-                    )
-                    return ("p\(platform.id)", page?.items.compactMap(\.pathCoverSmall) ?? [])
-                }
-            }
-            for collection in haveCollections {
-                group.addTask {
-                    let offset = Self.seededOffset(id: collection.id, day: today, count: collection.romCount)
-                    let page = try? await session.roms(
-                        collectionId: collection.id, limit: 2, offset: offset, matchedOnly: true
-                    )
-                    return ("c\(collection.id)", page?.items.compactMap(\.pathCoverSmall) ?? [])
-                }
-            }
-            for await (key, paths) in group where !paths.isEmpty {
-                mosaics[key] = paths
-            }
-        }
-        persistArt()
-    }
-
-    /// A stable pseudo-random offset. Deliberately not `Int.random`: the
-    /// same tile must resolve to the same offset every time it is asked
-    /// today, and to a different one tomorrow.
-    private static func seededOffset(id: Int, day: Int, count: Int) -> Int {
-        guard count > 2 else { return 0 }
-        var seed = UInt64(truncatingIfNeeded: id &* 2_654_435_761 &+ day &* 40_503)
-        seed ^= seed << 13
-        seed ^= seed >> 7
-        seed ^= seed << 17
-        return Int(seed % UInt64(count - 1))
+        let fresh = await LibraryTileArt.load(
+            platforms: platforms, collections: collections,
+            existing: mosaics, session: session
+        )
+        guard !fresh.isEmpty else { return }
+        mosaics.merge(fresh) { _, new in new }
+        LibraryTileArt.persist(mosaics, namespace: "tv")
     }
 
     /// Only platforms this device can actually play, and only ones with

@@ -210,7 +210,15 @@ struct GameLaunchView: View {
             .offset(y: dragOffset)
             .simultaneousGesture(dismissDragGesture)
         }
-        .background(Color(.systemGroupedBackground))
+        .background { ambientBackdrop }
+        // Music's Now Playing rule: while artwork is the backdrop the
+        // screen styles itself dark regardless of the system setting, so
+        // labels and cards read over the art instead of fighting it. A
+        // game with no cover keeps the plain grouped background and the
+        // system's own appearance. Applied here, before the sheet and
+        // cover modifiers below, so presented screens keep the system
+        // appearance rather than inheriting the override.
+        .environment(\.colorScheme, hasAmbientArt ? .dark : systemColorScheme)
         // The seeding bridge lives at the screen root, not on the export
         // button it once shared: the button is now hidden on exactly the
         // games that seed, and a webview mounted under a hidden view
@@ -590,6 +598,43 @@ struct GameLaunchView: View {
             } catch {
                 exporter.fail("Couldn't reach the server.")
             }
+        }
+    }
+
+    @Environment(\.colorScheme) private var systemColorScheme
+
+    private var hasAmbientArt: Bool {
+        (rom.pathCoverLarge ?? rom.pathCoverSmall) != nil
+    }
+
+    /// The tvOS ambient idea, expressed the way iOS expresses it: not an
+    /// app-shell backdrop but this one modal screen, the same contained
+    /// place Music blurs album art behind Now Playing. The game's own
+    /// cover, blurred past recognition, so the screen carries the game's
+    /// colour; the scrim keeps every card and label readable over
+    /// whatever the art happens to be. Reuses the exact cover path the
+    /// identity block loads, so the image is already in CoverCache.
+    @ViewBuilder
+    private var ambientBackdrop: some View {
+        if hasAmbientArt {
+            ZStack {
+                Color(.systemGroupedBackground)
+                CoverImage(
+                    path: rom.pathCoverLarge ?? rom.pathCoverSmall,
+                    title: "", showsPlaceholder: false
+                )
+                // Scaled, not stretched: blur samples past the view's
+                // edges, and without the extra pixels the border of the
+                // image reads as a vignette. Same trick as the tvOS tile.
+                .scaleEffect(1.4)
+                .blur(radius: 60)
+                .saturation(0.8)
+                .overlay(Color.black.opacity(0.45))
+            }
+            .clipped()
+            .ignoresSafeArea()
+        } else {
+            Color(.systemGroupedBackground)
         }
     }
 
