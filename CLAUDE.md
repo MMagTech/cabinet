@@ -47,7 +47,7 @@ design and the reasoning behind it, and most decisions in it are already settled
 
 ## Project shape
 
-Native SwiftUI shell, with two ways to run a game: twelve libretro cores
+Native SwiftUI shell, with two ways to run a game: fourteen libretro cores
 compiled into the app, and a `WKWebView` player running RomM's EmulatorJS page
 for everything else.
 
@@ -75,9 +75,24 @@ version of this idea. Decided deliberately, not a gap to fill in later.
   without calling it out explicitly first. The reverse applies to iOS work.
 - When tvOS needs logic that lives in an iOS-only file, extract it to a
   shared file both targets compile. Never copy-paste it into the tvOS target.
+  That direction, iOS holding the shared logic tvOS reaches into, is about
+  implementation history, iOS existed as a full app first. It is not a
+  design rule; see below for that.
 - iOS and tvOS do not have feature parity. Do not assume a feature exists on
   one platform because it exists on the other. Check the file's own doc
   comments first.
+- iOS and tvOS should not drift into looking or feeling like separate
+  products. Feature parity is not required and screens routinely diverge
+  for real platform reasons, tvOS has no touch controls, iOS has no
+  controller-driven focus navigation. The two apps' visual and experiential
+  identity, materials, color, ambient treatment, the sense of being one app
+  on two platforms, is meant to stay recognizable over time. A UI or UX
+  idea on either platform can inspire a version of it on the other, in that
+  platform's own idiom; this is not a requirement to mirror every change,
+  just an awareness to keep the two from quietly drifting apart. When a
+  change on either platform genuinely risks that, raise it explicitly.
+  The choice may need to be actually defended, not just explained and
+  accepted at face value, rather than deciding quietly either way.
 - Any change to a persisted local data format needs a non-destructive
   migration path decided at the same time, not discovered as data loss later.
 
@@ -96,8 +111,10 @@ version of this idea. Decided deliberately, not a gap to fill in later.
 
 ## Things marked verify
 
-The scope doc flags seven items as unverified. Do not build on them silently. If
-a task depends on one, say so and confirm before assuming.
+The scope doc's Open items list flags what is still unverified; most of the
+original seven are resolved now, check the list itself rather than trusting a
+count here, it will only go stale again. Do not build on a remaining item
+silently. If a task depends on one, say so and confirm before assuming.
 
 The instance is at `your-romm-server.example` and `/api/docs` is authoritative for
 endpoint shapes. Prefer checking it over assuming RomM's API from memory.

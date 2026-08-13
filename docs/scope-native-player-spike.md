@@ -1,6 +1,6 @@
 # Native player spike, scope
 
-Status: proposed, not started. This amends the "never emulate natively"
+Status: shipped. This amends the "never emulate natively"
 decision in scope-v0.1.md, which required a concrete reason to reopen.
 The reason exists and is measured: iOS's embedded webview leaks
 graphics memory for certain games (Neo Geo, CV1000 under fbneo) until

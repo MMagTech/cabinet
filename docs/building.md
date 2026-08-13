@@ -30,7 +30,7 @@ those still need the iOS 26 SDK to compile. On Xcode 16 the build fails on
 
 ## The simulator builds, but cannot really run a game
 
-Both targets link and run in the Simulator: the twelve native cores are
+Both app targets link and run in the Simulator: the fourteen native cores are
 device-only static libraries, so they are excluded per SDK
 (`EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]` /
 `[sdk=appletvsimulator*]`) rather than linked unconditionally. That is
@@ -46,23 +46,29 @@ that either, so even where a core did link, the thing you would be
 testing is not the thing that ships. Verifying emulation, native or web,
 still needs a real device.
 
-## Two targets
+## Three targets
 
-**RommApp** builds Cabinet. This is the one you want.
+**RommApp** builds Cabinet for iOS. This is the one you want if you have an
+iPhone.
+
+**RommAppTV** builds Cabinet for tvOS, the same repository, the same `dev`
+branch. Select it as the scheme instead of `RommApp`, change its team the
+same way under Signing & Capabilities, and run it on an Apple TV or the
+tvOS Simulator. Pairing with RomM works the same device-flow way as iOS.
 
 **LayoutEditor** is a separate tool for editing the on-screen control layouts in
 `RommApp/RommApp/Resources/ControlLayouts`. It is a development utility, it is
-not part of the app, and it is not in the released build. You can ignore it.
+not part of either app, and it is not in the released build. You can ignore it.
 
 ## The emulator cores
 
-The twelve native cores in `RommApp/RommApp/Native/*/lib*.a` are prebuilt and
+The fourteen native cores in `RommApp/RommApp/Native/*/lib*.a` are prebuilt and
 committed, so a normal build does not compile them.
 
 If you want to rebuild one yourself, `tools/build-core.sh` does it. It clones
 the upstream libretro repository into `spikes/`, builds it for iOS, and produces
 a single relocatable object whose only exported symbols are prefixed
-`<prefix>_retro_*`. That prefixing matters: without it, twelve cores that each
+`<prefix>_retro_*`. That prefixing matters: without it, fourteen cores that each
 export `retro_run` and bundle their own copy of zlib cannot link into one
 binary.
 

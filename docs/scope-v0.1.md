@@ -40,6 +40,14 @@ The app never emulates natively. EmulatorJS runs in the webview every time.
 entitlement, so WASM cores get JIT. Native cores in the app process do not and
 run interpreted.
 
+**Superseded.** This "never natively" decision was narrowed, not reversed, once
+a concrete reason to reopen it existed: see `docs/scope-native-player-spike.md`.
+The webview stays the default and the JIT reasoning above still holds for any
+system whose core needs a dynamic recompiler; a native player now exists for
+systems a plain interpreter can carry at full speed, fourteen of them as of
+this writing. The settled version of that split lives in the top level
+`CLAUDE.md`, under Project shape.
+
 **Verified** on 2026-08-01, iPhone Air (iPhone18,4) on iOS 26.6, Release build.
 An identical integer loop run three ways in one app: WASM in a `WKWebView`
 reached 405 to 422 million iterations per second against 433 to 508 for the
