@@ -119,6 +119,30 @@ to a different, more elaborate slang preset some other shader packs
 ship, not this GLSL one. No intermediate render target needed for any of
 the nine; every one ports as a plain fragment shader swap.
 
+## tvOS
+
+Status: shipped 2026-08-12, commit 5777c91. `TVNativeCoresView.swift`
+reads the same `NativeCoreOptions`/`NativeCoreOptionsStore` this whole
+document describes, so every correction and every open item above applies
+identically on tvOS, nothing here is a separate data model or a separate
+source of truth.
+
+What differs is presentation, not substance, and deliberately starts as a
+one-for-one match with iOS: same platforms listed, same options per
+platform, same defaults. `TVSettingsView` links to it the same way it
+links to the controller remap screen. Cards and a row of glass choice
+pills stand in for iOS's `List` and `Picker`, the pattern this app's own
+Library switcher already established, since most options here are a
+handful of mutually exclusive choices, not an open list a picker style
+suits better. Shaders are not part of this screen on tvOS any more than
+on iOS; that stays in-game, in the pause menu, for the same before/after
+comparison reasoning above.
+
+Whether tvOS's needs diverge from iOS's here over time is left open on
+purpose. Nothing has turned up a real difference yet, and per this
+project's own standing rule, that is not a reason to build for one in
+advance.
+
 ## Out of scope, explicitly
 
 - The webview player. EmulatorJS already has its own shader menu; this
