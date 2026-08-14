@@ -22,6 +22,7 @@ struct TVSettingsView: View {
 
     @AppStorage("com.mmagtech.RommAppTV.requirePINToSwitch") private var requirePIN = false
     @AppStorage("com.mmagtech.RommAppTV.switchPIN") private var storedPIN = ""
+    @AppStorage(BiasGlowLevel.storageKey) private var glowStored = BiasGlowLevel.subtle.rawValue
 
     var body: some View {
         NavigationStack {
@@ -85,6 +86,30 @@ struct TVSettingsView: View {
                                 title: "Native cores",
                                 detail: "Speed and accuracy options for the cores that run natively",
                                 chevron: true
+                            )
+                        }
+                        .buttonStyle(RowFocusStyle())
+                        // Mirror of the pause menu's Glow row, the
+                        // primary home; now that Off/Subtle/Strong are
+                        // settled values rather than something to tune
+                        // live, a plain picker here is enough.
+                        Menu {
+                            ForEach(BiasGlowLevel.allCases) { candidate in
+                                Button {
+                                    glowStored = candidate.rawValue
+                                } label: {
+                                    if candidate.rawValue == glowStored {
+                                        Label(candidate.label, systemImage: "checkmark")
+                                    } else {
+                                        Text(candidate.label)
+                                    }
+                                }
+                            }
+                        } label: {
+                            actionRow(
+                                title: "Letterbox glow",
+                                detail: "A soft light around the game picture. Currently \((BiasGlowLevel.level(fromStored: glowStored)).label.lowercased()).",
+                                chevron: false
                             )
                         }
                         .buttonStyle(RowFocusStyle())

@@ -72,6 +72,14 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     /// jitter the average hides, added after a real report of choppy
     /// gameplay that measured a stable-looking average anyway.
     @Published private(set) var worstFrameMS: Double = 0
+
+    /// The display-oriented aspect ratio of the current picture, rotation
+    /// already applied, 0 until the first frame has been fitted. This is
+    /// the same value `aspectFitVertices` fits the picture with, published
+    /// so a view layered over the Metal surface can reproduce the fitted
+    /// rect in SwiftUI coordinates (tvOS's letterbox glow today; an iOS
+    /// HDMI-out treatment would need exactly this too).
+    @Published private(set) var displayAspect: Double = 0
     private var worstFrameDelta: CFTimeInterval = 0
     private var lastDrawTime: CFTimeInterval = 0
 
@@ -472,6 +480,10 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         let rotated = rotation % 2 == 1
         let textureAspect = rotated ? 1 / unrotatedAspect : unrotatedAspect
         let viewAspect = Double(viewSize.width / viewSize.height)
+
+        if displayAspect != textureAspect {
+            displayAspect = textureAspect
+        }
 
         var scaleX: Float = 1
         var scaleY: Float = 1

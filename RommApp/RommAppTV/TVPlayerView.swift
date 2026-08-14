@@ -35,6 +35,7 @@ struct TVPlayerView: View {
     @State private var previousDisconnect: ((Int) -> Void)?
 
     @State private var menuVisible = false
+    @AppStorage(BiasGlowLevel.storageKey) private var glowStored = BiasGlowLevel.subtle.rawValue
     @State private var menuStatus: String?
     @State private var menuBusy = false
     @State private var startedAt: Date?
@@ -52,6 +53,10 @@ struct TVPlayerView: View {
     /// treatment upstream, same as `NativePlayerView`.
     private var platform: NativePlatform {
         NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug) ?? .arcade
+    }
+
+    private var glowLevel: BiasGlowLevel {
+        BiasGlowLevel.level(fromStored: glowStored)
     }
 
     /// PS1 and N64 both export a RETRO_MEMORY_SAVE_RAM battery save
@@ -303,8 +308,23 @@ struct TVPlayerView: View {
         ZStack {
             TVGameSurface(renderer: renderer, menuVisible: menuVisible)
                 .ignoresSafeArea()
+            TVBiasGlow(renderer: renderer, level: glowLevel)
             if menuVisible {
                 pauseMenu
+            }
+        }
+        // Without this, tvOS's system exit gesture (the remote's Menu
+        // swipe, and by the focus engine's own convention a physical
+        // controller's B button) falls through to its default action on
+        // any view that doesn't claim it: dismissing this whole screen.
+        // That bypassed the entire pause menu, Quit confirmation
+        // included, on a single accidental B press while paused, found
+        // on device 2026-08-13. Claiming it here makes exit do nothing
+        // outside the pause menu, and simply close the menu (same as
+        // Resume) while it's open, never an unconfirmed quit.
+        .onExitCommand {
+            if menuVisible {
+                closeMenu()
             }
         }
         .task {
@@ -427,6 +447,28 @@ struct TVPlayerView: View {
                         }
                     } label: {
                         Label("Shader", systemImage: "camera.filters")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(TVPauseMenuButtonStyle())
+
+                    // Landed on Off/Subtle/Strong after live-tuning with
+                    // a slider on device 2026-08-13; the slider found
+                    // the real numbers, a plain picker is all that's
+                    // needed to ship them.
+                    Menu {
+                        ForEach(BiasGlowLevel.allCases) { candidate in
+                            Button {
+                                glowStored = candidate.rawValue
+                            } label: {
+                                if candidate == glowLevel {
+                                    Label(candidate.label, systemImage: "checkmark")
+                                } else {
+                                    Text(candidate.label)
+                                }
+                            }
+                        }
+                    } label: {
+                        Label("Glow", systemImage: "rays")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(TVPauseMenuButtonStyle())
