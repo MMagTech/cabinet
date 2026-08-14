@@ -9,6 +9,18 @@ body:
         so the details below are usually what decides whether a problem is
         reproducible. Please fill them in even if they seem irrelevant.
 
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: Which app is this in?
+      options:
+        - iOS
+        - tvOS
+        - Both
+    validations:
+      required: true
+
   - type: textarea
     id: what-happened
     attributes:
@@ -48,10 +60,10 @@ body:
       required: false
 
   - type: input
-    id: ios-version
+    id: os-version
     attributes:
-      label: iOS version
-      placeholder: "18.5"
+      label: OS version
+      placeholder: "iOS 18.5, or tvOS 18.5"
     validations:
       required: true
 
@@ -59,7 +71,7 @@ body:
     id: device
     attributes:
       label: Device
-      placeholder: iPhone 15 Pro
+      placeholder: iPhone 15 Pro, or Apple TV 4K
     validations:
       required: true
 

@@ -1,0 +1,31 @@
+name: Feature request
+description: An idea for something Cabinet doesn't do yet
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: Which app is this for, if it's platform-specific?
+      options:
+        - iOS
+        - tvOS
+        - Both
+        - Not platform-specific
+    validations:
+      required: false
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What are you picturing
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Why this would help
+      description: What's the real problem this solves, if any.
+    validations:
+      required: false
