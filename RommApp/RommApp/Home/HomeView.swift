@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The launch screen. Resume first, not a library grid: the last game you
 /// played, large, one tap back in. The library is a room you walk into from
@@ -473,55 +474,94 @@ struct HomeView: View {
         min(max(available * 0.45, 280), 460)
     }
 
+    /// Reserving a real row rather than overlaying text on the art (see
+    /// the artwork comment below for why) only works if the row is
+    /// actually tall enough for its own text, and a fixed constant
+    /// guessed against iOS's font scale was not: tvOS renders the same
+    /// named text styles considerably larger (a 10-foot UI), so the same
+    /// two lines that fit iOS's 60pt band overflowed straight past a
+    /// tvOS card's edge (seen on device 2026-08-13). Measuring the real
+    /// line heights of the fonts actually used, rather than guessing a
+    /// second constant for tvOS, means this self-corrects on either
+    /// platform if the fonts or padding ever change again.
+    private func heroBandHeight(wide: Bool) -> CGFloat {
+        let titleStyle: UIFont.TextStyle = wide ? .headline : .title3
+        let subtitleStyle: UIFont.TextStyle = wide ? .caption1 : .subheadline
+        let titleHeight = UIFont.preferredFont(forTextStyle: titleStyle).lineHeight
+        let subtitleHeight = UIFont.preferredFont(forTextStyle: subtitleStyle).lineHeight
+        let lineSpacing: CGFloat = 2
+        let verticalPadding: CGFloat = (wide ? 10 : 12) * 2
+        return ceil(titleHeight + subtitleHeight + lineSpacing + verticalPadding)
+    }
+
     private func heroCard(for rom: Rom, height: CGFloat, wide: Bool) -> some View {
-        Button {
+        let bandHeight = heroBandHeight(wide: wide)
+        let artHeight = max(0, height - bandHeight)
+        return Button {
             resuming = rom
         } label: {
-            // Fitted over a blurred copy of itself rather than cropped to
-            // fill: box art is tall and the hero card is wide, so filling
-            // would slice the art to a strip of its middle. Fitting shows
-            // all of it, and the blurred backdrop fills the leftovers with
-            // the art's own colours instead of letterbox bars.
-            heroArtwork(for: rom, contentMode: .fit)
-                .frame(maxWidth: .infinity)
-                .frame(height: height)
-                // A background rather than a ZStack layer. Stacked, the
-                // filled copy is greedy about size and grew the whole card
-                // past the edge of the screen; as a background it is sized
-                // by the card instead of the other way round.
-                .background {
-                    heroArtwork(for: rom, contentMode: .fill)
-                        .blur(radius: 20)
-                        .overlay(Color.black.opacity(0.15))
-                        .clipped()
-                }
-                .clipped()
+            VStack(spacing: 0) {
+                // Fitted over a blurred copy of itself rather than cropped
+                // to fill: box art is tall and the hero card is wide, so
+                // filling would slice the art to a strip of its middle.
+                // Fitting shows all of it, and the blurred backdrop fills
+                // the leftovers with the art's own colours instead of
+                // letterbox bars.
+                //
+                // Sized to `artHeight`, not the card's full height: this
+                // row sits above the title band rather than behind it, so
+                // there is no overlap left for the art to be hidden under.
+                // The top padding keeps the fit image inset from the
+                // card's own rounded top corners, which otherwise clip a
+                // sliver off flush-fitted art (Contra's logo, seen the
+                // same session); the bottom no longer needs it now that
+                // the band, not the art, sits against the bottom corners.
+                heroArtwork(for: rom, contentMode: .fit)
+                    .padding(.top, 14)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: artHeight)
+
                 // A frosted band, not a black gradient. The gradient was
                 // painting over the very backdrop that makes this card
                 // worth looking at, leaving a slab of black under the
                 // artwork. A material keeps the game's colours showing
-                // through while still giving the text a surface it can be
-                // read against, and it matches the Resume pill, which is
-                // already the same material.
-                .overlay(alignment: .bottom) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(rom.displayName)
-                                .font(wide ? .headline : .title3.bold())
-                                .lineLimit(1)
-                            Text(rom.platformLabel(source: labelSource, platformNames: session.platformNames))
-                                .font(wide ? .caption : .subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer(minLength: 0)
+                // through (the blurred fill behind spans the whole card,
+                // this row included) while still giving the text a
+                // surface it can be read against, and it matches the
+                // Resume pill, which is already the same material.
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(rom.displayName)
+                            .font(wide ? .headline : .title3.bold())
+                            .lineLimit(1)
+                        Text(rom.platformLabel(source: labelSource, platformNames: session.platformNames))
+                            .font(wide ? .caption : .subheadline)
+                            .foregroundStyle(.secondary)
                     }
-                    .padding(.horizontal, wide ? 12 : 16)
-                    .padding(.vertical, wide ? 10 : 12)
-                    .frame(maxWidth: .infinity)
-                    .background(.regularMaterial)
+                    Spacer(minLength: 0)
                 }
-                .clipShape(.rect(cornerRadius: 18))
-                .shadow(radius: 10, y: 5)
+                .padding(.horizontal, wide ? 12 : 16)
+                .padding(.vertical, wide ? 10 : 12)
+                .frame(maxWidth: .infinity)
+                .frame(height: bandHeight)
+                .background(.regularMaterial)
+            }
+            .frame(height: height)
+            // A background rather than a ZStack layer. Stacked, the
+            // filled copy is greedy about size and grew the whole card
+            // past the edge of the screen; as a background it is sized
+            // by the card instead of the other way round. Spans the
+            // whole card, band included, so the material above still
+            // reads the art's colour through it rather than plain grey.
+            .background {
+                heroArtwork(for: rom, contentMode: .fill)
+                    .blur(radius: 20)
+                    .overlay(Color.black.opacity(0.15))
+                    .clipped()
+            }
+            .clipped()
+            .clipShape(.rect(cornerRadius: 18))
+            .shadow(radius: 10, y: 5)
         }
         .buttonStyle(.plain)
         #if os(tvOS)
