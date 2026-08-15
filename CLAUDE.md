@@ -133,7 +133,8 @@ did not change something Cabinet depends on.
 - Add dependencies without asking. No DI framework, no networking library, no
   architecture scaffolding. `URLSession` and Swift concurrency are enough.
 - Generate the API client from `openapi.json`. That is exactly why the existing
-  third party iOS client breaks across RomM versions. Six hand written calls.
+  third party iOS client breaks across RomM versions. Hand written calls, not
+  generated.
 - Commit `tools/*.xml` or `tools/profiles.json`. Derived data, regenerate it.
 
 ## tvOS conventions

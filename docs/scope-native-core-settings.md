@@ -50,8 +50,19 @@ comparison rather than a label to trust blind.
 
 **Core options.** In Settings, not in-game, because these are abstract
 toggles with nothing to visually compare. A new "Native cores" row in
-Settings lists every core with a native implementation (today: FinalBurn
-Neo, Beetle Saturn). Each core's own screen shows its options.
+Settings lists every core with a native implementation (at the time
+this was written: FinalBurn Neo, Beetle Saturn). Each core's own screen
+shows its options.
+
+Correction, 2026-08-14: the platform list has grown well past those
+two. `NativeCoreOptions.options(for:)` now covers arcade (FBNeo),
+Saturn, Game Boy, Game Boy Advance, Genesis/32X, Sega CD, and PC
+Engine/PCE-CD, real per-platform option sets, not the original two.
+Separately, PS1 (PCSX ReARMed) has forced options the frontend always
+sends (memory card setup) but no user-facing choices, not the same
+thing as an options screen. Whoever next touches this doc should read
+`NativeCoreOptions.swift` fresh rather than trust either the original
+count above or this correction, it will drift again.
 
 Correction, 2026-08-06, checked against real source rather than assumed:
 FBNeo is not option-free. It calls `RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2`
@@ -109,6 +120,15 @@ concrete example that came up, is the actual trigger for adding a
 per-shader core tag; building that mechanism now, before a core exists
 that would need it, is exactly the speculative complexity this project
 avoids elsewhere.
+
+Correction, 2026-08-14: that trigger arrived. `NativeShader` now has
+ten cases, not seven (crt-geom came back too, contrary to the "not
+ten" correction above), the two newest being genuine single-purpose
+additions, `.lcd` and `.gameBoy`, and per-core filtering now exists to
+match, this is no longer one flat list every core sees. See
+`handheld-shader-work` in memory for that build, and read
+`NativeShader.swift` directly for the real current case list rather
+than trust either correction in this file going forward.
 
 Verified, 2026-08-06, against the actual `.glslp` presets in
 `libretro/glsl-shaders` (the source EmulatorJS's bundle traces back to,
