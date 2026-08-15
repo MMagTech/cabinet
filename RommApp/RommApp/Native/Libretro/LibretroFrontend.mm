@@ -374,7 +374,20 @@ int16_t inputState(unsigned port, unsigned device, unsigned index, unsigned id) 
     // -setAnalogStickX:y:, not a digitized mask bit like every other
     // stick this frontend reads. y is already down-positive, matching
     // libretro's own convention, no flip needed here either.
-    if (device == RETRO_DEVICE_ANALOG && index == RETRO_DEVICE_INDEX_ANALOG_LEFT) {
+    //
+    // FBNeo is deliberately excluded. Its retro_input.cpp has a "fake
+    // analog" fallback that reads this axis even for plain digital
+    // joystick games and ORs the result into the digital directions.
+    // Physical controllers have fed this channel unconditionally since
+    // the two-player rework (GameController y is up-positive, opposite
+    // libretro's convention on this path), so a Bluetooth pad pushing up
+    // registered digital UP and fake-analog DOWN in the same frame:
+    // exactly the "character doesn't go where the stick points" report
+    // on Smash TV, github.com/MMagTech/cabinet#3, found 2026-08-15.
+    // Arcade sticks are fully covered by the digital bits; FBNeo has no
+    // real analog-stick hardware to serve here at all.
+    if (device == RETRO_DEVICE_ANALOG && index == RETRO_DEVICE_INDEX_ANALOG_LEFT
+        && gCoreID != LibretroCoreIDFBNeo) {
         float value = id == RETRO_DEVICE_ID_ANALOG_X ? gAnalogLeftX[port].load(std::memory_order_relaxed)
                     : id == RETRO_DEVICE_ID_ANALOG_Y ? gAnalogLeftY[port].load(std::memory_order_relaxed)
                     : 0.0f;

@@ -412,8 +412,10 @@ struct NativePlayerView: View {
                 renderer?.setButton(id, down: down, port: player)
             }
             // The continuous form, alongside the digitized d-pad bits
-            // .send already carries: N64 and Dreamcast read this, every
-            // other platform simply never asks LibretroFrontend for it.
+            // .send already carries: N64 and Dreamcast read this. FBNeo
+            // also asks for it (a "fake analog" fallback in its own input
+            // code) and is deliberately refused in LibretroFrontend's
+            // inputState; see the comment there and cabinet#3.
             GameControllerManager.shared.sendStick = { [weak renderer] player, x, y in
                 renderer?.setStick(x: Double(x), y: Double(y), port: player)
             }

@@ -37,6 +37,11 @@ final class GameControllerManager: ObservableObject {
         var bindings: [String: Int] = ControllerBindings.defaults
         var pressedInputs: Set<Int> = []
         var triggerDown: [String: Bool] = [:]
+        /// Hysteresis state per digitized stick direction (RetroPad.up/
+        /// down/left/right, or the second-stick ids 20-23), keyed by id.
+        /// Same reason as `triggerDown`: a flat threshold with no gap
+        /// chatters an axis resting near the boundary on and off.
+        var stickDown: [Int: Bool] = [:]
         var hapticEngines: [GCHapticsLocality: CHHapticEngine] = [:]
         var availableButtons: [String] = []
         /// Raw element names currently held, tracked independent of any
@@ -389,12 +394,11 @@ final class GameControllerManager: ObservableObject {
     }
 
     private func stick(x: Float, y: Float, player: Int) {
-        guard captureHandler == nil else { return }
-        let threshold: Float = 0.5
-        emit(RetroPad.left, x < -threshold, player: player)
-        emit(RetroPad.right, x > threshold, player: player)
-        emit(RetroPad.down, y < -threshold, player: player)
-        emit(RetroPad.up, y > threshold, player: player)
+        guard let slot = slots[player], captureHandler == nil else { return }
+        digitizeAxis(RetroPad.left, magnitude: max(0, -x), slot: slot, player: player)
+        digitizeAxis(RetroPad.right, magnitude: max(0, x), slot: slot, player: player)
+        digitizeAxis(RetroPad.down, magnitude: max(0, -y), slot: slot, player: player)
+        digitizeAxis(RetroPad.up, magnitude: max(0, y), slot: slot, player: player)
         sendStick?(player, x, y)
     }
 
@@ -403,12 +407,29 @@ final class GameControllerManager: ObservableObject {
     /// ArcadeLayout.secondStick for why those specific numbers and where
     /// they lead downstream in each player.
     private func stick2(x: Float, y: Float, player: Int) {
-        guard captureHandler == nil else { return }
-        let threshold: Float = 0.5
-        emit(21, x < -threshold, player: player)
-        emit(20, x > threshold, player: player)
-        emit(22, y < -threshold, player: player)
-        emit(23, y > threshold, player: player)
+        guard let slot = slots[player], captureHandler == nil else { return }
+        digitizeAxis(21, magnitude: max(0, -x), slot: slot, player: player)
+        digitizeAxis(20, magnitude: max(0, x), slot: slot, player: player)
+        digitizeAxis(22, magnitude: max(0, -y), slot: slot, player: player)
+        digitizeAxis(23, magnitude: max(0, y), slot: slot, player: player)
+    }
+
+    /// Turns one direction's stick deflection into a digital press, the
+    /// same hysteresis shape as `analog(_:value:player:)` above: engage at
+    /// 0.5, release only below 0.4. A flat single threshold, what this
+    /// replaced, let a stick resting right on the boundary during play
+    /// chatter the direction on and off, which read on real hardware as
+    /// "the character doesn't go where I'm telling it" on FBNeo's arcade
+    /// games specifically, the one native platform whose movement has no
+    /// other path in: N64 and Dreamcast read the raw analog value instead
+    /// (see `sendStick`) and never hit this digitizing at all, which is
+    /// why they were never affected. Found and fixed 2026-08-15.
+    private func digitizeAxis(_ id: Int, magnitude: Float, slot: Slot, player: Int) {
+        let wasDown = slot.stickDown[id] ?? false
+        let isDown = wasDown ? magnitude > 0.4 : magnitude > 0.5
+        guard isDown != wasDown else { return }
+        slot.stickDown[id] = isDown
+        emit(id, isDown, player: player)
     }
 
     /// Routes an input to the game, edges only: the stick handler above
