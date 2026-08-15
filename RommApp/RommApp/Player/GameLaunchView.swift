@@ -236,6 +236,9 @@ struct GameLaunchView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                routeIndicator
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 exportButton
             }
@@ -325,6 +328,34 @@ struct GameLaunchView: View {
     /// A star, not a card: this is a status toggle someone glances at and
     /// taps in passing, not a decision that needs its own explanation on
     /// the screen the way the arcade or firmware choices do.
+    /// Which address this screen's downloads will actually use, shown only
+    /// to someone who has set a second one and therefore has a choice to
+    /// know about. Everyone else sees nothing at all.
+    ///
+    /// It lives here rather than in Settings' own row because the download
+    /// happens here, and it matters beyond speed: a home connection can be
+    /// metered, and a round trip out to the internet and back spends that
+    /// allowance twice for bytes that never had to leave the house. A
+    /// glance is enough, which is why this is a plain status icon and not
+    /// a warning. It says local just as readily as it says internet, so it
+    /// reads as information rather than something being wrong.
+    ///
+    /// A router, deliberately not a house: the tab bar already spends a
+    /// house on Home, and two houses meaning different things is worse than
+    /// no icon. The title stays on the Label even though the toolbar
+    /// renders it icon only, so VoiceOver still reads it.
+    @ViewBuilder
+    private var routeIndicator: some View {
+        if session.localServerURL != nil {
+            Label(
+                session.isUsingLocalAddress ? "Local network" : "Internet",
+                systemImage: session.isUsingLocalAddress ? "wifi.router" : "globe"
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+    }
+
     private var favoriteButton: some View {
         Button {
             let romId = rom.id
