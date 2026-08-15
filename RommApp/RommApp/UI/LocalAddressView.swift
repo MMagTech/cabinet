@@ -43,7 +43,7 @@ struct LocalAddressView: View {
             } header: {
                 Text("Your server's other address")
             } footer: {
-                Text("Add your server's address on this network if you set Cabinet up with its internet address, or the other way round. Cabinet works out which is which and uses the one on this network whenever it can. It checks the address answers before saving it. Type http:// or https:// yourself if your server needs a particular one.")
+                Text("Checked before it's saved. Add http:// or https:// if your server needs one.")
             }
 
             if let failure {

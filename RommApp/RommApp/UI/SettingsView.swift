@@ -91,7 +91,7 @@ struct SettingsView: View {
             } header: {
                 Text("Controls")
             } footer: {
-                Text("On screen controls respond to touch at any visibility. Rumble fires a haptic when a game with a real rumble accessory (Drill Dozer's cartridge motor, an N64 Rumble Pak, a DualShock, Dreamcast's Jump Pack) tells the core to vibrate. Games and systems with no such hardware never trigger it.")
+                Text("Controls still respond to touch at any visibility. Rumble only fires in games that had it, like Drill Dozer or an N64 Rumble Pak.")
             }
 
             Section {
@@ -139,7 +139,7 @@ struct SettingsView: View {
             } header: {
                 Text("Connection")
             } footer: {
-                Text("If your server has a second address, add it here. Cabinet uses whichever of the two is on this network, so it can talk to your server directly instead of going out to the internet and back, and falls back to the other one when you're away.")
+                Text("If your server has a second address, Cabinet uses whichever one is on this network, and the other when you're away.")
             }
 
             Section {
