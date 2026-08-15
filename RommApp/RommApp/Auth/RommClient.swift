@@ -184,6 +184,30 @@ actor RommClient {
         return (200..<300).contains(http.statusCode)
     }
 
+    /// The subset of the failures below that also prove the server never
+    /// saw the request: the connection was never established in the first
+    /// place, so nothing can have been acted on.
+    ///
+    /// The two deliberately missing from this list, a timeout and a
+    /// connection lost partway, are the ones that can happen *after* a body
+    /// has arrived and been processed. Retrying those is safe for a plain
+    /// read and not safe for anything that writes: a save state upload that
+    /// reached the server and was slow to answer would be uploaded a second
+    /// time, leaving two identical states in the list. So a write is only
+    /// ever moved to the other address when it certainly never landed.
+    private static func provesNotDelivered(_ error: URLError) -> Bool {
+        switch error.code {
+        case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed,
+             .secureConnectionFailed, .serverCertificateUntrusted,
+             .serverCertificateHasBadDate, .serverCertificateHasUnknownRoot,
+             .serverCertificateNotYetValid,
+             .appTransportSecurityRequiresSecureConnection:
+            return true
+        default:
+            return false
+        }
+    }
+
     /// Whether a failure means "that address is not there", as opposed to
     /// the server answering with something we did not like. Only the first
     /// kind is worth retrying elsewhere: a 404 or a 401 from the local
@@ -886,10 +910,16 @@ actor RommClient {
         let wasPreferred = targetsPreferredAddress(req.url)
         if wasPreferred { req.timeoutInterval = Self.preferredTimeout }
 
+        // A read can always be repeated. Anything else has to be certain it
+        // never arrived before it is sent somewhere else.
+        let isRead = (req.httpMethod ?? "GET").uppercased() == "GET"
+
         do {
             return try await dataAndResponse(req)
         } catch let error as URLError {
-            guard wasPreferred, Self.isUnreachable(error), let preferredURL,
+            guard wasPreferred, Self.isUnreachable(error),
+                  isRead || Self.provesNotDelivered(error),
+                  let preferredURL,
                   let retryURL = Self.rebase(req.url, from: preferredURL, to: fallbackURL)
             else { throw RommError(urlError: error) }
 
