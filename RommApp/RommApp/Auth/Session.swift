@@ -79,12 +79,37 @@ final class Session: ObservableObject {
     /// to this class rather than duplicated as string literals in a second
     /// file. Nothing on iOS calls this today; iOS has no concept of
     /// switching which RomM account is active mid-session.
-    func activateProfile(serverURL url: URL, token: String) throws {
+    ///
+    /// `localURL` is the profile's own second address, and it has to be
+    /// swapped here alongside the token rather than left where it is.
+    /// `localServerURL` is stored once for the whole app, so without this
+    /// a profile switch kept whichever second address was already set, no
+    /// matter which server the incoming profile points at. Two profiles on
+    /// two different servers is where that bites: routing would prefer the
+    /// first profile's local address for the second profile's requests,
+    /// the reachability probe would pass because a real RomM really is
+    /// answering there, and then every request would be refused by a
+    /// server that has never seen that token. That reads as the app being
+    /// broken rather than as a misconfiguration, and it is the same
+    /// failure `setLocalAddress` grew its `/api/users/me` check to
+    /// prevent. Passing nil clears it, which is right for a profile that
+    /// has no second address of its own.
+    func activateProfile(serverURL url: URL, token: String, localURL: URL? = nil) throws {
         guard let host = url.host else {
             throw RommError.transport("That server address has no host.")
         }
         try Keychain.save(token: token, forHost: host)
         UserDefaults.standard.set(url.absoluteString, forKey: serverKey)
+
+        // Written before `restore()`, which reads this key back out and is
+        // what republishes `localServerURL` and rebuilds the client.
+        // Removing the key is what makes restore publish nil.
+        if let localURL {
+            UserDefaults.standard.set(localURL.absoluteString, forKey: localServerKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: localServerKey)
+        }
+
         restore()
     }
 

@@ -12,11 +12,26 @@ struct TVProfile: Identifiable, Codable, Equatable {
     let id: UUID
     var label: String
     /// Full server URL string (scheme included), not just host: this is
-    /// exactly what `Session.activateProfile(serverURL:token:)` needs, and
-    /// what `Session.serverURL.absoluteString` already looks like.
+    /// exactly what `Session.activateProfile(serverURL:token:localURL:)`
+    /// needs, and what `Session.serverURL.absoluteString` already looks
+    /// like.
     var serverURLString: String
+    /// This profile's own second address, if its server has one. Belongs
+    /// to the profile rather than to the device for the same reason the
+    /// token does: two profiles can point at two different servers, and
+    /// `Session`'s own `localServerURL` is a single app wide slot. See
+    /// `Session.activateProfile` for what went wrong when this was left
+    /// device wide.
+    ///
+    /// Optional, and that is also the whole migration path: a `Codable`
+    /// struct decodes a missing key for an optional as nil, so profiles
+    /// stored before this existed come back with no second address and
+    /// behave exactly as they did.
+    var localServerURLString: String? = nil
 
     var host: String? { URL(string: serverURLString)?.host }
+
+    var localServerURL: URL? { localServerURLString.flatMap { URL(string: $0) } }
 }
 
 /// Every profile paired on this Apple TV, kept completely independent of
@@ -120,12 +135,19 @@ enum TVProfileStore {
         }
     }
 
-    /// Makes `profile` the active one: its own stored token goes into the
-    /// shared slot `Session` reads from, then `Session` reloads from it.
+    /// Makes `profile` the active one: its own stored token and its own
+    /// second address go into the shared slots `Session` reads from, then
+    /// `Session` reloads from them.
+    ///
+    /// The second address travels with the profile for the same reason the
+    /// token does. A profile with none passes nil, which clears whatever
+    /// the previous profile left behind rather than inheriting it.
     @MainActor
     static func activate(_ profile: TVProfile, session: Session) {
         guard let url = URL(string: profile.serverURLString), let token = token(for: profile.id) else { return }
-        try? session.activateProfile(serverURL: url, token: token)
+        try? session.activateProfile(
+            serverURL: url, token: token, localURL: profile.localServerURL
+        )
         activeProfileID = profile.id
     }
 

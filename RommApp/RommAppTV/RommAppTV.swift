@@ -66,7 +66,17 @@ struct RommAppTV: App {
             // exists and the chip has something to show right away
             // rather than waiting on a network round trip; enriched with
             // the real username/avatar the moment that call lands.
-            let profile = TVProfile(id: UUID(), label: host, serverURLString: url.absoluteString)
+            // Takes the session's second address with it, so the very
+            // first profile owns whatever this device was set up with
+            // rather than leaving it in the app wide slot for the next
+            // profile to inherit. Nil today, since nothing on tvOS sets
+            // one by hand.
+            let profile = TVProfile(
+                id: UUID(),
+                label: host,
+                serverURLString: url.absoluteString,
+                localServerURLString: session.localServerURL?.absoluteString
+            )
             TVProfileStore.addProfile(profile, token: token)
             TVProfileStore.activeProfileID = profile.id
             TVProfileStore.enrichIfNeeded(profile)
