@@ -90,19 +90,14 @@ struct SettingsView: View {
                 Toggle("Rumble", isOn: $rumbleEnabled)
             } header: {
                 Text("Controls")
-            } footer: {
-                Text("Controls still respond to touch at any visibility.")
             }
 
             Section {
                 Toggle("Autosave while playing", isOn: $autosaveEnabled)
-                Text(autosaveEnabled
-                     ? "Keeps a local snapshot every half minute in the web player, so a game iOS closes costs seconds, not the run. The native player saves automatically on pause instead."
-                     : "Off. Nothing is written in the web player while you play, and a game iOS closes starts over. Doesn't affect the native player, which always saves on pause.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             } header: {
                 Text("Saving")
+            } footer: {
+                Text("Web player only. The native player always saves on pause.")
             }
 
             Section {
