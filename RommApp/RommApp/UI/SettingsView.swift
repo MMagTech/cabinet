@@ -97,7 +97,7 @@ struct SettingsView: View {
             } header: {
                 Text("Saving")
             } footer: {
-                Text("Web player only. The native player always saves on pause.")
+                Text("Web player only. The native player only saves when you tap Save state.")
             }
 
             Section {
