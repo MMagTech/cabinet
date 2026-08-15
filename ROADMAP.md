@@ -39,6 +39,18 @@ worth having in the open.
   The idea is a proper full-screen moment for genuinely large
   downloads, small ones would keep today's quick inline behavior. Not
   settled whether to build it at all, let alone how.
+- **Skip re-pairing on a new device using iCloud.** If Cabinet is
+  already paired to your RomM server on one of your own devices, a
+  brand-new Apple TV or iPhone signed into the same Apple ID could
+  offer to pick up that same pairing automatically instead of typing
+  the address and approving in a browser again, using iCloud's own
+  Keychain sync, nothing server-side. Scoped carefully so it can never
+  interfere with tvOS's multi-profile switcher: it only ever offers
+  anything on a brand-new device with no profiles yet, and never
+  touches an existing setup. Real open questions remain (what happens
+  if the stored login gets revoked, whether to confirm before jumping
+  in, what signing out should do to it), design in progress, not
+  built.
 
 ## Known gaps
 
@@ -55,9 +67,5 @@ Real, acknowledged holes, not yet started.
 - **PS1 and Saturn multi-disc games aren't supported**, and whether they
   should be is genuinely undecided, it would need real `.m3u`-style disc
   swapping support, not just a missing feature flag.
-
-## Not planned right now
-
-Named explicitly so it doesn't get re-asked without new information.
 
 - **iCloud sync for settings.** No confirmed real need yet.
