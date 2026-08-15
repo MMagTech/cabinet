@@ -513,6 +513,24 @@ final class GameControllerManager: ObservableObject {
         }
     }
 
+    /// Connects a core's rumble events to whoever should feel them, and
+    /// makes the on-by-default setting actually read as on.
+    ///
+    /// Shared, and called from both apps' launch, because it used to live in
+    /// the iOS app delegate, which tvOS does not compile. So tvOS did
+    /// neither of these, and rumble could not work there twice over: the
+    /// setting read as off, since `boolForKey:` on a key nobody registered
+    /// returns Foundation's false rather than this app's true, and even past
+    /// that the handler was nil, and the fallback for a nil handler is a
+    /// phone haptic an Apple TV does not have. Nothing on tvOS ever rumbled,
+    /// and nothing said so.
+    static func installRumbleRouting() {
+        UserDefaults.standard.register(defaults: ["com.mmagtech.RommApp.rumbleEnabled": true])
+        LibretroFrontend.setRumbleHandler { port, strong, strength in
+            GameControllerManager.shared.fireRumble(port: port, strong: strong, strength: strength)
+        }
+    }
+
     /// One engine per locality, kept alive rather than rebuilt per rumble
     /// event: `CHHapticEngine.start()` is cheap to call again on an already
     /// running engine, but creating a fresh one every haptic is not free,

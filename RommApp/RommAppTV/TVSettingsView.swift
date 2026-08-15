@@ -23,6 +23,9 @@ struct TVSettingsView: View {
     @AppStorage("com.mmagtech.RommAppTV.requirePINToSwitch") private var requirePIN = false
     @AppStorage("com.mmagtech.RommAppTV.switchPIN") private var storedPIN = ""
     @AppStorage(BiasGlowLevel.storageKey) private var glowStored = BiasGlowLevel.subtle.rawValue
+    /// Deliberately the iOS key, not a tvOS one: the core reads this exact
+    /// name from Objective-C++, and it means the same thing on both.
+    @AppStorage("com.mmagtech.RommApp.rumbleEnabled") private var rumbleEnabled = true
 
     var body: some View {
         NavigationStack {
@@ -70,6 +73,14 @@ struct TVSettingsView: View {
                         if controllers.connectedNames.allSatisfy({ $0 == nil }) {
                             infoRow(label: "No controller connected", value: "")
                         }
+                        // An Apple TV has no Taptic Engine of its own, so
+                        // unlike iOS there is nothing to fall back to when a
+                        // pad has no motors of its own: the rumble is simply
+                        // dropped rather than coming out of the device.
+                        Toggle(isOn: $rumbleEnabled) {
+                            actionRow(title: "Rumble", detail: nil, chevron: false)
+                        }
+                        .toggleStyle(.switch)
                         NavigationLink {
                             ControllerRemapView()
                         } label: {

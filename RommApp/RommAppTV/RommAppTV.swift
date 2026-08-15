@@ -13,6 +13,12 @@ import SwiftUI
 struct RommAppTV: App {
     @StateObject private var session = Session()
 
+    /// The iOS app does this from its app delegate, which this target does
+    /// not compile, so tvOS did it nowhere and no game ever rumbled here.
+    init() {
+        GameControllerManager.installRumbleRouting()
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()
