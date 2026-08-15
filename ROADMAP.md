@@ -10,6 +10,22 @@ If something here interests you, or you want to pick one up, open an
 issue or a discussion first so the approach can be talked through before
 any code gets written.
 
+## Built, waiting on a release
+
+Done and working, just not in a tagged release yet.
+
+- **Preferring the local network over the public internet.** Set an
+  optional second address for your server, and Cabinet uses whichever of
+  the two is on your local network whenever it can actually reach it,
+  falling back on its own when it cannot. It works whichever box you
+  typed which address into, so setting Cabinet up at home first and
+  adding a public hostname later works as well as the other way round.
+  Downloads stop being bottlenecked by your home connection's upload
+  speed, and, if your home internet is metered, stop spending your
+  allowance twice on bytes that never needed to leave the house. iPhone
+  only for now, an Apple TV is set up with whichever address you pair it
+  against.
+
 ## Being explored
 
 Not committed, not scoped, real conversations that happened and are
@@ -23,13 +39,6 @@ worth having in the open.
   becomes a real second screen, cover art and browsing while idle, a
   "now playing" view during a game, closer to a console companion app
   than a remote. Layout and interaction are entirely undecided.
-- **Preferring the local network over the public internet.** If Cabinet
-  and your RomM server are on the same LAN, there's no reason to route
-  requests out through the public internet and back. The idea is a
-  second, optional local address you can set once, used automatically
-  when reachable. Real side benefit: local downloads aren't bottlenecked
-  by your home connection's upload speed the way a round trip through
-  the public address is.
 - **A native touch control restyle.** The current on-screen controls are
   functional but read a little flat next to the rest of the app. A
   restyle direction has been discussed, not built.
@@ -47,10 +56,13 @@ worth having in the open.
   Keychain sync, nothing server-side. Scoped carefully so it can never
   interfere with tvOS's multi-profile switcher: it only ever offers
   anything on a brand-new device with no profiles yet, and never
-  touches an existing setup. Real open questions remain (what happens
-  if the stored login gets revoked, whether to confirm before jumping
-  in, what signing out should do to it), design in progress, not
-  built.
+  touches an existing setup. Now designed rather than just discussed,
+  including what happens when a stored login has been revoked (it
+  quietly becomes a pre-filled address field, never an error), and it
+  carries both your public and local addresses so a seeded Apple TV
+  still prefers your local network at home. Written up in
+  [docs/scope-icloud-pairing-continuity.md](docs/scope-icloud-pairing-continuity.md).
+  Not built.
 
 ## Known gaps
 
