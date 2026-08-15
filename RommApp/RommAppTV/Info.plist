@@ -7,5 +7,21 @@
 	     Info.plist. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- An Apple TV never leaves the house, so setting one up against the
+	     server's address on the local network is a perfectly ordinary
+	     choice, and that address is almost always plain http: no reverse
+	     proxy, and no certificate anyone could issue for 192.168.1.10.
+	     Without this, App Transport Security refuses those requests before
+	     they leave the device, so a TV set up that way would fail at
+	     pairing with nothing on screen explaining why. Local addresses
+	     only; anything with a real hostname still has to be https. Same
+	     exemption the iOS target carries. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Cabinet uses your local network to reach your RomM server directly, instead of going out to the internet and back.</string>
 </dict>
 </plist>

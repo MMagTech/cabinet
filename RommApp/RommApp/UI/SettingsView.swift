@@ -122,8 +122,24 @@ struct SettingsView: View {
                 if let version = session.serverVersion {
                     LabeledContent("RomM version", value: version)
                 }
+                NavigationLink {
+                    LocalAddressView()
+                } label: {
+                    LabeledContent(
+                        "Local address",
+                        value: session.localServerURL?.host ?? "Not set"
+                    )
+                }
+                if session.localServerURL != nil {
+                    LabeledContent(
+                        "Using",
+                        value: session.isUsingLocalAddress ? "Local network" : "Internet"
+                    )
+                }
             } header: {
                 Text("Connection")
+            } footer: {
+                Text("If your server is on this network, Cabinet can talk to it directly instead of going out to the internet and back, which is faster for downloads and keeps working while your internet doesn't.")
             }
 
             Section {

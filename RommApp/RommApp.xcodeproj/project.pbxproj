@@ -45,6 +45,7 @@
 				Settings/EmulatorCacheBridge.swift,
 				Settings/StorageView.swift,
 				UI/DebugView.swift,
+				UI/LocalAddressView.swift,
 				UI/NativeCoresView.swift,
 				UI/OrientationLock.swift,
 				UI/SettingsView.swift,

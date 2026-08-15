@@ -8,15 +8,67 @@ import UIKit
 ///
 /// URLSession and Codable only. No networking library, no generated client.
 actor RommClient {
-    private let baseURL: URL
+    /// The address someone paired against, reachable from anywhere.
+    private let publicURL: URL
+    /// An optional second address for the same server on the local network,
+    /// typed by hand in Settings. Never discovered: RomM does not advertise
+    /// itself over Bonjour, and a client cannot add that unilaterally.
+    private var localURL: URL?
+    /// Whether that local address answered the last time it was checked.
+    /// False until proven otherwise, so a server with no local address, or
+    /// one typed while away from home, behaves exactly as before.
+    private var localIsReachable = false
+    /// When that check last ran, so a decision made half an hour ago is not
+    /// trusted at the moment a large download is about to start.
+    private var lastRouteCheck: Date?
+
     private let session: URLSession
+    /// A separate session for the reachability probe alone. Its timeout is
+    /// the whole point: deciding which address to use has to be quick
+    /// enough to happen before the first real request, not after a
+    /// fifteen second wait on an address that is not there.
+    private let probeSession: URLSession
     private var accessToken: String?
 
     var host: String { baseURL.host ?? baseURL.absoluteString }
 
-    init(baseURL: URL, accessToken: String? = nil) {
-        self.baseURL = baseURL
+    /// Whether requests are currently going over the local network, for
+    /// Settings to report honestly rather than claiming a preference the
+    /// app is not actually acting on.
+    var isUsingLocalAddress: Bool { localURL != nil && localIsReachable }
+
+    /// Told whenever the answer above changes.
+    ///
+    /// Needed because the most interesting change happens without anyone
+    /// asking: a request discovers mid flight that the local address has
+    /// gone away and quietly moves to the public one. Found in the
+    /// simulator with the local server killed underneath a running app,
+    /// where every request had already corrected itself but Settings still
+    /// read "Using: Local network". A screen that disagrees with what the
+    /// app is actually doing is worse than one that says nothing.
+    private var routeDidChange: (@Sendable (Bool) -> Void)?
+
+    func onRouteChange(_ handler: @escaping @Sendable (Bool) -> Void) {
+        routeDidChange = handler
+    }
+
+    private func setLocalReachable(_ reachable: Bool) {
+        let before = isUsingLocalAddress
+        localIsReachable = reachable
+        let after = isUsingLocalAddress
+        if before != after { routeDidChange?(after) }
+    }
+
+    init(baseURL: URL, accessToken: String? = nil, localURL: URL? = nil) {
+        self.publicURL = baseURL
+        self.localURL = localURL
         self.accessToken = accessToken
+
+        let probeConfig = URLSessionConfiguration.ephemeral
+        probeConfig.waitsForConnectivity = false
+        probeConfig.timeoutIntervalForRequest = Self.probeTimeout
+        probeConfig.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        self.probeSession = URLSession(configuration: probeConfig)
 
         let config = URLSessionConfiguration.default
         // Deliberately false. With it on, a request made with no signal
@@ -30,12 +82,118 @@ actor RommClient {
         // stares at a screen before being told anything is wrong, and no
         // list request here is slow enough to need more: a server that has
         // not answered a page of games in fifteen seconds is not about to.
-        config.timeoutIntervalForRequest = 15
+        config.timeoutIntervalForRequest = Self.requestTimeout
         self.session = URLSession(configuration: config)
     }
 
     func setAccessToken(_ token: String?) {
         accessToken = token
+    }
+
+    // MARK: Which address requests go to
+
+    /// How long the probe waits for the local address before giving up on
+    /// it. Short on purpose: this runs before the first real request of a
+    /// launch, and a local server that has not answered in three seconds is
+    /// not on this network.
+    private static let probeTimeout: TimeInterval = 3
+    /// How long a routing decision is trusted before it is checked again.
+    /// Walking out the front door does not fire a network path change while
+    /// cellular takes over from wi-fi cleanly, so a decision is not trusted
+    /// forever, only long enough to keep a burst of screen loads from each
+    /// paying for their own probe.
+    private static let routeFreshness: TimeInterval = 30
+
+    /// The address every request is built against right now.
+    private var baseURL: URL {
+        if let localURL, localIsReachable { return localURL }
+        return publicURL
+    }
+
+    /// Re-checks even when the address has not changed: somebody saving the
+    /// same address again is usually somebody who just fixed whatever was
+    /// wrong at the other end and wants it tried now.
+    func setLocalURL(_ url: URL?) async {
+        localURL = url
+        setLocalReachable(false)
+        lastRouteCheck = nil
+        await refreshRoute()
+    }
+
+    /// Asks the local address whether it is there, and remembers the answer.
+    /// Called at launch, whenever the network path changes, and before
+    /// anything large enough that starting it against a dead address would
+    /// be a visible failure rather than a retry nobody notices.
+    func refreshRoute() async {
+        guard let localURL else {
+            setLocalReachable(false)
+            lastRouteCheck = Date()
+            return
+        }
+        setLocalReachable(await answersAsRomM(at: localURL))
+        lastRouteCheck = Date()
+    }
+
+    private func refreshRouteIfStale() async {
+        guard localURL != nil else { return }
+        guard let lastRouteCheck else { return await refreshRoute() }
+        if Date().timeIntervalSince(lastRouteCheck) > Self.routeFreshness {
+            await refreshRoute()
+        }
+    }
+
+    /// Deliberately the unauthenticated heartbeat, not a plain connection
+    /// test: something else answering on that address and port, a router
+    /// admin page or another container, must not be mistaken for the
+    /// server.
+    private func answersAsRomM(at url: URL) async -> Bool {
+        var req = URLRequest(url: url.appendingPathComponent("/api/heartbeat"))
+        req.timeoutInterval = Self.probeTimeout
+        guard let (_, response) = try? await probeSession.data(for: req),
+              let http = response as? HTTPURLResponse
+        else { return false }
+        return (200..<300).contains(http.statusCode)
+    }
+
+    /// Whether a failure means "that address is not there", as opposed to
+    /// the server answering with something we did not like. Only the first
+    /// kind is worth retrying elsewhere: a 404 or a 401 from the local
+    /// address would say exactly the same thing from the public one.
+    private static func isUnreachable(_ error: URLError) -> Bool {
+        switch error.code {
+        case .cannotFindHost, .cannotConnectToHost, .timedOut,
+             .networkConnectionLost, .dnsLookupFailed, .secureConnectionFailed,
+             .serverCertificateUntrusted, .serverCertificateHasBadDate,
+             .serverCertificateHasUnknownRoot, .serverCertificateNotYetValid,
+             .appTransportSecurityRequiresSecureConnection:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Moves a request from one address to the other, keeping its path,
+    /// query and everything else about it. Handles a base URL that carries
+    /// a path of its own, the reverse proxy subpath case, by swapping one
+    /// prefix for the other rather than assuming both are bare origins.
+    private static func rebase(_ url: URL?, from old: URL, to new: URL) -> URL? {
+        guard let url,
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let newComponents = URLComponents(url: new, resolvingAgainstBaseURL: false)
+        else { return nil }
+
+        let oldPrefix = old.path
+        var path = components.path
+        if !oldPrefix.isEmpty, oldPrefix != "/", path.hasPrefix(oldPrefix) {
+            path = String(path.dropFirst(oldPrefix.count))
+        }
+        let newPrefix = (newComponents.path == "/") ? "" : newComponents.path
+
+        components.scheme = newComponents.scheme
+        components.host = newComponents.host
+        components.port = newComponents.port
+        components.path = newPrefix + path
+        return components.url
     }
 
     // MARK: Reachability
@@ -145,7 +303,7 @@ actor RommClient {
         ])
         // Deliberately silent. Failing to record a play is not worth
         // interrupting one over.
-        _ = try? await session.data(for: req)
+        _ = try? await perform(req)
     }
 
     /// Records a finished session, which is what actually gives a game a
@@ -177,9 +335,7 @@ actor RommClient {
                 "duration_ms": max(0, Int(end.timeIntervalSince(start) * 1000)),
             ]],
         ])
-        guard let (_, response) = try? await session.data(for: req),
-              let http = response as? HTTPURLResponse
-        else { return false }
+        guard let (_, http) = try? await perform(req) else { return false }
         return (200...299).contains(http.statusCode)
     }
 
@@ -442,13 +598,7 @@ actor RommClient {
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         req.httpBody = body
 
-        let (data, response) = try await session.data(for: req)
-        guard let http = response as? HTTPURLResponse else {
-            throw RommError.transport("The server sent a response the app could not read.")
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            throw RommError(status: http.statusCode, body: data)
-        }
+        _ = try await performExpectingSuccess(req)
     }
 
     func saves(romId: Int) async throws -> [GameSave] {
@@ -497,27 +647,14 @@ actor RommClient {
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         req.httpBody = body
 
-        let (data, response) = try await session.data(for: req)
-        guard let http = response as? HTTPURLResponse else {
-            throw RommError.transport("The server sent a response the app could not read.")
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            throw RommError(status: http.statusCode, body: data)
-        }
+        _ = try await performExpectingSuccess(req)
     }
 
     /// The raw bytes of one battery save, the same content-endpoint
     /// pattern as states, covers and firmware.
     func saveContent(_ save: GameSave) async throws -> Data {
         let req = request(path: "/api/saves/\(save.id)/content")
-        let (data, response) = try await session.data(for: req)
-        guard let http = response as? HTTPURLResponse else {
-            throw RommError.transport("The server sent a response the app could not read.")
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            throw RommError(status: http.statusCode, body: data)
-        }
-        return data
+        return try await performExpectingSuccess(req)
     }
 
     func states(romId: Int) async throws -> [GameState] {
@@ -534,14 +671,7 @@ actor RommClient {
     /// the one path already proven to work: the pause menu's Load button.
     func stateContent(_ state: GameState) async throws -> Data {
         let req = request(path: "/api/states/\(state.id)/content")
-        let (data, response) = try await session.data(for: req)
-        guard let http = response as? HTTPURLResponse else {
-            throw RommError.transport("The server sent a response the app could not read.")
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            throw RommError(status: http.statusCode, body: data)
-        }
-        return data
+        return try await performExpectingSuccess(req)
     }
 
     func firmware(platformId: Int) async throws -> [Firmware] {
@@ -645,10 +775,9 @@ actor RommClient {
             req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         }
 
-        let (data, response) = try await session.data(for: req)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw RommError.notFound
-        }
+        guard let (data, http) = try? await perform(req),
+              (200..<300).contains(http.statusCode)
+        else { throw RommError.notFound }
         return data
     }
 
@@ -675,8 +804,17 @@ actor RommClient {
     /// and firmware content in particular. The caller drives the actual
     /// transfer, this only builds the request, since a real download needs
     /// a delegate for progress that does not belong on this actor.
-    func fileRequest(path: String) -> URLRequest {
-        request(path: path)
+    ///
+    /// Which also means these are the one kind of request that does not get
+    /// the automatic second attempt at the public address: nobody here sees
+    /// them fail. A download that dies because the local address went away
+    /// mid transfer has to be started again, a deliberate limit on this
+    /// feature's scope rather than an oversight. The routing decision is at
+    /// least re-checked first, so a large download is not started against
+    /// an address that stopped answering some time ago.
+    func fileRequest(path: String) async -> URLRequest {
+        await refreshRouteIfStale()
+        return request(path: path)
     }
 
     // MARK: Plumbing
@@ -690,23 +828,75 @@ actor RommClient {
         return req
     }
 
-    private func send<T: Decodable>(_ req: URLRequest, decoding: T.Type) async throws -> T {
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await session.data(for: req)
-        } catch let error as URLError {
-            throw RommError(urlError: error)
-        }
+    /// The ceiling on a normal request, and on a retry after the local
+    /// address turned out to be gone.
+    private static let requestTimeout: TimeInterval = 15
+    /// The ceiling on a request aimed at the local address. Much shorter,
+    /// because failing here is not the end of the story: whatever is left
+    /// of the wait is spent asking the public address the same thing, and
+    /// the two together still have to feel like one request.
+    private static let localTimeout: TimeInterval = 6
 
+    private func targetsLocalAddress(_ url: URL?) -> Bool {
+        guard let url, let localURL else { return false }
+        return url.host == localURL.host && url.scheme == localURL.scheme
+    }
+
+    /// Every request in this file goes through here. That is the whole
+    /// reason preferring the local address is one decision instead of one
+    /// per call site: nothing above this line knows which address it is
+    /// talking to, and nothing needs to.
+    ///
+    /// A local address that has quietly gone away costs one short timeout
+    /// and then the request happens anyway, against the public address, and
+    /// the routing decision is corrected so the next request skips the
+    /// detour. A server that answers with an error is not retried
+    /// elsewhere: a 401 from home would be a 401 from anywhere.
+    private func perform(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        var req = request
+        let wasLocal = targetsLocalAddress(req.url)
+        if wasLocal { req.timeoutInterval = Self.localTimeout }
+
+        do {
+            return try await dataAndResponse(req)
+        } catch let error as URLError {
+            guard wasLocal, Self.isUnreachable(error), let localURL,
+                  let retryURL = Self.rebase(req.url, from: localURL, to: publicURL)
+            else { throw RommError(urlError: error) }
+
+            setLocalReachable(false)
+            lastRouteCheck = Date()
+
+            var retry = req
+            retry.url = retryURL
+            retry.timeoutInterval = Self.requestTimeout
+            do {
+                return try await dataAndResponse(retry)
+            } catch let retryError as URLError {
+                throw RommError(urlError: retryError)
+            }
+        }
+    }
+
+    private func dataAndResponse(_ req: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let (data, response) = try await session.data(for: req)
         guard let http = response as? HTTPURLResponse else {
             throw RommError.transport("The server sent a response the app could not read.")
         }
+        return (data, http)
+    }
 
+    /// A request whose body is all that matters, with the status checked.
+    private func performExpectingSuccess(_ req: URLRequest) async throws -> Data {
+        let (data, http) = try await perform(req)
         guard (200..<300).contains(http.statusCode) else {
             throw RommError(status: http.statusCode, body: data)
         }
+        return data
+    }
 
+    private func send<T: Decodable>(_ req: URLRequest, decoding: T.Type) async throws -> T {
+        let data = try await performExpectingSuccess(req)
         do {
             return try JSONDecoder().decode(T.self, from: data)
         } catch {

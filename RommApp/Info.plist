@@ -24,5 +24,20 @@
 	     binds to the overlay menu. -->
 	<key>GCSupportsControllerUserInteraction</key>
 	<true/>
+	<!-- The optional local server address is almost always plain http: RomM
+	     running bare on a LAN has no reverse proxy and no certificate anyone
+	     could issue for 192.168.1.50. Without this, App Transport Security
+	     refuses those requests before they leave the device. This exception
+	     covers local addresses only, so every request to a real hostname,
+	     the public server address included, still has to be https. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<!-- Shown in the permission prompt iOS raises the first time the app
+	     talks to an address on the local network. -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Cabinet uses your local network to reach your RomM server directly when you are at home, instead of going out to the internet and back.</string>
 </dict>
 </plist>

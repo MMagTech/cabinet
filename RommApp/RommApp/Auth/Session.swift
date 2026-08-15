@@ -1,5 +1,7 @@
+import Combine
 import Foundation
 import SwiftUI
+import UIKit
 
 /// Which screen the app should be showing, and the state behind it.
 ///
@@ -42,13 +44,27 @@ final class Session: ObservableObject {
     /// link straight to it once it exists.
     @Published private(set) var favoriteCollection: Collection?
 
+    /// A second address for the same server, on the local network, typed by
+    /// hand in Settings and optional. Nil for everyone who has not set one,
+    /// which is what makes this change invisible to every existing install:
+    /// no key in defaults means no local address means exactly the old
+    /// behaviour, so there is nothing to migrate.
+    @Published private(set) var localServerURL: URL?
+    /// Whether requests are actually going over the local network right
+    /// now. Reported rather than assumed: having typed a local address and
+    /// being able to reach it are different things, and Settings should
+    /// never claim the second because of the first.
+    @Published private(set) var isUsingLocalAddress = false
+
     private var client: RommClient?
 
     private let serverKey = "com.mmagtech.RommApp.serverURL"
     private let versionKey = "com.mmagtech.RommApp.serverVersion"
+    private let localServerKey = "com.mmagtech.RommApp.localServerURL"
 
     init() {
         restore()
+        watchNetworkChanges()
     }
 
     /// Swaps in a different account's server and token, and reloads as if
@@ -81,16 +97,124 @@ final class Session: ObservableObject {
 
         serverURL = url
         serverVersion = UserDefaults.standard.string(forKey: versionKey)
+        localServerURL = UserDefaults.standard.string(forKey: localServerKey)
+            .flatMap { URL(string: $0) }
 
         guard let host = url.host, let token = Keychain.token(forHost: host) else {
-            client = RommClient(baseURL: url)
+            client = RommClient(baseURL: url, localURL: localServerURL)
             stage = .needsPairing
             return
         }
 
-        client = RommClient(baseURL: url, accessToken: token)
+        client = RommClient(baseURL: url, accessToken: token, localURL: localServerURL)
         stage = .ready
+        refreshRoute()
         refreshPlatformConfig()
+    }
+
+    // MARK: Which address requests go to
+
+    /// Checks whether the local address is reachable from wherever this
+    /// device currently is, and publishes the answer. Cheap, and not on the
+    /// path of anything the person is waiting for: every request already
+    /// falls back on its own if this turns out to be wrong.
+    private func refreshRoute() {
+        guard localServerURL != nil else {
+            isUsingLocalAddress = false
+            return
+        }
+        Task { [weak self] in
+            guard let self, let client else { return }
+            await client.onRouteChange { [weak self] usingLocal in
+                Task { @MainActor in self?.routeChanged(usingLocal: usingLocal) }
+            }
+            await client.refreshRoute()
+            self.isUsingLocalAddress = await client.isUsingLocalAddress
+        }
+    }
+
+    /// Called by the client whenever it changes its mind about which
+    /// address to use, including when a request discovers on its own that
+    /// the local one has gone away.
+    private func routeChanged(usingLocal: Bool) {
+        isUsingLocalAddress = usingLocal
+    }
+
+    /// Re-checks the moment the network path changes, which is the only
+    /// event that can turn a good local address into a dead one or back
+    /// again: arriving home, leaving home, wi-fi dropping to cellular.
+    /// `NetworkMonitor` already publishes this, so nothing new watches the
+    /// network here.
+    private func watchNetworkChanges() {
+        networkObserver = NetworkMonitor.shared.$isConnected
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                Task { @MainActor in self?.refreshRoute() }
+            }
+
+        // Coming back to the app is the other moment worth re-checking.
+        // Without it, falling back to the public address sticks: a local
+        // server that reboots, or a router that comes back, would go on
+        // being ignored for the rest of the session, since sitting still at
+        // home produces no network path change to notice. Cheap, and still
+        // nowhere near checking on every request.
+        foregroundObserver = NotificationCenter.default
+            .publisher(for: UIApplication.didBecomeActiveNotification)
+            .sink { [weak self] _ in
+                Task { @MainActor in self?.refreshRoute() }
+            }
+    }
+
+    private var networkObserver: AnyCancellable?
+    private var foregroundObserver: AnyCancellable?
+
+    /// Stores a local address, after checking that a RomM server actually
+    /// answers there. Passing nil removes it and puts every request back on
+    /// the public address.
+    ///
+    /// The same pairing token works against either address, since it is the
+    /// same server, so nothing here re-pairs or touches the Keychain.
+    func setLocalAddress(_ raw: String?) async throws {
+        guard let raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            localServerURL = nil
+            UserDefaults.standard.removeObject(forKey: localServerKey)
+            await client?.setLocalURL(nil)
+            isUsingLocalAddress = false
+            return
+        }
+
+        guard let url = Self.normalise(raw) else {
+            throw RommError.transport(
+                "That does not look like an address. Try something like 192.168.1.50:8080"
+            )
+        }
+
+        // Checked before it is stored, so a typo is caught while the person
+        // is still looking at the field they typed it into, rather than
+        // becoming a silent few seconds of delay on every request later.
+        let token = serverURL?.host.flatMap { Keychain.token(forHost: $0) }
+        let candidate = RommClient(baseURL: url, accessToken: token)
+        _ = try await candidate.heartbeat()
+
+        // Answering as RomM is not enough. Another RomM on the same network
+        // would pass that and then refuse every real request, which reads
+        // as the app being broken rather than as the wrong address being
+        // typed. This pairing's own token authenticating there is what
+        // actually proves the two addresses are the same server.
+        if token != nil {
+            do {
+                _ = try await candidate.currentUser()
+            } catch RommError.unauthorized, RommError.forbidden {
+                throw RommError.transport(
+                    "A RomM server answered there, but it is not the one this device is paired with."
+                )
+            }
+        }
+
+        localServerURL = url
+        UserDefaults.standard.set(url.absoluteString, forKey: localServerKey)
+        await client?.setLocalURL(url)
+        isUsingLocalAddress = await client?.isUsingLocalAddress ?? false
     }
 
     // MARK: Step one, the address
@@ -102,7 +226,7 @@ final class Session: ObservableObject {
             "That does not look like a web address. Try something like romm.example.com"
         ) }
 
-        let candidate = RommClient(baseURL: url)
+        let candidate = RommClient(baseURL: url, localURL: localServerURL)
         let beat = try await candidate.heartbeat()
 
         client = candidate
@@ -125,17 +249,50 @@ final class Session: ObservableObject {
     /// People type "romm.example.com", or paste a URL with a trailing slash, or
     /// include a path. Normalise all of it, and assume https when no scheme is
     /// given so a typo does not silently send a token over plain http.
+    ///
+    /// Except on the local network, where assuming https is wrong often
+    /// enough to be a bug rather than caution (issue #2). RomM running bare
+    /// on a LAN, no reverse proxy in front of it, speaks plain http, and
+    /// there is no certificate anyone could put on `192.168.1.50` anyway.
+    /// A typed `192.168.1.50:8080` used to be silently upgraded to https
+    /// and then simply fail to connect, with nothing on screen explaining
+    /// why. A private address is also not a place a token can leak to
+    /// somebody in the middle: it never leaves the house.
     static func normalise(_ raw: String) -> URL? {
         var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }
 
-        if !text.contains("://") { text = "https://" + text }
+        if !text.contains("://") {
+            text = (isLocalAddress(text) ? "http://" : "https://") + text
+        }
         while text.hasSuffix("/") { text.removeLast() }
 
-        guard let url = URL(string: text), let host = url.host, host.contains(".") || host == "localhost"
+        guard let url = URL(string: text), let host = url.host,
+              host.contains(".") || host == "localhost"
         else { return nil }
 
         return url
+    }
+
+    /// Whether an address, still without a scheme, is one that cannot leave
+    /// the local network: the three private IPv4 ranges, loopback,
+    /// link-local, and the `.local` names Bonjour hands out.
+    private static func isLocalAddress(_ text: String) -> Bool {
+        let host = text
+            .split(separator: "/", maxSplits: 1).first.map(String.init)?
+            .split(separator: ":").first.map(String.init)?
+            .lowercased() ?? ""
+
+        if host == "localhost" || host.hasSuffix(".local") { return true }
+
+        let parts = host.split(separator: ".").compactMap { Int($0) }
+        guard parts.count == 4, parts.allSatisfy({ (0...255).contains($0) }) else { return false }
+
+        switch (parts[0], parts[1]) {
+        case (10, _), (127, _), (192, 168), (169, 254): return true
+        case (172, 16...31): return true
+        default: return false
+        }
     }
 
     // MARK: Step two, pairing
@@ -236,9 +393,12 @@ final class Session: ObservableObject {
         if let host = serverURL?.host { Keychain.deleteToken(forHost: host) }
         UserDefaults.standard.removeObject(forKey: serverKey)
         UserDefaults.standard.removeObject(forKey: versionKey)
+        UserDefaults.standard.removeObject(forKey: localServerKey)
         client = nil
         serverURL = nil
         serverVersion = nil
+        localServerURL = nil
+        isUsingLocalAddress = false
         scopes = []
         stage = .needsServer
     }
@@ -555,6 +715,15 @@ final class Session: ObservableObject {
     /// we are. The token is injected into the page's requests because RomM's
     /// backend accepts bearer authentication on every endpoint, while its web
     /// player normally rides on a session cookie this app does not have.
+    ///
+    /// Deliberately the public address, even when the local one is in use
+    /// for everything else. The webview player's cache of games is an
+    /// IndexedDB database, and a browser keys those by origin: loading the
+    /// same page from a second address gives it a second, empty cache, so
+    /// every game somebody had kept for offline play would read as gone
+    /// while still occupying the disk. Moving the player across addresses
+    /// is a data migration, not a routing change, and it needs its own
+    /// decision rather than falling out of this one.
     func playerContext(for rom: Rom) async -> (url: URL, token: String)? {
         guard let serverURL, let host = serverURL.host,
               let token = Keychain.token(forHost: host),
