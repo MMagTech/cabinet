@@ -62,6 +62,17 @@ Real, acknowledged holes, not yet started.
 - **No native autosave.** Native play only resumes from an explicit save
   state, not automatically on quit or backgrounding, unlike the web
   player.
+- **In-game saves are only kept on three platforms.** PlayStation,
+  Nintendo 64 and Dreamcast save and restore properly. On every other
+  native platform with save hardware, Game Boy Advance, SNES, NES, Game
+  Boy, Genesis, Sega CD, Master System, Game Gear, 32X, TurboGrafx CD,
+  Saturn and Neo Geo Pocket, saving inside a game works while you play
+  and is lost when the game closes. Save states still work, which is
+  what makes it easy to miss. Saturn is the worst of them, its saves
+  currently have nowhere to be written at all. Atari 7800 and arcade
+  are unaffected, neither had in-game saves worth keeping. The full core
+  by core findings, including the traps involved in fixing it, are in
+  [docs/native-in-game-saves.md](docs/native-in-game-saves.md).
 - **PC Engine's 2-button vs. 6-button controller mode** isn't wired up
   to its touch layout yet, even though the core supports it.
 - **PS1 and Saturn multi-disc games aren't supported**, and whether they
