@@ -319,14 +319,13 @@ struct TVPlayerView: View {
         // any view that doesn't claim it: dismissing this whole screen.
         // That bypassed the entire pause menu, Quit confirmation
         // included, on a single accidental B press while paused, found
-        // on device 2026-08-13. Claiming it here makes exit do nothing
-        // outside the pause menu, and simply close the menu (same as
-        // Resume) while it's open, never an unconfirmed quit.
-        .onExitCommand {
-            if menuVisible {
-                closeMenu()
-            }
-        }
+        // on device 2026-08-13. Claiming it here makes exit do nothing at
+        // all, in or out of the pause menu: Resume is the only way to
+        // close the menu, found on device 2026-08-15 to also fire from
+        // inside the Shader/Glow dropdowns and resume the game
+        // unconfirmed, the same shape of accident the first fix closed
+        // for the top level.
+        .onExitCommand {}
         .task {
             if startedAt == nil { startedAt = Date() }
             await syncMemoryCardIn()

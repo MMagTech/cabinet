@@ -190,19 +190,26 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
 
     func draw(in view: MTKView) {
         let now = CACurrentMediaTime()
-        if fpsWindowStart == 0 { fpsWindowStart = now }
-        fpsFrameCount += 1
-        if lastDrawTime != 0 {
-            worstFrameDelta = max(worstFrameDelta, now - lastDrawTime)
+        // Skipped while paused: nothing on tvOS displays these, and
+        // publishing them here republishes `self` once a second even with
+        // the core sitting idle, which re-renders the whole pause menu and
+        // made the Shader/Glow dropdown flicker while it was open, found
+        // on device 2026-08-15.
+        if !paused {
+            if fpsWindowStart == 0 { fpsWindowStart = now }
+            fpsFrameCount += 1
+            if lastDrawTime != 0 {
+                worstFrameDelta = max(worstFrameDelta, now - lastDrawTime)
+            }
+            if now - fpsWindowStart >= 1.0 {
+                measuredFPS = Double(fpsFrameCount) / (now - fpsWindowStart)
+                worstFrameMS = worstFrameDelta * 1000
+                fpsFrameCount = 0
+                fpsWindowStart = now
+                worstFrameDelta = 0
+            }
         }
         lastDrawTime = now
-        if now - fpsWindowStart >= 1.0 {
-            measuredFPS = Double(fpsFrameCount) / (now - fpsWindowStart)
-            worstFrameMS = worstFrameDelta * 1000
-            fpsFrameCount = 0
-            fpsWindowStart = now
-            worstFrameDelta = 0
-        }
 
         if !paused && !awaitingSaveRAM {
             if let card = pendingSaveRAM {
