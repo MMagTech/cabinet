@@ -9,8 +9,9 @@ iPhone and your Apple TV, opening on whatever you were playing last so you are
 back in the game in one tap.
 
 ### [Try Cabinet on TestFlight](https://testflight.apple.com/join/caHsJFTR)
-One link, iPhone and Apple TV both. See [Get it](#get-it) below for the
-Apple TV redemption steps, tvOS has no browser to open the link in directly.
+Works directly for iPhone. For Apple TV you'll also need an iPhone or iPad
+to open the link on, that's an Apple TestFlight requirement, not this app.
+See [Get it](#get-it) below, including the option for Apple-TV-only setups.
 
 **Latest GitHub Releases:**
 [iOS 0.2.0-alpha](https://github.com/MMagTech/cabinet/releases/tag/v0.2.0-alpha) ·
@@ -71,16 +72,22 @@ Cabinet does not come with any games. It plays yours.
 ## Get it
 
 **The easy way: [TestFlight](https://testflight.apple.com/join/caHsJFTR).**
-One link for both iPhone and Apple TV.
 
 **On iPhone:** just open that link there. It walks you through installing
 TestFlight first if you don't have it, then Cabinet.
 
-**On Apple TV:** tvOS has no web browser, so you can't open the link on the
-TV itself. Open it on any other device instead, a phone, a computer, doesn't
-need to be an Apple device, it shows you a short redemption code. Then on
-the Apple TV, install TestFlight from the App Store, open it, go to
-**Redeem**, and type that code in with your remote.
+**On Apple TV, if you also have an iPhone or iPad:** install TestFlight on
+that device too (signed into the same Apple ID as your Apple TV), open the
+link there, and tap Accept. It installs on the Apple TV over the air, tvOS
+has no browser, so the link has to be opened on the phone or iPad, not the
+TV itself.
+
+**On Apple TV only, no iPhone or iPad at all:** the public link above can't
+reach you, that's an Apple limitation, not something we can work around.
+Ask in [Discussions](../../discussions) or [open an issue](../../issues/new)
+and I'll send you a direct email invite instead, which works from any
+device, a computer included, to get a one-time code you enter on the Apple
+TV.
 
 Each platform also has its own releases on its own schedule, all published
 under [Releases](https://github.com/MMagTech/cabinet/releases), if you'd
