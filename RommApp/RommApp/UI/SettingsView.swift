@@ -91,7 +91,7 @@ struct SettingsView: View {
             } header: {
                 Text("Controls")
             } footer: {
-                Text("Controls still respond to touch at any visibility. Rumble only fires in games that had it, like Drill Dozer or an N64 Rumble Pak.")
+                Text("Controls still respond to touch at any visibility.")
             }
 
             Section {
