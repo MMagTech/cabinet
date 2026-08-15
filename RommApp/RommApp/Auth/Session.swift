@@ -275,24 +275,14 @@ final class Session: ObservableObject {
     }
 
     /// Whether an address, still without a scheme, is one that cannot leave
-    /// the local network: the three private IPv4 ranges, loopback,
-    /// link-local, and the `.local` names Bonjour hands out.
+    /// the local network. The same judgement `RommClient` uses to decide
+    /// which of two addresses to prefer, deliberately shared so the two can
+    /// never disagree about what counts as local.
     private static func isLocalAddress(_ text: String) -> Bool {
         let host = text
             .split(separator: "/", maxSplits: 1).first.map(String.init)?
-            .split(separator: ":").first.map(String.init)?
-            .lowercased() ?? ""
-
-        if host == "localhost" || host.hasSuffix(".local") { return true }
-
-        let parts = host.split(separator: ".").compactMap { Int($0) }
-        guard parts.count == 4, parts.allSatisfy({ (0...255).contains($0) }) else { return false }
-
-        switch (parts[0], parts[1]) {
-        case (10, _), (127, _), (192, 168), (169, 254): return true
-        case (172, 16...31): return true
-        default: return false
-        }
+            .split(separator: ":").first.map(String.init) ?? ""
+        return LocalAddress.looksLocal(host: host)
     }
 
     // MARK: Step two, pairing

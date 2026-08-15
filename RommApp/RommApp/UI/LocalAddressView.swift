@@ -41,9 +41,9 @@ struct LocalAddressView: View {
                 }
                 .disabled(checking || address.trimmingCharacters(in: .whitespaces).isEmpty)
             } header: {
-                Text("Address on your network")
+                Text("Your server's other address")
             } footer: {
-                Text("Cabinet checks the address answers before saving it. Type http:// or https:// yourself if your server needs a particular one.")
+                Text("Add your server's address on this network if you set Cabinet up with its internet address, or the other way round. Cabinet works out which is which and uses the one on this network whenever it can. It checks the address answers before saving it. Type http:// or https:// yourself if your server needs a particular one.")
             }
 
             if let failure {
@@ -56,7 +56,7 @@ struct LocalAddressView: View {
 
             if session.localServerURL != nil {
                 Section {
-                    Button("Remove local address", role: .destructive) {
+                    Button("Remove second address", role: .destructive) {
                         Task {
                             try? await session.setLocalAddress(nil)
                             address = ""
@@ -67,7 +67,7 @@ struct LocalAddressView: View {
                 }
             }
         }
-        .navigationTitle("Local address")
+        .navigationTitle("Second address")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             if address.isEmpty, let existing = session.localServerURL {

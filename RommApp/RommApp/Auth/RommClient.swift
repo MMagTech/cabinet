@@ -8,16 +8,17 @@ import UIKit
 ///
 /// URLSession and Codable only. No networking library, no generated client.
 actor RommClient {
-    /// The address someone paired against, reachable from anywhere.
-    private let publicURL: URL
-    /// An optional second address for the same server on the local network,
-    /// typed by hand in Settings. Never discovered: RomM does not advertise
-    /// itself over Bonjour, and a client cannot add that unilaterally.
-    private var localURL: URL?
-    /// Whether that local address answered the last time it was checked.
-    /// False until proven otherwise, so a server with no local address, or
-    /// one typed while away from home, behaves exactly as before.
-    private var localIsReachable = false
+    /// The address someone paired against, and the one the access token
+    /// belongs to. It never moves, whichever network it happens to name.
+    private let pairedURL: URL
+    /// An optional second address for the same server, typed by hand in
+    /// Settings. Never discovered: RomM does not advertise itself over
+    /// Bonjour, and a client cannot add that unilaterally.
+    private var secondURL: URL?
+    /// Whether the preferred address answered the last time it was checked.
+    /// False until proven otherwise, so a server with only one address, or
+    /// a local one checked from away, behaves exactly as it always did.
+    private var preferredIsReachable = false
     /// When that check last ran, so a decision made half an hour ago is not
     /// trusted at the moment a large download is about to start.
     private var lastRouteCheck: Date?
@@ -32,16 +33,17 @@ actor RommClient {
 
     var host: String { baseURL.host ?? baseURL.absoluteString }
 
-    /// Whether requests are currently going over the local network, for
-    /// Settings to report honestly rather than claiming a preference the
-    /// app is not actually acting on.
-    var isUsingLocalAddress: Bool { localURL != nil && localIsReachable }
+    /// Whether the address requests are going to right now is one on the
+    /// local network. Answered by looking at the address actually in use,
+    /// not by which box someone typed it into, so Settings can never claim
+    /// a preference the app is not acting on.
+    var isUsingLocalAddress: Bool { LocalAddress.looksLocal(baseURL) }
 
     /// Told whenever the answer above changes.
     ///
     /// Needed because the most interesting change happens without anyone
-    /// asking: a request discovers mid flight that the local address has
-    /// gone away and quietly moves to the public one. Found in the
+    /// asking: a request discovers mid flight that the preferred address has
+    /// gone away and quietly moves to the other one. Found in the
     /// simulator with the local server killed underneath a running app,
     /// where every request had already corrected itself but Settings still
     /// read "Using: Local network". A screen that disagrees with what the
@@ -52,16 +54,16 @@ actor RommClient {
         routeDidChange = handler
     }
 
-    private func setLocalReachable(_ reachable: Bool) {
+    private func setPreferredReachable(_ reachable: Bool) {
         let before = isUsingLocalAddress
-        localIsReachable = reachable
+        preferredIsReachable = reachable
         let after = isUsingLocalAddress
         if before != after { routeDidChange?(after) }
     }
 
     init(baseURL: URL, accessToken: String? = nil, localURL: URL? = nil) {
-        self.publicURL = baseURL
-        self.localURL = localURL
+        self.pairedURL = baseURL
+        self.secondURL = localURL
         self.accessToken = accessToken
 
         let probeConfig = URLSessionConfiguration.ephemeral
@@ -104,38 +106,65 @@ actor RommClient {
     /// paying for their own probe.
     private static let routeFreshness: TimeInterval = 30
 
+    /// Of the two addresses, the one worth trying first, or nil when only
+    /// one is set and there is nothing to choose between.
+    ///
+    /// Decided by looking at the addresses themselves, not by which box
+    /// someone typed them into. Anyone who set Cabinet up at home typed
+    /// their local address as the paired one, so when they later put RomM
+    /// behind a domain, the public address is what lands in the second box.
+    /// Preferring the second box on principle would send them out to the
+    /// internet and back while sitting next to the server, the exact thing
+    /// this feature exists to stop. Telling them to pair again instead is
+    /// not free advice either: that changes the webview player's origin and
+    /// abandons its cache of games.
+    private var preferredURL: URL? {
+        guard let secondURL else { return nil }
+        if LocalAddress.looksLocal(pairedURL), !LocalAddress.looksLocal(secondURL) {
+            return pairedURL
+        }
+        return secondURL
+    }
+
+    /// Where a request goes when the preferred address is not answering:
+    /// whichever of the two the preference did not pick.
+    private var fallbackURL: URL {
+        preferredURL == pairedURL ? (secondURL ?? pairedURL) : pairedURL
+    }
+
     /// The address every request is built against right now.
     private var baseURL: URL {
-        if let localURL, localIsReachable { return localURL }
-        return publicURL
+        if let preferredURL, preferredIsReachable { return preferredURL }
+        return fallbackURL
     }
 
     /// Re-checks even when the address has not changed: somebody saving the
     /// same address again is usually somebody who just fixed whatever was
     /// wrong at the other end and wants it tried now.
     func setLocalURL(_ url: URL?) async {
-        localURL = url
-        setLocalReachable(false)
+        secondURL = url
+        setPreferredReachable(false)
         lastRouteCheck = nil
         await refreshRoute()
     }
 
-    /// Asks the local address whether it is there, and remembers the answer.
-    /// Called at launch, whenever the network path changes, and before
-    /// anything large enough that starting it against a dead address would
-    /// be a visible failure rather than a retry nobody notices.
+    /// Asks the preferred address whether it is there, and remembers the
+    /// answer. Called at launch, whenever the network path changes, on
+    /// returning to the app, and before anything large enough that starting
+    /// it against a dead address would be a visible failure rather than a
+    /// retry nobody notices.
     func refreshRoute() async {
-        guard let localURL else {
-            setLocalReachable(false)
+        guard let preferredURL else {
+            setPreferredReachable(false)
             lastRouteCheck = Date()
             return
         }
-        setLocalReachable(await answersAsRomM(at: localURL))
+        setPreferredReachable(await answersAsRomM(at: preferredURL))
         lastRouteCheck = Date()
     }
 
     private func refreshRouteIfStale() async {
-        guard localURL != nil else { return }
+        guard preferredURL != nil else { return }
         guard let lastRouteCheck else { return await refreshRoute() }
         if Date().timeIntervalSince(lastRouteCheck) > Self.routeFreshness {
             await refreshRoute()
@@ -828,43 +857,43 @@ actor RommClient {
         return req
     }
 
-    /// The ceiling on a normal request, and on a retry after the local
+    /// The ceiling on a normal request, and on a retry after the preferred
     /// address turned out to be gone.
     private static let requestTimeout: TimeInterval = 15
-    /// The ceiling on a request aimed at the local address. Much shorter,
-    /// because failing here is not the end of the story: whatever is left
-    /// of the wait is spent asking the public address the same thing, and
-    /// the two together still have to feel like one request.
-    private static let localTimeout: TimeInterval = 6
+    /// The ceiling on a request aimed at the preferred address. Much
+    /// shorter, because failing here is not the end of the story: whatever
+    /// is left of the wait is spent asking the other address the same
+    /// thing, and the two together still have to feel like one request.
+    private static let preferredTimeout: TimeInterval = 6
 
-    private func targetsLocalAddress(_ url: URL?) -> Bool {
-        guard let url, let localURL else { return false }
-        return url.host == localURL.host && url.scheme == localURL.scheme
+    private func targetsPreferredAddress(_ url: URL?) -> Bool {
+        guard let url, let preferredURL else { return false }
+        return url.host == preferredURL.host && url.scheme == preferredURL.scheme
     }
 
     /// Every request in this file goes through here. That is the whole
-    /// reason preferring the local address is one decision instead of one
+    /// reason preferring one address is a single decision instead of one
     /// per call site: nothing above this line knows which address it is
     /// talking to, and nothing needs to.
     ///
-    /// A local address that has quietly gone away costs one short timeout
-    /// and then the request happens anyway, against the public address, and
-    /// the routing decision is corrected so the next request skips the
+    /// A preferred address that has quietly gone away costs one short
+    /// timeout and then the request happens anyway, against the other one,
+    /// and the routing decision is corrected so the next request skips the
     /// detour. A server that answers with an error is not retried
     /// elsewhere: a 401 from home would be a 401 from anywhere.
     private func perform(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         var req = request
-        let wasLocal = targetsLocalAddress(req.url)
-        if wasLocal { req.timeoutInterval = Self.localTimeout }
+        let wasPreferred = targetsPreferredAddress(req.url)
+        if wasPreferred { req.timeoutInterval = Self.preferredTimeout }
 
         do {
             return try await dataAndResponse(req)
         } catch let error as URLError {
-            guard wasLocal, Self.isUnreachable(error), let localURL,
-                  let retryURL = Self.rebase(req.url, from: localURL, to: publicURL)
+            guard wasPreferred, Self.isUnreachable(error), let preferredURL,
+                  let retryURL = Self.rebase(req.url, from: preferredURL, to: fallbackURL)
             else { throw RommError(urlError: error) }
 
-            setLocalReachable(false)
+            setPreferredReachable(false)
             lastRouteCheck = Date()
 
             var retry = req
@@ -916,6 +945,45 @@ actor RommClient {
 
     private static var appVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1"
+    }
+}
+
+/// Whether an address names something that cannot leave the local network.
+///
+/// Two decisions depend on this and they have to agree: which of two
+/// addresses to prefer, and whether an address typed without a scheme
+/// should default to plain http instead of https.
+///
+/// A judgement made from the address text alone, which is enough for the
+/// addresses people actually type. It says nothing about a hostname that
+/// quietly resolves to a private address, and nothing about a VPN's own
+/// range. Neither gap costs anything real: an address that works from
+/// anywhere, a Tailscale name or a hostname that resolves differently at
+/// home, is the whole answer on its own, so nobody in that situation ever
+/// needs a second address for this to choose between. When it does guess
+/// wrong the result is using the internet at home, which is only ever what
+/// the app did before any of this existed.
+enum LocalAddress {
+    private static let suffixes = [".local", ".lan", ".home", ".home.arpa", ".internal"]
+
+    static func looksLocal(_ url: URL) -> Bool {
+        guard let host = url.host else { return false }
+        return looksLocal(host: host)
+    }
+
+    static func looksLocal(host: String) -> Bool {
+        let host = host.lowercased()
+        if host == "localhost" { return true }
+        if suffixes.contains(where: { host.hasSuffix($0) }) { return true }
+
+        // The private IPv4 ranges, plus loopback and link local.
+        let parts = host.split(separator: ".").compactMap { Int($0) }
+        guard parts.count == 4, parts.allSatisfy({ (0...255).contains($0) }) else { return false }
+        switch (parts[0], parts[1]) {
+        case (10, _), (127, _), (192, 168), (169, 254): return true
+        case (172, 16...31): return true
+        default: return false
+        }
     }
 }
 

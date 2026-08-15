@@ -126,7 +126,7 @@ struct SettingsView: View {
                     LocalAddressView()
                 } label: {
                     LabeledContent(
-                        "Local address",
+                        "Second address",
                         value: session.localServerURL?.host ?? "Not set"
                     )
                 }
@@ -139,7 +139,7 @@ struct SettingsView: View {
             } header: {
                 Text("Connection")
             } footer: {
-                Text("If your server is on this network, Cabinet can talk to it directly instead of going out to the internet and back, which is faster for downloads and keeps working while your internet doesn't.")
+                Text("If your server has a second address, add it here. Cabinet uses whichever of the two is on this network, so it can talk to your server directly instead of going out to the internet and back, and falls back to the other one when you're away.")
             }
 
             Section {
