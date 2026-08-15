@@ -63,7 +63,7 @@ struct SettingsView: View {
             } header: {
                 Text("Physical controller")
             } footer: {
-                Text("Pair a controller in the Settings app under General, then Game Controller. On screen controls hide while one is connected.")
+                Text("On screen controls hide while one is connected.")
             }
 
             Section {
