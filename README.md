@@ -8,7 +8,11 @@ work and built to bring it to Apple devices. It puts your collection on your
 iPhone and your Apple TV, opening on whatever you were playing last so you are
 back in the game in one tap.
 
-**Latest releases:**
+### [Try Cabinet on TestFlight](https://testflight.apple.com/join/caHsJFTR)
+One link, iPhone and Apple TV both. See [Get it](#get-it) below for the
+Apple TV redemption steps, tvOS has no browser to open the link in directly.
+
+**Latest GitHub Releases:**
 [iOS 0.2.0-alpha](https://github.com/MMagTech/cabinet/releases/tag/v0.2.0-alpha) ·
 [tvOS 0.1.0-alpha](https://github.com/MMagTech/cabinet/releases/tag/tvos-v0.1.0-alpha)
 
