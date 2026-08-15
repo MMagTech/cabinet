@@ -348,12 +348,38 @@ struct GameLaunchView: View {
     private var routeIndicator: some View {
         if session.localServerURL != nil {
             Label(
-                session.isUsingLocalAddress ? "Local network" : "Internet",
-                systemImage: session.isUsingLocalAddress ? "wifi.router" : "globe"
+                playWillUseLocalNetwork ? "Local network" : "Internet",
+                systemImage: playWillUseLocalNetwork ? "wifi.router" : "globe"
             )
             .font(.footnote)
             .foregroundStyle(.secondary)
         }
+    }
+
+    /// Whether pressing Play right now actually keeps its traffic on the
+    /// local network, which is not the same question as which address this
+    /// app is talking to.
+    ///
+    /// The web player is the exception, and it is the one that costs the
+    /// most. Its page is loaded from the address this device paired with,
+    /// so when it fetches a rom itself that fetch goes there, over the
+    /// internet, no matter which address Cabinet's own requests are using.
+    /// Reporting Cabinet's route in that case would show a router while the
+    /// largest transfer on the screen went the other way.
+    ///
+    /// A game already downloaded is fine either way: the web player reads
+    /// the copy seeded into its cache and fetches nothing. And the native
+    /// player always downloads through this app, so it follows the route
+    /// like everything else.
+    ///
+    /// This is also the whole of the nudge. Somebody watching a globe turn
+    /// into a router the moment they switch Download on has been told what
+    /// that toggle is worth, without a word of explanation on screen.
+    private var playWillUseLocalNetwork: Bool {
+        guard session.isUsingLocalAddress else { return false }
+        let willUseWebPlayer = !showsPlayerPicker || selectedBackend == .webview
+        let alreadyDownloaded = keptStore.kept(romId: rom.id) != nil
+        return !willUseWebPlayer || alreadyDownloaded
     }
 
     private var favoriteButton: some View {
