@@ -66,8 +66,21 @@ Cabinet does not come with any games. It plays yours.
 
 ## Get it
 
-Each platform has its own releases on its own schedule, all published under
-[Releases](https://github.com/MMagTech/cabinet/releases).
+**The easy way: [TestFlight](https://testflight.apple.com/join/caHsJFTR).**
+One link for both iPhone and Apple TV.
+
+**On iPhone:** just open that link there. It walks you through installing
+TestFlight first if you don't have it, then Cabinet.
+
+**On Apple TV:** tvOS has no web browser, so you can't open the link on the
+TV itself. Open it on any other device instead, a phone, a computer, doesn't
+need to be an Apple device, it shows you a short redemption code. Then on
+the Apple TV, install TestFlight from the App Store, open it, go to
+**Redeem**, and type that code in with your remote.
+
+Each platform also has its own releases on its own schedule, all published
+under [Releases](https://github.com/MMagTech/cabinet/releases), if you'd
+rather not go through TestFlight.
 
 **iPhone:** download the latest iOS IPA and install it with
 [AltStore](https://altstore.io) or [SideStore](https://sidestore.io).
