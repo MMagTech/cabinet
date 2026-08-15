@@ -114,6 +114,20 @@ version of this idea. Decided deliberately, not a gap to fill in later.
   Delta is AGPLv3 and this project is MIT.
 - Physical controllers are captured natively with `GameController`, not the
   webview's Gamepad API.
+- FBNeo must never be answered on the left analog axis. Its own input code
+  has a fake-analog fallback that reads that axis even for digital joystick
+  games and ORs it into the digital directions, and the physical-controller
+  path's y sign is opposite libretro's convention there, so feeding it makes
+  a Bluetooth pad register up and down in the same frame (issue #3, fixed
+  2026-08-15 in `LibretroFrontend.mm`'s `inputState`). Arcade sticks are
+  fully covered by the digital bits. Do not "clean up" that gate, and do not
+  add a new path that writes the analog-left values while FBNeo is running.
+- Any change touching controller input (GameControllerManager, inputState,
+  the send/sendStick wiring) must be verified on a real device with a real
+  Bluetooth pad on a twin-stick arcade game (Smash TV) before it is called
+  done. A commit once claimed exactly this verification while introducing
+  exactly this bug; the touch overlay and the menus exercising fine proves
+  nothing about the pad path.
 
 ## Things marked verify
 
