@@ -318,14 +318,12 @@ struct NativePlayerView: View {
     /// RETRO_MEMORY_SAVE_RAM at all (confirmed against its own
     /// retro_get_memory_data, which only ever answers
     /// RETRO_MEMORY_SYSTEM_RAM), it writes a real file straight into the
-    /// system directory instead. That file's name comes from the disc's
-    /// own internal game id, something this app has no way to read in
-    /// advance, so this looks for whichever file ends the way Flycast's
-    /// own VMU path naming always does rather than a name this code
-    /// picks. Upload only for now, capture and back up to RomM; loading
-    /// a previously saved card back in on a fresh directory needs
-    /// knowing that filename before Flycast invents it, which needs
-    /// parsing the disc's own IP.BIN game id ourselves, not solved yet.
+    /// system directory instead. This is the capture half; the restore
+    /// half is `NativeLauncher.restoreVMUSaveIfNeeded`, which writes the
+    /// card back as `dc/vmu_save_A1.bin` before the core boots. That is
+    /// Flycast's fallback filename, so if the core ever resolves the
+    /// disc's own game id and looks for the per-game name instead, the
+    /// restore is silently ignored; not yet seen on hardware.
     private func captureVMUSave() {
         guard platform == .dreamcast, renderer.paused else { return }
         guard let systemDir = LibretroFrontend.shared.systemDirectory() else {
