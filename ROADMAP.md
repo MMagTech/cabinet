@@ -26,6 +26,21 @@ Done and working, just not in a tagged release yet.
   only for now, an Apple TV is set up with whichever address you pair it
   against.
 
+- **In-game saves, on every platform that has them, on both iPhone and
+  Apple TV.** Saving inside a game used to work while you played and
+  vanish when the game closed, on everything except PlayStation, Nintendo
+  64 and Dreamcast. Now Game Boy Advance, SNES, NES, Game Boy, Game Boy
+  Color, Genesis, Master System, Game Gear, 32X, TurboGrafx CD, Saturn,
+  Sega CD and Neo Geo Pocket all keep their saves, back them up to RomM,
+  and put them back the next time you play, including on a different
+  device: save on the phone, carry on from the couch. Sega CD's external
+  RAM cartridge is kept as well, since games prefer it when it is there,
+  and the Game Boy's clock travels alongside its save for the games that
+  depend on it. Sega CD, Neo Geo Pocket and arcade only commit their
+  saves when you quit properly, which is how those emulator cores work
+  rather than a choice, so a session ended by iOS killing the app in the
+  background can still lose what you did since launch.
+
 ## Being explored
 
 Not committed, not scoped, real conversations that happened and are
@@ -42,6 +57,13 @@ worth having in the open.
 - **A native touch control restyle.** The current on-screen controls are
   functional but read a little flat next to the rest of the app. A
   restyle direction has been discussed, not built.
+- **Using the Apple TV's top shelf.** When an app sits in the top row of
+  the Apple TV home screen, the large area above it belongs to that app.
+  Cabinet shows nothing there today. The obvious fit is your recently
+  played games with their cover art, picking one dropping you straight
+  into it. It needs a separate extension target and a way to share the
+  artwork with it, so it is real work rather than a setting, but it is
+  the kind of thing that makes a tvOS app feel at home.
 - **A real loading screen on tvOS for large downloads.** Right now the
   Play button's own label just turns into a percentage while a native
   game downloads, on a short game that can flash by in under a second.
@@ -78,17 +100,12 @@ Real, acknowledged holes, not yet started.
 - **No native autosave.** Native play only resumes from an explicit save
   state, not automatically on quit or backgrounding, unlike the web
   player.
-- **In-game saves are only kept on three platforms.** PlayStation,
-  Nintendo 64 and Dreamcast save and restore properly. On every other
-  native platform with save hardware, Game Boy Advance, SNES, NES, Game
-  Boy, Genesis, Sega CD, Master System, Game Gear, 32X, TurboGrafx CD,
-  Saturn and Neo Geo Pocket, saving inside a game works while you play
-  and is lost when the game closes. Save states still work, which is
-  what makes it easy to miss. Saturn is the worst of them, its saves
-  currently have nowhere to be written at all. Atari 7800 and arcade
-  are unaffected, neither had in-game saves worth keeping. The full core
-  by core findings, including the traps involved in fixing it, are in
-  [docs/native-in-game-saves.md](docs/native-in-game-saves.md).
+- **Dreamcast runs below full speed in heavy scenes**, cut scenes worst
+  of all, on Apple TV especially. The Dreamcast core has to interpret
+  every instruction rather than translating it, because apps on Apple's
+  platforms cannot generate code at runtime, and video-heavy scenes are
+  the hardest case for that. Some emulator settings should recover part
+  of it; the ceiling is real.
 - **PC Engine's 2-button vs. 6-button controller mode** isn't wired up
   to its touch layout yet, even though the core supports it.
 - **PS1 and Saturn multi-disc games aren't supported**, and whether they
