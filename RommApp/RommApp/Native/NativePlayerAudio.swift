@@ -37,6 +37,18 @@ final class NativePlayerAudio {
     /// cutting straight to zero clicks; a short ramp does neither.
     private var lastLeft: Float32 = 0
     private var lastRight: Float32 = 0
+    /// Whether enough audio is queued to play from without immediately
+    /// running dry. Touched only on the render thread.
+    ///
+    /// Without this the callback starts draining the moment a single
+    /// sample arrives, so the buffer lives at the edge of empty and every
+    /// hitch in the draw loop is an underrun, which is a continuous
+    /// crackle on any core that cannot comfortably hold realtime. Delta
+    /// solves the same problem the same way (its audio manager refuses to
+    /// play until primed and re-primes after a starve); this is that
+    /// approach, written here rather than borrowed, since Delta is AGPL
+    /// and this project is MIT.
+    private var isPrimed = false
 
     init() {
         ring = UnsafeMutablePointer<Int16>.allocate(capacity: capacity)
@@ -81,6 +93,23 @@ final class NativePlayerAudio {
             let right = buffers.count > 1 ? buffers[1].mData?.assumingMemoryBound(to: Float32.self) : nil
 
             os_unfair_lock_lock(self.lock)
+            // Refuse to start (or restart) from a nearly empty buffer:
+            // stay silent until there is more than one callback's worth
+            // of slack, so a single late batch from the draw loop does
+            // not put us straight back into an underrun.
+            if !self.isPrimed {
+                if self.count / 2 < framesNeeded * 2 {
+                    os_unfair_lock_unlock(self.lock)
+                    for frame in 0..<framesNeeded {
+                        left?[frame] = 0
+                        right?[frame] = 0
+                    }
+                    self.lastLeft = 0
+                    self.lastRight = 0
+                    return noErr
+                }
+                self.isPrimed = true
+            }
             let framesAvailable = min(framesNeeded, self.count / 2)
             var index = self.readIndex
             let scale = Float32(Int16.max)
@@ -110,6 +139,9 @@ final class NativePlayerAudio {
                 }
                 self.lastLeft = 0
                 self.lastRight = 0
+                // Starved: refill before playing again rather than
+                // dribbling out each late batch as it trickles in.
+                self.isPrimed = false
             }
             return noErr
         }
