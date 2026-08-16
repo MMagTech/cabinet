@@ -22,6 +22,18 @@ final class NativePlayerAudio {
     /// at about a second so a stalled draw loop cannot grow it and a
     /// brief hitch cannot empty it.
     private let capacity = 44_100 * 2
+    /// How much audio is allowed to sit queued, in samples. The ring is
+    /// allocated far larger, but letting it actually fill would pin
+    /// playback a full second behind the picture: cores run slightly
+    /// faster than the hardware consumes (we drive them at the display's
+    /// 60Hz while NTSC systems want 59.94, about 0.1% surplus), so the
+    /// buffer creeps to full and stays there, roughly 17 minutes into a
+    /// session. Trimming to a target instead bounds the delay and sheds
+    /// the drift a fraction of a percent at a time, which is inaudible,
+    /// rather than accumulating it into a second of lag plus continuous
+    /// drops. 64ms matches RetroArch's own default audio latency
+    /// (DEFAULT_OUT_LATENCY in its config.def.h).
+    private var highWaterSamples = Int(44_100.0 * 0.064) * 2
     private let ring: UnsafeMutablePointer<Int16>
     private var readIndex = 0
     private var writeIndex = 0
@@ -78,6 +90,7 @@ final class NativePlayerAudio {
         try? AVAudioSession.sharedInstance().setActive(true)
 
         let sampleRate = LibretroFrontend.shared.audioSampleRate()
+        highWaterSamples = min(capacity, Int(sampleRate * 0.064) * 2)
         guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2) else { return }
 
         let sourceNode = AVAudioSourceNode { [weak self] _, _, frameCount, audioBufferList -> OSStatus in
@@ -177,8 +190,9 @@ final class NativePlayerAudio {
                 remaining -= chunk
                 count += chunk
             }
-            if count > capacity {
-                // Overrun: keep the newest second, drop what fell behind.
+            if count > highWaterSamples {
+                // Past the latency target: keep the newest audio, drop
+                // what fell behind.
                 // Rounded up to a whole stereo frame, because the ring is
                 // interleaved and dropping an odd number of samples
                 // shifts every later read by one, swapping left and right
