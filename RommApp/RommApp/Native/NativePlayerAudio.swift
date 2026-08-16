@@ -1,5 +1,4 @@
 import AVFoundation
-import QuartzCore
 import os
 
 /// Feeds the core's audio batches into CoreAudio through a small ring
@@ -51,26 +50,6 @@ final class NativePlayerAudio {
     /// and this project is MIT.
     private var isPrimed = false
 
-    // TEMPORARY instrumentation for the Dreamcast audio hunt
-    // (2026-08-16). Counts what the core actually hands over against
-    // what realtime would be, and how often the buffer starves or
-    // overflows, written to a file once a second from the draw loop
-    // (never from the render thread). Remove once the cause is known.
-    private var statFramesIn = 0
-    private var statFramesDropped = 0
-    private var statUnderruns = 0
-    private var statPrimes = 0
-    private var statSampleRate: Double = 44_100
-    private var statWindowStart: CFTimeInterval = 0
-    /// Incremented by the draw loop on every retro_run, so the log can
-    /// say whether the core is being called too often or is simply
-    /// handing over more audio per call than one frame's worth.
-    var statCoreRuns = 0
-    private lazy var statURL: URL = {
-        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        return caches.appendingPathComponent("audio-stats.txt")
-    }()
-
     init() {
         ring = UnsafeMutablePointer<Int16>.allocate(capacity: capacity)
         ring.initialize(repeating: 0, count: capacity)
@@ -99,8 +78,6 @@ final class NativePlayerAudio {
         try? AVAudioSession.sharedInstance().setActive(true)
 
         let sampleRate = LibretroFrontend.shared.audioSampleRate()
-        statSampleRate = sampleRate
-        try? "core declares \(sampleRate)Hz\n".write(to: statURL, atomically: true, encoding: .utf8)
         guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2) else { return }
 
         let sourceNode = AVAudioSourceNode { [weak self] _, _, frameCount, audioBufferList -> OSStatus in
@@ -132,7 +109,6 @@ final class NativePlayerAudio {
                     return noErr
                 }
                 self.isPrimed = true
-                self.statPrimes += 1
             }
             let framesAvailable = min(framesNeeded, self.count / 2)
             var index = self.readIndex
@@ -166,7 +142,6 @@ final class NativePlayerAudio {
                 // Starved: refill before playing again rather than
                 // dribbling out each late batch as it trickles in.
                 self.isPrimed = false
-                self.statUnderruns += 1
             }
             return noErr
         }
@@ -202,9 +177,7 @@ final class NativePlayerAudio {
                 remaining -= chunk
                 count += chunk
             }
-            statFramesIn += source.count / 2
             if count > capacity {
-                statFramesDropped += (count - capacity) / 2
                 // Overrun: keep the newest second, drop what fell behind.
                 // Rounded up to a whole stereo frame, because the ring is
                 // interleaved and dropping an odd number of samples
@@ -217,31 +190,6 @@ final class NativePlayerAudio {
             }
             os_unfair_lock_unlock(lock)
 
-            // One line per second of delivered audio: how much the core
-            // actually handed over against realtime, plus starves and
-            // overflow drops. Written here, on the draw thread, never
-            // from the render callback.
-            if Double(statFramesIn) >= statSampleRate {
-                let now = CACurrentMediaTime()
-                let elapsed = statWindowStart == 0 ? 0 : now - statWindowStart
-                statWindowStart = now
-                let rate = elapsed > 0 ? Double(statFramesIn) / elapsed : 0
-                let line = "in \(statFramesIn) frames over \(String(format: "%.2f", elapsed))s "
-                    + "= \(Int(rate)) frames/sec (realtime = \(Int(statSampleRate))), "
-                    + "dropped \(statFramesDropped), starves \(statUnderruns), primes \(statPrimes), "
-                    + "coreRuns \(statCoreRuns) = \(Int(elapsed > 0 ? Double(statCoreRuns) / elapsed : 0))/sec, "
-                    + "perRun \(statCoreRuns > 0 ? statFramesIn / statCoreRuns : 0) frames (expected \(Int(statSampleRate / max(LibretroFrontend.shared.targetFPS(), 1))))\n"
-                if let handle = try? FileHandle(forWritingTo: statURL) {
-                    handle.seekToEndOfFile()
-                    handle.write(Data(line.utf8))
-                    try? handle.close()
-                }
-                statFramesIn = 0
-                statFramesDropped = 0
-                statUnderruns = 0
-                statPrimes = 0
-                statCoreRuns = 0
-            }
         }
     }
 }

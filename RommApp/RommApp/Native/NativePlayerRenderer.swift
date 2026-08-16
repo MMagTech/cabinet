@@ -276,7 +276,6 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
                 frontend.runFrame()
                 framesRun += 1
                 ranThisDraw += 1
-                audio.statCoreRuns += 1
                 runAccumulator -= interval
             }
             // A draw that ran no emulated frame still presents the last
