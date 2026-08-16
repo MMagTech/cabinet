@@ -39,9 +39,26 @@ final class MemoryCardStore {
     private var meta: [String: Meta]
 
     private init() {
-        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        directory = documents.appendingPathComponent("MemoryCards", isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let fm = FileManager.default
+        // Application Support, not Documents: Cabinet's Documents folder
+        // is browsable in the Files app for the kept-games mirror, and
+        // this store's rom-id filenames and meta.json are plumbing, not
+        // files a person asked for. Anyone wanting to carry a save to
+        // another emulator downloads it from RomM itself, the same
+        // reasoning that keeps save states out of the Files mirror.
+        let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        directory = support.appendingPathComponent("MemoryCards", isDirectory: true)
+        // The store lived in Documents until 2026-08-16. One-time move,
+        // never a copy: a card left behind in Documents would keep a
+        // stale twin around for Files browsing to resurrect confusion
+        // from.
+        let legacy = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MemoryCards", isDirectory: true)
+        if fm.fileExists(atPath: legacy.path), !fm.fileExists(atPath: directory.path) {
+            try? fm.createDirectory(at: support, withIntermediateDirectories: true)
+            try? fm.moveItem(at: legacy, to: directory)
+        }
+        try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
         metaURL = directory.appendingPathComponent("meta.json")
         if let data = try? Data(contentsOf: metaURL),
            let decoded = try? JSONDecoder().decode([String: Meta].self, from: data) {
