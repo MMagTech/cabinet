@@ -65,6 +65,22 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         // can run them too: this file is not in that target, which is
         // exactly why rumble never worked there.
         GameControllerManager.installRumbleRouting()
+        // Cartridge motion sensors, iOS only. Installed here rather than
+        // alongside rumble in GameControllerManager precisely because
+        // this file is not in the tvOS target: a Siri Remote has had no
+        // motion sensors since the 2021 redesign, so there is nothing
+        // for this to route to there.
+        //
+        // Only wires the route. Nothing starts until a core actually
+        // enables a sensor, which today means mGBA and a handful of
+        // Game Boy Advance carts.
+        LibretroFrontend.setMotionSensingHandler { accelerometer, gyroscope in
+            MainActor.assumeIsolated {
+                MotionSensor.shared.setEnabled(
+                    accelerometer: accelerometer, gyroscope: gyroscope
+                )
+            }
+        }
         return true
     }
 

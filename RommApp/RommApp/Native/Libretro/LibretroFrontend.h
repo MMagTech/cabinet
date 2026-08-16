@@ -64,6 +64,33 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 // to hop threads itself.
 + (void)setRumbleHandler:(void (^ _Nullable)(NSInteger port, BOOL strong, uint16_t strength))handler;
 
+// Called when the running core turns motion sensing on or off, so the
+// caller can start and stop CoreMotion rather than leaving the device's
+// gyroscope running for every game that never asks. Shaped like the
+// rumble handler above and for the same reason: the decision belongs to
+// a Swift-only framework this Objective-C++ file has no business
+// reaching into.
+//
+// Only mGBA asks for any of this, out of all fourteen cores, and only
+// for the handful of Game Boy Advance carts that shipped with hardware
+// inside them: WarioWare Twisted's gyroscope, Yoshi's Universal
+// Gravitation and Koro Koro Puzzle's tilt sensor. Boktai's solar sensor
+// is the exception that needs nothing here, since mGBA exposes the sun
+// as an ordinary core option instead.
++ (void)setMotionSensingHandler:(void (^ _Nullable)(BOOL wantsAccelerometer, BOOL wantsGyroscope))handler;
+
+// Current sensor readings, fed once per motion update rather than per
+// frame: CoreMotion pushes at its own rate and the core samples
+// whatever is latest, exactly how a real cartridge sensor behaves.
+//
+// Units are the ones libretro documents and mGBA scales against, not
+// raw CoreMotion values. Acceleration is in g, gyro is radians per
+// second about the axis pointing out of the screen. The caller owns
+// the mapping from device orientation to these axes; see
+// MotionSensor.swift.
+- (void)setAccelerationX:(float)x y:(float)y z:(float)z;
+- (void)setRotationRateZ:(float)z;
+
 // Makes this core the one every later call drives. Switching away from a
 // core with a game loaded unloads and deinitializes it first; activating
 // the already-active core changes nothing, so callers can activate

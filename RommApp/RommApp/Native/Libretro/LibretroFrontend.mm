@@ -131,6 +131,26 @@ std::atomic<uint32_t> gRotation{0};
 std::atomic<float> gAnalogLeftX[kMaxPorts];
 std::atomic<float> gAnalogLeftY[kMaxPorts];
 
+// Cartridge sensors, for the Game Boy Advance carts that shipped with
+// hardware inside them. Only mGBA asks for any of this; every other core
+// here never calls the sensor interface at all.
+//
+// Not port-indexed like the pad state above, deliberately. These are the
+// device's own motion, and there is exactly one phone no matter how many
+// controllers are paired, so a second player's port has nothing of its
+// own to report here.
+std::atomic<float> gAccelerationX{0};
+std::atomic<float> gAccelerationY{0};
+std::atomic<float> gAccelerationZ{0};
+std::atomic<float> gRotationRateZ{0};
+// What the core has actually asked for. CoreMotion is not started until
+// a core enables a sensor and is stopped again when it disables one,
+// because leaving the gyroscope running for the thirteen cores that
+// never ask would be a battery cost paid by every game to serve one.
+std::atomic<bool> gAccelerometerEnabled{false};
+std::atomic<bool> gGyroscopeEnabled{false};
+static void (^gMotionSensingHandler)(BOOL wantsAccelerometer, BOOL wantsGyroscope) = nil;
+
 // Flycast: the only core here with no software renderer at all, so it
 // needs a real GLES context via libretro's hardware-render interface
 // instead of the plain memory-buffer path every other core uses. Kept
@@ -455,6 +475,80 @@ void logCallback(enum retro_log_level level, const char *fmt, ...) {
     NSLog(@"[core %s] %s", names[idx], buffer);
 }
 
+// The two halves of libretro's sensor interface.
+//
+// A cartridge sensor is sampled, not evented: the core asks for whatever
+// the current reading is, at whatever moment it happens to look. So
+// these just hand back the latest value CoreMotion pushed, and the
+// requested rate is accepted and ignored, exactly as RetroArch does,
+// since CoreMotion delivers at the interval it was configured with
+// rather than one negotiated per read.
+bool sensorSetState(unsigned port, enum retro_sensor_action action, unsigned rate) {
+    (void)rate;
+    if (port != 0) {
+        // One device, one set of sensors. A second player's port has no
+        // phone of its own to tilt.
+        return false;
+    }
+    switch (action) {
+        case RETRO_SENSOR_ACCELEROMETER_ENABLE:
+            gAccelerometerEnabled.store(true, std::memory_order_relaxed);
+            break;
+        case RETRO_SENSOR_ACCELEROMETER_DISABLE:
+            gAccelerometerEnabled.store(false, std::memory_order_relaxed);
+            break;
+        case RETRO_SENSOR_GYROSCOPE_ENABLE:
+            gGyroscopeEnabled.store(true, std::memory_order_relaxed);
+            break;
+        case RETRO_SENSOR_GYROSCOPE_DISABLE:
+            gGyroscopeEnabled.store(false, std::memory_order_relaxed);
+            break;
+        case RETRO_SENSOR_ILLUMINANCE_ENABLE:
+        case RETRO_SENSOR_ILLUMINANCE_DISABLE:
+            // Refused rather than faked. This is Boktai's solar sensor,
+            // and an iPhone's ambient light sensor is not available to
+            // apps at all. Saying no is the honest answer, and mGBA
+            // already exposes the sun as a core option ("Solar Sensor
+            // Level") for exactly this case, which is a better control
+            // than a light meter pointed at the ceiling anyway.
+            return false;
+        default:
+            return false;
+    }
+
+    BOOL wantsAccelerometer = gAccelerometerEnabled.load(std::memory_order_relaxed);
+    BOOL wantsGyroscope = gGyroscopeEnabled.load(std::memory_order_relaxed);
+    if (gMotionSensingHandler) {
+        // mGBA calls this from inside retro_run, on the emulation
+        // thread, so the hop to main belongs here rather than in every
+        // handler. CoreMotion's own start and stop are main-thread work.
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (gMotionSensingHandler) {
+                gMotionSensingHandler(wantsAccelerometer, wantsGyroscope);
+            }
+        });
+    }
+    return true;
+}
+
+float sensorGetInput(unsigned port, unsigned id) {
+    if (port != 0) {
+        return 0;
+    }
+    switch (id) {
+        case RETRO_SENSOR_ACCELEROMETER_X: return gAccelerationX.load(std::memory_order_relaxed);
+        case RETRO_SENSOR_ACCELEROMETER_Y: return gAccelerationY.load(std::memory_order_relaxed);
+        case RETRO_SENSOR_ACCELEROMETER_Z: return gAccelerationZ.load(std::memory_order_relaxed);
+        // Only Z is reported. mGBA reads nothing else (see its
+        // _updateRotation, which samples accelerometer X and Y and
+        // gyroscope Z and no other axis), and a cartridge gyroscope
+        // only ever measured the one rotation anyway: the plane of the
+        // cartridge itself, which is the plane of the screen.
+        case RETRO_SENSOR_GYROSCOPE_Z: return gRotationRateZ.load(std::memory_order_relaxed);
+        default: return 0;
+    }
+}
+
 bool environmentCallback(unsigned cmd, void *data) {
     switch (cmd) {
         case RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO: {
@@ -536,6 +630,15 @@ bool environmentCallback(unsigned cmd, void *data) {
                 return false;
             }
             rumble->set_rumble_state = rumbleSetState;
+            return true;
+        }
+        case RETRO_ENVIRONMENT_GET_SENSOR_INTERFACE: {
+            auto *sensor = (struct retro_sensor_interface *)data;
+            if (!sensor) {
+                return false;
+            }
+            sensor->set_sensor_state = sensorSetState;
+            sensor->get_sensor_input = sensorGetInput;
             return true;
         }
         case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE:
@@ -627,6 +730,20 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
 
 + (void)setRumbleHandler:(void (^)(NSInteger port, BOOL strong, uint16_t strength))handler {
     gRumbleHandler = handler;
+}
+
++ (void)setMotionSensingHandler:(void (^)(BOOL wantsAccelerometer, BOOL wantsGyroscope))handler {
+    gMotionSensingHandler = handler;
+}
+
+- (void)setAccelerationX:(float)x y:(float)y z:(float)z {
+    gAccelerationX.store(x, std::memory_order_relaxed);
+    gAccelerationY.store(y, std::memory_order_relaxed);
+    gAccelerationZ.store(z, std::memory_order_relaxed);
+}
+
+- (void)setRotationRateZ:(float)z {
+    gRotationRateZ.store(z, std::memory_order_relaxed);
 }
 
 - (void)activateCore:(LibretroCoreID)coreID {
@@ -912,6 +1029,18 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     }
     gCore->unload_game();
     gGameLoaded = false;
+    // Motion sensing belongs to the game that asked for it. Without this
+    // the gyroscope would keep running after WarioWare Twisted quits,
+    // draining the battery on behalf of a game that is no longer there,
+    // and the next game to load would inherit an enabled sensor it never
+    // requested.
+    gAccelerometerEnabled.store(false, std::memory_order_relaxed);
+    gGyroscopeEnabled.store(false, std::memory_order_relaxed);
+    if (gMotionSensingHandler) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (gMotionSensingHandler) { gMotionSensingHandler(NO, NO); }
+        });
+    }
     // Same FBNeo exception as loadGame's own teardown, same reason:
     // its second retro_deinit in one process hits a bad free. Leaving
     // gInitialized set is what makes the next loadGame skip the
