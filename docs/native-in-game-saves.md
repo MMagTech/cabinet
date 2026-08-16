@@ -236,5 +236,29 @@ Assault); Neo Geo Pocket capture and upload with real flash data
 that did not reproduce and is worth watching. Still owed: an NGP
 relaunch check (the game's own menu finding the save again).
 
-tvOS still syncs PS1 and N64 only; its pass follows once the feature is
-finished and verified on iOS, per the finish-iOS-first rule.
+tvOS got the whole feature on 2026-08-16 by extracting the save engine
+both players now share (`MemoryCardSync`), rather than by updating the
+stale copy `TVPlayerView` had been carrying.
+
+## The stale cache, worth knowing before testing sync
+
+Cross-device sync appeared to work per platform and then failed on the
+one game played over and over. The cause was not in any of this: RomM
+sends ETag and Last-Modified but no Cache-Control, and Cabinet asked for
+bare paths like `/api/saves/{id}/content` that do not change when a save
+is overwritten, so URLSession applied HTTP heuristic freshness and
+answered from its own store without contacting the server. Every device
+kept replaying the copy it had fetched earlier. Requests now bypass the
+cache (`reloadIgnoringLocalCacheData` in `RommClient.request`).
+
+Two lessons for the next person testing sync. A first fetch on a device
+is always cold and always looks correct, so a single pass per platform
+proves nothing about staleness; replay the same game several times.
+And verifying that the bytes reaching the core are "a valid save" is not
+enough, since a stale save is perfectly valid: compare them against the
+server's current copy.
+
+Verified end to end on hardware 2026-08-16: a Game Boy Advance save made
+on the iPhone loaded on the Apple TV, was played further there, and the
+Apple TV's newer save then loaded back on the iPhone, with the server's
+stored bytes growing across both hops.
