@@ -990,6 +990,13 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     return [self memoryRegion:RETRO_MEMORY_SAVE_RAM];
 }
 
+- (size_t)saveRAMSize {
+    if (!gInitialized || !gGameLoaded || !gCore->get_memory_size) {
+        return 0;
+    }
+    return gCore->get_memory_size(RETRO_MEMORY_SAVE_RAM);
+}
+
 - (nullable NSData *)memoryRegion:(unsigned)regionId {
     if (!gInitialized || !gGameLoaded || !gCore->get_memory_data || !gCore->get_memory_size) {
         return nil;

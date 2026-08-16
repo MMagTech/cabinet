@@ -193,6 +193,14 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 // thread driving runFrame.
 - (nullable NSData *)saveRAM;
 
+// The current reported size of the core's save RAM, without copying it.
+// Cheap enough to poll every frame, which is what the re-seat below
+// needs: mGBA reports a placeholder 128KB region until it has worked
+// out which save type the game actually uses, and re-initializes its
+// save buffer at that moment, so the size changing is the signal that
+// a restore seated before then has to be applied again.
+- (size_t)saveRAMSize;
+
 // A copy of any core memory region (a RETRO_MEMORY_* id), the general
 // form of -saveRAM. Exists for RETRO_MEMORY_RTC: Gambatte keeps the
 // Game Boy real-time clock in its own region next to the save RAM, and

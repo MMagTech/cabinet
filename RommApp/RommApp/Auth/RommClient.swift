@@ -946,6 +946,21 @@ actor RommClient {
         }
         var req = URLRequest(url: url)
         req.httpMethod = method
+        // Never answer from URLSession's cache. RomM sends ETag and
+        // Last-Modified but no Cache-Control, and every URL this client
+        // builds is stable across updates (RomM's own web UI appends a
+        // ?timestamp= to its download paths precisely to bust caches;
+        // this client asks for the bare path). Default
+        // useProtocolCachePolicy then applies HTTP heuristic freshness,
+        // roughly a tenth of the age since Last-Modified, and hands back
+        // a stored body without contacting the server at all. For a save
+        // that means a device replaying the copy it fetched earlier
+        // instead of the one another device just uploaded, which is
+        // exactly what an Apple TV kept doing with a Game Boy Advance
+        // card while the phone held newer progress (2026-08-16). Nothing
+        // this client fetches, a save, a state, a rom, a library listing,
+        // is safe to serve stale.
+        req.cachePolicy = .reloadIgnoringLocalCacheData
         if let accessToken {
             req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         }
