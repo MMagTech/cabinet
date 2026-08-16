@@ -75,7 +75,8 @@ struct RommAppTV: App {
                 id: UUID(),
                 label: host,
                 serverURLString: url.absoluteString,
-                localServerURLString: session.localServerURL?.absoluteString
+                localServerURLString: session.localServerURL?.absoluteString,
+                romDeviceId: session.romDeviceId
             )
             TVProfileStore.addProfile(profile, token: token)
             TVProfileStore.activeProfileID = profile.id

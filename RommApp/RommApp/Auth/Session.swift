@@ -56,11 +56,21 @@ final class Session: ObservableObject {
     /// never claim the second because of the first.
     @Published private(set) var isUsingLocalAddress = false
 
+    /// RomM's own id for the active pairing, so tvOS can hand it to a
+    /// profile it is backfilling. Nil for a pairing made before this was
+    /// stored.
+    var romDeviceId: String? { UserDefaults.standard.string(forKey: romDeviceKey) }
+
     private var client: RommClient?
 
     private let serverKey = "com.mmagtech.RommApp.serverURL"
     private let versionKey = "com.mmagtech.RommApp.serverVersion"
     private let localServerKey = "com.mmagtech.RommApp.localServerURL"
+    /// RomM's own id for the active pairing, kept because the presence
+    /// heartbeat is matched on it. Absent for every pairing made before
+    /// this was stored, which is why nothing reads it without checking:
+    /// see `RommClient.reportPlaying` and issue #4.
+    private let romDeviceKey = "com.mmagtech.RommApp.romDeviceId"
 
     init() {
         restore()
@@ -94,12 +104,28 @@ final class Session: ObservableObject {
     /// failure `setLocalAddress` grew its `/api/users/me` check to
     /// prevent. Passing nil clears it, which is right for a profile that
     /// has no second address of its own.
-    func activateProfile(serverURL url: URL, token: String, localURL: URL? = nil) throws {
+    func activateProfile(
+        serverURL url: URL,
+        token: String,
+        localURL: URL? = nil,
+        romDeviceId: String? = nil
+    ) throws {
         guard let host = url.host else {
             throw RommError.transport("That server address has no host.")
         }
         try Keychain.save(token: token, forHost: host)
         UserDefaults.standard.set(url.absoluteString, forKey: serverKey)
+
+        // Swapped with the token for the same reason the second address
+        // is: RomM issues one of these per pairing, so a profile carrying
+        // the previous profile's id would report presence against the
+        // wrong device. Nil clears it, which correctly turns the
+        // heartbeat off for a profile paired before this was stored.
+        if let romDeviceId {
+            UserDefaults.standard.set(romDeviceId, forKey: romDeviceKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: romDeviceKey)
+        }
 
         // Written before `restore()`, which reads this key back out and is
         // what republishes `localServerURL` and rebuilds the client.
@@ -131,7 +157,12 @@ final class Session: ObservableObject {
             return
         }
 
-        client = RommClient(baseURL: url, accessToken: token, localURL: localServerURL)
+        client = RommClient(
+            baseURL: url,
+            accessToken: token,
+            localURL: localServerURL,
+            romDeviceId: UserDefaults.standard.string(forKey: romDeviceKey)
+        )
         stage = .ready
         refreshRoute()
         refreshPlatformConfig()
@@ -331,6 +362,13 @@ final class Session: ObservableObject {
         let token = try await client.awaitDeviceApproval(start)
         try Keychain.save(token: token.accessToken, forHost: host)
 
+        // The only moment RomM ever tells us this. It was decoded and
+        // thrown away until 2026-08-15, which is the whole of issue #4:
+        // the presence heartbeat was then sent with an identifier this
+        // app invented for itself, and refused every time.
+        UserDefaults.standard.set(token.deviceId, forKey: romDeviceKey)
+        await client.setRomDeviceId(token.deviceId)
+
         scopes = token.scopes
         stage = .ready
         refreshPlatformConfig()
@@ -409,6 +447,7 @@ final class Session: ObservableObject {
         UserDefaults.standard.removeObject(forKey: serverKey)
         UserDefaults.standard.removeObject(forKey: versionKey)
         UserDefaults.standard.removeObject(forKey: localServerKey)
+        UserDefaults.standard.removeObject(forKey: romDeviceKey)
         client = nil
         serverURL = nil
         serverVersion = nil
@@ -456,6 +495,13 @@ final class Session: ObservableObject {
     /// already had a durable queue. Same fix, same shape: write first,
     /// clear the file only once RomM has actually confirmed it.
     func reportPlaySessionEnded(romId: Int, start: Date, end: Date) {
+        // Presence comes down here rather than anywhere else because this
+        // is the one call both players already make on every exit route.
+        // Fire and forget, and deliberately not part of the queued,
+        // retried history below: stale presence is worth correcting, not
+        // worth remembering across a relaunch.
+        Task { await client?.stopPlaying() }
+
         let queuedURL = Self.queuePendingSession(romId: romId, start: start, end: end)
         pendingPlayReport = Task {
             let success = await reportPlaySession(romId: romId, start: start, end: end)

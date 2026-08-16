@@ -28,6 +28,13 @@ struct TVProfile: Identifiable, Codable, Equatable {
     /// stored before this existed come back with no second address and
     /// behave exactly as they did.
     var localServerURLString: String? = nil
+    /// RomM's own id for this profile's pairing, needed by the presence
+    /// heartbeat. Per profile because RomM issues one per pairing, and two
+    /// profiles are two pairings even on the same server. Optional, and
+    /// nil for every profile paired before this was kept, which correctly
+    /// turns presence off for them rather than reporting it against
+    /// somebody else's device.
+    var romDeviceId: String? = nil
 
     var host: String? { URL(string: serverURLString)?.host }
 
@@ -146,7 +153,10 @@ enum TVProfileStore {
     static func activate(_ profile: TVProfile, session: Session) {
         guard let url = URL(string: profile.serverURLString), let token = token(for: profile.id) else { return }
         try? session.activateProfile(
-            serverURL: url, token: token, localURL: profile.localServerURL
+            serverURL: url,
+            token: token,
+            localURL: profile.localServerURL,
+            romDeviceId: profile.romDeviceId
         )
         activeProfileID = profile.id
     }

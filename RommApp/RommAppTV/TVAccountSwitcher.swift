@@ -228,7 +228,7 @@ private struct TVAddProfileView: View {
 
     private enum Step {
         case pairing(client: RommClient)
-        case naming(client: RommClient, token: String)
+        case naming(client: RommClient, token: String, romDeviceId: String)
     }
 
     @State private var step: Step
@@ -258,20 +258,32 @@ private struct TVAddProfileView: View {
         switch step {
         case .pairing(let client):
             pairingStep(client: client, serverURL: serverURL)
-        case .naming(let client, let token):
-            namingStep(client: client, serverURL: serverURL, token: token)
+        case .naming(let client, let token, let romDeviceId):
+            namingStep(
+                client: client, serverURL: serverURL,
+                token: token, romDeviceId: romDeviceId
+            )
         }
     }
 
     private func pairingStep(client: RommClient, serverURL: URL) -> some View {
-        TVAddProfilePairingStep(client: client, serverURL: serverURL) { token in
-            step = .naming(client: client, token: token)
+        TVAddProfilePairingStep(client: client, serverURL: serverURL) { token, romDeviceId in
+            step = .naming(client: client, token: token, romDeviceId: romDeviceId)
         }
     }
 
-    private func namingStep(client: RommClient, serverURL: URL, token: String) -> some View {
+    private func namingStep(
+        client: RommClient, serverURL: URL, token: String, romDeviceId: String
+    ) -> some View {
         TVAddProfileNamingStep(client: client, defaultName: serverURL.host ?? "Profile") { label, avatar in
-            let profile = TVProfile(id: UUID(), label: label, serverURLString: serverURL.absoluteString)
+            // Carries RomM's own id for this pairing, so this profile can
+            // report presence as itself rather than not at all.
+            let profile = TVProfile(
+                id: UUID(),
+                label: label,
+                serverURLString: serverURL.absoluteString,
+                romDeviceId: romDeviceId
+            )
             TVProfileStore.addProfile(profile, token: token)
             if let avatar { TVProfileStore.saveAvatar(avatar, for: profile.id) }
             completion(true)
@@ -282,7 +294,7 @@ private struct TVAddProfileView: View {
 private struct TVAddProfilePairingStep: View {
     let client: RommClient
     let serverURL: URL
-    let onApproved: (String) -> Void
+    let onApproved: (String, String) -> Void
 
     @State private var start: DeviceAuthInit?
     @State private var error: String?
@@ -354,7 +366,7 @@ private struct TVAddProfilePairingStep: View {
                 start = started
                 waiting = true
                 let token = try await client.awaitDeviceApproval(started)
-                onApproved(token.accessToken)
+                onApproved(token.accessToken, token.deviceId)
             } catch is CancellationError {
                 return
             } catch {

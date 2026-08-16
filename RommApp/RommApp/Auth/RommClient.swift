@@ -23,6 +23,11 @@ actor RommClient {
     /// trusted at the moment a large download is about to start.
     private var lastRouteCheck: Date?
 
+    /// RomM's own id for this pairing, as returned by device
+    /// authorization. Nil for a pairing made before this was kept, and for
+    /// a client built before anyone has paired at all.
+    private var romDeviceId: String?
+
     private let session: URLSession
     /// A separate session for the reachability probe alone. Its timeout is
     /// the whole point: deciding which address to use has to be quick
@@ -61,10 +66,16 @@ actor RommClient {
         if before != after { routeDidChange?(after) }
     }
 
-    init(baseURL: URL, accessToken: String? = nil, localURL: URL? = nil) {
+    init(
+        baseURL: URL,
+        accessToken: String? = nil,
+        localURL: URL? = nil,
+        romDeviceId: String? = nil
+    ) {
         self.pairedURL = baseURL
         self.secondURL = localURL
         self.accessToken = accessToken
+        self.romDeviceId = romDeviceId
 
         let probeConfig = URLSessionConfiguration.ephemeral
         probeConfig.waitsForConnectivity = false
@@ -90,6 +101,10 @@ actor RommClient {
 
     func setAccessToken(_ token: String?) {
         accessToken = token
+    }
+
+    func setRomDeviceId(_ id: String?) {
+        romDeviceId = id
     }
 
     // MARK: Which address requests go to
@@ -347,15 +362,53 @@ actor RommClient {
     /// described in its own docs as being for external devices, and it
     /// needs only the scope this app already pairs with. A plain POST is
     /// also a great deal easier to keep working than a socket.
+    /// `device_id` here is RomM's own id for this pairing, handed back at
+    /// the end of device authorization and stored since. Not the
+    /// identifier below, which this app makes up for itself: RomM matches
+    /// on the one it issued, and sending ours got
+    /// `404 Device <uuid> not found for this user` on every single game
+    /// launch, silently, for the whole life of the feature (issue #4).
+    ///
+    /// Skipped entirely when we do not have one. A pairing made before
+    /// this was stored cannot recover it, since the only endpoints that
+    /// could look it up need the `devices.read` scope this app does not
+    /// request, and adding a scope would force everybody to pair again
+    /// over what is only a presence indicator. So those installs send
+    /// nothing rather than a request that is guaranteed to fail, and
+    /// presence starts working by itself for anyone who pairs again.
     func reportPlaying(romId: Int) async {
+        guard let romDeviceId else { return }
         var req = request(path: "/api/activity/heartbeat", method: "POST")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try? JSONSerialization.data(withJSONObject: [
             "rom_id": romId,
-            "device_id": Self.deviceIdentifier,
+            "device_id": romDeviceId,
         ])
         // Deliberately silent. Failing to record a play is not worth
         // interrupting one over.
+        _ = try? await perform(req)
+    }
+
+    /// Clears this device's presence, so a game stops reading as being
+    /// played right now the moment it is closed.
+    ///
+    /// Needed for the same reason the heartbeat is: presence is state, and
+    /// nothing else ever takes it back down. Without this, fixing the
+    /// heartbeat would have made Cabinet claim you were mid-game forever
+    /// after you quit, which is worse than never reporting at all.
+    ///
+    /// Silent and best effort like its counterpart. A missed clear leaves
+    /// stale presence, which the next launch of anything corrects, and is
+    /// not worth interrupting somebody's exit from a game over.
+    /// Unlike the heartbeat, this one wants the device in the query
+    /// string rather than a body.
+    func stopPlaying() async {
+        guard let romDeviceId else { return }
+        let req = request(
+            path: "/api/activity/heartbeat",
+            method: "DELETE",
+            query: [URLQueryItem(name: "device_id", value: romDeviceId)]
+        )
         _ = try? await perform(req)
     }
 
@@ -379,8 +432,13 @@ actor RommClient {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let stamp = ISO8601DateFormatter()
         stamp.formatOptions = [.withInternetDateTime]
+        // Optional here, unlike the heartbeat, which is exactly why this
+        // call kept working while presence never did: RomM accepts a
+        // session whose device it cannot resolve. Sending the real id when
+        // we have one attributes the session properly; null is honest
+        // about not knowing, and is what the payload allows.
         req.httpBody = try? JSONSerialization.data(withJSONObject: [
-            "device_id": Self.deviceIdentifier,
+            "device_id": romDeviceId as Any? ?? NSNull(),
             "sessions": [[
                 "rom_id": romId,
                 "start_time": stamp.string(from: start),
@@ -872,8 +930,21 @@ actor RommClient {
 
     // MARK: Plumbing
 
-    private func request(path: String, method: String = "GET") -> URLRequest {
-        var req = URLRequest(url: baseURL.appendingPathComponent(path))
+    /// `query` is separate from `path` on purpose: `appendingPathComponent`
+    /// percent encodes a `?`, so a query written into the path becomes part
+    /// of the path and the parameter is silently never sent.
+    private func request(
+        path: String,
+        method: String = "GET",
+        query: [URLQueryItem] = []
+    ) -> URLRequest {
+        var url = baseURL.appendingPathComponent(path)
+        if !query.isEmpty,
+           var components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            components.queryItems = query
+            url = components.url ?? url
+        }
+        var req = URLRequest(url: url)
         req.httpMethod = method
         if let accessToken {
             req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
