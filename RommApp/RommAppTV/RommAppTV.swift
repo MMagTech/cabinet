@@ -12,6 +12,7 @@ import SwiftUI
 @main
 struct RommAppTV: App {
     @StateObject private var session = Session()
+    @Environment(\.scenePhase) private var scenePhase
 
     /// The iOS app does this from its app delegate, which this target does
     /// not compile, so tvOS did it nowhere and no game ever rumbled here.
@@ -41,7 +42,27 @@ struct RommAppTV: App {
                 // install (session is not yet .ready when this view
                 // first appears).
                 .onAppear { syncFirstProfileIfNeeded() }
-                .onChange(of: session.stage) { _, _ in syncFirstProfileIfNeeded() }
+                .onChange(of: session.stage) { _, stage in
+                    syncFirstProfileIfNeeded()
+                    // A fresh pairing has no snapshot at all, and the
+                    // shelf is one of the first things somebody sees
+                    // after setting the Apple TV up, before they have
+                    // opened the app a second time.
+                    if stage == .ready { TVTopShelfWriter.refresh(session: session) }
+                }
+                // Top shelf. The modifier takes the session by hand
+                // rather than from the environment; see its own note.
+                .modifier(TVDeepLinkHandler(session: session))
+                // Refreshed on every foreground, which covers both the
+                // ordinary case (came back from a game, recents moved)
+                // and the one Home cannot: a session spent entirely in
+                // Library and the player, where Home's own load never
+                // ran. Also fires once at launch, since a cold start
+                // arrives at .active.
+                .onChange(of: scenePhase) { _, phase in
+                    guard phase == .active, session.stage == .ready else { return }
+                    TVTopShelfWriter.refresh(session: session)
+                }
         }
     }
 

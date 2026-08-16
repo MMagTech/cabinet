@@ -13,6 +13,14 @@ import SwiftUI
 /// a Play button, and the save states you might want to jump back into.
 struct TVGameLaunchView: View {
     let rom: Rom
+    /// Starts preparing and booting the moment this appears, instead of
+    /// waiting for the Play button. Only the top shelf's Play action
+    /// sets this: pressing Play on the Home screen means play, so
+    /// landing here on a Play button that then has to be pressed again
+    /// would be one press too many for the one thing this whole feature
+    /// exists to make quick. Its own Select action lands here normally,
+    /// with the save states in reach.
+    var autoStart: Bool = false
 
     @EnvironmentObject private var session: Session
     @Environment(\.dismiss) private var dismiss
@@ -107,6 +115,15 @@ struct TVGameLaunchView: View {
             .padding(.vertical, 60)
         }
         .task { await loadStates() }
+        // A separate task from the one above on purpose: booting must
+        // not wait on the save state list, which is a second round trip
+        // and is not needed to start a fresh run. Guarded on the
+        // platform being playable here so an unsupported one still gets
+        // the explanation rather than a silent nothing.
+        .task {
+            guard autoStart, platform != nil else { return }
+            await play(stateData: nil)
+        }
         .fullScreenCover(item: $launch) { launch in
             TVPlayerView(rom: rom, core: launch.core, initialState: launch.initialState)
         }

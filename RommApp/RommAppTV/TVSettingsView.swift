@@ -154,7 +154,14 @@ struct TVSettingsView: View {
                 }
             }
             .alert("Sign out?", isPresented: $confirmingSignOut) {
-                Button("Sign out", role: .destructive) { session.forgetServer() }
+                Button("Sign out", role: .destructive) {
+                    // Before forgetting the server, not after: the top
+                    // shelf outlives the app, so a signed-out Apple TV
+                    // that still lists somebody's games on the Home
+                    // screen is the one thing signing out has to stop.
+                    TVTopShelfWriter.wipe()
+                    session.forgetServer()
+                }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("You'll need to pair this Apple TV with your server again.")

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSExtension</key>
+	<dict>
+		<!-- Taken from Xcode 26's own "TV Top Shelf Extension"
+		     template, not from memory: the same point identifier serves
+		     both the tvOS 9 era TVTopShelfProvider protocol and the
+		     tvOS 13 TVTopShelfContentProvider class this extension
+		     subclasses. Which API you get is decided by the principal
+		     class below, not by a second identifier. -->
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.tv-top-shelf</string>
+		<key>NSExtensionPrincipalClass</key>
+		<string>$(PRODUCT_MODULE_NAME).ContentProvider</string>
+	</dict>
+</dict>
+</plist>

@@ -16,6 +16,22 @@
 	     pairing with nothing on screen explaining why. Local addresses
 	     only; anything with a real hostname still has to be https. Same
 	     exemption the iOS target carries. -->
+	<!-- The top shelf launches the app by opening a URL, so the app
+	     needs a scheme to be opened with. Nothing else uses this today,
+	     and it is deliberately not advertised anywhere: it carries a rom
+	     id and nothing more, and TVDeepLinkHandler refuses anything it
+	     does not recognise. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.mmagtech.Cabinet.topshelf</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>cabinet</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

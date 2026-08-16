@@ -152,6 +152,12 @@ enum TVProfileStore {
     @MainActor
     static func activate(_ profile: TVProfile, session: Session) {
         guard let url = URL(string: profile.serverURLString), let token = token(for: profile.id) else { return }
+        // The top shelf belongs to whoever is active. Wiped here rather
+        // than rewritten, because the new profile's recents take a
+        // round trip to arrive and the Home screen must not be showing
+        // the previous person's games in the meantime. The writer fills
+        // it back in as soon as the session is ready again.
+        TVTopShelfWriter.wipe()
         try? session.activateProfile(
             serverURL: url,
             token: token,

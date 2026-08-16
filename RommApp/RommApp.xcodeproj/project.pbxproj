@@ -8,12 +8,38 @@
 
 /* Begin PBXBuildFile section */
 		10C5183AB7ADB61F260D8031 /* CoreImage.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 085D59256C4DAA9CDEBB4573 /* CoreImage.framework */; };
+		BB00000000000000000022 /* CabinetTopShelf.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = BB00000000000000000021 /* CabinetTopShelf.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		F50297785940689BEBC3D8A3 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E4B2AC95B1AB0E374EB9378B /* Foundation.framework */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		BB00000000000000000027 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BB00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BB00000000000000000020;
+			remoteInfo = CabinetTopShelf;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		BB00000000000000000026 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				BB00000000000000000022 /* CabinetTopShelf.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		085D59256C4DAA9CDEBB4573 /* CoreImage.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreImage.framework; path = System/Library/Frameworks/CoreImage.framework; sourceTree = SDKROOT; };
 		22568825F8A2B0F5F517C40C /* Cabinet TV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Cabinet TV.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB00000000000000000021 /* CabinetTopShelf.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CabinetTopShelf.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		E4B2AC95B1AB0E374EB9378B /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
@@ -85,6 +111,21 @@
 			);
 			target = BB00000000000000000010 /* LayoutEditor */;
 		};
+		BB00000000000000000024 /* Exceptions for "RommAppTopShelf" folder in "RommAppTV" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				ContentProvider.swift,
+				Info.plist,
+			);
+			target = FB4792A61D4A9C6E7864DCEB /* RommAppTV */;
+		};
+		BB00000000000000000025 /* Exceptions for "RommAppTopShelf" folder in "CabinetTopShelf" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = BB00000000000000000020 /* CabinetTopShelf */;
+		};
 		C6626E28D50263B9632B46B6 /* Exceptions for "RommAppTV" folder in "RommAppTV" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -107,6 +148,15 @@
 		BB00000000000000000017 /* LayoutEditor */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = LayoutEditor;
+			sourceTree = "<group>";
+		};
+		BB00000000000000000023 /* RommAppTopShelf */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				BB00000000000000000024 /* Exceptions for "RommAppTopShelf" folder in "RommAppTV" target */,
+				BB00000000000000000025 /* Exceptions for "RommAppTopShelf" folder in "CabinetTopShelf" target */,
+			);
+			path = RommAppTopShelf;
 			sourceTree = "<group>";
 		};
 		C16DDCA1D4B951A394B9FA7D /* RommAppTV */ = {
@@ -143,9 +193,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BB0000000000000000002A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		0F2C9EB8303235A40049E308 /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				BB00000000000000000023 /* RommAppTopShelf */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
 		4AE25F905859E16D5B246FD0 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
@@ -171,6 +236,7 @@
 				C16DDCA1D4B951A394B9FA7D /* RommAppTV */,
 				BB00000000000000000003 /* Products */,
 				4AE25F905859E16D5B246FD0 /* Frameworks */,
+				0F2C9EB8303235A40049E308 /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -178,6 +244,7 @@
 			isa = PBXGroup;
 			children = (
 				22568825F8A2B0F5F517C40C /* Cabinet TV.app */,
+				BB00000000000000000021 /* CabinetTopShelf.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -223,6 +290,26 @@
 			productName = LayoutEditor;
 			productType = "com.apple.product-type.application";
 		};
+		BB00000000000000000020 /* CabinetTopShelf */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BB0000000000000000002B /* Build configuration list for PBXNativeTarget "CabinetTopShelf" */;
+			buildPhases = (
+				BB00000000000000000029 /* Sources */,
+				BB0000000000000000002A /* Frameworks */,
+				BB0000000000000000002C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				BB00000000000000000023 /* RommAppTopShelf */,
+			);
+			name = CabinetTopShelf;
+			productName = CabinetTopShelf;
+			productReference = BB00000000000000000021 /* CabinetTopShelf.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		FB4792A61D4A9C6E7864DCEB /* RommAppTV */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 04B7F005F23F5849B1175D45 /* Build configuration list for PBXNativeTarget "RommAppTV" */;
@@ -230,13 +317,16 @@
 				6F81DB8C48BF90C4E41F051D /* Sources */,
 				2DBA6A79D663E9C7A0BAC597 /* Frameworks */,
 				8A3DCBF3E2B8311EC493B403 /* Resources */,
+				BB00000000000000000026 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				BB00000000000000000028 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				BB0000000000000000000F /* RommApp */,
+				BB00000000000000000023 /* RommAppTopShelf */,
 				C16DDCA1D4B951A394B9FA7D /* RommAppTV */,
 			);
 			name = RommAppTV;
@@ -279,6 +369,7 @@
 				BB00000000000000000004 /* RommApp */,
 				BB00000000000000000010 /* LayoutEditor */,
 				FB4792A61D4A9C6E7864DCEB /* RommAppTV */,
+				BB00000000000000000020 /* CabinetTopShelf */,
 			);
 		};
 /* End PBXProject section */
@@ -299,6 +390,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		BB00000000000000000013 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BB0000000000000000002C /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -329,7 +427,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BB00000000000000000029 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		BB00000000000000000028 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BB00000000000000000020 /* CabinetTopShelf */;
+			targetProxy = BB00000000000000000027 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		B25B711D6693BBC3E95729DF /* Release */ = {
@@ -338,11 +451,15 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
+				CODE_SIGN_ENTITLEMENTS = RommAppTV/RommAppTV.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
-				"EXCLUDED_SOURCE_FILE_NAMES[sdk=appletvsimulator*]" = "*_tvos.a *Core.mm";
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=appletvsimulator*]" = (
+					"*_tvos.a",
+					"*Core.mm",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RommAppTV/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet TV";
@@ -446,6 +563,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = (
+					"*_ios.a",
+					"*Core.mm",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/RommApp/Native/Libretro",
@@ -492,7 +613,6 @@
 					"$(PROJECT_DIR)/RommApp/Native/Mupen64Plus",
 				);
 				MARKETING_VERSION = 0.1;
-				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = "*_ios.a *Core.mm";
 				OTHER_LDFLAGS = (
 					"-lfbneo_libretro_ios",
 					"-lbeetle_saturn_ios",
@@ -527,6 +647,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = (
+					"*_ios.a",
+					"*Core.mm",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/RommApp/Native/Libretro",
@@ -573,7 +697,6 @@
 					"$(PROJECT_DIR)/RommApp/Native/Mupen64Plus",
 				);
 				MARKETING_VERSION = 0.1;
-				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = "*_ios.a *Core.mm";
 				OTHER_LDFLAGS = (
 					"-lfbneo_libretro_ios",
 					"-lbeetle_saturn_ios",
@@ -657,17 +780,76 @@
 			};
 			name = Release;
 		};
+		BB0000000000000000002D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = RommAppTopShelf/RommAppTopShelf.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZMUB88RZ5D;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RommAppTopShelf/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet Top Shelf";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev.tv.topshelf;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 18.0;
+			};
+			name = Debug;
+		};
+		BB0000000000000000002E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = RommAppTopShelf/RommAppTopShelf.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZMUB88RZ5D;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RommAppTopShelf/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet Top Shelf";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet.topshelf;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 18.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		F79B1708F32E796D92796E0D /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
+				CODE_SIGN_ENTITLEMENTS = RommAppTV/RommAppTV.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
-				"EXCLUDED_SOURCE_FILE_NAMES[sdk=appletvsimulator*]" = "*_tvos.a *Core.mm";
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=appletvsimulator*]" = (
+					"*_tvos.a",
+					"*Core.mm",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RommAppTV/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet TV Dev";
@@ -743,6 +925,15 @@
 			buildConfigurations = (
 				BB00000000000000000015 /* Debug */,
 				BB00000000000000000016 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BB0000000000000000002B /* Build configuration list for PBXNativeTarget "CabinetTopShelf" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BB0000000000000000002E /* Release */,
+				BB0000000000000000002D /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
