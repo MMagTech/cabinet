@@ -960,11 +960,15 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
 }
 
 - (nullable NSData *)saveRAM {
+    return [self memoryRegion:RETRO_MEMORY_SAVE_RAM];
+}
+
+- (nullable NSData *)memoryRegion:(unsigned)regionId {
     if (!gInitialized || !gGameLoaded || !gCore->get_memory_data || !gCore->get_memory_size) {
         return nil;
     }
-    void *bytes = gCore->get_memory_data(RETRO_MEMORY_SAVE_RAM);
-    size_t size = gCore->get_memory_size(RETRO_MEMORY_SAVE_RAM);
+    void *bytes = gCore->get_memory_data(regionId);
+    size_t size = gCore->get_memory_size(regionId);
     if (!bytes || size == 0) {
         return nil;
     }
@@ -981,15 +985,26 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
 }
 
 - (BOOL)loadSaveRAM:(NSData *)data {
+    return [self loadMemoryRegion:data region:RETRO_MEMORY_SAVE_RAM];
+}
+
+- (BOOL)loadMemoryRegion:(NSData *)data region:(unsigned)regionId {
     if (!gInitialized || !gGameLoaded || !gCore->get_memory_data || !gCore->get_memory_size) {
         return NO;
     }
-    void *bytes = gCore->get_memory_data(RETRO_MEMORY_SAVE_RAM);
-    size_t size = gCore->get_memory_size(RETRO_MEMORY_SAVE_RAM);
-    if (!bytes || size == 0 || data.length != size) {
+    void *bytes = gCore->get_memory_data(regionId);
+    size_t size = gCore->get_memory_size(regionId);
+    if (!bytes || size == 0 || data.length == 0) {
         return NO;
     }
-    memcpy(bytes, data.bytes, size);
+    // The smaller of the two, not an exact match: see the header comment.
+    // Genesis Plus GX reports its full 64KB at boot but trims the size to
+    // the written bytes at capture, and mGBA reports the 128KB flash
+    // maximum until save-type autodetection has run, so a core's own
+    // capture legitimately comes back shorter than the region it restores
+    // into. The rest of the buffer keeps the core's own initialized
+    // erase pattern, exactly what RetroArch's short-.srm load leaves too.
+    memcpy(bytes, data.bytes, MIN(data.length, size));
     return YES;
 }
 

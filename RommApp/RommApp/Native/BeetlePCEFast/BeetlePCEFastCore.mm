@@ -22,6 +22,8 @@ extern "C" {
     size_t pce_retro_serialize_size(void);
     bool pce_retro_serialize(void *, size_t);
     bool pce_retro_unserialize(const void *, size_t);
+    void *pce_retro_get_memory_data(unsigned);
+    size_t pce_retro_get_memory_size(unsigned);
 }
 
 const LibretroCoreAPI *BeetlePCEFastCoreAPI(void) {
@@ -45,6 +47,13 @@ const LibretroCoreAPI *BeetlePCEFastCoreAPI(void) {
         .serialize_size = pce_retro_serialize_size,
         .serialize = pce_retro_serialize,
         .unserialize = pce_retro_unserialize,
+        // The CD add-on's 2KB backup RAM, mapped on both of the core's
+        // load paths. HuCards had no save hardware at all, so for
+        // TurboGrafx-16 cartridges this region exists but stays zeroed
+        // and the player's junk guard keeps it off the server; only CD
+        // games ever put anything real here.
+        .get_memory_data = pce_retro_get_memory_data,
+        .get_memory_size = pce_retro_get_memory_size,
     };
     return &api;
 }

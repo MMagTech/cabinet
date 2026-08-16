@@ -48,9 +48,9 @@ const LibretroCoreAPI *PCSXReARMedCoreAPI(void) {
         .serialize = psx_retro_serialize,
         .unserialize = psx_retro_unserialize,
         // Memory card 1, exposed as standard SAVE_RAM because the core's
-        // pcsx_rearmed_memcard1 option defaults to "libretro". The only
-        // core wired for save RAM so far: PS1 saves have no other home,
-        // while cartridge systems still cover themselves with states.
+        // pcsx_rearmed_memcard1 option defaults to "libretro". This was
+        // the first core wired for save RAM; every cartridge core gained
+        // the same wiring 2026-08-15 for issue #5, in-game saves lost.
         .get_memory_data = psx_retro_get_memory_data,
         .get_memory_size = psx_retro_get_memory_size,
     };

@@ -33,6 +33,9 @@ struct NativePlayerView: View {
     /// The card bytes as of the last sync or upload, so snapshots only
     /// travel when an in-game save actually changed them.
     @State private var lastCardData: Data?
+    /// Same idea for the Game Boy clock region. Tracked separately so a
+    /// clock tick alone never counts as a card change.
+    @State private var lastRTCData: Data?
 
     private var profile: ArcadeProfile {
         ArcadeProfileStore.shared.resolve(romId: rom.id, shortname: rom.fsNameNoExt)
@@ -119,16 +122,16 @@ struct NativePlayerView: View {
     }
 
     /// Whether this session has a RETRO_MEMORY_SAVE_RAM battery save to
-    /// look after through the core directly. PS1 and N64 both export
-    /// this: PCSX ReARMed's memory card and mupen64plus-nx's
-    /// SRAM/EEPROM cartridge save both answer RETRO_MEMORY_SAVE_RAM,
-    /// confirmed for N64 by the go/no-go spike's own console log
-    /// ("Save type: 2") against a real cartridge that saves. Dreamcast's
-    /// VMU save is a real battery save too, just reached a completely
-    /// different way; see `captureVMUSave()`, gated on `platform ==
-    /// .dreamcast` separately rather than folded in here.
+    /// look after through the core directly. Started as PS1 and N64
+    /// only; issue #5 wired the same one memory call into every
+    /// cartridge core, so this now covers every platform whose saves
+    /// ride that call, the list (and the reasons for each exclusion)
+    /// living on the platform itself. Dreamcast's VMU save is a real
+    /// battery save too, just reached a completely different way; see
+    /// `captureVMUSave()`, gated on `platform == .dreamcast` separately
+    /// rather than folded in here.
     private var hasMemoryCard: Bool {
-        platform == .psx || platform == .n64
+        platform.savesOverSaveRAM
     }
 
     /// The launch-time decision of which card goes into the slot: a local
@@ -147,21 +150,11 @@ struct NativePlayerView: View {
     /// happened when a quick native boot left an empty local card behind
     /// and blocked the adoption path below.
     ///
-    /// N64's SRAM/EEPROM has no comparable directory to check and its
-    /// size varies by cartridge (mupen64plus-nx logged "Save type: 2",
-    /// EEPROM, for the go/no-go title), so a byte-format check would
-    /// either always reject real saves or always accept junk. Non-empty
-    /// and not all zero bytes, the state mupen64plus-nx writes for an
-    /// unused save rather than leaving the file absent, is the only
-    /// signal available.
+    /// The format knowledge itself lives on MemoryCardStore, shared with
+    /// keep-time prefetch so the two can never judge the same bytes
+    /// differently. This wrapper only binds the current platform.
     private func cardHasSaves(_ card: Data) -> Bool {
-        if platform == .psx {
-            guard card.count == 128 * 1024 else { return false }
-            return (1...15).contains { block in
-                [0x51, 0x52, 0x53].contains(Int(card[128 * block]))
-            }
-        }
-        return !card.isEmpty && card.contains { $0 != 0 }
+        MemoryCardStore.cardHasSaves(card, platform: platform)
     }
 
     private func syncMemoryCardIn() async {
@@ -180,11 +173,17 @@ struct NativePlayerView: View {
                 romVersion: session.serverVersion
             )
             await uploadMemoryCard(local)
+            await syncRTCIn(serverRows: nil)
             return
         }
 
         if let saves = try? await session.saves(romId: rom.id) {
-            let sorted = saves.sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
+            // The clock region travels as its own row; it is never a card
+            // and never an adoption candidate, so it stays out of every
+            // decision below and gets its own pass at the end.
+            let sorted = saves
+                .filter { !$0.fileName.hasSuffix(".rtc") }
+                .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
             let own = sorted.first { $0.emulator == core.emulatorTag }
             // A game with no Cabinet card worth keeping adopts the newest
             // card from anywhere else: a save uploaded through RomM's web
@@ -205,6 +204,7 @@ struct NativePlayerView: View {
                         message: "Loaded \(newest.fileName) from the server into the card slot.",
                         romVersion: session.serverVersion
                     )
+                    await syncRTCIn(serverRows: saves)
                     return
                 }
                 DiagnosticsLog.record(
@@ -213,13 +213,24 @@ struct NativePlayerView: View {
                     romVersion: session.serverVersion
                 )
             }
-        } else {
-            DiagnosticsLog.record(
-                context: "Memory card",
-                message: "Could not list saves from the server; using what is on this phone.",
-                romVersion: session.serverVersion
-            )
+            if let local {
+                renderer.pendingSaveRAM = local
+                lastCardData = local
+                DiagnosticsLog.record(
+                    context: "Memory card",
+                    message: localUseful ? "Using the local card." : "Using the local card; it holds no saves yet.",
+                    romVersion: session.serverVersion
+                )
+            }
+            await syncRTCIn(serverRows: saves)
+            return
         }
+
+        DiagnosticsLog.record(
+            context: "Memory card",
+            message: "Could not list saves from the server; using what is on this phone.",
+            romVersion: session.serverVersion
+        )
 
         if let local {
             renderer.pendingSaveRAM = local
@@ -230,18 +241,76 @@ struct NativePlayerView: View {
                 romVersion: session.serverVersion
             )
         }
+        await syncRTCIn(serverRows: nil)
+    }
+
+    /// The Game Boy clock region's own, much simpler launch decision:
+    /// only ever Cabinet's own row (a clock from another emulator's save
+    /// means nothing to this core's format), local-pending wins, else a
+    /// server copy newer than the last sync, else whatever is on disk.
+    /// `serverRows` reuses the list the card sync already fetched; nil
+    /// means the server was unreachable and only the local copy plays.
+    private func syncRTCIn(serverRows: [GameSave]?) async {
+        let store = MemoryCardStore.shared
+        let local = store.localCard(romId: rom.id, region: .rtc)
+
+        if store.pendingUpload(romId: rom.id, region: .rtc), let local {
+            renderer.pendingRTC = local
+            lastRTCData = local
+            await uploadMemoryCard(local, region: .rtc)
+            return
+        }
+
+        if let own = serverRows?
+            .filter({ $0.emulator == core.emulatorTag && $0.fileName.hasSuffix(".rtc") })
+            .sorted(by: { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") })
+            .first,
+           own.updatedAt != store.serverStamp(romId: rom.id, region: .rtc) || local == nil,
+           let bytes = try? await session.saveContent(own), !bytes.isEmpty {
+            store.storeDownloaded(romId: rom.id, data: bytes, serverStamp: own.updatedAt, region: .rtc)
+            renderer.pendingRTC = bytes
+            lastRTCData = bytes
+            return
+        }
+
+        if let local {
+            renderer.pendingRTC = local
+            lastRTCData = local
+        }
     }
 
     /// Snapshots the card while the core is paused and, when it actually
     /// changed, writes it to disk first and then tries the upload. Runs on
     /// every pause, quit and background: cards are small and in-game saves
     /// are the one thing a player never expects to lose.
+    ///
+    /// A card that never held a save does not travel: a session that
+    /// started with nothing (no local card, no server card) and whose
+    /// bytes still read as a factory erase pattern is just the core's own
+    /// freshly initialized region, and uploading it would put a junk row
+    /// on the server for every save-less game ever paused. The moment a
+    /// card holds anything real, or a real card existed before this
+    /// session, every change travels, erasing a save included.
     private func captureMemoryCard() {
         guard hasMemoryCard, renderer.paused, let data = renderer.snapshotSaveRAM() else { return }
         guard data != lastCardData else { return }
+        guard cardHasSaves(data) || lastCardData != nil else { return }
         lastCardData = data
         MemoryCardStore.shared.storeSnapshot(romId: rom.id, data: data)
         Task { await uploadMemoryCard(data) }
+        captureRTC()
+    }
+
+    /// The clock region rides along only when the card itself just
+    /// traveled: the region ticks on every real-world second, so change
+    /// alone means nothing, but a clock captured next to a fresh save is
+    /// exactly what keeps Pokemon Gold and Silver's day/night right when
+    /// the save comes back on this or another device.
+    private func captureRTC() {
+        guard let rtc = renderer.snapshotRTC(), rtc != lastRTCData else { return }
+        lastRTCData = rtc
+        MemoryCardStore.shared.storeSnapshot(romId: rom.id, data: rtc, region: .rtc)
+        Task { await uploadMemoryCard(rtc, region: .rtc) }
     }
 
     /// Dreamcast only, and structurally different from
@@ -296,7 +365,7 @@ struct NativePlayerView: View {
         Task { await uploadMemoryCard(data) }
     }
 
-    private func uploadMemoryCard(_ data: Data) async {
+    private func uploadMemoryCard(_ data: Data, region: MemoryCardStore.Region = .saveRAM) async {
         do {
             // The Cabinet marker keeps this row's filename distinct from
             // anything the web player made: RomM's overwrite matches rows
@@ -306,17 +375,17 @@ struct NativePlayerView: View {
             // card of the same name.
             try await session.uploadSave(
                 romId: rom.id, emulator: core.emulatorTag,
-                fileName: "\(rom.fsNameNoExt) (Cabinet).srm", saveData: data
+                fileName: "\(rom.fsNameNoExt) (Cabinet).\(region.rawValue)", saveData: data
             )
             // Re-list to learn the stamp the server just minted, so the
             // next launch recognises its own upload instead of pulling
             // it back down.
             let saves = (try? await session.saves(romId: rom.id)) ?? []
             let stamp = saves
-                .filter { $0.emulator == core.emulatorTag }
+                .filter { $0.emulator == core.emulatorTag && $0.fileName.hasSuffix(".rtc") == (region == .rtc) }
                 .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
                 .first?.updatedAt
-            MemoryCardStore.shared.markUploaded(romId: rom.id, serverStamp: stamp)
+            MemoryCardStore.shared.markUploaded(romId: rom.id, serverStamp: stamp, region: region)
         } catch {
             // The disk copy and its pending flag survive; the next launch
             // retries. Same soft failure as the state queue.

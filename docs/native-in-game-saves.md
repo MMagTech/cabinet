@@ -1,7 +1,9 @@
 # In-game saves in the native player
 
-Written 2026-08-15 after a full scrub of all fourteen native cores. Nothing
-here is built yet. This exists so the findings do not have to be rediscovered.
+Written 2026-08-15 after a full scrub of all fourteen native cores, when
+nothing here was built yet. This exists so the findings do not have to be
+rediscovered. Stage 1 of the fix landed on iOS 2026-08-16; the Status
+section at the bottom records what is built and what is verified.
 
 ## Two different things both called saving
 
@@ -170,5 +172,29 @@ surprises are about size rather than data:
 
 ## Status
 
-Nothing here is built, and nothing is filed. The core by core findings came
-from reading the vendored core sources in `spikes/`, not from documentation.
+Filed as issue #5. The core by core findings came from reading the vendored
+core sources in `spikes/`, not from documentation.
+
+Stage 1 is built on iOS as of 2026-08-16: every platform whose saves ride
+RETRO_MEMORY_SAVE_RAM now captures, uploads and restores through the same
+memory card sync PS1 and N64 always had, Saturn included, with the Game Boy
+clock travelling as its own `.rtc` file next to the card. Keeping a game
+for offline also pulls the newest server save down at keep time. Two traps
+were confirmed live during device testing: Saturn's freshly formatted
+backup RAM reads as data (a "BackUpRam Format" text header), so it gets a
+format-aware emptiness check the way PS1's directory check already worked,
+and restore copies the smaller of blob and region because Genesis Plus GX
+and mGBA report different sizes at restore time than at capture time.
+
+Verified on hardware 2026-08-15/16: full save-quit-relaunch round trips on
+Game Boy Advance (mGBA) and TurboGrafx-CD (Beetle PCE Fast), and the
+capture-upload half on Saturn. Wired identically but not yet exercised on
+a real save: SNES, NES, Game Boy, Game Boy Color, Genesis, Master System,
+Game Gear, 32X, and the Game Boy clock file (no RTC-capable game in the
+test library). Worst case for an unexercised platform is what it already
+was, the save not surviving, so verification continues opportunistically.
+
+Still not built: stage 2, the file-writing cores (Sega CD's .brm backup
+RAM and Neo Geo Pocket's .flash), which flush only inside
+retro_unload_game and so need a quit-time unload this frontend does not do
+yet. tvOS still syncs PS1 and N64 only; its pass follows separately.

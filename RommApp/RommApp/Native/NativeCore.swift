@@ -146,6 +146,34 @@ enum NativePlatform: String, CaseIterable {
         }
     }
 
+    /// Whether this platform's in-game saves ride RETRO_MEMORY_SAVE_RAM,
+    /// the standard libretro battery-save call the player's memory card
+    /// sync captures, uploads and restores. This is the gate for that
+    /// whole path, so a platform is only listed once its core's wiring
+    /// actually exports the memory API and the mechanism is confirmed in
+    /// the core's own source (docs/native-in-game-saves.md holds the
+    /// per-core findings).
+    ///
+    /// The platforms left out each have a real reason, not a gap:
+    /// - arcade: no save-and-resume concept in these games; FBNeo's
+    ///   high-score/NVRAM files are a different mechanism entirely.
+    /// - atari7800: no retail cartridge could save, and the core
+    ///   implements nothing.
+    /// - dreamcast: the VMU is a real battery save but Flycast hands it
+    ///   over as a file, `captureVMUSave()`'s own separate path.
+    /// - segaCD, ngpc: their cores write real files (Sega CD's .brm
+    ///   backup RAM, Neo Geo Pocket's .flash) instead of answering
+    ///   SAVE_RAM, and flush them only inside retro_unload_game; issue
+    ///   #5's second stage covers them.
+    var savesOverSaveRAM: Bool {
+        switch self {
+        case .arcade, .atari7800, .dreamcast, .segaCD, .ngpc:
+            return false
+        default:
+            return true
+        }
+    }
+
     /// Whether a second local player's controller has anywhere to plug
     /// into. Defaults to yes: consoles and arcade boards genuinely have a
     /// second port, and arcade in particular is a core 2-player use case

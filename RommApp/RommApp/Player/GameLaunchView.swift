@@ -1262,7 +1262,7 @@ struct GameLaunchView: View {
                         .foregroundStyle(.secondary)
                 }
                 if MemoryCardStore.shared.pendingUpload(romId: rom.id) {
-                    Text("Memory card waiting to upload")
+                    Text("In-game save waiting to upload")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

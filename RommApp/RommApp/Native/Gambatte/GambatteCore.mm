@@ -22,6 +22,8 @@ extern "C" {
     size_t gmb_retro_serialize_size(void);
     bool gmb_retro_serialize(void *, size_t);
     bool gmb_retro_unserialize(const void *, size_t);
+    void *gmb_retro_get_memory_data(unsigned);
+    size_t gmb_retro_get_memory_size(unsigned);
 }
 
 const LibretroCoreAPI *GambatteCoreAPI(void) {
@@ -45,6 +47,13 @@ const LibretroCoreAPI *GambatteCoreAPI(void) {
         .serialize_size = gmb_retro_serialize_size,
         .serialize = gmb_retro_serialize,
         .unserialize = gmb_retro_unserialize,
+        // Cartridge battery RAM as SAVE_RAM, plus the real-time clock as
+        // its own separate RETRO_MEMORY_RTC region. Capturing only the
+        // save memory silently loses the clock, which Pokemon Gold and
+        // Silver's whole day/night system depends on, so the player
+        // snapshots both regions for this core.
+        .get_memory_data = gmb_retro_get_memory_data,
+        .get_memory_size = gmb_retro_get_memory_size,
     };
     return &api;
 }

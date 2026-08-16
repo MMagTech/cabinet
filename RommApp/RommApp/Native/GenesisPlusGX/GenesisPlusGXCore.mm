@@ -22,6 +22,8 @@ extern "C" {
     size_t gpgx_retro_serialize_size(void);
     bool gpgx_retro_serialize(void *, size_t);
     bool gpgx_retro_unserialize(const void *, size_t);
+    void *gpgx_retro_get_memory_data(unsigned);
+    size_t gpgx_retro_get_memory_size(unsigned);
 }
 
 const LibretroCoreAPI *GenesisPlusGXCoreAPI(void) {
@@ -45,6 +47,16 @@ const LibretroCoreAPI *GenesisPlusGXCoreAPI(void) {
         .serialize_size = gpgx_retro_serialize_size,
         .serialize = gpgx_retro_serialize,
         .unserialize = gpgx_retro_unserialize,
+        // Cartridge save RAM for Genesis, Master System and Game Gear.
+        // The reported size is the fixed 64KB maximum at load time and is
+        // trimmed to the bytes actually written once the game is running,
+        // so a captured save is usually smaller than the size reported at
+        // the next boot; the frontend's restore copies the smaller length
+        // for exactly this reason. Never-written save RAM reports zero.
+        // Sega CD's internal backup RAM is NOT this region, the core
+        // writes that to its own .brm file instead, handled separately.
+        .get_memory_data = gpgx_retro_get_memory_data,
+        .get_memory_size = gpgx_retro_get_memory_size,
     };
     return &api;
 }

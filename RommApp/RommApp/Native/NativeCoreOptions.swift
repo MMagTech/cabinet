@@ -342,6 +342,18 @@ enum NativeCoreOptionsStore {
                 "pcsx_rearmed_memcard1": "libretro",
                 "pcsx_rearmed_memcard2": "none",
             ]
+        case .saturn:
+            // "libretro" hands the console's internal backup RAM to this
+            // frontend through RETRO_MEMORY_SAVE_RAM, which is where the
+            // memory card sync reads it. It is already the vendored
+            // core's own default; forcing it means a core update flipping
+            // that default can never silently strand Saturn saves in a
+            // .bkr file nothing on this side reads (which is exactly what
+            // every Saturn save did before issue #5 wired this region up:
+            // libretro mode stops the core writing its own file, and the
+            // frontend was not collecting the region either, so the saves
+            // had no destination at all).
+            return ["beetle_saturn_save_method": "libretro"]
         case .sega32X:
             // PicoDrive's retro_set_controller_port_device is an empty
             // function (confirmed in its libretro.c); pad type only moves

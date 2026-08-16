@@ -162,6 +162,14 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 // thread driving runFrame.
 - (nullable NSData *)saveRAM;
 
+// A copy of any core memory region (a RETRO_MEMORY_* id), the general
+// form of -saveRAM. Exists for RETRO_MEMORY_RTC: Gambatte keeps the
+// Game Boy real-time clock in its own region next to the save RAM, and
+// capturing only the save RAM silently loses the clock Pokemon Gold
+// and Silver depend on. Same nil conditions and threading rule as
+// -saveRAM.
+- (nullable NSData *)memoryRegion:(unsigned)regionId;
+
 // Debug-only: the hardware-render pipeline's own state, for cores like
 // Flycast that have no software renderer to fall back on. nil for every
 // other core, which never sets it. See LibretroCoreIDFlycast.
@@ -169,9 +177,19 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 
 // Copies bytes into the core's save RAM buffer, the standard libretro
 // frontend contract for restoring battery saves: call it after the game
-// loads, before play begins. Returns NO when there is no buffer or the
-// sizes disagree, both meaning the bytes belong to something else.
+// loads, before play begins. Copies the smaller of the blob and the
+// region rather than demanding an exact match, the same thing RetroArch
+// does when it reads an .srm back in, because two cores here genuinely
+// report a different size at restore time than at capture time: Genesis
+// Plus GX trims its reported size to the bytes actually written once
+// the game is running, and mGBA reports the 128KB flash maximum until
+// it has autodetected the game's real save type. Returns NO when there
+// is no buffer at all.
 - (BOOL)loadSaveRAM:(NSData *)data;
+
+// The general form of -loadSaveRAM:, for restoring a non-SAVE_RAM
+// region (the Game Boy clock). Same copy-the-smaller-length contract.
+- (BOOL)loadMemoryRegion:(NSData *)data region:(unsigned)regionId;
 
 @end
 

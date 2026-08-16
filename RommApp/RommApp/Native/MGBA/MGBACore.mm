@@ -22,6 +22,8 @@ extern "C" {
     size_t gba_retro_serialize_size(void);
     bool gba_retro_serialize(void *, size_t);
     bool gba_retro_unserialize(const void *, size_t);
+    void *gba_retro_get_memory_data(unsigned);
+    size_t gba_retro_get_memory_size(unsigned);
 }
 
 const LibretroCoreAPI *MGBACoreAPI(void) {
@@ -45,6 +47,13 @@ const LibretroCoreAPI *MGBACoreAPI(void) {
         .serialize_size = gba_retro_serialize_size,
         .serialize = gba_retro_serialize,
         .unserialize = gba_retro_unserialize,
+        // Cartridge save memory. The reported size is unstable early on,
+        // the full 128KB flash maximum until the core has autodetected
+        // which save type the game actually uses, so the size must be
+        // queried again at the moment of saving, never cached at load.
+        // The player's snapshot path already does exactly that.
+        .get_memory_data = gba_retro_get_memory_data,
+        .get_memory_size = gba_retro_get_memory_size,
     };
     return &api;
 }

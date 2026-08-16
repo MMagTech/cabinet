@@ -22,6 +22,8 @@ extern "C" {
     size_t fcm_retro_serialize_size(void);
     bool fcm_retro_serialize(void *, size_t);
     bool fcm_retro_unserialize(const void *, size_t);
+    void *fcm_retro_get_memory_data(unsigned);
+    size_t fcm_retro_get_memory_size(unsigned);
 }
 
 const LibretroCoreAPI *FCEUmmCoreAPI(void) {
@@ -45,6 +47,12 @@ const LibretroCoreAPI *FCEUmmCoreAPI(void) {
         .serialize_size = fcm_retro_serialize_size,
         .serialize = fcm_retro_serialize,
         .unserialize = fcm_retro_unserialize,
+        // Cartridge battery RAM, only offered when the board actually has
+        // a battery. One surprise: for Famicom Disk System games this
+        // region is the entire live disk image, hundreds of kilobytes
+        // rather than a few, which is correct, the disk is the save.
+        .get_memory_data = fcm_retro_get_memory_data,
+        .get_memory_size = fcm_retro_get_memory_size,
     };
     return &api;
 }

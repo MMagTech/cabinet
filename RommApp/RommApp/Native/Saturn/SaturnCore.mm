@@ -23,6 +23,8 @@ extern "C" {
     size_t bsat_retro_serialize_size(void);
     bool bsat_retro_serialize(void *, size_t);
     bool bsat_retro_unserialize(const void *, size_t);
+    void *bsat_retro_get_memory_data(unsigned);
+    size_t bsat_retro_get_memory_size(unsigned);
 }
 
 const LibretroCoreAPI *BeetleSaturnCoreAPI(void) {
@@ -46,6 +48,14 @@ const LibretroCoreAPI *BeetleSaturnCoreAPI(void) {
         .serialize_size = bsat_retro_serialize_size,
         .serialize = bsat_retro_serialize,
         .unserialize = bsat_retro_unserialize,
+        // The console's internal backup RAM, exposed as standard SAVE_RAM
+        // because beetle_saturn_save_method defaults to "libretro" (and
+        // NativeCoreOptionsStore forces it, so a core update can never
+        // silently flip it). Before this wiring Saturn saves had nowhere
+        // to go at all: libretro mode deliberately stops the core writing
+        // its own .bkr file, and nothing on this side picked the data up.
+        .get_memory_data = bsat_retro_get_memory_data,
+        .get_memory_size = bsat_retro_get_memory_size,
     };
     return &api;
 }

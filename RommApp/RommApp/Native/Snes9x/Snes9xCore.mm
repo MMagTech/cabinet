@@ -22,6 +22,8 @@ extern "C" {
     size_t s9x_retro_serialize_size(void);
     bool s9x_retro_serialize(void *, size_t);
     bool s9x_retro_unserialize(const void *, size_t);
+    void *s9x_retro_get_memory_data(unsigned);
+    size_t s9x_retro_get_memory_size(unsigned);
 }
 
 const LibretroCoreAPI *Snes9xCoreAPI(void) {
@@ -45,6 +47,11 @@ const LibretroCoreAPI *Snes9xCoreAPI(void) {
         .serialize_size = s9x_retro_serialize_size,
         .serialize = s9x_retro_serialize,
         .unserialize = s9x_retro_unserialize,
+        // Cartridge battery SRAM. The pointer is never null even for a
+        // cartridge with no battery; only the size drops to zero, so the
+        // size is the signal, which the frontend's saveRAM already tests.
+        .get_memory_data = s9x_retro_get_memory_data,
+        .get_memory_size = s9x_retro_get_memory_size,
     };
     return &api;
 }

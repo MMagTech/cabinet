@@ -22,6 +22,8 @@ extern "C" {
     size_t pico_retro_serialize_size(void);
     bool pico_retro_serialize(void *, size_t);
     bool pico_retro_unserialize(const void *, size_t);
+    void *pico_retro_get_memory_data(unsigned);
+    size_t pico_retro_get_memory_size(unsigned);
 }
 
 const LibretroCoreAPI *PicoDriveCoreAPI(void) {
@@ -45,6 +47,11 @@ const LibretroCoreAPI *PicoDriveCoreAPI(void) {
         .serialize_size = pico_retro_serialize_size,
         .serialize = pico_retro_serialize,
         .unserialize = pico_retro_unserialize,
+        // 32X cartridge save RAM. Rare in the library, a handful of
+        // titles, but the wiring is the same one call every cartridge
+        // core answers. Save RAM the game never wrote reports size zero.
+        .get_memory_data = pico_retro_get_memory_data,
+        .get_memory_size = pico_retro_get_memory_size,
     };
     return &api;
 }

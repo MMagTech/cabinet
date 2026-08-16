@@ -172,6 +172,12 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     /// save screens, and applying late risks the game having already
     /// read an empty card.
     var pendingSaveRAM: Data?
+    /// The Game Boy real-time clock region riding alongside
+    /// `pendingSaveRAM`, seated the same frame. Gambatte keeps the clock
+    /// in its own RETRO_MEMORY_RTC region, and a restored save without it
+    /// resets the clock Pokemon Gold and Silver's day/night system runs
+    /// on. Nil for every core without a clock region.
+    var pendingRTC: Data?
     /// While true the draw loop presents but does not run the core: the
     /// memory card decision is still in flight, and a PS1 game must not
     /// boot past its own card check before the card is in the slot. EA's
@@ -186,6 +192,13 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     /// contract as serializeState and for the same reason.
     func snapshotSaveRAM() -> Data? {
         frontend.saveRAM()
+    }
+
+    /// The core's real-time clock region (RETRO_MEMORY_RTC, id 1), nil
+    /// for cores without one. Same paused-only contract as
+    /// `snapshotSaveRAM`.
+    func snapshotRTC() -> Data? {
+        frontend.memoryRegion(1)
     }
 
     func draw(in view: MTKView) {
@@ -226,6 +239,10 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
                         : "Core refused the card bytes (frame \(framesRun)).",
                     romVersion: nil
                 )
+            }
+            if let clock = pendingRTC {
+                pendingRTC = nil
+                _ = frontend.loadMemoryRegion(clock, region: 1)
             }
             for (port, held) in heldButtons.enumerated() {
                 let mask = held.reduce(into: UInt32(0)) { $0 |= (1 << $1) }
