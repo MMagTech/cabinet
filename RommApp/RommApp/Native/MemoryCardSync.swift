@@ -178,16 +178,24 @@ final class MemoryCardSync {
 
     // MARK: Pause-time capture
 
-    /// Everything a paused core can hand over: the memory-API card (plus
-    /// the clock when the region exists) and Dreamcast's VMU file. Call
-    /// on every pause, quit and background: cards are small and in-game
-    /// saves are the one thing a player never expects to lose. The
-    /// file-writing cores (Sega CD, Neo Geo Pocket) cannot be captured
-    /// here, their files only exist after the quit-time shutdown; see
-    /// `captureAfterShutdown()`.
+    /// What a paused core can safely hand over: the memory-API card, plus
+    /// the clock when that region exists. Call on every pause, quit and
+    /// background: cards are small and in-game saves are the one thing a
+    /// player never expects to lose.
+    ///
+    /// Every core that manages its own save file is captured after the
+    /// quit-time shutdown instead, never here; see
+    /// `captureAfterShutdown()`. Dreamcast used to be captured here and
+    /// it was wrong: Flycast writes the VMU one block at a time with
+    /// plain buffered stdio and no flush (maple_devs.cpp's block-write
+    /// path), and only closes the file in the VMU device's destructor at
+    /// core teardown, so mid-session the image on disk is partial by
+    /// construction. Cabinet uploaded exactly such a half-written card
+    /// and restored it later, and Crazy Taxi 2 reported "loading was
+    /// unsuccessful, the file may be corrupted" (found on device
+    /// 2026-08-16).
     func capturePauseSnapshot() {
         captureMemoryCard()
-        captureVMUSave()
     }
 
     /// A card that never held a save does not travel: a session that
@@ -219,7 +227,8 @@ final class MemoryCardSync {
         Task { await uploadMemoryCard(rtc, region: .rtc) }
     }
 
-    /// Dreamcast only, and structurally different from the card capture:
+    /// Dreamcast only, and structurally different from the card capture,
+    /// run from `captureAfterShutdown()` once Flycast has closed the file:
     /// Flycast never exposes its VMU save through RETRO_MEMORY_SAVE_RAM
     /// at all (confirmed against its own retro_get_memory_data, which
     /// only ever answers RETRO_MEMORY_SYSTEM_RAM), it writes a real file
@@ -231,7 +240,7 @@ final class MemoryCardSync {
     /// instead, the restore is silently ignored; not yet seen on
     /// hardware.
     private func captureVMUSave() {
-        guard platform == .dreamcast, renderer.paused else { return }
+        guard platform == .dreamcast else { return }
         guard let systemDir = LibretroFrontend.shared.systemDirectory() else { return }
         // Same "dc/" subdirectory the BIOS needed: confirmed 2026-08-11
         // by pulling the app's real data container and finding the file
@@ -245,8 +254,14 @@ final class MemoryCardSync {
         guard let vmuName = entries.first(where: { $0.hasSuffix("vmu_save_A1.bin") }),
               let data = try? Data(contentsOf: URL(fileURLWithPath: scanDir).appendingPathComponent(vmuName))
         else { return }
-        guard data != lastCardData else { return }
-        lastCardData = data
+        // Compared against the store's own copy, not `lastCardData`: the
+        // launch sync never runs for Dreamcast (its saves do not ride
+        // RETRO_MEMORY_SAVE_RAM) so that baseline is always nil here,
+        // which made every Dreamcast session re-upload an unchanged
+        // 128KB card and left save timestamps claiming a save happened
+        // when none had.
+        let previous = MemoryCardStore.shared.localCard(romId: rom.id)
+        guard data != previous else { return }
         MemoryCardStore.shared.storeSnapshot(romId: rom.id, data: data)
         DiagnosticsLog.record(
             context: "VMU save", message: "Found \(vmuName), \(data.count) bytes, uploading.",
@@ -269,6 +284,7 @@ final class MemoryCardSync {
     /// these platforms; the same junk guard applies so a session that
     /// never saved uploads nothing.
     func captureAfterShutdown() {
+        captureVMUSave()
         let suffix: String
         switch platform {
         case .segaCD: suffix = ".brm"
