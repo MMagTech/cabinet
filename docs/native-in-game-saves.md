@@ -186,13 +186,18 @@ format-aware emptiness check the way PS1's directory check already worked,
 and restore copies the smaller of blob and region because Genesis Plus GX
 and mGBA report different sizes at restore time than at capture time.
 
-Verified on hardware 2026-08-15/16: full save-quit-relaunch round trips on
-Game Boy Advance (mGBA) and TurboGrafx-CD (Beetle PCE Fast), and the
-capture-upload half on Saturn. Wired identically but not yet exercised on
-a real save: SNES, NES, Game Boy, Game Boy Color, Genesis, Master System,
-Game Gear, 32X, and the Game Boy clock file (no RTC-capable game in the
-test library). Worst case for an unexercised platform is what it already
-was, the save not surviving, so verification continues opportunistically.
+Verified on hardware 2026-08-15/16, full save-quit-relaunch round trips
+with real data: Game Boy Advance (mGBA), TurboGrafx-CD (Beetle PCE
+Fast), Saturn (Beetle Saturn, a real SEGARALLY_0 RECORDS entry), Game
+Gear twice over (Genesis Plus GX's cartridge SAVE_RAM path with its
+trimmed odd sizes, 8193 and 3840 bytes, restoring correctly), Sega CD
+(internal and cart) and Neo Geo Pocket. That covers every distinct save
+mechanism in the change. Wired identically but not exercised on a real
+save: SNES, NES, Game Boy, Game Boy Color, 32X (each rides a mechanism
+proven on another core), and the Game Boy clock file (no RTC-capable
+game in the test library). Worst case for an unexercised platform is
+what it already was, the save not surviving, so those are left to
+tester feedback.
 
 Stage 2 is built on iOS as of 2026-08-16, modeled on how RetroArch never
 loses these saves: cores now get a persistent per-game save directory
