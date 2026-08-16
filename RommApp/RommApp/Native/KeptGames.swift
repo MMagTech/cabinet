@@ -773,6 +773,17 @@ final class KeptGameStore: ObservableObject {
                 }
             }
 
+            // The newest in-game save comes down at keep time too, into
+            // the same local store the launch sync reads, so a game kept
+            // and taken straight offline has its progress with it even
+            // when that progress was made on another device or in the
+            // web player. Tolerant of failure like the state cache
+            // above: the launch sync re-checks whenever it can reach the
+            // server anyway, this only makes sure offline is not empty.
+            if let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug) {
+                await MemoryCardStore.shared.prefetchFromServer(rom: rom, platform: platform, session: session)
+            }
+
             let manifest = KeptGame(
                 rom: rom, totalBytes: Self.directorySize(staging), keptAt: Date(),
                 fileId: webFile?.id, webFileName: webFile?.fileName, contentLength: contentLength,

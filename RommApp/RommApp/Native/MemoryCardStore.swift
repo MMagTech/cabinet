@@ -131,4 +131,55 @@ final class MemoryCardStore {
         }
     }
 
+    /// Pulls the newest server save into local storage without seating
+    /// anything into a core: keep-time prefetch, so a game kept and
+    /// taken straight offline carries its progress with it, not only
+    /// its ROM. Without this, a save made on another device or in the
+    /// web player only ever reached this phone at an online launch, and
+    /// keep-then-fly started the game fresh.
+    ///
+    /// The same decision the player's launch sync makes, minus the
+    /// seating: a pending local upload wins outright (it is strictly
+    /// newer than anything the server has, so there is nothing to
+    /// fetch), otherwise Cabinet's own row, otherwise the newest row
+    /// from any emulator when nothing useful is local, verified as a
+    /// real card before it lands. The launch sync remains the authority
+    /// whenever it can run; this only makes sure the local store is not
+    /// empty when it cannot.
+    @MainActor
+    func prefetchFromServer(rom: Rom, platform: NativePlatform, session: Session) async {
+        // Dreamcast rides along: its VMU file is restored from this same
+        // store. The platforms left out are the stage-2 file-writing
+        // cores and the two with nothing to save; see savesOverSaveRAM.
+        guard platform.savesOverSaveRAM || platform == .dreamcast else { return }
+        let core = platform.core
+        guard !pendingUpload(romId: rom.id) else { return }
+        guard let saves = try? await session.saves(romId: rom.id) else { return }
+
+        let local = localCard(romId: rom.id)
+        let localUseful = local.map { Self.cardHasSaves($0, platform: platform) } ?? false
+        let rows = saves
+            .filter { !$0.fileName.hasSuffix(".rtc") }
+            .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
+        let own = rows.first { $0.emulator == core.emulatorTag }
+        let chosen = own ?? (localUseful ? nil : rows.first)
+        if let chosen, chosen.updatedAt != serverStamp(romId: rom.id) || !localUseful,
+           let bytes = try? await session.saveContent(chosen),
+           Self.cardHasSaves(bytes, platform: platform) {
+            storeDownloaded(romId: rom.id, data: bytes, serverStamp: chosen.updatedAt)
+        }
+
+        // The clock region, own row only: a clock from another
+        // emulator's save means nothing to this core's format.
+        if !pendingUpload(romId: rom.id, region: .rtc),
+           let ownRTC = saves
+               .filter({ $0.emulator == core.emulatorTag && $0.fileName.hasSuffix(".rtc") })
+               .sorted(by: { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") })
+               .first,
+           ownRTC.updatedAt != serverStamp(romId: rom.id, region: .rtc)
+               || localCard(romId: rom.id, region: .rtc) == nil,
+           let bytes = try? await session.saveContent(ownRTC), !bytes.isEmpty {
+            storeDownloaded(romId: rom.id, data: bytes, serverStamp: ownRTC.updatedAt, region: .rtc)
+        }
+    }
 }
