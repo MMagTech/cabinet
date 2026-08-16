@@ -104,8 +104,9 @@ Real, acknowledged holes, not yet started.
   of all, on Apple TV especially. The Dreamcast core has to interpret
   every instruction rather than translating it, because apps on Apple's
   platforms cannot generate code at runtime, and video-heavy scenes are
-  the hardest case for that. Some emulator settings should recover part
-  of it; the ceiling is real.
+  the hardest case for that. The usual emulator settings that would buy
+  speed back are already at their fastest values here, so the ceiling is
+  mostly real rather than a matter of tuning.
 - **PC Engine's 2-button vs. 6-button controller mode** isn't wired up
   to its touch layout yet, even though the core supports it.
 - **PS1 and Saturn multi-disc games aren't supported**, and whether they
