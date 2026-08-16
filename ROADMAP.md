@@ -41,6 +41,25 @@ Done and working, just not in a tagged release yet.
   rather than a choice, so a session ended by iOS killing the app in the
   background can still lose what you did since launch.
 
+- **Your recent games on the Apple TV's top shelf.** When Cabinet sits in
+  the top row of the Apple TV home screen, the large area above it now
+  shows the games you played recently, with their own cover art.
+  Selecting one opens it, where your save states are; pressing Play on
+  the remote drops you straight into the game. Only games this Apple TV
+  can actually run appear there, and it shows nothing at all until you
+  have paired and played something, rather than putting a row of dead
+  ends on your home screen.
+
+- **Cartridge motion sensors on iPhone.** A few Game Boy Advance games
+  shipped with hardware inside the cartridge. WarioWare: Twisted! has a
+  gyroscope and is played by physically turning the thing in your hands,
+  and until now Cabinet had no answer when the game asked which way you
+  had turned it, so it stopped being playable at the first prompt. The
+  phone's own motion now stands in for that cartridge, which is rather
+  better hardware for it than the original ever had. Yoshi's Universal
+  Gravitation and Koro Koro Puzzle's tilt sensors work the same way.
+  iPhone only: the Siri Remote has had no motion sensors since 2021.
+
 ## Being explored
 
 Not committed, not scoped, real conversations that happened and are
@@ -57,13 +76,6 @@ worth having in the open.
 - **A native touch control restyle.** The current on-screen controls are
   functional but read a little flat next to the rest of the app. A
   restyle direction has been discussed, not built.
-- **Using the Apple TV's top shelf.** When an app sits in the top row of
-  the Apple TV home screen, the large area above it belongs to that app.
-  Cabinet shows nothing there today. The obvious fit is your recently
-  played games with their cover art, picking one dropping you straight
-  into it. It needs a separate extension target and a way to share the
-  artwork with it, so it is real work rather than a setting, but it is
-  the kind of thing that makes a tvOS app feel at home.
 - **A real loading screen on tvOS for large downloads.** Right now the
   Play button's own label just turns into a percentage while a native
   game downloads, on a short game that can flash by in under a second.
