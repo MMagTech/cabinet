@@ -30,12 +30,11 @@ struct NativePlayerView: View {
     @AppStorage("com.mmagtech.RommApp.controlOpacity") private var controlOpacity = 0.7
     @Environment(\.scenePhase) private var scenePhase
     @State private var startedAt: Date?
-    /// The card bytes as of the last sync or upload, so snapshots only
-    /// travel when an in-game save actually changed them.
-    @State private var lastCardData: Data?
-    /// Same idea for the Game Boy clock region. Tracked separately so a
-    /// clock tick alone never counts as a card change.
-    @State private var lastRTCData: Data?
+    /// The battery-save engine, shared with tvOS's player: it owns the
+    /// launch decision, the change detection and the uploads, this view
+    /// only tells it when (pause, background, quit). Created in onAppear
+    /// once the environment session exists.
+    @State private var cardSync: MemoryCardSync?
 
     private var profile: ArcadeProfile {
         ArcadeProfileStore.shared.resolve(romId: rom.id, shortname: rom.fsNameNoExt)
@@ -117,330 +116,27 @@ struct NativePlayerView: View {
         renderer.paused = true
         menuStatus = nil
         menuVisible = true
-        captureMemoryCard()
-        captureVMUSave()
+        syncEngine().capturePauseSnapshot()
     }
 
-    /// Whether this session has a RETRO_MEMORY_SAVE_RAM battery save to
-    /// look after through the core directly. Started as PS1 and N64
-    /// only; issue #5 wired the same one memory call into every
-    /// cartridge core, so this now covers every platform whose saves
-    /// ride that call, the list (and the reasons for each exclusion)
-    /// living on the platform itself. Dreamcast's VMU save is a real
-    /// battery save too, just reached a completely different way; see
-    /// `captureVMUSave()`, gated on `platform == .dreamcast` separately
-    /// rather than folded in here.
+    /// Whether boot must hold for the launch card decision: every
+    /// platform whose saves ride RETRO_MEMORY_SAVE_RAM, the list (and
+    /// each exclusion's reason) living on the platform itself. The save
+    /// logic itself lives in MemoryCardSync, shared with tvOS.
     private var hasMemoryCard: Bool {
         platform.savesOverSaveRAM
     }
 
-    /// The launch-time decision of which card goes into the slot: a local
-    /// copy still waiting to upload always wins (it is strictly newer than
-    /// anything the server has), otherwise the server's card wins whenever
-    /// its stamp moved since the last sync, covering saves made on another
-    /// device. Offline, or with nothing on the server, whatever is on disk
-    /// plays. A game with no card anywhere just starts with the core's
-    /// own freshly formatted one.
-    /// Whether a card image holds any actual saves. PS1's 128KB memory
-    /// card has a real directory format worth checking: frames 1-15
-    /// carry 0x51/0x52/0x53 in their first byte for in-use blocks, 0xA0
-    /// for free ones (the PS1 memory card spec's block allocation
-    /// states). A freshly formatted card that no game ever wrote must
-    /// never outrank a real card from the server, which is exactly what
-    /// happened when a quick native boot left an empty local card behind
-    /// and blocked the adoption path below.
-    ///
-    /// The format knowledge itself lives on MemoryCardStore, shared with
-    /// keep-time prefetch so the two can never judge the same bytes
-    /// differently. This wrapper only binds the current platform.
-    private func cardHasSaves(_ card: Data) -> Bool {
-        MemoryCardStore.cardHasSaves(card, platform: platform)
-    }
-
-    private func syncMemoryCardIn() async {
-        guard hasMemoryCard else { return }
-        defer { renderer.awaitingSaveRAM = false }
-        let store = MemoryCardStore.shared
-        let local = store.localCard(romId: rom.id)
-        let localUseful = local.map(cardHasSaves) ?? false
-
-        if store.pendingUpload(romId: rom.id), let local, localUseful {
-            renderer.pendingSaveRAM = local
-            lastCardData = local
-            DiagnosticsLog.record(
-                context: "Memory card",
-                message: "Using the local card; its upload is still pending.",
-                romVersion: session.serverVersion
-            )
-            await uploadMemoryCard(local)
-            await syncRTCIn(serverRows: nil)
-            return
-        }
-
-        if let saves = try? await session.saves(romId: rom.id) {
-            // The clock and cart regions travel as their own rows; they
-            // are never cards and never adoption candidates, so they stay
-            // out of every decision below.
-            let sorted = saves
-                .filter { MemoryCardStore.region(ofFileName: $0.fileName) == .saveRAM }
-                .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
-            let own = sorted.first { $0.emulator == core.emulatorTag }
-            // A game with no Cabinet card worth keeping adopts the newest
-            // card from anywhere else: a save uploaded through RomM's web
-            // UI, a card brought over from another emulator. Only ever as
-            // a seed when there is no local card holding real saves, and
-            // only if the bytes verify as an actual card image with saves
-            // on it. In-game saves after this fork into Cabinet's own row;
-            // the original upload is never touched.
-            let newest = own ?? (localUseful ? nil : sorted.first)
-            if let newest, newest.updatedAt != store.serverStamp(romId: rom.id) || !localUseful {
-                if let bytes = try? await session.saveContent(newest),
-                   cardHasSaves(bytes) {
-                    store.storeDownloaded(romId: rom.id, data: bytes, serverStamp: newest.updatedAt)
-                    renderer.pendingSaveRAM = bytes
-                    lastCardData = bytes
-                    DiagnosticsLog.record(
-                        context: "Memory card",
-                        message: "Loaded \(newest.fileName) from the server into the card slot.",
-                        romVersion: session.serverVersion
-                    )
-                    await syncRTCIn(serverRows: saves)
-                    return
-                }
-                DiagnosticsLog.record(
-                    context: "Memory card",
-                    message: "Found \(newest.fileName) on the server but its content did not verify as a card with saves.",
-                    romVersion: session.serverVersion
-                )
-            }
-            if let local {
-                renderer.pendingSaveRAM = local
-                lastCardData = local
-                DiagnosticsLog.record(
-                    context: "Memory card",
-                    message: localUseful ? "Using the local card." : "Using the local card; it holds no saves yet.",
-                    romVersion: session.serverVersion
-                )
-            }
-            await syncRTCIn(serverRows: saves)
-            return
-        }
-
-        DiagnosticsLog.record(
-            context: "Memory card",
-            message: "Could not list saves from the server; using what is on this phone.",
-            romVersion: session.serverVersion
+    /// The engine, created on first use rather than in a specific
+    /// lifecycle callback: .task and .onAppear have no guaranteed order,
+    /// and whichever asks first should not find nil.
+    private func syncEngine() -> MemoryCardSync {
+        if let cardSync { return cardSync }
+        let engine = MemoryCardSync(
+            rom: rom, core: core, platform: platform, session: session, renderer: renderer
         )
-
-        if let local {
-            renderer.pendingSaveRAM = local
-            lastCardData = local
-            DiagnosticsLog.record(
-                context: "Memory card",
-                message: localUseful ? "Using the local card." : "Using the local card; it holds no saves yet.",
-                romVersion: session.serverVersion
-            )
-        }
-        await syncRTCIn(serverRows: nil)
-    }
-
-    /// The Game Boy clock region's own, much simpler launch decision:
-    /// only ever Cabinet's own row (a clock from another emulator's save
-    /// means nothing to this core's format), local-pending wins, else a
-    /// server copy newer than the last sync, else whatever is on disk.
-    /// `serverRows` reuses the list the card sync already fetched; nil
-    /// means the server was unreachable and only the local copy plays.
-    private func syncRTCIn(serverRows: [GameSave]?) async {
-        let store = MemoryCardStore.shared
-        let local = store.localCard(romId: rom.id, region: .rtc)
-
-        if store.pendingUpload(romId: rom.id, region: .rtc), let local {
-            renderer.pendingRTC = local
-            lastRTCData = local
-            await uploadMemoryCard(local, region: .rtc)
-            return
-        }
-
-        if let own = serverRows?
-            .filter({ $0.emulator == core.emulatorTag && $0.fileName.hasSuffix(".rtc") })
-            .sorted(by: { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") })
-            .first,
-           own.updatedAt != store.serverStamp(romId: rom.id, region: .rtc) || local == nil,
-           let bytes = try? await session.saveContent(own), !bytes.isEmpty {
-            store.storeDownloaded(romId: rom.id, data: bytes, serverStamp: own.updatedAt, region: .rtc)
-            renderer.pendingRTC = bytes
-            lastRTCData = bytes
-            return
-        }
-
-        if let local {
-            renderer.pendingRTC = local
-            lastRTCData = local
-        }
-    }
-
-    /// Snapshots the card while the core is paused and, when it actually
-    /// changed, writes it to disk first and then tries the upload. Runs on
-    /// every pause, quit and background: cards are small and in-game saves
-    /// are the one thing a player never expects to lose.
-    ///
-    /// A card that never held a save does not travel: a session that
-    /// started with nothing (no local card, no server card) and whose
-    /// bytes still read as a factory erase pattern is just the core's own
-    /// freshly initialized region, and uploading it would put a junk row
-    /// on the server for every save-less game ever paused. The moment a
-    /// card holds anything real, or a real card existed before this
-    /// session, every change travels, erasing a save included.
-    private func captureMemoryCard() {
-        guard hasMemoryCard, renderer.paused, let data = renderer.snapshotSaveRAM() else { return }
-        guard data != lastCardData else { return }
-        guard cardHasSaves(data) || lastCardData != nil else { return }
-        lastCardData = data
-        MemoryCardStore.shared.storeSnapshot(romId: rom.id, data: data)
-        Task { await uploadMemoryCard(data) }
-        captureRTC()
-    }
-
-    /// The clock region rides along only when the card itself just
-    /// traveled: the region ticks on every real-world second, so change
-    /// alone means nothing, but a clock captured next to a fresh save is
-    /// exactly what keeps Pokemon Gold and Silver's day/night right when
-    /// the save comes back on this or another device.
-    private func captureRTC() {
-        guard let rtc = renderer.snapshotRTC(), rtc != lastRTCData else { return }
-        lastRTCData = rtc
-        MemoryCardStore.shared.storeSnapshot(romId: rom.id, data: rtc, region: .rtc)
-        Task { await uploadMemoryCard(rtc, region: .rtc) }
-    }
-
-    /// Dreamcast only, and structurally different from
-    /// `captureMemoryCard()`: Flycast never exposes its VMU save through
-    /// RETRO_MEMORY_SAVE_RAM at all (confirmed against its own
-    /// retro_get_memory_data, which only ever answers
-    /// RETRO_MEMORY_SYSTEM_RAM), it writes a real file straight into the
-    /// system directory instead. This is the capture half; the restore
-    /// half is `NativeLauncher.restoreVMUSaveIfNeeded`, which writes the
-    /// card back as `dc/vmu_save_A1.bin` before the core boots. That is
-    /// Flycast's fallback filename, so if the core ever resolves the
-    /// disc's own game id and looks for the per-game name instead, the
-    /// restore is silently ignored; not yet seen on hardware.
-    private func captureVMUSave() {
-        guard platform == .dreamcast, renderer.paused else { return }
-        guard let systemDir = LibretroFrontend.shared.systemDirectory() else {
-            print("[vmu] no systemDirectory")
-            return
-        }
-        // Same "dc/" subdirectory the BIOS needed (see stageFirmware's
-        // own comment): confirmed 2026-08-11 by pulling the app's real
-        // data container over `devicectl device copy from` and finding
-        // the actual file at workDir/dc/vmu_save_A1.bin after a real
-        // in-game save, not at the system directory's own root the way
-        // this scan first assumed.
-        let scanDir = URL(fileURLWithPath: systemDir).appendingPathComponent("dc", isDirectory: true).path
-        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: scanDir) else {
-            print("[vmu] could not list \(scanDir)")
-            return
-        }
-        print("[vmu] scanning \(scanDir): \(entries)")
-        // No leading underscore: PerGameVmu names the file
-        // "<gameId>_vmu_save_A1.bin", but Flycast falls back to the
-        // bare "vmu_save_A1.bin" (no separator at all) whenever the
-        // disc's own game id isn't available yet at the moment it
-        // names the file.
-        guard let vmuName = entries.first(where: { $0.hasSuffix("vmu_save_A1.bin") }),
-              let data = try? Data(contentsOf: URL(fileURLWithPath: scanDir).appendingPathComponent(vmuName))
-        else {
-            print("[vmu] no *vmu_save_A1.bin match")
-            return
-        }
-        guard data != lastCardData else { return }
-        lastCardData = data
-        MemoryCardStore.shared.storeSnapshot(romId: rom.id, data: data)
-        DiagnosticsLog.record(
-            context: "VMU save", message: "Found \(vmuName), \(data.count) bytes, uploading.",
-            romVersion: session.serverVersion
-        )
-        Task { await uploadMemoryCard(data) }
-    }
-
-    /// Sega CD and Neo Geo Pocket, after `unloadGame` has made the core
-    /// flush: reads the save file the core just wrote into its
-    /// persistent save directory and syncs it through the same store and
-    /// upload the memory-API platforms use. Quit is the only capture
-    /// point these two have; a session ended by iOS killing the app
-    /// loses its in-game saves since launch, the same accepted
-    /// limitation FBNeo's NVRAM always had, and the same one RetroArch
-    /// lives with for these cores. Compared against the store's own copy
-    /// rather than `lastCardData`, which the launch sync never sets for
-    /// these platforms; the same junk guard applies so a session that
-    /// never saved uploads nothing.
-    private func captureCoreFileSaves() {
-        let suffix: String
-        switch platform {
-        case .segaCD: suffix = ".brm"
-        case .ngpc: suffix = ".flash"
-        default: return
-        }
-        let dir = NativeLauncher.coreSaveDirectory(romId: rom.id)
-        guard let entries = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
-        else { return }
-
-        func capture(_ file: URL, region: MemoryCardStore.Region) {
-            guard let data = try? Data(contentsOf: file) else { return }
-            let previous = MemoryCardStore.shared.localCard(romId: rom.id, region: region)
-            guard data != previous else { return }
-            guard MemoryCardStore.cardHasSaves(data, platform: platform) || previous != nil else { return }
-            MemoryCardStore.shared.storeSnapshot(romId: rom.id, data: data, region: region)
-            DiagnosticsLog.record(
-                context: "In-game save",
-                message: "Captured \(file.lastPathComponent), \(data.count) bytes, after core shutdown.",
-                romVersion: session.serverVersion
-            )
-            Task { await uploadMemoryCard(data, region: region) }
-        }
-
-        // The internal backup RAM (or NGP's flash); the cart file is its
-        // own region below, never this one.
-        if let file = entries.first(where: {
-            $0.lastPathComponent.hasSuffix(suffix) && !$0.lastPathComponent.hasSuffix("cart.brm")
-        }) {
-            capture(file, region: .saveRAM)
-        }
-
-        // Sega CD's external RAM cartridge, the location games prefer
-        // when one is present (Lunar routed its save here on the first
-        // real device test). Same store, same upload, its own row.
-        if platform == .segaCD,
-           let cart = entries.first(where: { $0.lastPathComponent.hasSuffix("cart.brm") }) {
-            capture(cart, region: .cart)
-        }
-    }
-
-    private func uploadMemoryCard(_ data: Data, region: MemoryCardStore.Region = .saveRAM) async {
-        do {
-            // The Cabinet marker keeps this row's filename distinct from
-            // anything the web player made: RomM's overwrite matches rows
-            // by filename alone, emulator tag not included (confirmed in
-            // its saves endpoint source), so a bare "<name>.srm" upload
-            // would silently take over and rewrite an existing EmulatorJS
-            // card of the same name.
-            try await session.uploadSave(
-                romId: rom.id, emulator: core.emulatorTag,
-                fileName: "\(rom.fsNameNoExt) (Cabinet).\(region.rawValue)", saveData: data
-            )
-            // Re-list to learn the stamp the server just minted, so the
-            // next launch recognises its own upload instead of pulling
-            // it back down.
-            let saves = (try? await session.saves(romId: rom.id)) ?? []
-            let stamp = saves
-                .filter { $0.emulator == core.emulatorTag && MemoryCardStore.region(ofFileName: $0.fileName) == region }
-                .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
-                .first?.updatedAt
-            MemoryCardStore.shared.markUploaded(romId: rom.id, serverStamp: stamp, region: region)
-        } catch {
-            // The disk copy and its pending flag survive; the next launch
-            // retries. Same soft failure as the state queue.
-        }
+        cardSync = engine
+        return engine
     }
 
     private func closeMenu() {
@@ -507,7 +203,7 @@ struct NativePlayerView: View {
         // game is loaded and running.
         .task {
             if startedAt == nil { startedAt = Date() }
-            await syncMemoryCardIn()
+            await syncEngine().syncIn()
             while !Task.isCancelled {
                 await session.reportPlaying(romId: rom.id)
                 try? await Task.sleep(for: .seconds(60))
@@ -583,7 +279,7 @@ struct NativePlayerView: View {
             // loop: runFrame and the snapshot methods all guard on the
             // loaded flag this clears.
             LibretroFrontend.shared.unloadGame()
-            captureCoreFileSaves()
+            syncEngine().captureAfterShutdown()
             NativeSessionMarker.recordCleanExit()
             // An un-kept game's downloaded files have no life after the
             // session; a kept game's live elsewhere and survive this.
@@ -596,8 +292,7 @@ struct NativePlayerView: View {
             if phase == .background {
                 NativeSessionMarker.recordBackgrounded()
                 renderer.paused = true
-                captureMemoryCard()
-                captureVMUSave()
+                syncEngine().capturePauseSnapshot()
             } else if phase == .active && !menuVisible {
                 renderer.paused = false
             }

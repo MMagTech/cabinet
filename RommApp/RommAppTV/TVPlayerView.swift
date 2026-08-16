@@ -39,9 +39,13 @@ struct TVPlayerView: View {
     @State private var menuStatus: String?
     @State private var menuBusy = false
     @State private var startedAt: Date?
-    /// The card bytes as of the last sync or upload, so snapshots only
-    /// travel when an in-game save actually changed them.
-    @State private var lastCardData: Data?
+    /// The battery-save engine shared with iOS's player
+    /// (MemoryCardSync): it owns the launch decision, change detection,
+    /// region handling and uploads; this view only tells it when
+    /// (pause, background, quit). Replaces this file's own stale copy of
+    /// that logic, which had silently fallen behind iOS at PS1/N64-only
+    /// while iOS grew every platform (issue #5).
+    @State private var cardSync: MemoryCardSync?
 
     private var canonicalSlug: String {
         rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
@@ -59,147 +63,30 @@ struct TVPlayerView: View {
         BiasGlowLevel.level(fromStored: glowStored)
     }
 
-    /// PS1 and N64 both export a RETRO_MEMORY_SAVE_RAM battery save
-    /// through the core directly. Dreamcast's VMU save is a real battery
-    /// save too, just reached a completely different way; see
-    /// `captureVMUSave()`, gated on `platform == .dreamcast` separately
-    /// rather than folded in here. Identical to `NativePlayerView`'s own
-    /// property, same reasoning.
+    /// Whether boot must hold for the launch card decision: every
+    /// platform whose saves ride RETRO_MEMORY_SAVE_RAM, matching iOS
+    /// exactly now that both players share MemoryCardSync.
     private var hasMemoryCard: Bool {
-        platform == .psx || platform == .n64
+        platform.savesOverSaveRAM
     }
 
-    /// Whether a card image holds any actual saves. See
-    /// `NativePlayerView.cardHasSaves` for the full reasoning; identical
-    /// logic here since the card formats do not differ by platform.
-    private func cardHasSaves(_ card: Data) -> Bool {
-        if platform == .psx {
-            guard card.count == 128 * 1024 else { return false }
-            return (1...15).contains { block in
-                [0x51, 0x52, 0x53].contains(Int(card[128 * block]))
-            }
-        }
-        return !card.isEmpty && card.contains { $0 != 0 }
-    }
-
-    private func syncMemoryCardIn() async {
-        guard hasMemoryCard else { return }
-        defer { renderer.awaitingSaveRAM = false }
-        let store = MemoryCardStore.shared
-        let local = store.localCard(romId: rom.id)
-        let localUseful = local.map(cardHasSaves) ?? false
-
-        if store.pendingUpload(romId: rom.id), let local, localUseful {
-            renderer.pendingSaveRAM = local
-            lastCardData = local
-            DiagnosticsLog.record(
-                context: "Memory card",
-                message: "Using the local card; its upload is still pending.",
-                romVersion: session.serverVersion
-            )
-            await uploadMemoryCard(local)
-            return
-        }
-
-        if let saves = try? await session.saves(romId: rom.id) {
-            let sorted = saves.sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
-            let own = sorted.first { $0.emulator == core.emulatorTag }
-            let newest = own ?? (localUseful ? nil : sorted.first)
-            if let newest, newest.updatedAt != store.serverStamp(romId: rom.id) || !localUseful {
-                if let bytes = try? await session.saveContent(newest),
-                   cardHasSaves(bytes) {
-                    store.storeDownloaded(romId: rom.id, data: bytes, serverStamp: newest.updatedAt)
-                    renderer.pendingSaveRAM = bytes
-                    lastCardData = bytes
-                    DiagnosticsLog.record(
-                        context: "Memory card",
-                        message: "Loaded \(newest.fileName) from the server into the card slot.",
-                        romVersion: session.serverVersion
-                    )
-                    return
-                }
-                DiagnosticsLog.record(
-                    context: "Memory card",
-                    message: "Found \(newest.fileName) on the server but its content did not verify as a card with saves.",
-                    romVersion: session.serverVersion
-                )
-            }
-        } else {
-            DiagnosticsLog.record(
-                context: "Memory card",
-                message: "Could not list saves from the server; using what is on this phone.",
-                romVersion: session.serverVersion
-            )
-        }
-
-        if let local {
-            renderer.pendingSaveRAM = local
-            lastCardData = local
-            DiagnosticsLog.record(
-                context: "Memory card",
-                message: localUseful ? "Using the local card." : "Using the local card; it holds no saves yet.",
-                romVersion: session.serverVersion
-            )
-        }
-    }
-
-    /// Snapshots the card while the core is paused and, when it actually
-    /// changed, writes it to disk first and then tries the upload. Runs
-    /// on every pause, quit and background, identical to
-    /// `NativePlayerView.captureMemoryCard`.
-    private func captureMemoryCard() {
-        guard hasMemoryCard, renderer.paused, let data = renderer.snapshotSaveRAM() else { return }
-        guard data != lastCardData else { return }
-        lastCardData = data
-        MemoryCardStore.shared.storeSnapshot(romId: rom.id, data: data)
-        Task { await uploadMemoryCard(data) }
-    }
-
-    /// Dreamcast only. See `NativePlayerView.captureVMUSave` for the full
-    /// reasoning behind scanning for Flycast's own VMU file rather than
-    /// naming it; identical here.
-    private func captureVMUSave() {
-        guard platform == .dreamcast, renderer.paused else { return }
-        guard let systemDir = LibretroFrontend.shared.systemDirectory() else { return }
-        let scanDir = URL(fileURLWithPath: systemDir).appendingPathComponent("dc", isDirectory: true).path
-        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: scanDir) else { return }
-        guard let vmuName = entries.first(where: { $0.hasSuffix("vmu_save_A1.bin") }),
-              let data = try? Data(contentsOf: URL(fileURLWithPath: scanDir).appendingPathComponent(vmuName))
-        else { return }
-        guard data != lastCardData else { return }
-        lastCardData = data
-        MemoryCardStore.shared.storeSnapshot(romId: rom.id, data: data)
-        DiagnosticsLog.record(
-            context: "VMU save", message: "Found \(vmuName), \(data.count) bytes, uploading.",
-            romVersion: session.serverVersion
+    /// The engine, created on first use rather than in a specific
+    /// lifecycle callback: .task and .onAppear have no guaranteed order,
+    /// and whichever asks first should not find nil.
+    private func syncEngine() -> MemoryCardSync {
+        if let cardSync { return cardSync }
+        let engine = MemoryCardSync(
+            rom: rom, core: core, platform: platform, session: session, renderer: renderer
         )
-        Task { await uploadMemoryCard(data) }
-    }
-
-    private func uploadMemoryCard(_ data: Data) async {
-        do {
-            try await session.uploadSave(
-                romId: rom.id, emulator: core.emulatorTag,
-                fileName: "\(rom.fsNameNoExt) (Cabinet).srm", saveData: data
-            )
-            let saves = (try? await session.saves(romId: rom.id)) ?? []
-            let stamp = saves
-                .filter { $0.emulator == core.emulatorTag }
-                .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
-                .first?.updatedAt
-            MemoryCardStore.shared.markUploaded(romId: rom.id, serverStamp: stamp)
-        } catch {
-            // The disk copy and its pending flag survive; the next launch
-            // retries. Same soft failure as the state queue.
-        }
+        cardSync = engine
+        return engine
     }
 
     private func openMenu() {
         renderer.paused = true
         menuStatus = nil
         menuVisible = true
-        captureMemoryCard()
-        captureVMUSave()
+        syncEngine().capturePauseSnapshot()
     }
 
     private func closeMenu() {
@@ -328,7 +215,7 @@ struct TVPlayerView: View {
         .onExitCommand {}
         .task {
             if startedAt == nil { startedAt = Date() }
-            await syncMemoryCardIn()
+            await syncEngine().syncIn()
             while !Task.isCancelled {
                 await session.reportPlaying(romId: rom.id)
                 try? await Task.sleep(for: .seconds(60))
@@ -383,6 +270,13 @@ struct TVPlayerView: View {
             if let startedAt {
                 session.reportPlaySessionEnded(romId: rom.id, start: startedAt, end: Date())
             }
+            // The same quit-time core shutdown iOS does, for the same
+            // reason: retro_unload_game is the one moment the
+            // file-writing cores (Sega CD, Neo Geo Pocket) flush their
+            // saves, and the pause capture above has already snapshotted
+            // memory-API save RAM, matching RetroArch's own close order.
+            LibretroFrontend.shared.unloadGame()
+            syncEngine().captureAfterShutdown()
             NativeSessionMarker.recordCleanExit()
             NativeLauncher.cleanUpTempDirectories()
         }
@@ -390,8 +284,7 @@ struct TVPlayerView: View {
             if phase == .background {
                 NativeSessionMarker.recordBackgrounded()
                 renderer.paused = true
-                captureMemoryCard()
-                captureVMUSave()
+                syncEngine().capturePauseSnapshot()
             } else if phase == .active && !menuVisible {
                 renderer.paused = false
             }
