@@ -260,8 +260,14 @@ struct TVPlayerView: View {
             renderer.awaitingSaveRAM = hasMemoryCard
             renderer.shader = NativeShader.current(for: platform)
             NativeSessionMarker.recordGameRunning(romId: rom.id)
+            // Temporary, for issue #6, the same two calls the iOS player
+            // makes: one trace file per play session, pulled off the
+            // device afterwards. The recording itself lives in the shared
+            // renderer, so without these the trace simply never starts.
+            FrameTrace.shared.begin(core: "\(core)")
         }
         .onDisappear {
+            FrameTrace.shared.end()
             controllers.capturesMenuButton = false
             controllers.send = previousSend
             controllers.sendStick = previousStick

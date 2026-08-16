@@ -83,6 +83,11 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     private var worstFrameDelta: CFTimeInterval = 0
     private var lastDrawTime: CFTimeInterval = 0
 
+    /// Temporary instrumentation for issue #6: the time the Metal upload
+    /// took on this draw, milliseconds. The other three stages are timed
+    /// inside `LibretroFrontend` where they happen. See `FrameTrace`.
+    private var uploadMS: Double = 0
+
     /// Held RetroPad ids, merged from the touch overlay and any connected
     /// game controller. Both already speak the same id space (see
     /// ControllerBindings.swift's RetroPad constants), so merging is just
@@ -191,6 +196,13 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     /// frame rate rather than once per display refresh. See the draw loop.
     private var runAccumulator: CFTimeInterval = 0
     private var lastRunTimestamp: CFTimeInterval = 0
+    /// The audio governor's schedule: how many audio frames the core
+    /// should have produced by now, advanced by wall clock while the game
+    /// runs. Compared against what the core actually produced; see the
+    /// draw loop. `audioBaseFrames` anchors the count at this session's
+    /// start, since the frontend's counter spans the whole process.
+    private var audioTargetFrames: Double = 0
+    private var audioBaseFrames: UInt64 = 0
 
     /// The core's current save RAM. Only call while `paused`, the same
     /// contract as serializeState and for the same reason.
@@ -226,6 +238,9 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
                 worstFrameDelta = 0
             }
         }
+        // Captured before lastDrawTime moves on, since the trace below
+        // wants the gap this draw actually followed.
+        let drawGapMS = lastDrawTime == 0 ? 0 : (now - lastDrawTime) * 1000
         lastDrawTime = now
 
         if !paused && !awaitingSaveRAM {
@@ -263,20 +278,71 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
             // surplus discarded, which is what made music play back
             // sounding sped up.
             let interval = 1.0 / max(frontend.targetFPS(), 1)
-            if lastRunTimestamp == 0 { lastRunTimestamp = now }
-            runAccumulator += now - lastRunTimestamp
+            if lastRunTimestamp == 0 {
+                lastRunTimestamp = now
+                audioBaseFrames = frontend.debugAudioFramesTotal()
+                audioTargetFrames = 0
+            }
+            let delta = now - lastRunTimestamp
+            runAccumulator += delta
             lastRunTimestamp = now
             // Capped so a stall cannot bank a debt the core then tries to
             // repay all at once, which would stutter and flood the audio
             // buffer; anything beyond a couple of frames behind is time
             // that is simply gone.
             if runAccumulator > interval * 4 { runAccumulator = interval }
+
+            // The audio governor, the brake wall-clock pacing alone cannot
+            // be. Pacing assumes one retro_run advances one emulated
+            // frame; Flycast's threaded mode breaks that assumption, its
+            // emulation thread free-running as far ahead as its render
+            // queue allows, measured on device at up to five times
+            // realtime with the surplus audio discarded as static. In
+            // RetroArch the brake is the audio callback blocking until
+            // the buffer drains; this frontend's callback must never
+            // block (it feeds a realtime ring from the main thread), so
+            // the same backpressure is applied here instead: when the
+            // core's own audio output is ahead of the wall clock, it is
+            // not due, whatever the frame accumulator says. Skipped runs
+            // leave the render queue unconsumed, which is what actually
+            // stalls the emulation thread.
+            //
+            // Production against the wall clock, deliberately not against
+            // the playback buffer: a gate on playback draining freezes
+            // the game whenever the audio engine is not running, the
+            // exact hazard issue #6 records against the first attempt at
+            // this. The wall clock advances no matter what.
+            let audioRate = frontend.audioSampleRate()
+            var audioProduced = Double(frontend.debugAudioFramesTotal() &- audioBaseFrames)
+            if audioRate > 0 {
+                audioTargetFrames += delta * audioRate
+                // A core running behind schedule keeps its full claim to
+                // run (the governor only ever slows, never speeds), but
+                // the debt it may repay at speed is capped, so a slow
+                // stretch is followed by normal pace rather than an
+                // audible fast-forward sprint.
+                if audioTargetFrames - audioProduced > audioRate * 0.1 {
+                    audioTargetFrames = audioProduced + audioRate * 0.1
+                }
+            }
+            // Half a frame of surplus is jitter; a governor tighter than
+            // one call's worth of audio would fight normal granularity.
+            let audioCushion = audioRate * 0.05
             var ranThisDraw = 0
             while runAccumulator >= interval && ranThisDraw < 2 {
+                if audioRate > 0 && audioProduced - audioTargetFrames > audioCushion {
+                    // Ahead of realtime: burn the banked time without
+                    // running, otherwise the accumulator would force the
+                    // skipped frame in on the next draw and the governor
+                    // would never win.
+                    runAccumulator -= interval
+                    continue
+                }
                 frontend.runFrame()
                 framesRun += 1
                 ranThisDraw += 1
                 runAccumulator -= interval
+                audioProduced = Double(frontend.debugAudioFramesTotal() &- audioBaseFrames)
             }
             // A draw that ran no emulated frame still presents the last
             // one below, so the picture holds steady while the core is
@@ -290,8 +356,31 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
                 audio.enqueue(audioData)
             }
 
-            if ranThisDraw > 0, let frame = frontend.latestFrame() {
-                updateTexture(from: frame)
+            if ranThisDraw > 0 {
+                let uploadStart = CACurrentMediaTime()
+                if let frame = frontend.latestFrame() {
+                    updateTexture(from: frame)
+                    uploadMS = (CACurrentMediaTime() - uploadStart) * 1000
+                }
+            }
+
+            // Temporary, for issue #6. Recorded only on draws that actually
+            // advanced the core: a draw that was simply not due yet has no
+            // frame to account for and would dilute the trace with zeroes.
+            if ranThisDraw > 0 {
+                FrameTrace.shared.record(
+                    drawGap: drawGapMS,
+                    framesRun: ranThisDraw,
+                    run: frontend.debugCoreRunMS(),
+                    readback: frontend.debugReadbackMS(),
+                    swizzle: frontend.debugSwizzleMS(),
+                    upload: uploadMS,
+                    audioFrames: frontend.debugAudioFramesTotal(),
+                    hwFrames: frontend.debugHWFramesTotal(),
+                    runCalls: frontend.debugRunCallTotal(),
+                    hwDupes: frontend.debugHWDupeTotal(),
+                    targetFPS: frontend.targetFPS()
+                )
             }
         }
 

@@ -67,6 +67,59 @@ if [ ! -d "$SRC" ]; then
     git clone --recurse-submodules --depth 1 https://github.com/flyinghead/flycast.git "$SRC"
 fi
 
+# Patch upstream's interpreter cycle ratio, same in-build-script patching
+# precedent as build-core.sh's Beetle PCE zlib fix. Upstream charges every
+# interpreted instruction 8 cycles ("SH4 underclock factor when using the
+# interpreter so that it's somewhat usable"), which hands games an
+# effective 25MHz SH4: enough for light scenes, and the direct cause of
+# heavy scenes slowing down inside the emulated machine, identically on
+# any host hardware (issue #6's 20fps, diagnosed 2026-08-16 with the
+# frame trace). Charging 2 instead gives an effective 100MHz. Both
+# values around it were measured on device 2026-08-16 and rejected: 8 is
+# the 20fps heavy-scene slowdown, and 1 (the authentic 200MHz) saturates
+# even an iPhone Air's interpreter, audio ratio flooring at 0.60 with
+# audible dropouts. Per-platform tuning below 100MHz happens at runtime
+# instead, via the reicast_sh4clock option NativeCoreOptions forces per
+# platform, so both platforms share one core build. The audio governor
+# turns any remaining shortfall into graceful slowdown rather than
+# static, measurable as the trace's audio ratio dropping below 1.0.
+# Idempotent; harmless if upstream renames the constant, the build then
+# just carries upstream's value. The sed targets whatever value the tree
+# currently holds, so it matches 8 (a fresh clone) or a previous run's.
+CPU_RATIO=2
+sed -i '' "s/static constexpr int CPU_RATIO = [0-9]*;/static constexpr int CPU_RATIO = $CPU_RATIO;/" \
+    "$SRC/core/hw/sh4/sh4_interpreter.h"
+
+# Second upstream patch: let a fresh retro_load_game start the emulator.
+#
+# Flycast only ever calls emu.start() when its `first_run` flag is set,
+# and that flag is set only by retro_init and retro_deinit. That assumes
+# a frontend deinitializes the core between games, which Cabinet cannot
+# do here: Flycast's own retro_deinit calls addrspace::release() without
+# emu.term() on Apple, leaving the Emulator in state Init with its
+# address space gone, so the next retro_init early-returns out of
+# Emulator::init(), never re-runs mem_Init(), and the first dc_reset
+# writes to unmapped memory (SIGSEGV, refused by Flycast's own fault
+# handler, die("segfault")). That was the "quit a Dreamcast game and the
+# next one closes the app" crash, pinned to emulator.cpp:594 by a
+# debug-info build 2026-08-16. LibretroFrontend.mm therefore never
+# deinitializes this core, which left the opposite symptom: the second
+# game loaded but never started, stayed in state Loaded, rendered
+# nothing, and showed a black screen.
+#
+# Setting the flag when a game unloads says exactly what is true: the
+# next game to load has not been started yet. Anchored on the two-line
+# opening of retro_unload_game, which is unique in the file, and made a
+# no-op if the patch is already present, so re-running this script is
+# safe. If upstream ever fixes retro_deinit, this stays harmless.
+perl -0pi -e '
+    s/(\temu\.unloadGame\(\);\n)(\tdreampotato::term\(\);)/$1\tfirst_run = true;\n$2/
+    unless /first_run = true;\n\tdreampotato::term/;
+' "$SRC/shell/libretro/libretro.cpp"
+grep -q 'first_run = true;' "$SRC/shell/libretro/libretro.cpp" \
+    && grep -A 2 'emu.unloadGame();' "$SRC/shell/libretro/libretro.cpp" | grep -q 'first_run = true;' \
+    || { echo "first_run patch did not apply; upstream shape changed" >&2; exit 1; }
+
 FLAGS="-fno-common -DTARGET_NO_REC -DIOS"
 
 # tvOS masquerades as iOS to Flycast's own build, via -DIOS=ON below.

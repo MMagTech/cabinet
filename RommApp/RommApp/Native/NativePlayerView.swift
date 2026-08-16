@@ -253,8 +253,12 @@ struct NativePlayerView: View {
             renderer.awaitingSaveRAM = hasMemoryCard
             renderer.shader = NativeShader.current(for: platform)
             NativeSessionMarker.recordGameRunning(romId: rom.id)
+            // Temporary, for issue #6. One file per play session, so there
+            // is never a question which run the numbers came from.
+            FrameTrace.shared.begin(core: "\(core)")
         }
         .onDisappear {
+            FrameTrace.shared.end()
             UIApplication.shared.isIdleTimerDisabled = false
             GameControllerManager.shared.send = previousControllerSend
             GameControllerManager.shared.sendStick = previousControllerStick
@@ -505,3 +509,4 @@ struct NativePlayerView: View {
 
 // NativePlayerAudio now lives in its own file, Native/NativePlayerAudio.swift,
 // shared with tvOS's PS1PlayTestView rather than duplicated for it.
+

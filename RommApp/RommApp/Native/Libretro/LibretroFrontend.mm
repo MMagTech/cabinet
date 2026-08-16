@@ -34,6 +34,8 @@
 #include <vector>
 #include <mutex>
 #include <atomic>
+#include <chrono>
+#include <set>
 #include <algorithm>
 #include <cstdarg>
 #include <cstdio>
@@ -65,6 +67,13 @@ LibretroCoreID gCoreID = LibretroCoreIDFBNeo;
 unsigned gPortDevice[2] = {0, 0};
 bool gPortDeviceSet[2] = {false, false};
 bool gInitialized = false;
+// Whether the CURRENT core is initialized is `gInitialized`; this is the
+// same fact for every core, which is only interesting for the cores
+// `coreToleratesDeinit` refuses to tear down. Those stay initialized
+// after their game unloads, so switching away and back must NOT run a
+// second retro_init on them: that is exactly the sequence that made
+// Flycast reserve fresh address space it never mapped anything into.
+std::set<LibretroCoreID> gInitializedCores;
 bool gGameLoaded = false;
 
 std::string gSystemDirectory;
@@ -185,6 +194,78 @@ std::atomic<uint32_t> gHWFrameCount{0};
 // their own hardcoded default regardless of what gOptions holds.
 std::atomic<bool> gThreadedRenderingQueried{false};
 
+// Per-stage timings for the hardware-render path, milliseconds, each
+// holding the most recent single sample rather than an average: the trace
+// that reads them (FrameTrace, NativePlayerRenderer.swift) wants raw
+// per-frame numbers so a stall shows up as a stall instead of being
+// smeared across its neighbours.
+//
+// Temporary instrumentation for issue #6: Dreamcast holds correct emulated
+// speed and correct realtime audio while the picture updates about 20
+// times a second, which says the SH4 is keeping up and something after it
+// is not. This splits "after it" into its actual parts so the answer is
+// measured rather than argued.
+std::atomic<double> gTimeCoreRunMS{0};
+std::atomic<double> gTimeReadbackMS{0};
+std::atomic<double> gTimeSwizzleMS{0};
+
+// Cumulative counters alongside them, same temporary purpose. These three
+// together answer the question the timings alone cannot: audio frames
+// against 44,100 a second says whether emulated time is advancing at
+// realtime, which is the only direct read on whether the SH4 interpreter
+// is keeping up; hardware frames says how often the core actually handed
+// over a new picture; run calls says how often we asked. Cumulative rather
+// than per-frame so no sample can be missed or double counted.
+std::atomic<uint64_t> gAudioFramesTotal{0};
+std::atomic<uint64_t> gRunCallTotal{0};
+// Duplicate-frame reports from a hardware-rendered core. This is the one
+// signal that says which mode Flycast is actually running in, without
+// inferring it: its non-threaded path returns true from every
+// Emulator::render, so is_dupe is always false and a dupe can never be
+// reported. Any dupe at all means threaded rendering is genuinely on.
+std::atomic<uint64_t> gHWDupeCount{0};
+
+static double nowMS() {
+    return std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+static void recordStage(std::atomic<double> &slot, double sample) {
+    slot.store(sample, std::memory_order_relaxed);
+}
+
+// Whether a core survives retro_deinit followed by a fresh retro_init in
+// the same process. Most do, and get the full teardown, which is the one
+// guarantee that holds across cores whose internal state does not reset
+// from retro_unload_game alone (Genesis Plus GX corrupting memory across
+// games, Beetle PCE Fast failing every game after the first, both real
+// device crashes 2026-08-08).
+//
+// Two cores must never be deinitialized, for unrelated reasons, and both
+// were found the same way, as a crash on the second game of a session:
+//
+// - FBNeo: a second retro_deinit in one process (its own BurnLibExit)
+//   hits a bad free and takes the app down. Found 2026-08-11.
+// - Flycast: its retro_deinit calls addrspace::release() on Apple but
+//   NOT emu.term() (shell/libretro/libretro.cpp, an #if that terms the
+//   emulator on every other platform), so the Emulator stays in state
+//   Init with its address space gone. The next retro_init reserves fresh
+//   address space, but Emulator::init() returns early on any state that
+//   is not Uninitialized, so mem_Init() never re-runs and nothing is
+//   mapped into it. The next dc_reset's mem_Reset then writes to
+//   unmapped memory: SIGSEGV, refused by Flycast's own fault handler
+//   since it is not a watched page, and die("segfault"). Found
+//   2026-08-16 from three device crash reports plus a debug-info build
+//   pinning it to emulator.cpp:594.
+//
+// Both are safe to leave initialized: retro_unload_game already returns
+// them to a state a fresh retro_load_game accepts, which is the ordinary
+// libretro contract, and Flycast's reserved address space is virtual,
+// not committed.
+static bool coreToleratesDeinit(LibretroCoreID coreID) {
+    return coreID != LibretroCoreIDFBNeo && coreID != LibretroCoreIDFlycast;
+}
+
 uintptr_t hwGetCurrentFramebuffer(void) {
     return gFBO;
 }
@@ -256,6 +337,12 @@ void setupHWFramebuffer(GLuint width, GLuint height) {
 }
 
 void videoRefresh(const void *data, unsigned width, unsigned height, size_t pitch) {
+    // A hardware-render core saying "same picture as last time". Counted
+    // for the mode discriminator above; the early return below already
+    // treated it as nothing-changed.
+    if (gUsesHWRender && data == nullptr) {
+        gHWDupeCount.fetch_add(1, std::memory_order_relaxed);
+    }
     if (data == RETRO_HW_FRAME_BUFFER_VALID) {
         // The frame is already sitting in gFBO on the GPU; read it back
         // once as BGRA (matching this frontend's existing XRGB8888 byte
@@ -294,7 +381,10 @@ void videoRefresh(const void *data, unsigned width, unsigned height, size_t pitc
         std::vector<uint8_t> flipped(needed);
         glBindFramebuffer(GL_FRAMEBUFFER, gFBO);
         glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        double readbackStart = nowMS();
         glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, flipped.data());
+        double swizzleStart = nowMS();
+        recordStage(gTimeReadbackMS, swizzleStart - readbackStart);
         GLenum readbackErr = glGetError();
         for (unsigned y = 0; y < height; y++) {
             const uint8_t *srcRow = flipped.data() + (height - 1 - y) * bytesPerRow;
@@ -306,6 +396,7 @@ void videoRefresh(const void *data, unsigned width, unsigned height, size_t pitc
                 dstRow[x * 4 + 3] = srcRow[x * 4 + 3]; // A
             }
         }
+        recordStage(gTimeSwizzleMS, nowMS() - swizzleStart);
         gFrameWidth = width;
         gFrameHeight = height;
         gFrameBytesPerRow = (uint32_t)bytesPerRow;
@@ -357,11 +448,13 @@ void audioSample(int16_t left, int16_t right) {
     std::lock_guard<std::mutex> lock(gAudioMutex);
     gAudioSamples.push_back(left);
     gAudioSamples.push_back(right);
+    gAudioFramesTotal.fetch_add(1, std::memory_order_relaxed);
 }
 
 size_t audioSampleBatch(const int16_t *data, size_t frames) {
     std::lock_guard<std::mutex> lock(gAudioMutex);
     gAudioSamples.insert(gAudioSamples.end(), data, data + frames * 2);
+    gAudioFramesTotal.fetch_add(frames, std::memory_order_relaxed);
     return frames;
 }
 
@@ -752,15 +845,27 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     }
     if (gCore && gInitialized) {
         // A different core was live: give it the full shutdown it expects
-        // before its callbacks stop meaning anything.
+        // before its callbacks stop meaning anything. Except where deinit
+        // itself is the unsafe part, see coreToleratesDeinit: a core left
+        // initialized here keeps only its own idle state, and this app
+        // never runs two cores at once, so nothing else is reading it.
+        // Switching away from Dreamcast and back was the original way to
+        // hit Flycast's re-init crash, before an unconditional teardown
+        // in loadGame briefly made it happen on every relaunch.
         if (gGameLoaded) {
             gCore->unload_game();
         }
-        gCore->deinit();
+        if (coreToleratesDeinit(gCoreID)) {
+            gCore->deinit();
+            gInitializedCores.erase(gCoreID);
+        }
     }
     gCore = coreAPI(coreID);
     gCoreID = coreID;
-    gInitialized = false;
+    // Not blindly false: a core this app declined to deinitialize is
+    // still initialized, and telling loadGame otherwise would run a
+    // second retro_init on it.
+    gInitialized = gInitializedCores.count(coreID) > 0;
     gGameLoaded = false;
     {
         std::lock_guard<std::mutex> lock(gFrameMutex);
@@ -826,22 +931,30 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     // the one guarantee that holds for all of them: this is exactly the
     // teardown a core switch already gets, just now applied every time,
     // not only when the core itself changes.
-    if (gInitialized && gGameLoaded) {
-        gCore->unload_game();
-        // FBNeo is the one exception to "deinit before every fresh init":
-        // a second retro_deinit call in the same process (its own
-        // BurnLibExit) hits a bad free and takes the whole app down,
-        // confirmed on a real device 2026-08-11 by playing an arcade game,
-        // quitting, and playing the same or another one again without
-        // leaving the app. FBNeo was never actually run through this
-        // same-core-relaunch path when the full-deinit fix above was
-        // written and verified against Genesis Plus GX and Beetle PCE
-        // Fast; it does not tolerate what those two needed. Plain
-        // unload_game without deinit is what this whole block did before
-        // that fix, and is still what FBNeo gets.
-        if (gCoreID != LibretroCoreIDFBNeo) {
+    // Keyed on gInitialized alone, NOT gInitialized && gGameLoaded: the
+    // quit path already unloads the game (the retro_unload_game moment
+    // file-writing cores flush their saves on), so by the next launch
+    // gGameLoaded is false and a gGameLoaded-gated teardown silently
+    // skips, leaving the fresh load to run on a core that kept its
+    // previous session's internal state. Most cores happened to survive
+    // that; Flycast with threaded rendering faults inside the second
+    // Emulator::loadGame, three identical crash logs off a real device
+    // 2026-08-16 (quit a Dreamcast game, launch another, app dies; the
+    // relaunch after THAT works because the crash handed us a fresh
+    // process, which is itself the tell that stale in-process state was
+    // the problem).
+    if (gInitialized) {
+        if (gGameLoaded) {
+            gCore->unload_game();
+            gGameLoaded = false;
+        }
+        // Plain unload_game without deinit for the cores that cannot take
+        // one; see coreToleratesDeinit for what each of them does instead
+        // of surviving it.
+        if (coreToleratesDeinit(gCoreID)) {
             gCore->deinit();
             gInitialized = false;
+            gInitializedCores.erase(gCoreID);
         }
     }
     gGameLoaded = false;
@@ -883,6 +996,7 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
         gCore->set_input_poll(inputPoll);
         gCore->set_input_state(inputState);
         gInitialized = true;
+        gInitializedCores.insert(gCoreID);
     }
 
     struct retro_game_info info = {};
@@ -1041,14 +1155,21 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
             if (gMotionSensingHandler) { gMotionSensingHandler(NO, NO); }
         });
     }
-    // Same FBNeo exception as loadGame's own teardown, same reason:
-    // its second retro_deinit in one process hits a bad free. Leaving
-    // gInitialized set is what makes the next loadGame skip the
-    // fresh-init path for FBNeo, exactly the unload-without-deinit
-    // sequence it always got.
-    if (gCoreID != LibretroCoreIDFBNeo) {
+    // Same exception list as loadGame's own teardown, see
+    // coreToleratesDeinit. Leaving gInitialized set is what makes the
+    // next loadGame skip the fresh-init path, giving those cores exactly
+    // the unload-without-deinit sequence they tolerate.
+    //
+    // This site is the one that mattered for Dreamcast: quitting a game
+    // deinitialized Flycast, which on Apple releases its address space
+    // without terming the emulator, so the NEXT launch of anything on
+    // that core re-initialized into unmapped memory and died in
+    // dc_reset. That is the "quit a Dreamcast game and the next one
+    // closes the app" report, 2026-08-16.
+    if (coreToleratesDeinit(gCoreID)) {
         gCore->deinit();
         gInitialized = false;
+        gInitializedCores.erase(gCoreID);
     }
 }
 
@@ -1077,8 +1198,39 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
             glBindFramebuffer(GL_FRAMEBUFFER, gFBO);
             glViewport(0, 0, gFBOWidth, gFBOHeight);
         }
+        double runStart = nowMS();
         gCore->run();
+        recordStage(gTimeCoreRunMS, nowMS() - runStart);
+        gRunCallTotal.fetch_add(1, std::memory_order_relaxed);
     }
+}
+
+- (double)debugCoreRunMS {
+    return gTimeCoreRunMS.load(std::memory_order_relaxed);
+}
+
+- (uint64_t)debugAudioFramesTotal {
+    return gAudioFramesTotal.load(std::memory_order_relaxed);
+}
+
+- (uint64_t)debugHWFramesTotal {
+    return gHWFrameCount.load(std::memory_order_relaxed);
+}
+
+- (uint64_t)debugRunCallTotal {
+    return gRunCallTotal.load(std::memory_order_relaxed);
+}
+
+- (uint64_t)debugHWDupeTotal {
+    return gHWDupeCount.load(std::memory_order_relaxed);
+}
+
+- (double)debugReadbackMS {
+    return gTimeReadbackMS.load(std::memory_order_relaxed);
+}
+
+- (double)debugSwizzleMS {
+    return gTimeSwizzleMS.load(std::memory_order_relaxed);
 }
 
 - (nullable LibretroFrame *)latestFrame {

@@ -241,10 +241,51 @@ enum NativeCoreOptions {
         genesisPad,
     ]
 
+    /// The one Dreamcast option, and unlike everything else in this file
+    /// it IS a performance knob, exposed deliberately: the emulated SH4's
+    /// speed decides whether heavy scenes slow down, the right value is a
+    /// property of the device in hand (an iPhone Air affords twice what
+    /// an A15 Apple TV does, measured 2026-08-16), and hardware this app
+    /// has never met will keep arriving. The audio governor makes a
+    /// too-high pick degrade into slowdown rather than static, which is
+    /// what makes this safe to hand to users at all.
+    ///
+    /// Labels are EFFECTIVE speeds, half the nominal values sent to the
+    /// core, because the build charges interpreted instructions double
+    /// (CPU_RATIO=2, see tools/build-flycast.sh). A row saying 200MHz
+    /// while delivering 100 would be a lie users tune against.
+    static let dreamcast: [NativeCoreOption] = [
+        NativeCoreOption(
+            key: "reicast_sh4clock",
+            label: "CPU speed",
+            detail: "A real Dreamcast is 200 MHz. Lower runs cooler with fewer audio dropouts; higher needs a recent device.",
+            choices: [
+                .init(value: "100", label: "50 MHz"),
+                .init(value: "150", label: "75 MHz"),
+                .init(value: "200", label: "100 MHz"),
+                .init(value: "300", label: "150 MHz"),
+                .init(value: "400", label: "200 MHz"),
+            ],
+            defaultValue: dreamcastDefaultClock
+        ),
+    ]
+
+    /// Measured on device, 2026-08-16: the iPhone Air holds an effective
+    /// 100MHz with margin and saturates at 200; the A15 Apple TV floors
+    /// at 0.65x realtime at 100 and gets 75. New hardware tiers are what
+    /// the visible setting above is for.
+    #if os(tvOS)
+    static let dreamcastDefaultClock = "150"
+    #else
+    static let dreamcastDefaultClock = "200"
+    #endif
+
     /// Per-platform option sets. A platform absent from this switch has no
     /// options worth exposing, per docs/scope-native-core-settings.md:
     /// only what decides whether a game boots or looks fundamentally
     /// different clears the bar, never preference or performance toggles.
+    /// Dreamcast's CPU speed is the one deliberate exception; its comment
+    /// argues the case.
     static func options(for platform: NativePlatform) -> [NativeCoreOption] {
         switch platform {
         case .arcade: return fbneo
@@ -260,6 +301,7 @@ enum NativeCoreOptions {
         case .genesis, .sega32X: return genesis
         case .segaCD: return segaCD
         case .tg16, .tgCD: return pce
+        case .dreamcast: return dreamcast
         default: return []
         }
     }
@@ -320,6 +362,14 @@ enum NativeCoreOptionsStore {
             else { continue }
             result[option.key] = stored
         }
+        // Dreamcast's CPU speed is always sent at its resolved value, not
+        // only when changed: its per-platform default (75MHz effective on
+        // tvOS) differs from the core's own baked-in 200, so an untouched
+        // install relying on "send nothing" would silently run the wrong
+        // speed on the Apple TV.
+        if platform == .dreamcast, let clock = NativeCoreOptions.dreamcast.first {
+            result[clock.key] = value(clock, for: platform)
+        }
         result.merge(forcedOptions(for: platform)) { _, forced in forced }
         return result
     }
@@ -343,17 +393,42 @@ enum NativeCoreOptionsStore {
                 "pcsx_rearmed_memcard2": "none",
             ]
         case .dreamcast:
-            // Flycast's threaded rendering runs emulation on its own
-            // thread rather than one frame per retro_run, so nothing
-            // Cabinet does paces it. Instrumented on device 2026-08-16:
-            // roughly 60% of every second of audio the core produced was
-            // being discarded, the ring staying permanently overfull,
-            // which is why music played back sounding sped up. Running
-            // the core synchronously ties audio production to this
-            // frontend's own frame cadence. Under test against the same
-            // instrumentation; if the drops do not fall to zero this is
-            // not the cause and should come back out.
-            return ["reicast_threaded_rendering": "disabled"]
+            // Threaded rendering back ON, reversing the override this
+            // returned between d49008d and 2026-08-16. That override was
+            // added on the theory that running the core synchronously
+            // would tie audio production to this frontend's frame
+            // cadence, and its own comment said to take it back out if
+            // the drops did not fall to zero. Traced on device: they did
+            // not. The core ran at 1.0x to 2.9x realtime, averaging
+            // 84,090 audio frames a second against 44,100, and the
+            // picture rate fell in exact inverse proportion, 60fps
+            // wherever the ratio was 1.0 and 30fps wherever it was 2.0.
+            //
+            // Synchronous is the mode with no brake. Flycast's own
+            // WriteSample drops samples on overflow rather than
+            // blocking, so audio applies no backpressure, and
+            // Emulator::render's non-threaded path runs the SH4 until
+            // either the game flips its framebuffer or fifty
+            // milliseconds of emulated time have passed
+            // (Emulator::vblank, core/emulator.cpp). Fifty milliseconds
+            // is 2,205 audio frames at 44.1kHz, which is the "about
+            // 2,207 audio frames per retro_run" already recorded in
+            // issue #6: that measurement was the timeout firing, not the
+            // game running slowly. A frontend pacing one retro_run per
+            // frame cannot see a call that silently advanced three.
+            //
+            // Threaded mode does have a brake, and it is this frontend's
+            // own frame cadence: the emulator thread enqueues render
+            // messages into a queue bounded at four
+            // (Renderer_if.cpp's PvrMessageQueue::enqueue) and blocks
+            // when they back up, so it can only run as fast as this app
+            // consumes frames.
+            //
+            // The CPU speed is NOT forced here: it is the visible
+            // Dreamcast option (NativeCoreOptions.dreamcast), always sent
+            // at its resolved value by dictionary(for:) above, with a
+            // per-platform default measured on device.
+            return ["reicast_threaded_rendering": "enabled"]
         case .segaCD:
             // The CD console's internal backup RAM defaults to "per
             // bios", one shared .brm per region across every Sega CD
