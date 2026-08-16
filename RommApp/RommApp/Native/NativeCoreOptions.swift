@@ -350,7 +350,29 @@ enum NativeCoreOptionsStore {
             // sync is per game on RomM's per-rom save model, a shared
             // file would have to live under some arbitrary game, and the
             // tiny 8KB BRAM can no longer fill up across the library.
-            return ["genesis_plus_gx_system_bram": "per game"]
+            //
+            // cart_size must be answered explicitly, same gap-class as
+            // N64's zeroed globals: unanswered, the core's cart_size
+            // global stays 0, a state upstream never runs, and Sonic CD
+            // refuses to boot past "RAM cartridge not initialized",
+            // found on device 2026-08-16.
+            //
+            // "4meg" is RetroArch's own default and the only class of
+            // value that is safe: "disabled" (0xff) was tried first and
+            // crashes the vendored core outright in Mode 2 CD boot,
+            // cd_cart_init computes its size mask as (1 << (id + 13)) - 1
+            // and 0xff makes that a 268-bit shift, undefined behavior
+            // that produced an all-ones mask and a format write 4GB past
+            // the buffer (EXC_BAD_ACCESS in bram_load's cart formatting,
+            // symbolicated from a real device crash 2026-08-16). Known
+            // limitation of having a cart present: a save a player
+            // deliberately writes onto the cart persists on this device
+            // (the save directory survives) but does not sync to RomM,
+            // only the internal backup RAM does.
+            return [
+                "genesis_plus_gx_system_bram": "per game",
+                "genesis_plus_gx_cart_size": "4meg",
+            ]
         case .saturn:
             // "libretro" hands the console's internal backup RAM to this
             // frontend through RETRO_MEMORY_SAVE_RAM, which is where the
