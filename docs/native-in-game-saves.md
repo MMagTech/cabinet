@@ -212,9 +212,24 @@ already-deleted directory.
 The honest limitation, shared with RetroArch: Sega CD and Neo Geo Pocket
 only flush at a clean quit, so a session ended by iOS killing the
 backgrounded app loses in-game saves made since launch on those two
-platforms, and on arcade. Stage 2 is not yet verified on hardware: one
-Sega CD in-game save and one Neo Geo Pocket save need a
-save-quit-relaunch round trip on a real device.
+platforms, and on arcade.
+
+Stage 2 device testing (2026-08-16) found and fixed two more things.
+Sega CD's cart_size option must be answered: unanswered blocked Sonic
+CD's boot, and "disabled" crashes the vendored core outright (an
+upstream shift-overflow bug, see the forcedOptions comment), so it is
+forced to RetroArch's own "4meg" default. And with a cart present,
+games genuinely prefer it: Lunar put its save on the external RAM
+cartridge, so the cart is synced as its own third region
+("(Cabinet).cart") next to the card and the clock, verified
+byte-identical between device and server.
+
+Verified on hardware for stage 2: Sega CD capture, upload, local
+restore and cart sync (Sonic CD, Final Fight CD, Lunar, Android
+Assault); Neo Geo Pocket capture and upload with real flash data
+(Metal Slug 1st Mission), after one earlier unexplained empty flush
+that did not reproduce and is worth watching. Still owed: an NGP
+relaunch check (the game's own menu finding the save again).
 
 tvOS still syncs PS1 and N64 only; its pass follows once the feature is
 finished and verified on iOS, per the finish-iOS-first rule.
