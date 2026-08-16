@@ -89,6 +89,8 @@ double gAudioSampleRate = 44100.0;
 // square-pixel, so raw pixels and this always agreed and nobody noticed
 // the frontend never read it; Saturn commonly is not.
 std::atomic<double> gAspectRatio{0.0};
+// The core's own declared frame rate; see where it is read in loadGame.
+std::atomic<double> gTargetFPS{60.0};
 
 // Core options for RETRO_ENVIRONMENT_GET_VARIABLE, keyed and valued as
 // the core spells them. Read from the core's thread, written from the
@@ -455,6 +457,31 @@ void logCallback(enum retro_log_level level, const char *fmt, ...) {
 
 bool environmentCallback(unsigned cmd, void *data) {
     switch (cmd) {
+        case RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO: {
+            // A core correcting its own timing once it knows the game's
+            // real video mode. Flycast does this: its setAVInfo divides
+            // the SPG-derived rate by the vsync swap interval and calls
+            // this whenever that changes, so the rate declared at load
+            // can be wrong for the game actually running. Ignoring it
+            // meant the draw loop kept pacing against a stale figure and
+            // the core handed over more audio per call than a frame's
+            // worth, which is discarded and heard as sped-up playback.
+            //
+            // Only the frame rate and aspect are taken. The sample rate
+            // is deliberately left alone: the audio engine's format is
+            // fixed when playback starts and cannot follow a change
+            // mid-session.
+            const struct retro_system_av_info *info = (const struct retro_system_av_info *)data;
+            if (!info) { return false; }
+            if (info->timing.fps > 0) {
+                gTargetFPS.store(info->timing.fps, std::memory_order_relaxed);
+                NSLog(@"[core] av_info update: fps now %f", info->timing.fps);
+            }
+            if (info->geometry.aspect_ratio > 0) {
+                gAspectRatio.store(info->geometry.aspect_ratio, std::memory_order_relaxed);
+            }
+            return true;
+        }
         case RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY:
             *(const char **)data = gSystemDirectory.c_str();
             return true;
@@ -807,6 +834,15 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
         std::lock_guard<std::mutex> lock(gAudioMutex);
         gAudioSampleRate = avInfo.timing.sample_rate > 0 ? avInfo.timing.sample_rate : 44100.0;
     }
+    // The rate the core expects to be run at, which is not the rate the
+    // display refreshes at. Read but never used until 2026-08-16, when
+    // instrumenting Dreamcast audio showed the core producing 65,000 to
+    // 85,000 audio frames a second against 44,100 of realtime: the draw
+    // loop was calling retro_run once per display refresh, and an Apple
+    // TV's display link runs far above the 59.94 Flycast asks for, so
+    // the emulator was simply running too fast and the surplus audio was
+    // being thrown away.
+    gTargetFPS.store(avInfo.timing.fps > 0 ? avInfo.timing.fps : 60.0, std::memory_order_relaxed);
     gAspectRatio.store(avInfo.geometry.aspect_ratio > 0 ? avInfo.geometry.aspect_ratio : 0.0,
                         std::memory_order_relaxed);
 
@@ -988,6 +1024,10 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
 
 - (nullable NSData *)saveRAM {
     return [self memoryRegion:RETRO_MEMORY_SAVE_RAM];
+}
+
+- (double)targetFPS {
+    return gTargetFPS.load(std::memory_order_relaxed);
 }
 
 - (size_t)saveRAMSize {

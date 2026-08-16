@@ -193,6 +193,13 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 // thread driving runFrame.
 - (nullable NSData *)saveRAM;
 
+// The frame rate the core declares it wants to be run at (its
+// retro_system_av_info timing.fps), which is not the display's refresh
+// rate: NTSC systems ask for 59.94 and an Apple TV's display link can
+// run far above that. The draw loop must pace retro_run against this,
+// not against how often it happens to be asked to draw.
+- (double)targetFPS;
+
 // The current reported size of the core's save RAM, without copying it.
 // Cheap enough to poll every frame, which is what the re-seat below
 // needs: mGBA reports a placeholder 128KB region until it has worked

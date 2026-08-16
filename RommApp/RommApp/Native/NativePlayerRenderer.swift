@@ -187,6 +187,10 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     /// whichever way it resolves.
     var awaitingSaveRAM = false
     private var framesRun = 0
+    /// Wall-clock pacing for the core, so it advances at its own declared
+    /// frame rate rather than once per display refresh. See the draw loop.
+    private var runAccumulator: CFTimeInterval = 0
+    private var lastRunTimestamp: CFTimeInterval = 0
 
     /// The core's current save RAM. Only call while `paused`, the same
     /// contract as serializeState and for the same reason.
@@ -248,18 +252,46 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
                 let mask = held.reduce(into: UInt32(0)) { $0 |= (1 << $1) }
                 frontend.setButtonMask(mask, port: port)
             }
-            frontend.runFrame()
-            framesRun += 1
-            if let state = pendingState, framesRun > 60 {
+            // Run the core at the rate the core asked for, not once per
+            // draw. This used to be one retro_run per display refresh,
+            // which silently ran every game at whatever rate the display
+            // happened to tick: fine where that is 60 and the core wants
+            // 59.94, badly wrong on an Apple TV whose display link runs
+            // far higher. Instrumented 2026-08-16 on Dreamcast, where the
+            // core was producing 65,000 to 85,000 audio frames a second
+            // against 44,100 of realtime, roughly 1.5x too fast, with the
+            // surplus discarded, which is what made music play back
+            // sounding sped up.
+            let interval = 1.0 / max(frontend.targetFPS(), 1)
+            if lastRunTimestamp == 0 { lastRunTimestamp = now }
+            runAccumulator += now - lastRunTimestamp
+            lastRunTimestamp = now
+            // Capped so a stall cannot bank a debt the core then tries to
+            // repay all at once, which would stutter and flood the audio
+            // buffer; anything beyond a couple of frames behind is time
+            // that is simply gone.
+            if runAccumulator > interval * 4 { runAccumulator = interval }
+            var ranThisDraw = 0
+            while runAccumulator >= interval && ranThisDraw < 2 {
+                frontend.runFrame()
+                framesRun += 1
+                ranThisDraw += 1
+                audio.statCoreRuns += 1
+                runAccumulator -= interval
+            }
+            // A draw that ran no emulated frame still presents the last
+            // one below, so the picture holds steady while the core is
+            // simply not due yet.
+            if ranThisDraw > 0, let state = pendingState, framesRun > 60 {
                 pendingState = nil
                 frontend.unserializeState(state)
             }
 
-            if let audioData = frontend.drainAudio() {
+            if ranThisDraw > 0, let audioData = frontend.drainAudio() {
                 audio.enqueue(audioData)
             }
 
-            if let frame = frontend.latestFrame() {
+            if ranThisDraw > 0, let frame = frontend.latestFrame() {
                 updateTexture(from: frame)
             }
         }

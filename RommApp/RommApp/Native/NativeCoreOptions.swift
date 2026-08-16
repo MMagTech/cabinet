@@ -342,6 +342,18 @@ enum NativeCoreOptionsStore {
                 "pcsx_rearmed_memcard1": "libretro",
                 "pcsx_rearmed_memcard2": "none",
             ]
+        case .dreamcast:
+            // Flycast's threaded rendering runs emulation on its own
+            // thread rather than one frame per retro_run, so nothing
+            // Cabinet does paces it. Instrumented on device 2026-08-16:
+            // roughly 60% of every second of audio the core produced was
+            // being discarded, the ring staying permanently overfull,
+            // which is why music played back sounding sped up. Running
+            // the core synchronously ties audio production to this
+            // frontend's own frame cadence. Under test against the same
+            // instrumentation; if the drops do not fall to zero this is
+            // not the cause and should come back out.
+            return ["reicast_threaded_rendering": "disabled"]
         case .segaCD:
             // The CD console's internal backup RAM defaults to "per
             // bios", one shared .brm per region across every Sega CD
