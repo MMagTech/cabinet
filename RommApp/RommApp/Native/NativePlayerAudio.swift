@@ -31,10 +31,10 @@ final class NativePlayerAudio {
     /// property, so `&self.lock` can silently lock a copy.
     private let lock = UnsafeMutablePointer<os_unfair_lock>.allocate(capacity: 1)
     private var started = false
-    /// The last frame handed to CoreAudio, repeated through an underrun
-    /// rather than slamming the output to zero. A core running below
-    /// realtime still sounds wrong, but it drags instead of clicking, and
-    /// the click is the part that reads as broken.
+    /// The last frame handed to CoreAudio, faded to silence across an
+    /// underrun rather than either repeated or cut to zero. Repeating it
+    /// drones and smears music (Crazy Taxi, on device, 2026-08-16) and
+    /// cutting straight to zero clicks; a short ramp does neither.
     private var lastLeft: Float32 = 0
     private var lastRight: Float32 = 0
 
@@ -88,10 +88,18 @@ final class NativePlayerAudio {
             os_unfair_lock_unlock(self.lock)
 
             if framesAvailable < framesNeeded {
+                // Ramp the last frame down to silence over about a
+                // millisecond, then stay there for the rest of this
+                // callback.
+                let rampFrames = min(framesNeeded - framesAvailable, 48)
                 for frame in framesAvailable..<framesNeeded {
-                    left?[frame] = self.lastLeft
-                    right?[frame] = self.lastRight
+                    let step = frame - framesAvailable
+                    let gain = step < rampFrames ? 1 - Float32(step) / Float32(rampFrames) : 0
+                    left?[frame] = self.lastLeft * gain
+                    right?[frame] = self.lastRight * gain
                 }
+                self.lastLeft = 0
+                self.lastRight = 0
             }
             return noErr
         }
@@ -129,9 +137,14 @@ final class NativePlayerAudio {
             }
             if count > capacity {
                 // Overrun: keep the newest second, drop what fell behind.
-                let dropped = count - capacity
+                // Rounded up to a whole stereo frame, because the ring is
+                // interleaved and dropping an odd number of samples
+                // shifts every later read by one, swapping left and right
+                // for the rest of the session.
+                var dropped = count - capacity
+                if dropped % 2 != 0 { dropped += 1 }
                 readIndex = (readIndex + dropped) % capacity
-                count = capacity
+                count -= dropped
             }
             os_unfair_lock_unlock(lock)
         }
