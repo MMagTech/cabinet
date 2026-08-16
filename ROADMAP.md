@@ -48,21 +48,25 @@ worth having in the open.
   The idea is a proper full-screen moment for genuinely large
   downloads, small ones would keep today's quick inline behavior. Not
   settled whether to build it at all, let alone how.
-- **Skip re-pairing on a new device using iCloud.** If Cabinet is
-  already paired to your RomM server on one of your own devices, a
-  brand-new Apple TV or iPhone signed into the same Apple ID could
-  offer to pick up that same pairing automatically instead of typing
-  the address and approving in a browser again, using iCloud's own
-  Keychain sync, nothing server-side. Scoped carefully so it can never
-  interfere with tvOS's multi-profile switcher: it only ever offers
-  anything on a brand-new device with no profiles yet, and never
-  touches an existing setup. Now designed rather than just discussed,
-  including what happens when a stored login has been revoked (it
-  quietly becomes a pre-filled address field, never an error), and it
-  carries both your public and local addresses so a seeded Apple TV
-  still prefers your local network at home. Written up in
-  [docs/scope-icloud-pairing-continuity.md](docs/scope-icloud-pairing-continuity.md).
-  Not built.
+- **Skipping setup on a new device: tried, and not happening.** The idea
+  was that a brand-new Apple TV signed into the same Apple ID could pick
+  up the pairing your iPhone already has, via iCloud Keychain, so you
+  never type a server address with a remote. It was designed, built and
+  taken to real hardware, where it did nothing: Apple TV does not
+  participate in iCloud Keychain at all, so the seed can never arrive
+  there. The iPhone-to-iPhone half did work, and was dropped anyway,
+  because it meant quietly copying a token for your private server into
+  iCloud in exchange for skipping one text field.
+
+  Two alternatives were checked and rejected too. Approving the pairing
+  inside Cabinet on your phone, the way Discord signs you in on a TV,
+  needs a RomM permission scope that would also let Cabinet modify your
+  account and mint API tokens. A direct phone-to-TV handoff over your
+  own network is the only remaining route that removes typing the
+  address, and it only works when both are at home. The reasoning is
+  written up in
+  [docs/scope-icloud-pairing-continuity.md](docs/scope-icloud-pairing-continuity.md)
+  so it doesn't get proposed again from scratch.
 
 ## Known gaps
 

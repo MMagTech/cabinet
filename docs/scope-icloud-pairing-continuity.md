@@ -1,5 +1,75 @@
 # iCloud pairing continuity
 
+## Not built. Designed, built, tested on hardware, and removed on 2026-08-15.
+
+This document is a record of an approach that was tried and rejected, kept
+so nobody spends another evening on it. Cabinet ships none of it.
+
+Two separate reasons, and both are needed to understand why the whole idea
+went rather than half of it.
+
+**The Apple TV half is impossible.** Detail below. That removed the only
+case anybody cared about, since setting up a phone was never hard.
+
+**The iPhone half worked, and was removed anyway, on Marcus's call.** It
+was real: built, and verified skipping setup on his own device. What was
+left of its value once tvOS was gone is a new iPhone every few years, plus
+reinstalls, where the token already survives app deletion so the seed only
+saved typing an address on a device with a keyboard.
+
+Against that, it silently copied a bearer token for somebody's private,
+self hosted server into iCloud, with no disclosure and no way to opt out.
+Marcus's own read, and it is the right one: the self hosting community is
+exactly the audience most likely to have turned iCloud Keychain off
+deliberately, and least likely to welcome that. Not defensible for what
+was left of the benefit.
+
+Note that this does not block the parked settings backup idea further
+down. That would use iCloud's key value store rather than the Keychain,
+because settings are not secrets, so it never needed this mechanism.
+
+## Why the Apple TV half cannot work
+
+Built and taken to real hardware on 2026-08-15, where it did nothing. The
+cause is a platform limitation, not a bug in any of the below.
+
+**tvOS does not participate in iCloud Keychain.** Apple's own
+documentation for `kSecAttrSynchronizable` says an app can set the key on
+tvOS and that tvOS ignores it: items stored on tvOS never leave that
+device, and items stored on other devices never arrive on a tvOS one. So
+an Apple TV can never receive a seed, however long it waits.
+
+That removes the entire reason this feature was proposed. Setting up an
+Apple TV is the painful case; setting up a phone was never hard.
+
+Two other explanations were ruled out first, on device, and are worth
+recording so nobody re-treads them:
+
+- **Not a timing problem.** Sync propagation was the suspected cause, and
+  it is not, at any duration.
+- **Not an entitlement problem**, though there genuinely was a second bug
+  underneath: with no `keychain-access-groups` entitlement, each app falls
+  back to its own bundle identifier as its access group, so the iOS and
+  tvOS apps could not have seen each other's items even on a platform that
+  does sync. That is fixed, both targets now share
+  `ZMUB88RZ5D.com.mmagtech.Cabinet.continuity`, and it was necessary but
+  nowhere near sufficient.
+
+The rest of this document is kept because its reasoning is sound and most
+of it survives: the seed format, the write rules, the validation, the
+address handling, and the phase two thinking are all unaffected. Read
+every mention of Apple TV below as describing something that was designed
+and then found to be impossible.
+
+**The alternatives, all evaluated 2026-08-15 and all rejected**, are in
+the section below. Do not restart this without reading it: in-app approval
+of a pairing is possible but needs the `me.write` scope, which also grants
+account modification and API token minting, and the LAN handoff is the
+only remaining route that removes typing an address, at the cost of real
+networking code that only helps at home.
+
+---
+
 Design only. Nothing here is built, and nothing here has touched a device.
 
 A brand new device signed into the same Apple ID as a device that already
@@ -518,8 +588,76 @@ half has a household problem it does not share, and there is no confirmed
 need yet. Note this is the second time iCloud settings sync has been
 parked for want of a real need.
 
+## The three routes to an easier Apple TV setup, and why none were taken
+
+Worked through on 2026-08-15 after the seed failed on hardware. Recorded
+in full because each one looks attractive from the outside and somebody
+will propose it again.
+
+**1. The iCloud seed.** Impossible on tvOS. See the top of this document.
+
+**2. Approving the pairing inside Cabinet on your phone**, the pattern
+Discord and Spotify use for signing in on a TV. Server mediated, not
+network based: the TV asks RomM for a code, your phone tells RomM to
+approve that code, the TV polls and gets its own token. Better than the
+seed in one real way, since each device ends up with its own token
+instead of a copy of somebody else's.
+
+Rejected on cost. It needs the `me.write` scope, and that scope is much
+broader than approving a device. Enumerated from the live server:
+
+    POST   /api/auth/device/approve
+    POST   /api/auth/device/deny
+    POST   /api/client-tokens
+    DELETE /api/client-tokens/{token_id}
+    POST   /api/client-tokens/{token_id}/pair
+    PUT    /api/client-tokens/{token_id}/regenerate
+    PUT    /api/users/{id}
+    POST   /api/users/{id}/ra/refresh
+
+So the price of approving a TV in the app is that Cabinet's token could
+also mint fresh long lived API tokens for the account and modify the user
+record. Today it reads games and writes saves. That is a real escalation
+for a game launcher, and the same attack surface reasoning that killed the
+RomM side local address request.
+
+Note also what it does *not* buy: the Apple TV still has to be told the
+server address before it can ask for a code at all. Discord's TV app knows
+where its server is; Cabinet cannot. So this replaces the browser trip
+with an in-app tap and leaves the worst step in place.
+
+**Revisit only if RomM exposes a narrower scope**, something that can
+approve a device without touching the profile or minting tokens. That is a
+reasonable thing to ask upstream precisely because it requests less
+privilege, which is a different shape from the local address request that
+was turned down.
+
+**3. A LAN handoff.** The phone finds the Apple TV on the network and
+sends it the address and a token directly. The only remaining route that
+removes typing an address, which is the actual worst part. Needs no new
+scope: the phone hands over its own token, and the objection that two
+devices then share one credential applies equally to the seed, which
+copies the token too.
+
+Not taken for now. It is the most code of the three, a listener and a
+discovery mechanism, it only works when both devices are at home, and
+whether tvOS shows a local network permission prompt the way iOS does was
+never established. Nothing needs Apple's approval for it though: no
+entitlement, only Info.plist declarations, and a typed short code avoids
+camera permission entirely.
+
 ## Status
 
-Phase one, the pairing seed, is fully designed. Phase two is parked.
-All six original open questions are answered. Nothing here is built and nothing
+**Abandoned, not deferred, and nothing of it ships.** The Apple TV half is
+impossible and the iPhone half was not worth what it cost.
+
+The six original design questions were all answered correctly, and their
+reasoning holds if this ever comes back by some other mechanism. Phase
+two, settings backup, is parked independently and is not affected: it
+would use iCloud's key value store, since settings are not secrets.
+
+An Apple TV keeps the setup flow it already had. That is less bad than it
+sounds: tvOS offers your iPhone as a keyboard for a focused text field on
+its own, which takes most of the sting out of the address step, and the
+QR approval already avoids typing a password anywhere. Nothing here is built and nothing
 has touched a device, so the test plan under Q5 is the next real step.
