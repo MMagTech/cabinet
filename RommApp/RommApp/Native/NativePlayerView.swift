@@ -178,11 +178,11 @@ struct NativePlayerView: View {
         }
 
         if let saves = try? await session.saves(romId: rom.id) {
-            // The clock region travels as its own row; it is never a card
-            // and never an adoption candidate, so it stays out of every
-            // decision below and gets its own pass at the end.
+            // The clock and cart regions travel as their own rows; they
+            // are never cards and never adoption candidates, so they stay
+            // out of every decision below.
             let sorted = saves
-                .filter { !$0.fileName.hasSuffix(".rtc") }
+                .filter { MemoryCardStore.region(ofFileName: $0.fileName) == .saveRAM }
                 .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
             let own = sorted.first { $0.emulator == core.emulatorTag }
             // A game with no Cabinet card worth keeping adopts the newest
@@ -382,25 +382,38 @@ struct NativePlayerView: View {
         default: return
         }
         let dir = NativeLauncher.coreSaveDirectory(romId: rom.id)
-        guard let entries = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil),
-              // The internal backup RAM only: the optional RAM cartridge
-              // writes "<name>_128Kbit_cart.brm" style siblings, a
-              // region Cabinet deliberately leaves disabled.
-              let file = entries.first(where: {
-                  $0.lastPathComponent.hasSuffix(suffix) && !$0.lastPathComponent.hasSuffix("_cart.brm")
-              }),
-              let data = try? Data(contentsOf: file)
+        guard let entries = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
         else { return }
-        let previous = MemoryCardStore.shared.localCard(romId: rom.id)
-        guard data != previous else { return }
-        guard MemoryCardStore.cardHasSaves(data, platform: platform) || previous != nil else { return }
-        MemoryCardStore.shared.storeSnapshot(romId: rom.id, data: data)
-        DiagnosticsLog.record(
-            context: "In-game save",
-            message: "Captured \(file.lastPathComponent), \(data.count) bytes, after core shutdown.",
-            romVersion: session.serverVersion
-        )
-        Task { await uploadMemoryCard(data) }
+
+        func capture(_ file: URL, region: MemoryCardStore.Region) {
+            guard let data = try? Data(contentsOf: file) else { return }
+            let previous = MemoryCardStore.shared.localCard(romId: rom.id, region: region)
+            guard data != previous else { return }
+            guard MemoryCardStore.cardHasSaves(data, platform: platform) || previous != nil else { return }
+            MemoryCardStore.shared.storeSnapshot(romId: rom.id, data: data, region: region)
+            DiagnosticsLog.record(
+                context: "In-game save",
+                message: "Captured \(file.lastPathComponent), \(data.count) bytes, after core shutdown.",
+                romVersion: session.serverVersion
+            )
+            Task { await uploadMemoryCard(data, region: region) }
+        }
+
+        // The internal backup RAM (or NGP's flash); the cart file is its
+        // own region below, never this one.
+        if let file = entries.first(where: {
+            $0.lastPathComponent.hasSuffix(suffix) && !$0.lastPathComponent.hasSuffix("cart.brm")
+        }) {
+            capture(file, region: .saveRAM)
+        }
+
+        // Sega CD's external RAM cartridge, the location games prefer
+        // when one is present (Lunar routed its save here on the first
+        // real device test). Same store, same upload, its own row.
+        if platform == .segaCD,
+           let cart = entries.first(where: { $0.lastPathComponent.hasSuffix("cart.brm") }) {
+            capture(cart, region: .cart)
+        }
     }
 
     private func uploadMemoryCard(_ data: Data, region: MemoryCardStore.Region = .saveRAM) async {
@@ -420,7 +433,7 @@ struct NativePlayerView: View {
             // it back down.
             let saves = (try? await session.saves(romId: rom.id)) ?? []
             let stamp = saves
-                .filter { $0.emulator == core.emulatorTag && $0.fileName.hasSuffix(".rtc") == (region == .rtc) }
+                .filter { $0.emulator == core.emulatorTag && MemoryCardStore.region(ofFileName: $0.fileName) == region }
                 .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
                 .first?.updatedAt
             MemoryCardStore.shared.markUploaded(romId: rom.id, serverStamp: stamp, region: region)

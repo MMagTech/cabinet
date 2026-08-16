@@ -20,10 +20,28 @@ final class MemoryCardStore {
 
     /// Which persisted region a call is about. `.saveRAM` is the default
     /// everywhere so every caller written when the card was the only
-    /// region reads unchanged.
+    /// region reads unchanged. `.cart` is Sega CD's external RAM
+    /// cartridge, a second real save location games prefer over the
+    /// internal backup RAM when one is present (Lunar routed its save
+    /// there on the first real device test); without its own synced
+    /// region those saves were recoverable on the one device and
+    /// invisible to RomM, which defeats the playing-between-devices
+    /// point of the whole sync.
     enum Region: String {
         case saveRAM = "srm"
         case rtc
+        case cart
+    }
+
+    /// Which region a server row belongs to, judged by the filename this
+    /// app itself uploads ("<name> (Cabinet).srm/.rtc/.cart"). Foreign
+    /// rows (the web player's, another emulator's) land on `.saveRAM`,
+    /// which is right: they are only ever considered as card adoption
+    /// candidates.
+    static func region(ofFileName name: String) -> Region {
+        if name.hasSuffix(".rtc") { return .rtc }
+        if name.hasSuffix(".cart") { return .cart }
+        return .saveRAM
     }
 
     private struct Meta: Codable {
@@ -117,6 +135,14 @@ final class MemoryCardStore {
         persistMeta()
     }
 
+    /// Whether any region of this game's saves still owes an upload, for
+    /// the "waiting to upload" captions: a pending cart or clock file
+    /// deserves the same visibility the card always had.
+    func anyPendingUpload(romId: Int) -> Bool {
+        pendingUpload(romId: romId) || pendingUpload(romId: romId, region: .rtc)
+            || pendingUpload(romId: romId, region: .cart)
+    }
+
     /// Whether a card image holds any actual saves, as opposed to a
     /// freshly formatted or factory-erased region. Lives here, not in a
     /// player view, because keep-time prefetch and both players' launch
@@ -147,9 +173,15 @@ final class MemoryCardStore {
             // Same formatted-header idea as Saturn, other end of the
             // file: Genesis Plus GX puts its 64-byte format block at the
             // END of the .brm (brm_format copied to the last 0x40 bytes,
-            // per the vendored bram_load/bram_save).
-            guard card.count > 64 else { return false }
-            return card.dropLast(64).contains { $0 != 0x00 && $0 != 0xFF }
+            // per the vendored bram_load/bram_save). The first 16 bytes
+            // are skipped too: freshly formatted backup RAM carries
+            // allocation marks there (a repeating ff fa 00 02 pattern,
+            // seen on device in a session that never saved), and counting
+            // those as data uploaded formatted-empty images. The same
+            // layout covers the external RAM cartridge, which is the
+            // identical format at a bigger size.
+            guard card.count > 80 else { return false }
+            return card.dropFirst(16).dropLast(64).contains { $0 != 0x00 && $0 != 0xFF }
         default:
             return card.contains { $0 != 0x00 && $0 != 0xFF }
         }
@@ -185,7 +217,7 @@ final class MemoryCardStore {
         let local = localCard(romId: rom.id)
         let localUseful = local.map { Self.cardHasSaves($0, platform: platform) } ?? false
         let rows = saves
-            .filter { !$0.fileName.hasSuffix(".rtc") }
+            .filter { Self.region(ofFileName: $0.fileName) == .saveRAM }
             .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
         let own = rows.first { $0.emulator == core.emulatorTag }
         let chosen = own ?? (localUseful ? nil : rows.first)
@@ -195,17 +227,19 @@ final class MemoryCardStore {
             storeDownloaded(romId: rom.id, data: bytes, serverStamp: chosen.updatedAt)
         }
 
-        // The clock region, own row only: a clock from another
-        // emulator's save means nothing to this core's format.
-        if !pendingUpload(romId: rom.id, region: .rtc),
-           let ownRTC = saves
-               .filter({ $0.emulator == core.emulatorTag && $0.fileName.hasSuffix(".rtc") })
-               .sorted(by: { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") })
-               .first,
-           ownRTC.updatedAt != serverStamp(romId: rom.id, region: .rtc)
-               || localCard(romId: rom.id, region: .rtc) == nil,
-           let bytes = try? await session.saveContent(ownRTC), !bytes.isEmpty {
-            storeDownloaded(romId: rom.id, data: bytes, serverStamp: ownRTC.updatedAt, region: .rtc)
+        // The clock and cart regions, own rows only: these formats mean
+        // nothing coming from another emulator's uploads.
+        for region in [Region.rtc, Region.cart] {
+            guard !pendingUpload(romId: rom.id, region: region),
+                  let own = saves
+                      .filter({ $0.emulator == core.emulatorTag && Self.region(ofFileName: $0.fileName) == region })
+                      .sorted(by: { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") })
+                      .first,
+                  own.updatedAt != serverStamp(romId: rom.id, region: region)
+                      || localCard(romId: rom.id, region: region) == nil,
+                  let bytes = try? await session.saveContent(own), !bytes.isEmpty
+            else { continue }
+            storeDownloaded(romId: rom.id, data: bytes, serverStamp: own.updatedAt, region: region)
         }
     }
 }

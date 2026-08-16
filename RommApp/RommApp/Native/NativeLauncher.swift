@@ -200,37 +200,49 @@ enum NativeLauncher {
         }
         let store = MemoryCardStore.shared
         let stem = loadURL.deletingPathExtension().lastPathComponent
-        let target = saveDir.appendingPathComponent("\(stem).\(suffix)")
+        // One server list for however many regions restore below; nil
+        // means unreachable and only local copies play.
+        let serverRows = try? await session.saves(romId: rom.id)
 
-        func place(_ data: Data) {
-            try? data.write(to: target, options: .atomic)
-        }
-
-        let local = store.localCard(romId: rom.id)
-        if store.pendingUpload(romId: rom.id), let local {
-            place(local)
-            return
-        }
-
-        if let saves = try? await session.saves(romId: rom.id) {
-            let own = saves
-                .filter { $0.emulator == platform.core.emulatorTag && !$0.fileName.hasSuffix(".rtc") }
-                .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
-                .first
-            if let own, own.updatedAt != store.serverStamp(romId: rom.id) || local == nil,
-               let bytes = try? await session.saveContent(own) {
-                store.storeDownloaded(romId: rom.id, data: bytes, serverStamp: own.updatedAt)
-                place(bytes)
+        // The same decision every region makes: a pending local copy wins
+        // outright, else the newest own server row when its stamp moved
+        // or nothing useful is local, else whatever is on this device.
+        // Nothing anywhere leaves whatever file a previous session's
+        // flush left in the save directory, which is already this game's
+        // newest save; the core reads it exactly as it wrote it.
+        func restore(region: MemoryCardStore.Region, to target: URL) async {
+            let local = store.localCard(romId: rom.id, region: region)
+            if store.pendingUpload(romId: rom.id, region: region), let local {
+                try? local.write(to: target, options: .atomic)
                 return
+            }
+            if let own = serverRows?
+                .filter({ $0.emulator == platform.core.emulatorTag && MemoryCardStore.region(ofFileName: $0.fileName) == region })
+                .sorted(by: { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") })
+                .first,
+               own.updatedAt != store.serverStamp(romId: rom.id, region: region) || local == nil,
+               let bytes = try? await session.saveContent(own) {
+                store.storeDownloaded(romId: rom.id, data: bytes, serverStamp: own.updatedAt, region: region)
+                try? bytes.write(to: target, options: .atomic)
+                return
+            }
+            if let local {
+                try? local.write(to: target, options: .atomic)
             }
         }
 
-        if let local {
-            place(local)
+        await restore(region: .saveRAM, to: saveDir.appendingPathComponent("\(stem).\(suffix)"))
+
+        // Sega CD's second save location, the external RAM cartridge,
+        // which games prefer over the internal RAM when present (Lunar,
+        // first device test). Its filename is fixed by the two core
+        // options Cabinet forces: cart_bram stays on its "per cart"
+        // default (per-game separation already comes from each game's
+        // own save directory) and cart_size is "4meg", which makes the
+        // core look for exactly this name.
+        if platform == .segaCD {
+            await restore(region: .cart, to: saveDir.appendingPathComponent("4Mbit_cart.brm"))
         }
-        // Nothing local and nothing on the server leaves whatever file a
-        // previous session's flush left here, which is already this
-        // game's newest save; the core reads it exactly as it wrote it.
     }
 
     /// Dreamcast only, and run before the core boots rather than after
