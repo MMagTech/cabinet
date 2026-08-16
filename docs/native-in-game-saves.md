@@ -194,7 +194,27 @@ Game Gear, 32X, and the Game Boy clock file (no RTC-capable game in the
 test library). Worst case for an unexercised platform is what it already
 was, the save not surviving, so verification continues opportunistically.
 
-Still not built: stage 2, the file-writing cores (Sega CD's .brm backup
-RAM and Neo Geo Pocket's .flash), which flush only inside
-retro_unload_game and so need a quit-time unload this frontend does not do
-yet. tvOS still syncs PS1 and N64 only; its pass follows separately.
+Stage 2 is built on iOS as of 2026-08-16, modeled on how RetroArch never
+loses these saves: cores now get a persistent per-game save directory
+(CoreSaves/<rom id> under Application Support; Caches on tvOS) instead of
+the per-launch temp directory, and the player shuts the core down
+properly at quit, which is the one moment the file-writing cores flush
+(Sega CD's bram_save, Neo Geo Pocket's flash_commit, both only inside
+retro_unload_game). Restore places the file at the name the core will
+look for, the loaded content's basename, before boot; capture reads it
+back after the quit-time unload and syncs it through the same store as
+everything else. Sega CD's backup RAM is forced per game rather than the
+core's shared per-BIOS default. A side effect of the same two changes:
+FBNeo's NVRAM and high scores now flush somewhere that survives, where
+they previously flushed at the next launch into the prior session's
+already-deleted directory.
+
+The honest limitation, shared with RetroArch: Sega CD and Neo Geo Pocket
+only flush at a clean quit, so a session ended by iOS killing the
+backgrounded app loses in-game saves made since launch on those two
+platforms, and on arcade. Stage 2 is not yet verified on hardware: one
+Sega CD in-game save and one Neo Geo Pocket save need a
+save-quit-relaunch round trip on a real device.
+
+tvOS still syncs PS1 and N64 only; its pass follows once the feature is
+finished and verified on iOS, per the finish-iOS-first rule.

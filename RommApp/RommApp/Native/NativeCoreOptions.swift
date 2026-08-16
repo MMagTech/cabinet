@@ -342,6 +342,15 @@ enum NativeCoreOptionsStore {
                 "pcsx_rearmed_memcard1": "libretro",
                 "pcsx_rearmed_memcard2": "none",
             ]
+        case .segaCD:
+            // The CD console's internal backup RAM defaults to "per
+            // bios", one shared .brm per region across every Sega CD
+            // game, real hardware's own behavior. Forced per game
+            // instead (decided with Marcus 2026-08-16): Cabinet's save
+            // sync is per game on RomM's per-rom save model, a shared
+            // file would have to live under some arbitrary game, and the
+            // tiny 8KB BRAM can no longer fill up across the library.
+            return ["genesis_plus_gx_system_bram": "per game"]
         case .saturn:
             // "libretro" hands the console's internal backup RAM to this
             // frontend through RETRO_MEMORY_SAVE_RAM, which is where the

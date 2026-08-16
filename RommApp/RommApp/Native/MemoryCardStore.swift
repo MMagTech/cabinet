@@ -143,6 +143,13 @@ final class MemoryCardStore {
         case .saturn:
             guard card.count > 64 else { return false }
             return card.dropFirst(64).contains { $0 != 0x00 && $0 != 0xFF }
+        case .segaCD:
+            // Same formatted-header idea as Saturn, other end of the
+            // file: Genesis Plus GX puts its 64-byte format block at the
+            // END of the .brm (brm_format copied to the last 0x40 bytes,
+            // per the vendored bram_load/bram_save).
+            guard card.count > 64 else { return false }
+            return card.dropLast(64).contains { $0 != 0x00 && $0 != 0xFF }
         default:
             return card.contains { $0 != 0x00 && $0 != 0xFF }
         }
@@ -166,9 +173,11 @@ final class MemoryCardStore {
     @MainActor
     func prefetchFromServer(rom: Rom, platform: NativePlatform, session: Session) async {
         // Dreamcast rides along: its VMU file is restored from this same
-        // store. The platforms left out are the stage-2 file-writing
-        // cores and the two with nothing to save; see savesOverSaveRAM.
-        guard platform.savesOverSaveRAM || platform == .dreamcast else { return }
+        // store. Dreamcast, Sega CD and Neo Geo Pocket all restore from
+        // this same store through their file-placing launch paths. The
+        // only platforms left out are the two with nothing to save,
+        // arcade and Atari 7800; see savesOverSaveRAM.
+        guard platform != .arcade, platform != .atari7800 else { return }
         let core = platform.core
         guard !pendingUpload(romId: rom.id) else { return }
         guard let saves = try? await session.saves(romId: rom.id) else { return }

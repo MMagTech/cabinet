@@ -163,8 +163,10 @@ enum NativePlatform: String, CaseIterable {
     ///   over as a file, `captureVMUSave()`'s own separate path.
     /// - segaCD, ngpc: their cores write real files (Sega CD's .brm
     ///   backup RAM, Neo Geo Pocket's .flash) instead of answering
-    ///   SAVE_RAM, and flush them only inside retro_unload_game; issue
-    ///   #5's second stage covers them.
+    ///   SAVE_RAM, flushed only inside retro_unload_game. They sync
+    ///   through their own file path: NativeLauncher places the file
+    ///   before boot, the player captures it after the quit-time
+    ///   unload.
     var savesOverSaveRAM: Bool {
         switch self {
         case .arcade, .atari7800, .dreamcast, .segaCD, .ngpc:

@@ -87,7 +87,19 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 // romPath: full path to the game file (zip for arcade, chd for CD systems).
 // systemDirectory: where the core looks up BIOS files by name, the same
 // convention as RetroArch's system directory.
+// saveDirectory: where a core that manages its own save files writes them
+// (RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY): Sega CD's .brm, Neo Geo
+// Pocket's .flash, FBNeo's NVRAM and high scores. Must be a directory
+// that outlives the session; RetroArch's is persistent, and pointing
+// this at the per-launch temp directory is how those saves used to
+// vanish (issue #5 stage 2).
 // Returns nil on success, or an error description on failure.
+- (nullable NSString *)loadGame:(NSString *)romPath
+                systemDirectory:(NSString *)systemDirectory
+                  saveDirectory:(NSString *)saveDirectory;
+
+// The old signature, save directory defaulting to the system directory,
+// exactly what every call site meant before the two were split.
 - (nullable NSString *)loadGame:(NSString *)romPath systemDirectory:(NSString *)systemDirectory;
 
 // The directory passed to the last -loadGame:systemDirectory: call. Some
@@ -97,6 +109,25 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 // NativeLauncher itself only ever threads it into loadGame, nothing kept
 // it around for later.
 - (nullable NSString *)systemDirectory;
+
+// The save directory from the last load, for the player's quit-time scan
+// of the files a core flushed there.
+- (nullable NSString *)saveDirectory;
+
+// Shuts the core down the way the next loadGame's own teardown would,
+// unload plus the full deinit (minus FBNeo, whose BurnLibExit cannot
+// survive a second deinit in one process; see loadGame's comment). Call
+// at quit, after the last snapshot of core memory has been taken:
+// retro_unload_game is the one moment file-writing cores flush their
+// saves (Sega CD's bram_save, Neo Geo Pocket's flash_commit, FBNeo's
+// NVRAM, all confirmed in the vendored sources), and this frontend used
+// to only unload lazily at the NEXT launch, after the save directory
+// those flushes wrote into had already been deleted. RetroArch's content
+// close does exactly this, in this order (runloop.c: SRAM save, then
+// core_unload_game, then deinit). Safe against a still-ticking draw
+// loop: runFrame and every snapshot method already guard on the
+// game-loaded flag this clears.
+- (void)unloadGame;
 
 // Runs exactly one emulated frame. Call this from a display-link-driven
 // loop; each call may produce a new video frame and some audio samples.

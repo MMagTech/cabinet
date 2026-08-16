@@ -363,6 +363,46 @@ struct NativePlayerView: View {
         Task { await uploadMemoryCard(data) }
     }
 
+    /// Sega CD and Neo Geo Pocket, after `unloadGame` has made the core
+    /// flush: reads the save file the core just wrote into its
+    /// persistent save directory and syncs it through the same store and
+    /// upload the memory-API platforms use. Quit is the only capture
+    /// point these two have; a session ended by iOS killing the app
+    /// loses its in-game saves since launch, the same accepted
+    /// limitation FBNeo's NVRAM always had, and the same one RetroArch
+    /// lives with for these cores. Compared against the store's own copy
+    /// rather than `lastCardData`, which the launch sync never sets for
+    /// these platforms; the same junk guard applies so a session that
+    /// never saved uploads nothing.
+    private func captureCoreFileSaves() {
+        let suffix: String
+        switch platform {
+        case .segaCD: suffix = ".brm"
+        case .ngpc: suffix = ".flash"
+        default: return
+        }
+        let dir = NativeLauncher.coreSaveDirectory(romId: rom.id)
+        guard let entries = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil),
+              // The internal backup RAM only: the optional RAM cartridge
+              // writes "<name>_128Kbit_cart.brm" style siblings, a
+              // region Cabinet deliberately leaves disabled.
+              let file = entries.first(where: {
+                  $0.lastPathComponent.hasSuffix(suffix) && !$0.lastPathComponent.hasSuffix("_cart.brm")
+              }),
+              let data = try? Data(contentsOf: file)
+        else { return }
+        let previous = MemoryCardStore.shared.localCard(romId: rom.id)
+        guard data != previous else { return }
+        guard MemoryCardStore.cardHasSaves(data, platform: platform) || previous != nil else { return }
+        MemoryCardStore.shared.storeSnapshot(romId: rom.id, data: data)
+        DiagnosticsLog.record(
+            context: "In-game save",
+            message: "Captured \(file.lastPathComponent), \(data.count) bytes, after core shutdown.",
+            romVersion: session.serverVersion
+        )
+        Task { await uploadMemoryCard(data) }
+    }
+
     private func uploadMemoryCard(_ data: Data, region: MemoryCardStore.Region = .saveRAM) async {
         do {
             // The Cabinet marker keeps this row's filename distinct from
@@ -517,6 +557,20 @@ struct NativePlayerView: View {
             if let startedAt {
                 session.reportPlaySessionEnded(romId: rom.id, start: startedAt, end: Date())
             }
+            // The core gets a real shutdown at quit, the way RetroArch
+            // closes content, instead of lingering loaded until the next
+            // launch's lazy teardown: retro_unload_game is the one moment
+            // file-writing cores flush their saves (Sega CD's bram_save,
+            // Neo Geo Pocket's flash_commit, FBNeo's NVRAM and high
+            // scores), and the lazy unload used to fire after the
+            // directory those flushes wrote into was already deleted.
+            // Runs after the pause capture above has already snapshotted
+            // memory-API save RAM, mirroring RetroArch's own close order
+            // (SRAM save, then core_unload_game). Safe against the draw
+            // loop: runFrame and the snapshot methods all guard on the
+            // loaded flag this clears.
+            LibretroFrontend.shared.unloadGame()
+            captureCoreFileSaves()
             NativeSessionMarker.recordCleanExit()
             // An un-kept game's downloaded files have no life after the
             // session; a kept game's live elsewhere and survive this.

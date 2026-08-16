@@ -654,11 +654,17 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
 }
 
 - (nullable NSString *)loadGame:(NSString *)romPath systemDirectory:(NSString *)systemDirectory {
+    return [self loadGame:romPath systemDirectory:systemDirectory saveDirectory:systemDirectory];
+}
+
+- (nullable NSString *)loadGame:(NSString *)romPath
+                systemDirectory:(NSString *)systemDirectory
+                  saveDirectory:(NSString *)saveDirectory {
     if (!gCore) {
         gCore = coreAPI(gCoreID);
     }
     gSystemDirectory = systemDirectory.fileSystemRepresentation;
-    gSaveDirectory = systemDirectory.fileSystemRepresentation;
+    gSaveDirectory = saveDirectory.fileSystemRepresentation;
 
     // A second game on the same already-active core skipped all of this
     // entirely: `activateCore:` only tears a core down when switching to
@@ -858,6 +864,27 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
 
 - (nullable NSString *)systemDirectory {
     return gSystemDirectory.empty() ? nil : [NSString stringWithUTF8String:gSystemDirectory.c_str()];
+}
+
+- (nullable NSString *)saveDirectory {
+    return gSaveDirectory.empty() ? nil : [NSString stringWithUTF8String:gSaveDirectory.c_str()];
+}
+
+- (void)unloadGame {
+    if (!gCore || !gInitialized || !gGameLoaded) {
+        return;
+    }
+    gCore->unload_game();
+    gGameLoaded = false;
+    // Same FBNeo exception as loadGame's own teardown, same reason:
+    // its second retro_deinit in one process hits a bad free. Leaving
+    // gInitialized set is what makes the next loadGame skip the
+    // fresh-init path for FBNeo, exactly the unload-without-deinit
+    // sequence it always got.
+    if (gCoreID != LibretroCoreIDFBNeo) {
+        gCore->deinit();
+        gInitialized = false;
+    }
 }
 
 - (void)runFrame {

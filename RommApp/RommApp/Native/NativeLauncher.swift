@@ -79,8 +79,10 @@ enum NativeLauncher {
 
         #if os(iOS)
         if let keptDir = KeptGameStore.shared.launchDirectory(romId: rom.id) {
-            await restoreVMUSaveIfNeeded(rom: rom, session: session, platform: platform, workDir: keptDir)
-            return try activate(platform: platform, romURL: keptDir.appendingPathComponent(rom.fsName), workDir: keptDir)
+            return try await finishLaunch(
+                platform: platform, rom: rom, session: session,
+                romURL: keptDir.appendingPathComponent(rom.fsName), workDir: keptDir
+            )
         }
         #endif
 
@@ -105,8 +107,10 @@ enum NativeLauncher {
             .appendingPathComponent(String(rom.id), isDirectory: true)
         let cachedROMURL = cacheDir.appendingPathComponent(rom.fsName)
         if FileManager.default.fileExists(atPath: cachedROMURL.path) {
-            await restoreVMUSaveIfNeeded(rom: rom, session: session, platform: platform, workDir: cacheDir)
-            return try activate(platform: platform, romURL: cachedROMURL, workDir: cacheDir)
+            return try await finishLaunch(
+                platform: platform, rom: rom, session: session,
+                romURL: cachedROMURL, workDir: cacheDir
+            )
         }
         let workDir = cacheDir
         try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
@@ -131,9 +135,102 @@ enum NativeLauncher {
         }
 
         stageFirmware(from: downloadedFirmwareURLs, in: workDir, platform: platform)
-        await restoreVMUSaveIfNeeded(rom: rom, session: session, platform: platform, workDir: workDir)
 
-        return try activate(platform: platform, romURL: romURL, workDir: workDir)
+        return try await finishLaunch(
+            platform: platform, rom: rom, session: session, romURL: romURL, workDir: workDir
+        )
+    }
+
+    /// The tail every launch path shares once the ROM is on disk:
+    /// extract if archived, restore whatever saves belong in place before
+    /// the core boots, then activate. Extraction happens first because
+    /// the file-writing cores name their save after the loaded content
+    /// (`<basename>.brm`, `<basename>.flash`), which for a zipped ROM is
+    /// the extracted file's name, unknowable earlier.
+    @MainActor
+    private static func finishLaunch(
+        platform: NativePlatform, rom: Rom, session: Session, romURL: URL, workDir: URL
+    ) async throws -> NativeCore {
+        let loadURL = try extractedIfArchived(romURL, core: platform.core, in: workDir)
+        let saveDir = coreSaveDirectory(romId: rom.id)
+        await restoreVMUSaveIfNeeded(rom: rom, session: session, platform: platform, workDir: workDir)
+        await restoreCoreFileSaveIfNeeded(
+            rom: rom, session: session, platform: platform, loadURL: loadURL, saveDir: saveDir
+        )
+        return try activate(platform: platform, loadURL: loadURL, workDir: workDir, saveDir: saveDir)
+    }
+
+    /// The persistent per-game directory handed to the core as its save
+    /// directory (RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY). This is where
+    /// Sega CD writes its .brm, Neo Geo Pocket its .flash, FBNeo its
+    /// NVRAM and high scores. Persistent on purpose, the way RetroArch's
+    /// save directory is: this used to be the per-launch temp directory,
+    /// so everything those cores flushed was deleted with the session,
+    /// half of issue #5's stage 2. On tvOS it lives under Caches to
+    /// match that platform's transient storage model; losing it there
+    /// costs a re-download from RomM at worst, same deal as the ROM
+    /// cache itself.
+    static func coreSaveDirectory(romId: Int) -> URL {
+        #if os(tvOS)
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        #else
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        #endif
+        let dir = base
+            .appendingPathComponent("CoreSaves", isDirectory: true)
+            .appendingPathComponent(String(romId), isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    /// Sega CD and Neo Geo Pocket: their cores read a save file by name
+    /// from the save directory at load (bram_load, flash_read), so the
+    /// restore is placing that file before boot, the same shape as the
+    /// VMU path above and with the same own-rows-only rule: a web-player
+    /// .srm for these platforms is the cartridge SAVE_RAM region, not
+    /// this file, so there is nothing foreign worth adopting.
+    private static func restoreCoreFileSaveIfNeeded(
+        rom: Rom, session: Session, platform: NativePlatform, loadURL: URL, saveDir: URL
+    ) async {
+        let suffix: String
+        switch platform {
+        case .segaCD: suffix = "brm"
+        case .ngpc: suffix = "flash"
+        default: return
+        }
+        let store = MemoryCardStore.shared
+        let stem = loadURL.deletingPathExtension().lastPathComponent
+        let target = saveDir.appendingPathComponent("\(stem).\(suffix)")
+
+        func place(_ data: Data) {
+            try? data.write(to: target, options: .atomic)
+        }
+
+        let local = store.localCard(romId: rom.id)
+        if store.pendingUpload(romId: rom.id), let local {
+            place(local)
+            return
+        }
+
+        if let saves = try? await session.saves(romId: rom.id) {
+            let own = saves
+                .filter { $0.emulator == platform.core.emulatorTag && !$0.fileName.hasSuffix(".rtc") }
+                .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
+                .first
+            if let own, own.updatedAt != store.serverStamp(romId: rom.id) || local == nil,
+               let bytes = try? await session.saveContent(own) {
+                store.storeDownloaded(romId: rom.id, data: bytes, serverStamp: own.updatedAt)
+                place(bytes)
+                return
+            }
+        }
+
+        if let local {
+            place(local)
+        }
+        // Nothing local and nothing on the server leaves whatever file a
+        // previous session's flush left here, which is already this
+        // game's newest save; the core reads it exactly as it wrote it.
     }
 
     /// Dreamcast only, and run before the core boots rather than after
@@ -192,7 +289,7 @@ enum NativeLauncher {
         }
     }
 
-    private static func activate(platform: NativePlatform, romURL: URL, workDir: URL) throws -> NativeCore {
+    private static func activate(platform: NativePlatform, loadURL: URL, workDir: URL, saveDir: URL) throws -> NativeCore {
         #if targetEnvironment(simulator)
         // A simulator build links no cores: they are built for real
         // hardware and rebuilding emulator cores for a simulator proves
@@ -204,7 +301,6 @@ enum NativeLauncher {
         throw LaunchError.unsupportedFormat("Games can't run in the Simulator. Use a real Apple TV.")
         #else
         let core = platform.core
-        let loadURL = try extractedIfArchived(romURL, core: core, in: workDir)
         LibretroFrontend.shared.activateCore(core.coreID)
         LibretroFrontend.shared.setCoreOptions(NativeCoreOptionsStore.dictionary(for: platform))
         let padDevice = NativeCoreOptionsStore.padDevice(for: platform)
@@ -216,7 +312,9 @@ enum NativeLauncher {
         if platform.supportsSecondPlayer {
             LibretroFrontend.shared.setControllerPortDevice(padDevice, port: 1)
         }
-        if let failure = LibretroFrontend.shared.loadGame(loadURL.path, systemDirectory: workDir.path) {
+        if let failure = LibretroFrontend.shared.loadGame(
+            loadURL.path, systemDirectory: workDir.path, saveDirectory: saveDir.path
+        ) {
             throw NSError(domain: "NativeLauncher", code: 1, userInfo: [NSLocalizedDescriptionKey: failure])
         }
         return core
