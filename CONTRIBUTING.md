@@ -19,6 +19,17 @@ reverse.
 **Keep PRs small and focused.** One fix or feature per PR. Working software
 over speculative design.
 
+**Say so when a PR moves code between files.** If code moves to a new file
+on one branch while someone fixes that same code where it used to live on
+another, git merges both without a conflict and silently drops the fix.
+Nothing shows up in the diff to notice. That is not hypothetical here: a
+fix making the native player's audio true stereo landed hours after the
+audio code had moved to a new file on another branch, the merge kept the
+move and lost the fix, and every core played mono for five days before
+anyone caught it. So call out moves in the PR description, and after
+merging a branch that has been open a while, check that the changes it
+brought in still exist where that code now lives.
+
 **No new dependencies without discussion.** Open an issue first.
 `URLSession` and Swift concurrency have been enough so far.
 

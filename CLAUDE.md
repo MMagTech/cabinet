@@ -33,6 +33,15 @@ design and the reasoning behind it, and most decisions in it are already settled
 - The old squash-merge-only rule is retired. Decided 2026-08-09, at launch: the
   history is public and complete on purpose, including the messy parts. Do not
   squash it away or propose hiding branches.
+- A fix on one branch and a refactor that moves the same code on another
+  branch merge cleanly and silently drop the fix. There is no conflict and
+  nothing in the diff to see. It cost the native player's stereo audio for
+  five days: `72f8a4e` fixed it in `NativePlayerView.swift`, the tvOS
+  branch had already moved that code to `NativePlayerAudio.swift`, and the
+  merge in `263bdf0` kept the move and dropped the fix (found 2026-08-16).
+  After merging any branch that has diverged for more than a day, list what
+  the merged-in side changed and confirm each change still exists where
+  that code now lives.
 - After every build or package operation, provide a one line commit summary and a
   full commit description without being asked.
 - `SECURITY.md` stays in the repository root.
