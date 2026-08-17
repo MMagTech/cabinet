@@ -481,12 +481,25 @@ enum NativeCoreOptionsStore {
             let sixButton = padDevice(for: .sega32X) == NativePadDevice.sixButton
             return ["picodrive_input1": sixButton ? "6 button pad" : "3 button pad"]
         case .n64:
-            // Forced, not a Settings choice: this app's cores run in the
-            // main process with no JIT entitlement, so the CPU core must
-            // stay the pure interpreter (mupen64plus-cpucore's dynarec
-            // choices would crash), and the RDP plugin is pinned to
+            // Forced, not a Settings choice. The RDP plugin is pinned to
             // GLideN64, the only one of the core's three RDP plugins with
             // a GLES3 hardware-render path this frontend supports.
+            //
+            // cpucore is the cached interpreter, not the pure one. This
+            // used to read pure_interpreter, on the belief that anything
+            // else needed a JIT entitlement this app does not have. That
+            // is true of dynamic_recompiler and false of the cached
+            // interpreter: `cached_interp_init_block` allocates its block
+            // with a plain malloc (mupen64plus-core's cached_interp.c),
+            // while the malloc_exec that maps PROT_EXEC pages is reached
+            // only through dynarec_init_block, wired up in r4300_core.c
+            // under EMUMODE_DYNAREC. The cached interpreter emits no code
+            // at all, it just stops re-decoding every instruction on
+            // every execution. Checked in the core's own source
+            // 2026-08-17. Upstream reports a few titles that run only on
+            // the pure interpreter (libdragon homebrew, mupen64plus-core
+            // issue #738), so this is the one option here with a real
+            // compatibility risk rather than a pure win.
             // MaxTxCacheSize must be sent explicitly: GLideN64's texture
             // cache size global defaults to 0 in the core's own source
             // (spikes/cores/mupen64plus/src/libretro/libretro.c), not the
@@ -506,9 +519,66 @@ enum NativeCoreOptionsStore {
             // ordinary RetroPad ids the way the rest of this app already
             // reads input, matching n64.json's own ids exactly.
             return [
-                "mupen64plus-cpucore": "pure_interpreter",
+                "mupen64plus-cpucore": "cached_interpreter",
                 "mupen64plus-rdp-plugin": "gliden64",
                 "mupen64plus-MaxTxCacheSize": "8000",
+                // Framebuffer emulation stays OFF, which is what this
+                // frontend has always run (the globals initialise to 0 and
+                // the keys were never answered), and it is not an
+                // oversight to correct. Turning it and the two buffer
+                // copies on to their documented defaults was tried on
+                // 2026-08-17 to explain missing scenery in Hydro Thunder,
+                // and it made that game strictly worse: the boat and the
+                // water stopped drawing at all.
+                //
+                // The cause is NOT established, and the obvious theory was
+                // checked and rejected: GLideN64 does treat framebuffer 0
+                // as its output (DisplayWindowMupen64plus::
+                // _getDefaultFramebuffer returns ObjectHandle::null), but
+                // GLSM redirects any bind of 0 to the frontend's own FBO
+                // (glsm.c's rglBindFramebuffer, against a
+                // default_framebuffer captured from get_current_framebuffer
+                // in glsm_state_setup), and this app creates gFBO before
+                // that setup runs. So "it composites somewhere we never
+                // read" does not survive reading the code.
+                //
+                // The untested candidate is the two buffer copies rather
+                // than framebuffer emulation itself: CopyColorToRDRAM and
+                // CopyDepthToRDRAM do their own GPU-to-CPU readback through
+                // whichever ColorBufferReader implementation GLideN64
+                // picks at runtime, and several of those rely on buffer
+                // storage or EGL image, neither of which exists on iOS
+                // GLES3. All three options were turned on together, so
+                // which one broke it is unknown. Anyone retrying this
+                // should set EnableFBEmulation alone with both copies
+                // explicitly Off, and change one thing at a time.
+                // Render at the N64's own resolution. Left unanswered,
+                // retro_screen_width/height keep their static 640x480
+                // (libretro.c:145) rather than the 320x240 the core's own
+                // options table documents as the 4:3 default, so this app
+                // has been rendering four times the pixels the core meant
+                // to. That is four times the fragment work for GLideN64,
+                // four times the bytes through the synchronous glReadPixels
+                // measured at 1.8ms rising to 7.2ms in heavy scenes, and
+                // four times the Metal upload. Passing 320x240 also trips
+                // the core's own guard at libretro.c:1441, which forces
+                // EnableNativeResFactor to 1 for low resolutions, which is
+                // what makes GLideN64 render natively rather than blit a
+                // larger image down.
+                //
+                // The key is 43screensize rather than 169screensize
+                // because `aspect` is likewise unanswered, leaving
+                // AspectRatio at its static 0 and screen_size_key at the
+                // 4:3 one it is initialized to (libretro.c:917).
+                "mupen64plus-43screensize": "320x240",
+                // Let the core tell us when a frame is unchanged. With
+                // this off, every retro_run produces a frame and every
+                // frame pays the full readback; with it on, a duplicate
+                // arrives as a null pointer that videoRefresh already
+                // handles by counting a dupe and returning before any GL
+                // work. The trace currently reports hw_dupes: 0, so this
+                // saving is being left entirely on the table.
+                "mupen64plus-FrameDuping": "True",
                 "mupen64plus-alt-map": "True",
                 "mupen64plus-pak1": "memory",
                 // The real bug behind "the stick doesn't move my
