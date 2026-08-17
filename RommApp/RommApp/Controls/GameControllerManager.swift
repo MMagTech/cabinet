@@ -89,6 +89,19 @@ final class GameControllerManager: ObservableObject {
     /// ignores the digitized d-pad bits sent already, and needs the real
     /// analog value to move.
     var sendStick: ((Int, Float, Float) -> Void)?
+    /// Whether the left stick also presses d-pad directions, as well as
+    /// reporting its true analog value through `sendStick`.
+    ///
+    /// True everywhere by default, which is every consumer that existed
+    /// before this flag: the webview player, and every native platform
+    /// whose real controller has no analog stick, where the digitized
+    /// bits are the only way a stick can move anything. Set false only
+    /// for the platforms whose cores read the real analog value AND whose
+    /// real controller carries a separate d-pad, since there one thumb
+    /// would otherwise work two different physical controls at once. The
+    /// player views set it on appear and restore it on disappear, the
+    /// same borrow-and-return the input handlers around it already use.
+    var digitizesLeftStickAsDPad = true
     /// Called when the pad's overlay button is pressed.
     var onMenu: (() -> Void)?
     /// Called when a controller disconnects mid game, so play can pause
@@ -395,10 +408,33 @@ final class GameControllerManager: ObservableObject {
 
     private func stick(x: Float, y: Float, player: Int) {
         guard let slot = slots[player], captureHandler == nil else { return }
-        digitizeAxis(RetroPad.left, magnitude: max(0, -x), slot: slot, player: player)
-        digitizeAxis(RetroPad.right, magnitude: max(0, x), slot: slot, player: player)
-        digitizeAxis(RetroPad.down, magnitude: max(0, -y), slot: slot, player: player)
-        digitizeAxis(RetroPad.up, magnitude: max(0, y), slot: slot, player: player)
+        // The left stick reaches a game by two separate routes, and on a
+        // console whose real controller has BOTH a d-pad and an analog
+        // stick, sending both routes at once presses two different
+        // physical controls from one thumb. Dreamcast's Rush 2049 steers
+        // on the analog stick and swings the camera on the d-pad, so
+        // pushing right did both at once (reported on device 2026-08-16).
+        //
+        // Suppressed only where the core reads the true analog value, and
+        // only for this stick. Everything about the second stick (stick2,
+        // ids 20-23) and about platforms without an analog stick is
+        // untouched: FBNeo's arcade movement has no path in other than
+        // this digitizing, which is exactly what cabinet#3 was about.
+        if digitizesLeftStickAsDPad {
+            digitizeAxis(RetroPad.left, magnitude: max(0, -x), slot: slot, player: player)
+            digitizeAxis(RetroPad.right, magnitude: max(0, x), slot: slot, player: player)
+            digitizeAxis(RetroPad.down, magnitude: max(0, -y), slot: slot, player: player)
+            digitizeAxis(RetroPad.up, magnitude: max(0, y), slot: slot, player: player)
+        } else {
+            // Any direction still held from before the mode changed has to
+            // be released, or it stays pressed forever with nothing left
+            // to clear it.
+            for id in [RetroPad.left, RetroPad.right, RetroPad.down, RetroPad.up]
+            where slot.stickDown[id] == true {
+                slot.stickDown[id] = false
+                emit(id, false, player: player)
+            }
+        }
         sendStick?(player, x, y)
     }
 

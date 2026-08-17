@@ -111,6 +111,39 @@ version of this idea. Decided deliberately, not a gap to fill in later.
   Details, and where to record an exception or platform-specific tuning,
   live in `docs/building.md`.
 
+## Blast radius: say it out loud before touching shared code
+
+Fourteen cores and two platforms run through a handful of shared files.
+`LibretroFrontend`, `NativePlayerRenderer`, `NativePlayerAudio`,
+`GameControllerManager` and the control layouts are the main ones. A fix
+aimed at one core lands on all of them unless it is deliberately scoped.
+
+- **State the two lists before building.** Which cores and platforms
+  actually execute the lines being changed, and which ones the change is
+  meant to help. If those lists differ, say so explicitly, in those
+  words, and get agreement before writing code. Do not decide alone that
+  the difference is harmless.
+- **Prefer additive.** A new enum case, a new flag defaulting to today's
+  behaviour, a new branch. Never edit an existing shared branch when an
+  additive change would do, so untouched cores run byte-identical code.
+- **Scope the fix as narrowly as the evidence.** A finding measured on
+  one core belongs behind a check for that core, in the frontend where
+  core identity already lives, not in the shared path "because it should
+  be harmless everywhere".
+- **Test the blast radius, not the target.** Before calling it done, run
+  a game on at least one core per affected class, not only the core that
+  motivated the work. For the render path that means one core per pixel
+  format plus both hardware-rendered cores.
+
+Two regressions on 2026-08-16 are why this section exists, both from
+Dreamcast fixes placed in shared code, and both found by Marcus on his
+own hardware after the work was called done: an audio governor built for
+Flycast's free-running emulation thread went into the shared draw loop
+and slowed N64 down, and a teardown condition widened for Flycast went
+into the shared load path and turned an N64 relaunch into a crash in
+GLideN64's `TexrectDrawer::destroy`. Both were one-line widenings that
+looked harmless. Neither was.
+
 ## Things that are settled
 
 - Auth is RomM's device authorization flow. Not username and password, not

@@ -931,23 +931,17 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     // the one guarantee that holds for all of them: this is exactly the
     // teardown a core switch already gets, just now applied every time,
     // not only when the core itself changes.
-    // Keyed on gInitialized alone, NOT gInitialized && gGameLoaded: the
-    // quit path already unloads the game (the retro_unload_game moment
-    // file-writing cores flush their saves on), so by the next launch
-    // gGameLoaded is false and a gGameLoaded-gated teardown silently
-    // skips, leaving the fresh load to run on a core that kept its
-    // previous session's internal state. Most cores happened to survive
-    // that; Flycast with threaded rendering faults inside the second
-    // Emulator::loadGame, three identical crash logs off a real device
-    // 2026-08-16 (quit a Dreamcast game, launch another, app dies; the
-    // relaunch after THAT works because the crash handed us a fresh
-    // process, which is itself the tell that stale in-process state was
-    // the problem).
-    if (gInitialized) {
-        if (gGameLoaded) {
-            gCore->unload_game();
-            gGameLoaded = false;
-        }
+    // Both conditions, deliberately. Widening this to gInitialized alone
+    // was tried on 2026-08-16 as a first (wrong) guess at the Dreamcast
+    // relaunch crash, and it made the teardown fire in a state it never
+    // used to: a core still initialized whose game is already unloaded.
+    // GLideN64's own teardown null-derefs there, so it turned an N64
+    // relaunch into a crash in TexrectDrawer::destroy. The real Dreamcast
+    // fix is coreToleratesDeinit plus the first_run patch in
+    // build-flycast.sh; neither needs anything widened here.
+    if (gInitialized && gGameLoaded) {
+        gCore->unload_game();
+        gGameLoaded = false;
         // Plain unload_game without deinit for the cores that cannot take
         // one; see coreToleratesDeinit for what each of them does instead
         // of surviving it.
@@ -1203,6 +1197,19 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
         recordStage(gTimeCoreRunMS, nowMS() - runStart);
         gRunCallTotal.fetch_add(1, std::memory_order_relaxed);
     }
+}
+
+- (BOOL)needsAudioGovernor {
+    // Flycast alone. Its threaded rendering mode runs emulation on its
+    // own thread, so this frontend's frame pacing does not gate it and
+    // nothing else does either (its libretro audio path drops samples
+    // rather than blocking): measured free-running at up to 5x realtime.
+    // Every other core here advances exactly one emulated frame per
+    // retro_run, so the frame pacing alone already holds them to
+    // realtime, and a governor can only ever subtract runs from them.
+    // Applying it to all cores slowed N64 down, reported on device
+    // 2026-08-16 within hours of the governor landing.
+    return gCoreID == LibretroCoreIDFlycast;
 }
 
 - (double)debugCoreRunMS {

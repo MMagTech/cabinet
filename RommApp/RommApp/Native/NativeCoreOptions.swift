@@ -565,4 +565,18 @@ enum NativeCoreOptionsStore {
         else { return 0 }
         return UInt32(value(option, for: platform)) ?? 0
     }
+
+    /// Whether this platform's real controller has a separate analog
+    /// stick and d-pad, with a core that reads the analog value. On those
+    /// the left stick must not also press d-pad directions; see
+    /// `GameControllerManager.digitizesLeftStickAsDPad`.
+    ///
+    /// The same two platforms `padDevice` calls out above, for a related
+    /// reason: they are the ones with a real analog stick to configure.
+    /// Every other native platform's controller is d-pad only (or is an
+    /// arcade stick), so digitizing is the only way its stick reaches the
+    /// game at all.
+    static func usesTrueAnalogStick(_ platform: NativePlatform) -> Bool {
+        platform == .dreamcast || platform == .n64
+    }
 }

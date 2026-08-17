@@ -312,7 +312,12 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
             // the game whenever the audio engine is not running, the
             // exact hazard issue #6 records against the first attempt at
             // this. The wall clock advances no matter what.
-            let audioRate = frontend.audioSampleRate()
+            // Flycast only. Every other core advances exactly one emulated
+            // frame per retro_run, so the pacing above already holds it to
+            // realtime and the governor could only ever take runs away:
+            // applied to all cores it slowed N64 down, found on device the
+            // same evening it landed.
+            let audioRate = frontend.needsAudioGovernor() ? frontend.audioSampleRate() : 0
             var audioProduced = Double(frontend.debugAudioFramesTotal() &- audioBaseFrames)
             if audioRate > 0 {
                 audioTargetFrames += delta * audioRate
