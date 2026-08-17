@@ -41,13 +41,14 @@
 #include <cstdio>
 
 @implementation LibretroFrame
-- (instancetype)initWithPixels:(NSData *)pixels width:(uint32_t)width height:(uint32_t)height bytesPerRow:(uint32_t)bytesPerRow pixelFormat:(LibretroPixelFormat)pixelFormat {
+- (instancetype)initWithPixels:(NSData *)pixels width:(uint32_t)width height:(uint32_t)height bytesPerRow:(uint32_t)bytesPerRow pixelFormat:(LibretroPixelFormat)pixelFormat flippedVertically:(BOOL)flippedVertically {
     if ((self = [super init])) {
         _pixels = pixels;
         _width = width;
         _height = height;
         _bytesPerRow = bytesPerRow;
         _pixelFormat = pixelFormat;
+        _flippedVertically = flippedVertically;
     }
     return self;
 }
@@ -86,6 +87,10 @@ uint32_t gFrameWidth = 0;
 uint32_t gFrameHeight = 0;
 uint32_t gFrameBytesPerRow = 0;
 bool gFrameDirty = false;
+// Set only by the hardware-render readback, cleared by every other path,
+// so a core switch or a software-rendered game can never inherit it. See
+// LibretroFrame.flippedVertically for why the flip moved off the CPU.
+bool gFrameFlipped = false;
 
 std::mutex gAudioMutex;
 std::vector<int16_t> gAudioSamples; // interleaved stereo
@@ -375,32 +380,34 @@ void videoRefresh(const void *data, unsigned width, unsigned height, size_t pitc
 
         // GL_RGBA/GL_UNSIGNED_BYTE, not GL_BGRA_EXT: not a guaranteed-
         // valid glReadPixels format/type pair on every GLES3
-        // implementation. R/B is swapped by hand below instead, since
-        // RGBA/UNSIGNED_BYTE is the one combination every implementation
-        // is required to accept.
-        std::vector<uint8_t> flipped(needed);
+        // implementation. RGBA/UNSIGNED_BYTE is the one combination every
+        // implementation is required to accept.
+        //
+        // Straight into gFrameBytes, with no intermediate buffer and no
+        // per-pixel work afterwards. This used to read into a fresh
+        // std::vector allocated every frame (1.2MB at 640x480, about
+        // 60MB/s of allocator churn at 50fps), then walk every pixel to
+        // swap R and B and reverse the row order into gFrameBytes. Both
+        // are gone: the bytes are handed to Metal as RGBA, and the upside
+        // down GL origin is corrected by flipping the display quad's
+        // texture coordinates, which costs nothing. Measured on Apple TV
+        // 2026-08-16 at 1.15ms a frame for the swizzle alone, against a
+        // 20ms budget the core was already missing in heavy scenes.
         glBindFramebuffer(GL_FRAMEBUFFER, gFBO);
         glPixelStorei(GL_PACK_ALIGNMENT, 1);
         double readbackStart = nowMS();
-        glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, flipped.data());
-        double swizzleStart = nowMS();
-        recordStage(gTimeReadbackMS, swizzleStart - readbackStart);
+        glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, gFrameBytes.data());
+        recordStage(gTimeReadbackMS, nowMS() - readbackStart);
         GLenum readbackErr = glGetError();
-        for (unsigned y = 0; y < height; y++) {
-            const uint8_t *srcRow = flipped.data() + (height - 1 - y) * bytesPerRow;
-            uint8_t *dstRow = gFrameBytes.data() + y * bytesPerRow;
-            for (unsigned x = 0; x < width; x++) {
-                dstRow[x * 4 + 0] = srcRow[x * 4 + 2]; // B
-                dstRow[x * 4 + 1] = srcRow[x * 4 + 1]; // G
-                dstRow[x * 4 + 2] = srcRow[x * 4 + 0]; // R
-                dstRow[x * 4 + 3] = srcRow[x * 4 + 3]; // A
-            }
-        }
-        recordStage(gTimeSwizzleMS, nowMS() - swizzleStart);
+        // Kept, reporting zero, rather than removed with its accessor:
+        // FrameTrace writes a fixed set of columns and a rebuilt trace
+        // should stay comparable against the ones already captured.
+        recordStage(gTimeSwizzleMS, 0);
         gFrameWidth = width;
         gFrameHeight = height;
         gFrameBytesPerRow = (uint32_t)bytesPerRow;
-        gPixelFormat = LibretroPixelFormatXRGB8888;
+        gPixelFormat = LibretroPixelFormatRGBA8888;
+        gFrameFlipped = true;
         gFrameDirty = true;
 
         uint32_t frameCount = gHWFrameCount.fetch_add(1, std::memory_order_relaxed) + 1;
@@ -413,7 +420,7 @@ void videoRefresh(const void *data, unsigned width, unsigned height, size_t pitc
             // less useful than it looked.
             uint32_t nonZeroBytes = 0;
             uint8_t maxByte = 0;
-            for (uint8_t b : flipped) {
+            for (uint8_t b : gFrameBytes) {
                 if (b != 0) {
                     nonZeroBytes++;
                     if (b > maxByte) maxByte = b;
@@ -423,7 +430,7 @@ void videoRefresh(const void *data, unsigned width, unsigned height, size_t pitc
             snprintf(buf, sizeof(buf),
                       "read %ux%u frame #%u, %u/%zu bytes non-zero (max=%u), "
                       "preErr=0x%04X readbackErr=0x%04X",
-                      width, height, frameCount, nonZeroBytes, flipped.size(), maxByte,
+                      width, height, frameCount, nonZeroBytes, gFrameBytes.size(), maxByte,
                       preExistingErr, readbackErr);
             gHWDiagnostic = buf;
         }
@@ -441,6 +448,10 @@ void videoRefresh(const void *data, unsigned width, unsigned height, size_t pitc
     gFrameWidth = width;
     gFrameHeight = height;
     gFrameBytesPerRow = (uint32_t)pitch;
+    // Software-rendered frames are already top-left origin and always
+    // were. Cleared rather than left alone so nothing here depends on a
+    // core never having produced a hardware frame earlier in the process.
+    gFrameFlipped = false;
     gFrameDirty = true;
 }
 
@@ -871,6 +882,7 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
         std::lock_guard<std::mutex> lock(gFrameMutex);
         gFrameBytes.clear();
         gFrameDirty = false;
+        gFrameFlipped = false;
     }
     {
         std::lock_guard<std::mutex> lock(gAudioMutex);
@@ -958,14 +970,20 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     // lack of one) happened to leave it. FBNeo and Saturn both request
     // XRGB8888 explicitly, which is why `gPixelFormat`'s own initial
     // value matched them by coincidence and nobody noticed this was
-    // missing. Genesis Plus GX never calls SET_PIXEL_FORMAT at all in
-    // this build (FRONTEND_SUPPORTS_RGB565 isn't defined, so it always
-    // stays on the spec default), so without this reset its real
-    // 16-bit-per-pixel frames get read as 32-bit XRGB8888 leftover from
-    // whatever ran before it, wrong stride, wrong byte count, silently:
-    // no crash, just a black screen. Found 2026-08-08 the same way as
+    // missing. A core whose real frames are 16 bits per pixel, read as
+    // 32-bit XRGB8888 left over from whatever ran before it, gives the
+    // wrong stride and the wrong byte count silently: no crash, just a
+    // black screen. Found 2026-08-08 on Genesis Plus GX the same way as
     // the audio crash, a real device test with correct controls and
     // input but nothing on screen.
+    //
+    // That case used to be described here as Genesis Plus GX never
+    // calling SET_PIXEL_FORMAT because FRONTEND_SUPPORTS_RGB565 was
+    // undefined. That is not true of this build: the core's own Makefile
+    // defines it, and its "Frontend supports RGB565" log string, which
+    // only exists inside that #ifdef, is present in the shipped archive.
+    // Checked 2026-08-16. The reset below is still needed, for the mGBA
+    // ordering reason immediately after this.
     //
     // The reset has to happen BEFORE retro_init, not after: libretro
     // documents SET_PIXEL_FORMAT as callable from retro_load_game or
@@ -1251,7 +1269,8 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
                                            width:gFrameWidth
                                           height:gFrameHeight
                                      bytesPerRow:gFrameBytesPerRow
-                                     pixelFormat:gPixelFormat];
+                                     pixelFormat:gPixelFormat
+                               flippedVertically:gFrameFlipped];
 }
 
 - (nullable NSData *)drainAudio {

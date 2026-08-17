@@ -384,7 +384,13 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
                     hwFrames: frontend.debugHWFramesTotal(),
                     runCalls: frontend.debugRunCallTotal(),
                     hwDupes: frontend.debugHWDupeTotal(),
-                    targetFPS: frontend.targetFPS()
+                    targetFPS: frontend.targetFPS(),
+                    // Added 2026-08-17: the readback's cost scales with
+                    // pixel count, and N64 games switch resolution mid
+                    // game, so a trace that does not record the size
+                    // cannot tell a heavier scene from a bigger frame.
+                    frameWidth: textureWidth,
+                    frameHeight: textureHeight
                 )
             }
         }
@@ -398,7 +404,8 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         let vertices = aspectFitVertices(
             textureSize: CGSize(width: textureWidth, height: textureHeight),
             viewSize: view.drawableSize,
-            rotation: Int(frontend.rotation())
+            rotation: Int(frontend.rotation()),
+            flipped: textureIsFlipped
         )
 
         guard let commandBuffer = commandQueue.makeCommandBuffer(),
@@ -422,6 +429,17 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     /// rather than allocated fresh every frame.
     private var conversionBuffer: [UInt8] = []
 
+    /// Whether the frame currently in `texture` arrived upside down, which
+    /// only ever happens on the hardware-render path (GL's framebuffer
+    /// origin is bottom-left). Read by `draw` when it builds the quad, so
+    /// the turn happens in texture coordinates instead of on the CPU.
+    private var textureIsFlipped = false
+
+    /// The Metal format `texture` was created with. Tracked because it is
+    /// no longer always `.bgra8Unorm`: the hardware-render path stores its
+    /// bytes as RGBA rather than paying a per-pixel swap to reorder them.
+    private var texturePixelFormat: MTLPixelFormat = .bgra8Unorm
+
     private func updateTexture(from frame: LibretroFrame) {
         let width = Int(frame.width)
         let height = Int(frame.height)
@@ -438,9 +456,17 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         // worth staking correctness on. Converting here uses only
         // libretro's own documented bit layout (retro_pixel_format in
         // libretro.h), nothing assumed about Metal's internals.
-        if texture == nil || textureWidth != width || textureHeight != height {
+        // The one exception to "always bgra8Unorm" is the hardware-render
+        // path. Those bytes come out of glReadPixels as RGBA, and a
+        // sampler reads an rgba8Unorm texture to exactly the same colour
+        // it reads a bgra8Unorm one to, because the format describes the
+        // memory layout rather than the meaning. Storing them as they
+        // already are is what lets the byte-swap loop go away entirely.
+        let wantedFormat: MTLPixelFormat = frame.pixelFormat == .RGBA8888 ? .rgba8Unorm : .bgra8Unorm
+        if texture == nil || textureWidth != width || textureHeight != height
+            || texturePixelFormat != wantedFormat {
             let descriptor = MTLTextureDescriptor.texture2DDescriptor(
-                pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false
+                pixelFormat: wantedFormat, width: width, height: height, mipmapped: false
             )
             // .renderTarget as well as .shaderRead: the RGB565 path below
             // decodes into this texture with a real render pass, and Metal
@@ -450,13 +476,18 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
             texture = device.makeTexture(descriptor: descriptor)
             textureWidth = width
             textureHeight = height
+            texturePixelFormat = wantedFormat
         }
+        textureIsFlipped = frame.flippedVertically
 
         let bytesPerRow = width * 4
         frame.pixels.withUnsafeBytes { raw in
             guard let base = raw.baseAddress else { return }
             switch frame.pixelFormat {
-            case .XRGB8888:
+            case .XRGB8888, .RGBA8888:
+                // Both are a straight upload of 32-bit pixels; the only
+                // difference is which Metal format the texture was made
+                // with above, so neither needs any work here.
                 texture?.replace(
                     region: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0,
                     withBytes: base, bytesPerRow: Int(frame.bytesPerRow)
@@ -574,17 +605,45 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         let bytesPerRow = width * 4
         var bgra = [UInt8](repeating: 0, count: bytesPerRow * height)
 
-        // The texture is always bgra8Unorm now: updateTexture converts
-        // every source pixel format itself rather than trusting Metal's
-        // native 16-bit packed formats, so there is only ever one case
-        // to read back here.
-        guard texture.pixelFormat == .bgra8Unorm else { return nil }
+        // Two layouts reach this point. Software-rendered cores are
+        // converted to bgra8Unorm by updateTexture; the hardware-render
+        // path stores its readback as rgba8Unorm instead, since swapping
+        // those bytes cost more per frame than it was worth. Anything
+        // else would be a texture this class did not create.
+        let byteOrderInfo: UInt32
+        switch texture.pixelFormat {
+        case .bgra8Unorm:
+            byteOrderInfo = CGImageAlphaInfo.noneSkipFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+        case .rgba8Unorm:
+            byteOrderInfo = CGImageAlphaInfo.noneSkipLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
+        default:
+            return nil
+        }
         texture.getBytes(&bgra, bytesPerRow: bytesPerRow, from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
+
+        // A hardware-render frame is upside down in the texture, since the
+        // display path turns it over in texture coordinates rather than in
+        // memory. A PNG has no such trick available, so the rows are
+        // reversed here. Once per saved state, not per frame.
+        if textureIsFlipped {
+            var row = [UInt8](repeating: 0, count: bytesPerRow)
+            for y in 0..<(height / 2) {
+                let top = y * bytesPerRow
+                let bottom = (height - 1 - y) * bytesPerRow
+                row.withUnsafeMutableBufferPointer { scratch in
+                    bgra.withUnsafeMutableBufferPointer { buf in
+                        scratch.baseAddress!.update(from: buf.baseAddress! + top, count: bytesPerRow)
+                        (buf.baseAddress! + top).update(from: buf.baseAddress! + bottom, count: bytesPerRow)
+                        (buf.baseAddress! + bottom).update(from: scratch.baseAddress!, count: bytesPerRow)
+                    }
+                }
+            }
+        }
 
         guard let context = CGContext(
             data: &bgra, width: width, height: height, bitsPerComponent: 8, bytesPerRow: bytesPerRow,
             space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.noneSkipFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+            bitmapInfo: byteOrderInfo
         ), let cgImage = context.makeImage() else { return nil }
 
         let rotation = Int(frontend.rotation()) % 4
@@ -600,13 +659,24 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         }
     }
 
-    private func aspectFitVertices(textureSize: CGSize, viewSize: CGSize, rotation: Int) -> [Vertex] {
+    /// `flipped` turns the picture over in texture coordinates, for frames
+    /// that arrived bottom-row-first from a GL framebuffer. Defaults to
+    /// false, so every software-rendered core builds exactly the quad it
+    /// built before this existed.
+    private func aspectFitVertices(
+        textureSize: CGSize, viewSize: CGSize, rotation: Int, flipped: Bool = false
+    ) -> [Vertex] {
+        // Origin corners for the triangle strip, before any rotation:
+        // bottom-left, bottom-right, top-left, top-right.
+        let base: [SIMD2<Float>] = flipped
+            ? [[0, 0], [1, 0], [0, 1], [1, 1]]
+            : [[0, 1], [1, 1], [0, 0], [1, 0]]
         guard textureSize.width > 0, textureSize.height > 0, viewSize.width > 0, viewSize.height > 0 else {
             return [
-                Vertex(position: [-1, -1], texCoord: [0, 1]),
-                Vertex(position: [1, -1], texCoord: [1, 1]),
-                Vertex(position: [-1, 1], texCoord: [0, 0]),
-                Vertex(position: [1, 1], texCoord: [1, 0]),
+                Vertex(position: [-1, -1], texCoord: base[0]),
+                Vertex(position: [1, -1], texCoord: base[1]),
+                Vertex(position: [-1, 1], texCoord: base[2]),
+                Vertex(position: [1, 1], texCoord: base[3]),
             ]
         }
 
@@ -645,8 +715,11 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         // Screen corners stay put; the texture coordinates walk around the
         // quad corner by corner, one step per 90 degrees of rotation.
         // Order matches the triangle strip: bottom-left, bottom-right,
-        // top-left, top-right.
-        var coords: [SIMD2<Float>] = [[0, 1], [1, 1], [0, 0], [1, 0]]
+        // top-left, top-right. Starts from `base`, so a flipped frame is
+        // turned over before it is rotated. The two never combine today,
+        // rotation being an arcade (TATE) request and the only flipped
+        // frames coming from the two GL cores, neither of which rotates.
+        var coords = base
         for _ in 0..<(rotation % 4) {
             coords = coords.map { SIMD2<Float>(1 - $0.y, $0.x) }
         }

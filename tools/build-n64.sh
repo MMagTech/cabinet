@@ -120,6 +120,13 @@ real_cxx=$(xcrun -sdk "$XCRUN_SDK" -find clang++)
 # which is where this surfaced (2026-08-11, first tvOS build); the same
 # breakage was latent in the iOS wrapper too and simply never got hit,
 # since only the C-side vendored libpng ever needed the define.
+# To debug a crash in this core, add -g here the way build-flycast.sh's
+# header describes, so a crash report resolves to source lines via atos.
+# Note that -fno-omit-frame-pointer does NOT work from this position: this
+# Makefile's own CPUOPTS appends -fomit-frame-pointer unconditionally, and
+# these resolve last-flag-wins, exactly like the -fcommon case above. It
+# has to go after "$@" to take effect. Chasing missing stack frames
+# without noticing that cost a build cycle on 2026-08-16.
 printf '#!/bin/sh\nexec "%s" -fno-common -D__MATH_H__ -Dfdopen=fdopen "$@" -fno-common\n' "$real_cc" > "$WRAP/cc"
 printf '#!/bin/sh\nexec "%s" -fno-common -D__MATH_H__ -Dfdopen=fdopen "$@" -fno-common\n' "$real_cc" > "$WRAP/clang"
 printf '#!/bin/sh\nexec "%s" -fno-common -Dfdopen=fdopen "$@" -fno-common\n' "$real_cxx" > "$WRAP/c++"

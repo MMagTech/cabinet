@@ -65,9 +65,11 @@ final class FrameTrace {
             try? FileManager.default.removeItem(at: self.fileURL)
             FileManager.default.createFile(atPath: self.fileURL.path, contents: nil)
             self.handle = try? FileHandle(forWritingTo: self.fileURL)
+            // New columns append rather than insert, so a trace captured
+            // before they existed still parses against the same offsets.
             let header = "# core=\(core) sample_rate=\(sampleRate)\n"
                 + "elapsed_ms,draw_gap_ms,frames_run,run_ms,readback_ms,swizzle_ms,upload_ms,"
-                + "audio_frames,hw_frames,run_calls,hw_dupes,target_fps\n"
+                + "audio_frames,hw_frames,run_calls,hw_dupes,target_fps,frame_w,frame_h\n"
             self.handle?.write(Data(header.utf8))
         }
         started = CFAbsoluteTimeGetCurrent()
@@ -84,14 +86,14 @@ final class FrameTrace {
         drawGap: Double, framesRun: Int,
         run: Double, readback: Double, swizzle: Double, upload: Double,
         audioFrames: UInt64, hwFrames: UInt64, runCalls: UInt64, hwDupes: UInt64,
-        targetFPS: Double
+        targetFPS: Double, frameWidth: Int, frameHeight: Int
     ) {
         guard started != 0, written < Self.maxRows else { return }
         let elapsed = (CFAbsoluteTimeGetCurrent() - started) * 1000
         let row = String(
-            format: "%.1f,%.2f,%d,%.3f,%.3f,%.3f,%.3f,%llu,%llu,%llu,%llu,%.4f\n",
+            format: "%.1f,%.2f,%d,%.3f,%.3f,%.3f,%.3f,%llu,%llu,%llu,%llu,%.4f,%d,%d\n",
             elapsed, drawGap, framesRun, run, readback, swizzle, upload,
-            audioFrames, hwFrames, runCalls, hwDupes, targetFPS
+            audioFrames, hwFrames, runCalls, hwDupes, targetFPS, frameWidth, frameHeight
         )
         pending.append(row)
         // Batched at about two seconds of play: small enough that a crash

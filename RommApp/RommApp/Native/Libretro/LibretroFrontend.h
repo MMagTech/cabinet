@@ -6,6 +6,15 @@ typedef NS_ENUM(uint32_t, LibretroPixelFormat) {
     LibretroPixelFormatRGB1555 = 0,
     LibretroPixelFormatXRGB8888 = 1,
     LibretroPixelFormatRGB565 = 2,
+    // Not a libretro format: no core ever requests this one. It is what
+    // the hardware-render readback now produces, because GL_RGBA is the
+    // one glReadPixels pair every GLES3 implementation must accept, and
+    // Metal can store those bytes directly in an rgba8Unorm texture.
+    // Reading back as RGBA and letting the sampler read it as RGBA costs
+    // nothing; the byte-swap loop it replaces cost 1.15ms a frame on N64.
+    // Only Flycast and Mupen64Plus ever reach this value; the twelve
+    // software-rendered cores still set exactly the constants above.
+    LibretroPixelFormatRGBA8888 = 3,
 };
 
 // The statically linked cores this build carries. One core is active at a
@@ -44,6 +53,12 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 @property (nonatomic, readonly) uint32_t height;
 @property (nonatomic, readonly) uint32_t bytesPerRow;
 @property (nonatomic, readonly) LibretroPixelFormat pixelFormat;
+// GL's framebuffer origin is bottom-left and everything else here assumes
+// top-left, so a hardware-render frame arrives upside down. It used to be
+// turned over row by row on the CPU during the readback; the display path
+// now flips the quad's texture coordinates instead, which is free. False
+// for every software-rendered core, whose frames were never flipped.
+@property (nonatomic, readonly) BOOL flippedVertically;
 @end
 
 // The shared libretro frontend: video, audio, input, and state plumbing
