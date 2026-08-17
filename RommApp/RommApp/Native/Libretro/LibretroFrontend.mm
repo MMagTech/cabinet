@@ -271,6 +271,51 @@ static bool coreToleratesDeinit(LibretroCoreID coreID) {
     return coreID != LibretroCoreIDFBNeo && coreID != LibretroCoreIDFlycast;
 }
 
+// Completes the hardware-render half of the libretro contract, which this
+// frontend had only ever driven one way: context_reset at every load,
+// context_destroy at none. That was survivable right up until the core was
+// also torn down, and it is what made a second N64 game kill the app.
+//
+// The mechanism is one variable inside libretro-common's GLSM, the state
+// machine mupen64plus renders through (libretro-common/glsm/glsm.c, its
+// GLSM_CTL_STATE_CONTEXT_RESET case). GLSM tracks whether it currently
+// holds a live context in `window_first`. On the first context_reset of a
+// process that flag is zero, so it merely arms it and does nothing else.
+// On every later one it is set, so GLSM calls retroChangeWindow(), which
+// goes through dwnd().changeWindow() into GLideN64's teardown.
+//
+// Meanwhile retro_deinit had already taken mupen through ROM_CLOSE into
+// GLideN64's RomClosed and DisplayWindow::stop(), which runs
+// _destroyData() and then gfxContext.destroy(), leaving graphics::Context
+// holding a null implementation pointer. So the next launch's
+// context_reset drove a second teardown over an already-destroyed context:
+// a null deref in TexrectDrawer::destroy, reached from deep inside GLSM.
+//
+// glsm_state_ctx_destroy's entire body is `window_first = 0`, and the
+// frontend calling context_destroy is the only thing that ever reaches it.
+// Cabinet was tearing the core down without telling GLSM, so GLSM went on
+// believing the old context was current. Confirmed 2026-08-16 by a
+// breadcrumb trace through both the core and GLideN64, after two crash
+// reports showed nothing at all between loadGame: and the fault.
+//
+// Deliberately paired with the deinit rather than called at every unload:
+// the context is only actually invalidated when the core is torn down, and
+// pairing it here means the two cores that never get a deinit, FBNeo and
+// Flycast, reach none of this. Flycast is the only other hardware-render
+// core and it works today; scoping by the deinit keeps it byte-identical
+// without needing a core check of its own.
+static void destroyHWContextIfNeeded(void) {
+    if (!gUsesHWRender || !gHWRender.context_destroy) {
+        return;
+    }
+    // The core is about to release GL objects, so the context those
+    // objects live in has to be the current one.
+    if (gGLContext) {
+        [EAGLContext setCurrentContext:gGLContext];
+    }
+    gHWRender.context_destroy();
+}
+
 uintptr_t hwGetCurrentFramebuffer(void) {
     return gFBO;
 }
@@ -867,6 +912,7 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
             gCore->unload_game();
         }
         if (coreToleratesDeinit(gCoreID)) {
+            destroyHWContextIfNeeded();
             gCore->deinit();
             gInitializedCores.erase(gCoreID);
         }
@@ -946,11 +992,13 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     // Both conditions, deliberately. Widening this to gInitialized alone
     // was tried on 2026-08-16 as a first (wrong) guess at the Dreamcast
     // relaunch crash, and it made the teardown fire in a state it never
-    // used to: a core still initialized whose game is already unloaded.
-    // GLideN64's own teardown null-derefs there, so it turned an N64
-    // relaunch into a crash in TexrectDrawer::destroy. The real Dreamcast
-    // fix is coreToleratesDeinit plus the first_run patch in
-    // build-flycast.sh; neither needs anything widened here.
+    // used to: a core still initialized whose game is already unloaded,
+    // which took an N64 relaunch through the same TexrectDrawer::destroy
+    // null deref destroyHWContextIfNeeded now explains in full. That crash
+    // was reachable on the ordinary quit path too and predated the
+    // widening, so reverting this was necessary but never sufficient. The
+    // real Dreamcast fix is coreToleratesDeinit plus the first_run patch
+    // in build-flycast.sh; neither needs anything widened here.
     if (gInitialized && gGameLoaded) {
         gCore->unload_game();
         gGameLoaded = false;
@@ -958,6 +1006,7 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
         // one; see coreToleratesDeinit for what each of them does instead
         // of surviving it.
         if (coreToleratesDeinit(gCoreID)) {
+            destroyHWContextIfNeeded();
             gCore->deinit();
             gInitialized = false;
             gInitializedCores.erase(gCoreID);
@@ -1179,6 +1228,7 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     // dc_reset. That is the "quit a Dreamcast game and the next one
     // closes the app" report, 2026-08-16.
     if (coreToleratesDeinit(gCoreID)) {
+        destroyHWContextIfNeeded();
         gCore->deinit();
         gInitialized = false;
         gInitializedCores.erase(gCoreID);
