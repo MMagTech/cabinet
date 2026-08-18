@@ -44,6 +44,36 @@ final class FrameTrace {
     /// Dreamcast run to a Game Boy game started afterwards.
     private var core = "unknown"
 
+    /// The OS's own thermal verdict, cached from a notification rather
+    /// than polled per frame. Added 2026-08-17: a fixed-work calibration
+    /// loop inside Flycast proved the Apple TV slows itself down on a
+    /// roughly two-minute rhythm with nobody playing, escalating as a run
+    /// goes on, which is thermal throttling rather than anything in the
+    /// emulator. This column is tvOS/iOS confirming that in its own words,
+    /// and it stays useful afterwards: any future "it got slow" report can
+    /// be checked against whether the box was hot at the time.
+    private var thermal: Int32 = 0
+    private var thermalObserver: NSObjectProtocol?
+
+    private func startThermalWatch() {
+        updateThermal()
+        guard thermalObserver == nil else { return }
+        thermalObserver = NotificationCenter.default.addObserver(
+            forName: ProcessInfo.thermalStateDidChangeNotification,
+            object: nil, queue: nil
+        ) { [weak self] _ in self?.updateThermal() }
+    }
+
+    private func updateThermal() {
+        switch ProcessInfo.processInfo.thermalState {
+        case .nominal: thermal = 0
+        case .fair: thermal = 1
+        case .serious: thermal = 2
+        case .critical: thermal = 3
+        @unknown default: thermal = -1
+        }
+    }
+
     var fileURL: URL {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("frame-trace-\(core).csv")
@@ -69,9 +99,10 @@ final class FrameTrace {
             // before they existed still parses against the same offsets.
             let header = "# core=\(core) sample_rate=\(sampleRate)\n"
                 + "elapsed_ms,draw_gap_ms,frames_run,run_ms,readback_ms,swizzle_ms,upload_ms,"
-                + "audio_frames,hw_frames,run_calls,hw_dupes,target_fps,frame_w,frame_h\n"
+                + "audio_frames,hw_frames,run_calls,hw_dupes,target_fps,frame_w,frame_h,thermal\n"
             self.handle?.write(Data(header.utf8))
         }
+        startThermalWatch()
         started = CFAbsoluteTimeGetCurrent()
     }
 
@@ -91,9 +122,10 @@ final class FrameTrace {
         guard started != 0, written < Self.maxRows else { return }
         let elapsed = (CFAbsoluteTimeGetCurrent() - started) * 1000
         let row = String(
-            format: "%.1f,%.2f,%d,%.3f,%.3f,%.3f,%.3f,%llu,%llu,%llu,%llu,%.4f,%d,%d\n",
+            format: "%.1f,%.2f,%d,%.3f,%.3f,%.3f,%.3f,%llu,%llu,%llu,%llu,%.4f,%d,%d,%d\n",
             elapsed, drawGap, framesRun, run, readback, swizzle, upload,
-            audioFrames, hwFrames, runCalls, hwDupes, targetFPS, frameWidth, frameHeight
+            audioFrames, hwFrames, runCalls, hwDupes, targetFPS, frameWidth, frameHeight,
+            thermal
         )
         pending.append(row)
         // Batched at about two seconds of play: small enough that a crash
