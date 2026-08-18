@@ -973,6 +973,26 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     gSystemDirectory = systemDirectory.fileSystemRepresentation;
     gSaveDirectory = saveDirectory.fileSystemRepresentation;
 
+    // Drop whatever the previous game left on screen. activateCore: does
+    // this too, but it returns early when the core has not changed, so a
+    // second game on the same core inherited the last frame of the first
+    // one: still in gFrameBytes, still flagged dirty, so the new player's
+    // very first draw uploaded and displayed it. Reported 2026-08-17 as
+    // the old game showing briefly before the new one starts, on an N64
+    // to N64 relaunch. The same early return is why gUsesHWRender was
+    // seen surviving a relaunch in that session's lifecycle trace.
+    //
+    // Every core runs this line, and every core wants it: none of them
+    // benefits from showing the previous game's picture. The window it
+    // closes is small, one frame's worth of load time, but it is only
+    // ever wrong.
+    {
+        std::lock_guard<std::mutex> lock(gFrameMutex);
+        gFrameBytes.clear();
+        gFrameDirty = false;
+        gFrameFlipped = false;
+    }
+
     // A second game on the same already-active core skipped all of this
     // entirely: `activateCore:` only tears a core down when switching to
     // a different one, never when staying on the same one for a second
