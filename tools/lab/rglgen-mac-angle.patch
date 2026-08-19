@@ -1,0 +1,20 @@
+diff --git a/core/deps/libretro-common/include/glsym/rglgen_headers.h b/core/deps/libretro-common/include/glsym/rglgen_headers.h
+index 7d44b6d..87f0290 100644
+--- a/core/deps/libretro-common/include/glsym/rglgen_headers.h
++++ b/core/deps/libretro-common/include/glsym/rglgen_headers.h
+@@ -28,7 +28,14 @@
+ #include <EGL/eglext.h>
+ #endif
+ 
+-#if defined(IOS)
++#if defined(CABINET_MAC_ANGLE)
++/* Cabinet's Mac lab: GLES3 via ANGLE on a desktop Mac. Must beat the
++ * __APPLE__ branch below, which assumes an Apple platform can only ever
++ * mean desktop GL. */
++#include <GLES3/gl3.h>
++#define __gl2_h_
++#include <GLES2/gl2ext.h>
++#elif defined(IOS)
+ 
+ #if defined(HAVE_OPENGLES3)
+ #include <OpenGLES/ES3/gl.h>
