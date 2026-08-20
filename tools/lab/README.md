@@ -23,9 +23,15 @@ memory `flycast-perf-investigation` for the investigation it closes.
 
        cmake -B build-lab -DLIBRETRO=ON -DUSE_GLES=ON \
          -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-         -DCMAKE_C_FLAGS="-isystem <angle>/include -DCABINET_MAC_ANGLE -DTARGET_NO_REC" \
-         -DCMAKE_CXX_FLAGS="-isystem <angle>/include -DCABINET_MAC_ANGLE -DTARGET_NO_REC"
+         -DCMAKE_C_FLAGS="-isystem <angle>/include -DCABINET_MAC_ANGLE -DTARGET_NO_REC -DCABINET_PROFILER" \
+         -DCMAKE_CXX_FLAGS="-isystem <angle>/include -DCABINET_MAC_ANGLE -DTARGET_NO_REC -DCABINET_PROFILER"
        cmake --build build-lab -j8
+
+   CABINET_PROFILER compiles in the per-timeslice profiler, the
+   calibration loop, the device-speed throttle, the instruction-mix
+   counters and the CAB_PD_NOCHECK ablation switch. Device builds via
+   tools/build-flycast.sh never define it, so the shipping cores carry
+   none of that; define it here or the lab has no instruments.
 
    TARGET_NO_REC must be a COMPILE FLAG, not a cmake -D option; as an
    option it is silently ignored and you get the dynarec. The tell: the
@@ -61,6 +67,24 @@ resolve:
     xcrun devicectl device copy from --device <id> \
       --domain-type appDataContainer --domain-identifier com.mmagtech.CabinetDev.tv \
       --source "Library/Caches/native-rom-cache/<romid>/dc/dc_boot.bin" ...
+
+## Device-run toggles and traps
+
+The cores read a few environment switches, injectable per launch with
+`devicectl device process launch -e '{"KEY":"value"}'`: CAB_PREDECODE
+(0 disables the predecoded-block interpreter), CAB_PD_FASTMEM (0
+disables the fast memory-handler variants), CAB_SH4CLOCK (overrides the
+sh4clock option for headless clock sweeps), and, in profiler builds
+only, CAB_PD_NOCHECK (skips the block entry check; hangs real games at
+the first code reload, measurement use only). The dclab harness also
+answers any core option from a CAB_OPT_<key> environment variable.
+
+Two traps when pulling results off a device: a stalled launch leaves
+the previous run's full-size trace in place, so guard every pull with
+an md5 compare against the previous pull, never a size check; and a
+hung game leaves the app foreground where the next launch can fail to
+displace it, so treat identical pulls from different configs as
+contamination, not data.
 
 ## The rglgen patch
 

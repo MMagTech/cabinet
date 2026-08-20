@@ -47,6 +47,14 @@ static bool env_cb(unsigned cmd, void *data) {
     case RETRO_ENVIRONMENT_GET_VARIABLE: {
         struct retro_variable *v = (struct retro_variable *)data;
         printf("  GET_VARIABLE %s\n", v->key);
+        /* Generic override: CAB_OPT_<key>=<value> in the environment
+         * answers any core option, e.g. CAB_OPT_reicast_sh4clock=400. */
+        {
+            char envkey[128];
+            snprintf(envkey, sizeof(envkey), "CAB_OPT_%s", v->key);
+            const char *ov = getenv(envkey);
+            if (ov != NULL) { v->value = ov; return true; }
+        }
         if (!strcmp(v->key, "reicast_hle_bios")) { v->value = "enabled"; return true; }
         if (!strcmp(v->key, "reicast_threaded_rendering")) { v->value = "enabled"; return true; }
         v->value = NULL; return false;
