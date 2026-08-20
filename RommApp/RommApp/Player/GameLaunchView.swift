@@ -139,8 +139,9 @@ struct GameLaunchView: View {
                     // A short wide screen has width to spare and almost no
                     // height, so the option cards sit side by side rather
                     // than stacking into a column that needs scrolling.
-                    // Identity and the primary action stay together on the
-                    // left, where the eye starts.
+                    // Identity sits on the left where the eye starts; the
+                    // action leads the column beside it, full width, where
+                    // a primary button has room to read as one.
                     HStack(alignment: .top, spacing: 20) {
                         // Identity on the left, choices and the action on
                         // the right. The cover stays small because a
@@ -153,6 +154,13 @@ struct GameLaunchView: View {
                         .frame(width: 170)
 
                         VStack(spacing: 12) {
+                            // The action leads the column, matching
+                            // portrait's order exactly: identity, Play,
+                            // then the options. It had drifted below the
+                            // option cards here while portrait kept it
+                            // beside the title (reported 2026-08-20).
+                            if loading || isPlayableHere { playButton }
+
                             // Equal halves. Both cards carry a label and a
                             // picker and nothing else, so they match without
                             // being forced to.
@@ -176,15 +184,12 @@ struct GameLaunchView: View {
                             if showsPlayerPicker, !networkMonitor.isOffline { playerCard }
                             if showsKeepCard { keepCard }
 
-                            // No dead button on unsupported systems: the
-                            // library section, the platform label and the
-                            // storage-only card already say everything a
-                            // permanently grey "Unsupported" restated.
-                            // Game-level states on supported systems
-                            // (marked not working, crash counts) keep the
-                            // live button, those are retryable.
-                            if loading || isPlayableHere { playButton }
-
+                            // No dead button on unsupported systems (the
+                            // playButton guard above): the library section,
+                            // the platform label and the storage-only card
+                            // already say everything a permanently grey
+                            // "Unsupported" restated. Game-level states on
+                            // supported systems keep the live button.
                             if isComputerPlatform { computerPlatformCard }
                             downloadStatusCard
                             if interruptedAt != nil { continueCard }
