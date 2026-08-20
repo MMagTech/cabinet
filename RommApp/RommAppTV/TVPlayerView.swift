@@ -494,6 +494,11 @@ private struct TVGameSurface: UIViewControllerRepresentable {
         metalView.enableSetNeedsDisplay = false
         metalView.isPaused = false
         metalView.clearColor = MTLClearColorMake(0, 0, 0, 1)
+        // Deliberately the default three drawables. Two was tried for
+        // latency and measured on this very device (2026-08-20,
+        // FrameTrace): the hardware-rendered cores locked to every other
+        // vsync, N64 presenting at 30 instead of 50. See the matching
+        // comment in NativePlayerRenderer.swift for the numbers.
         metalView.translatesAutoresizingMaskIntoConstraints = false
 
         controller.view.backgroundColor = .black

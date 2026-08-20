@@ -17,6 +17,13 @@ struct MetalGameView: UIViewRepresentable {
         view.enableSetNeedsDisplay = false
         view.isPaused = false
         view.clearColor = MTLClearColorMake(0, 0, 0, 1)
+        // Deliberately the default three drawables. A two-drawable
+        // low-latency configuration was tried and measured on the Apple
+        // TV (2026-08-20, FrameTrace): both hardware-rendered cores
+        // locked to every other vsync, N64's presented rate halving from
+        // 50 to 30 with a 33ms median draw gap, so the "latency" saving
+        // doubled real present latency. Software cores were unaffected.
+        // Do not retry without measuring the readback path first.
         renderer.attach(to: view)
         return view
     }
@@ -330,9 +337,21 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
                     audioTargetFrames = audioProduced + audioRate * 0.1
                 }
             }
-            // Half a frame of surplus is jitter; a governor tighter than
-            // one call's worth of audio would fight normal granularity.
-            let audioCushion = audioRate * 0.05
+            // One frame's worth of audio plus a little jitter room, and
+            // no more. This was 0.05 (50ms) and that generosity was felt:
+            // the governor lets the emulation run ahead of the wall clock
+            // by up to the cushion, and the lead IS input latency, since
+            // the frame on screen trails the emulated present by exactly
+            // that much. Reported by Marcus 2026-08-18 as bad input lag on
+            // Dreamcast only, which fits: the governor is Flycast-only,
+            // and N64 felt fine. 0.02 keeps a full emulated frame of
+            // slack (~17ms) against audio crackle; if crackle returns in
+            // heavy scenes, this is the number to raise, knowing each
+            // hundredth is 10ms of felt lag. Measured against 0.05 on the
+            // Apple TV (2026-08-20, FrameTrace, Crazy Taxi): draw pacing
+            // and audio hold were identical within run noise, so the
+            // tighter value costs nothing measurable.
+            let audioCushion = audioRate * 0.02
             var ranThisDraw = 0
             while runAccumulator >= interval && ranThisDraw < 2 {
                 if audioRate > 0 && audioProduced - audioTargetFrames > audioCushion {
