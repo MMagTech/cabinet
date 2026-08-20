@@ -3,6 +3,12 @@ import Foundation
 /// A human name for each bundled layout file, and what real platform slugs
 /// resolve to it.
 ///
+/// The arcade entries are different in kind from the rest: arcade layouts
+/// are picked per game by the cabinet's own profile (stick type and button
+/// count) rather than by platform slug, and they were generated in code
+/// until tools/arcade-layouts exported them as real files. Editing one
+/// here changes every arcade game with that shape.
+///
 /// Copied by hand from `ControlLayout.forPlatform(slug:)`'s switch, not
 /// derived from it: that switch is not data the editor's target can read at
 /// runtime, only Swift the compiler resolves. Keeping this list is the
@@ -15,6 +21,20 @@ struct LayoutName {
     let slugs: String
 
     static let all: [LayoutName] = [
+        LayoutName(file: "arcade-stick0", title: "Arcade, 0 buttons", slugs: "one stick, no buttons: Pac-Man, Donkey Kong and the rest of the maze and climb family"),
+        LayoutName(file: "arcade-stick1", title: "Arcade, 1 button", slugs: "one stick, 1 button"),
+        LayoutName(file: "arcade-stick2", title: "Arcade, 2 buttons", slugs: "one stick, 2 buttons"),
+        LayoutName(file: "arcade-stick3", title: "Arcade, 3 buttons", slugs: "one stick, 3 buttons"),
+        LayoutName(file: "arcade-stick4", title: "Arcade, 4 buttons", slugs: "one stick, 4 buttons"),
+        LayoutName(file: "arcade-stick5", title: "Arcade, 5 buttons", slugs: "one stick, 5 buttons"),
+        LayoutName(file: "arcade-stick6", title: "Arcade, 6 buttons", slugs: "one stick, six buttons: the fighter layout, and the generic guess for an unmapped cabinet"),
+        LayoutName(file: "arcade-twin0", title: "Arcade twin stick, 0 buttons", slugs: "two sticks (MAME doublejoy): Smash TV, Robotron, Battlezone"),
+        LayoutName(file: "arcade-twin1", title: "Arcade twin stick, 1 button", slugs: "two sticks plus 1 button"),
+        LayoutName(file: "arcade-twin2", title: "Arcade twin stick, 2 buttons", slugs: "two sticks plus 2 buttons"),
+        LayoutName(file: "arcade-twin3", title: "Arcade twin stick, 3 buttons", slugs: "two sticks plus 3 buttons"),
+        LayoutName(file: "arcade-twin4", title: "Arcade twin stick, 4 buttons", slugs: "two sticks plus 4 buttons"),
+        LayoutName(file: "arcade-twin5", title: "Arcade twin stick, 5 buttons", slugs: "two sticks plus 5 buttons"),
+        LayoutName(file: "arcade-twin6", title: "Arcade twin stick, 6 buttons", slugs: "two sticks plus 6 buttons"),
         LayoutName(file: "atari7800", title: "Atari 7800", slugs: "atari7800"),
         LayoutName(file: "default", title: "Fallback pad", slugs: "anything with no fixed digital pad this app can honestly draw"),
         LayoutName(file: "dreamcast", title: "Dreamcast", slugs: "dc"),

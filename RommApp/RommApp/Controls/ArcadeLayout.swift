@@ -19,6 +19,15 @@ import Foundation
 /// machines coins constantly.
 enum ArcadeLayout {
     static func build(for profile: ArcadeProfile) -> ControlLayout {
+        // A tuned file wins over the generated arrangement. The generator
+        // below is what produced these files in the first place
+        // (tools/arcade-layouts), so this changes nothing until one is
+        // edited; it exists so arcade layouts can be tuned in the
+        // LayoutEditor like every other system instead of being the one
+        // corner of the app where layouts are code.
+        if let tuned = tunedLayout(for: profile) {
+            return tuned
+        }
         var items: [ControlLayout.Item] = []
 
         // The stick, low in the left thumb's arc, pivoting from the bottom
@@ -100,6 +109,45 @@ enum ArcadeLayout {
             items: items,
             landscapeItems: landscapeItems(for: profile),
             headroom: nil
+        )
+    }
+
+    /// The tuned file for this profile's geometry, if one is bundled.
+    ///
+    /// Only the stick kind and the button count pick the file: everything
+    /// else about a profile is either behaviour or palette, and both are
+    /// re-applied here from the live profile rather than trusted from the
+    /// file. Four-way-ness in particular is the game's own cabinet data
+    /// (Pac-Man and Donkey Kong break when fed diagonals), so it overrides
+    /// whatever the file happens to carry, and the system string is rebuilt
+    /// so the palette still follows the running game.
+    private static func tunedLayout(for profile: ArcadeProfile) -> ControlLayout? {
+        let count = max(0, min(profile.buttons, 6))
+        let name = "arcade-\(profile.isDualStick ? "twin" : "stick")\(count)"
+        // Loaded here rather than through ControlLayout.named, which
+        // asserts on a miss because everywhere else a missing layout IS a
+        // bug. Here it simply means this variant has never been tuned, and
+        // the generator below is the answer.
+        guard let url = Bundle.main.url(forResource: name, withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let file = try? JSONDecoder().decode(ControlLayout.self, from: data)
+        else { return nil }
+        let fourWay = profile.isDualStick ? false : profile.isFourWay
+        func applied(_ items: [ControlLayout.Item]) -> [ControlLayout.Item] {
+            items.map { item in
+                guard item.kind == .dpad, item.inputs == [4, 5, 6, 7] else { return item }
+                return ControlLayout.Item(
+                    kind: item.kind, label: item.label, input: item.input,
+                    inputs: item.inputs, frame: item.frame,
+                    extended: item.extended, fourWay: fourWay
+                )
+            }
+        }
+        return ControlLayout(
+            system: "arcade:\(profile.profile):\(count)",
+            items: applied(file.items),
+            landscapeItems: file.landscapeItems.map(applied),
+            headroom: file.headroom
         )
     }
 
