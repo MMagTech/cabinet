@@ -40,6 +40,15 @@ static unsigned g_rotation = 0;
 static uint64_t g_audio_frames = 0;
 static unsigned g_last_w = 0, g_last_h = 0;
 static uint64_t g_frame_hash = 0;
+// The frame hash is taken inside video_cb, which the core calls from
+// inside retro_run, so hashing lands inside the stopwatch that is
+// supposed to be timing emulation. Left alone it charges the core for
+// the harness's own work, and because the cost scales with the frame
+// size it does not cancel out of an A/B that changes geometry: it moves
+// the answer in the same direction as the thing being measured. So the
+// hash times itself here and the run loop subtracts it.
+static double g_hash_ms_frame = 0.0;
+static double g_hash_ms[MAX_FRAMES];
 static uint64_t g_dupe_frames = 0;
 // Audio gets its own running hash: an option that only changes sound (an FM
 // chip model, a resampler) leaves every video hash identical, so a video-only
@@ -164,7 +173,9 @@ static bool env_cb(unsigned cmd, void *data) {
 static void video_cb(const void *data, unsigned width, unsigned height, size_t pitch) {
     g_last_w = width; g_last_h = height;
     if (!data) { g_dupe_frames++; return; }  // dupe, same as last frame
+    double hash_t0 = now_ms();
     g_frame_hash = hash_frame(data, width, height, pitch);
+    g_hash_ms_frame += now_ms() - hash_t0;
     if (g_dump_dir[0]) {
         for (int i = 0; i < g_dump_count; i++) {
             // Latching, not exact-match: a 30fps game reports a dupe on half
@@ -333,11 +344,16 @@ int main(int argc, char **argv) {
     for (int i = 0; i < frames; i++) {
         if (i == g_warmup) { t_all = now_ms(); g_audio_frames = 0; }
         g_frame_index = i;
+        g_hash_ms_frame = 0.0;
         double t0 = now_ms();
         retro_run();
-        double dt = now_ms() - t0;
+        // Emulation only: the harness's own hashing ran inside this
+        // window, via the core's call to video_cb, and comes back out.
+        double dt = now_ms() - t0 - g_hash_ms_frame;
+        if (dt < 0) dt = 0;
         if (i >= g_warmup && g_recorded < MAX_FRAMES) {
             g_run_ms[g_recorded] = dt;
+            g_hash_ms[g_recorded] = g_hash_ms_frame;
             g_hash[g_recorded] = g_frame_hash;
             g_w[g_recorded] = g_last_w;
             g_h[g_recorded] = g_last_h;
@@ -392,6 +408,17 @@ int main(int argc, char **argv) {
     printf("  \"wall_ms\": %.2f,\n", wall);
     printf("  \"run_ms_mean\": %.4f,\n", mean);
     printf("  \"run_ms_median\": %.4f,\n", median);
+    // What the harness itself cost, excluded from run_ms above. Reported
+    // rather than hidden: it is the size of the error every number this
+    // tool produced before 2026-08-20 carried, and it scales with the
+    // frame, so it is the first thing to look at when an old result and a
+    // new one disagree.
+    {
+        double hash_total = 0;
+        for (int i = 0; i < g_recorded; i++) hash_total += g_hash_ms[i];
+        printf("  \"hash_ms_mean_excluded\": %.4f,\n",
+               g_recorded ? hash_total / g_recorded : 0.0);
+    }
     printf("  \"run_ms_p95\": %.4f,\n", p95);
     printf("  \"run_ms_p99\": %.4f,\n", p99);
     printf("  \"realtime_ratio\": %.3f,\n", emulated_ms / wall);
