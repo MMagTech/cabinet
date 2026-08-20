@@ -45,24 +45,35 @@ enum ControllerBindings {
         GCInputButtonHome: RetroPad.overlay,
     ]
 
-    /// N64 only. The arcade fold above is wrong for this console in a way
-    /// players notice immediately: mupen64plus reads the N64's own B
-    /// button from RetroPad Y and its C-down from RetroPad A, so the
-    /// arcade defaults put the N64 B on the pad's X and a camera control
-    /// on the pad's B. Hydro Thunder tells you to press B to boost and
-    /// the camera swings instead (reported 2026-08-19).
+    /// N64 only. The arcade fold above is wrong for this console in a
+    /// way players notice immediately (Hydro Thunder's camera swinging
+    /// where a labelled button should act, reported 2026-08-19).
     ///
-    /// Here the two face buttons the N64 actually labels sit where they
-    /// are labelled, and the C-buttons take the remaining two. C is also
-    /// on the right stick, which this app already sends, so nothing
-    /// becomes unreachable. Everything else, including the shoulders and
-    /// Z on the left bumper, is unchanged from `defaults`.
+    /// The full row follows the layout established emulators have set
+    /// for N64 on an Xbox-style pad (mupen64plus-next's RetroArch
+    /// defaults, Project64): A accelerates where A sits, N64 B on the
+    /// west face, C-down and C-up on the east and north faces, Z on the
+    /// left trigger, N64 L and R on the bumpers, all four C-buttons on
+    /// the right stick.
+    ///
+    /// The RetroPad ids look odd because this app pins the core's
+    /// alt-map mode (see NativeCoreOptions' n64 case: the touch layout
+    /// needs C-buttons as plain RetroPad bits), and in that mode the
+    /// core reads N64 L from RetroPad Select and N64 R from RetroPad R2
+    /// (emulate_game_controller_via_libretro.c, alternate_mapping
+    /// branch). The row exists precisely so a core quirk like that is
+    /// absorbed here, per platform, instead of leaking to the player's
+    /// hands.
     static let n64: [String: Int] = {
         var map = defaults
-        map[GCInputButtonA] = RetroPad.b        // N64 A
-        map[GCInputButtonB] = RetroPad.y        // N64 B
-        map[GCInputButtonX] = RetroPad.a        // C-down
-        map[GCInputButtonY] = RetroPad.x        // C-up
+        map[GCInputButtonA] = RetroPad.b              // N64 A
+        map[GCInputButtonX] = RetroPad.y              // N64 B
+        map[GCInputButtonB] = RetroPad.a              // C-down
+        map[GCInputButtonY] = RetroPad.x              // C-up
+        map[GCInputLeftTrigger] = RetroPad.l2         // Z
+        map[GCInputLeftShoulder] = RetroPad.select    // N64 L (alt-map quirk)
+        map[GCInputRightShoulder] = RetroPad.r2       // N64 R (alt-map quirk)
+        map[GCInputRightTrigger] = RetroPad.r2        // N64 R, trigger twin
         return map
     }()
 
