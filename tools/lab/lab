@@ -27,7 +27,7 @@ usage() {
 usage: tools/lab/lab <command> [args]
 
   check [station]     run every assertion, or one station's
-                      stations: controls arcade
+                      stations: wiring controls arcade
   bench <args>        measure a core headless (see bench/README or -h)
   core <name>         bring-up status for one core, as a checklist
   hw <args>           the Dreamcast/ANGLE station, needs ANGLE built
@@ -49,9 +49,10 @@ USAGE
 #
 # A check must never modify the working tree. The tripwire below enforces
 # that rather than trusting it.
-CHECK_STATIONS="controls arcade"
+CHECK_STATIONS="wiring controls arcade"
 check_script_for() {
     case "$1" in
+    wiring)   echo "$LAB/wiring/run.sh" ;;
     controls) echo "$LAB/controls/run.sh" ;;
     arcade)   echo "$LAB/arcade/verify.sh" ;;
     *)        echo "" ;;
@@ -129,6 +130,7 @@ device)
     ;;
 stations)
     cat <<'LIST'
+wiring    asserts   core ids, symbol collisions, both platforms built, layouts present
 controls  asserts   the real controller state machines, headless in the simulator
 arcade    asserts   the bundled arcade layouts still match their generator
 bench     measures  any core headless: frame time, audio rate, geometry, hashes
