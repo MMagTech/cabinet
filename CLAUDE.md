@@ -8,7 +8,7 @@ design and the reasoning behind it, and most decisions in it are already settled
 - Never use `--` (a double hyphen) or an em dash. Not in prose, not in comments,
   not in commit messages, not in UI copy. Use commas, colons, or separate
   sentences.
-- Plain sentences over bullet soup when explaining something.
+- Plain sentences over bullet soup in comments and documentation.
 
 ## Git conventions
 
@@ -42,17 +42,7 @@ design and the reasoning behind it, and most decisions in it are already settled
   After merging any branch that has diverged for more than a day, list what
   the merged-in side changed and confirm each change still exists where
   that code now lives.
-- After every build or package operation, provide a one line commit summary and a
-  full commit description without being asked.
 - `SECURITY.md` stays in the repository root.
-
-## How I like to work
-
-- Scope and mock things before writing code.
-- Keep initial versions weekend sized. Ship something that works, then extend.
-- Favour implementation and momentum over speculative design.
-- Do not reopen settled architectural decisions without a concrete reason.
-- Working software and visible progress over process overhead.
 
 ## Project shape
 
@@ -136,8 +126,8 @@ aimed at one core lands on all of them unless it is deliberately scoped.
   format plus both hardware-rendered cores.
 
 Two regressions on 2026-08-16 are why this section exists, both from
-Dreamcast fixes placed in shared code, and both found by Marcus on his
-own hardware after the work was called done: an audio governor built for
+Dreamcast fixes placed in shared code, and both found on real hardware
+after the work was called done: an audio governor built for
 Flycast's free-running emulation thread went into the shared draw loop
 and slowed N64 down, and a teardown condition widened for Flycast went
 into the shared load path and turned an N64 relaunch into a crash in
@@ -186,8 +176,10 @@ did not change something Cabinet depends on.
 
 ## Do not
 
-- Add dependencies without asking. No DI framework, no networking library, no
-  architecture scaffolding. `URLSession` and Swift concurrency are enough.
+- Add dependencies. No DI framework, no networking library, no architecture
+  scaffolding. `URLSession` and Swift concurrency are enough, and that is a
+  settled decision rather than a default to revisit. Raise it as a proposal
+  first if something genuinely cannot be done without one.
 - Generate the API client from `openapi.json`. That is exactly why the existing
   third party iOS client breaks across RomM versions. Hand written calls, not
   generated.
