@@ -65,6 +65,23 @@ struct CoverFocusStyle: ButtonStyle {
         }
     }
 }
+/// The caption slide for a cover card. `CoverFocusStyle` scales a
+/// focused card 1.10 about its centre, so the card's bottom edge
+/// advances by five percent of the cover height; a caption sitting
+/// under the card gets buried under that growth (reported 2026-08-20,
+/// Smash T.V. on the Recent shelf). Sliding the caption down by the
+/// same amount keeps it clear, the way the TV app's own shelf titles
+/// ride down with a lifted poster. Unfocused, layout is untouched.
+///
+/// The 0.05 here IS half of the style's 1.10 minus one; if the scale
+/// in CoverFocusStyle ever changes, change this with it.
+extension View {
+    func coverCaptionSlide(active: Bool, coverHeight: CGFloat) -> some View {
+        offset(y: active ? coverHeight * 0.05 + 2 : 0)
+            .animation(.easeOut(duration: 0.18), value: active)
+    }
+}
+
 #endif
 
 /// Focus for a text link or textual control, such as a shelf's

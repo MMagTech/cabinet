@@ -23,6 +23,12 @@ struct HomeView: View {
     @State private var loaded = false
     @State private var offline = false
     @State private var resuming: Rom?
+    #if os(tvOS)
+    /// Which shelf card holds focus, keyed by shelf title + rom id so a
+    /// game appearing on two shelves slides only the focused copy's
+    /// caption. Drives coverCaptionSlide.
+    @FocusState private var focusedShelfCard: String?
+    #endif
     #if os(iOS)
     @State private var directLaunch: DirectLaunch?
     #endif
@@ -846,6 +852,7 @@ struct HomeView: View {
                             }
                             #if os(tvOS)
                             .buttonStyle(CoverFocusStyle(cornerRadius: 10))
+                            .focused($focusedShelfCard, equals: "\(title)-\(rom.id)")
                             #else
                             .buttonStyle(.plain)
                             #endif
@@ -858,6 +865,15 @@ struct HomeView: View {
                                 .foregroundStyle(
                                     compatibility.isMarked(rom.id) ? .secondary : .primary
                                 )
+                                #if os(tvOS)
+                                // Rides down with the focused card's lift so
+                                // the grown art cannot bury it; see
+                                // coverCaptionSlide in TVCoverFocus.swift.
+                                .coverCaptionSlide(
+                                    active: focusedShelfCard == "\(title)-\(rom.id)",
+                                    coverHeight: TenFoot.shelfCoverHeight
+                                )
+                                #endif
                         }
                     }
                 }

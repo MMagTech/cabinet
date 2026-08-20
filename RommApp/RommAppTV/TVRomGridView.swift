@@ -39,6 +39,8 @@ struct TVRomGridView: View {
     }
 
     private let columns = [GridItem(.adaptive(minimum: 260), spacing: 48)]
+    /// Which card holds focus, for the caption slide.
+    @FocusState private var focusedRom: Int?
 
     var body: some View {
         ScrollView {
@@ -121,6 +123,7 @@ struct TVRomGridView: View {
                     .favoriteBadge(romId: rom.id)
             }
             .buttonStyle(CoverFocusStyle())
+            .focused($focusedRom, equals: rom.id)
 
             // Two lines, not one: at this width a single line truncated
             // almost every real title. Fixed height so the grid rows stay
@@ -131,6 +134,14 @@ struct TVRomGridView: View {
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .foregroundStyle(compatibility.isMarked(rom.id) ? .secondary : .primary)
+                // Rides down with the focused card's lift; see
+                // coverCaptionSlide in TVCoverFocus.swift. Nominal shelf
+                // cover height is close enough across this grid's
+                // adaptive column range.
+                .coverCaptionSlide(
+                    active: focusedRom == rom.id,
+                    coverHeight: TenFoot.shelfCoverHeight
+                )
         }
     }
 
