@@ -270,15 +270,14 @@ enum NativeCoreOptions {
         ),
     ]
 
-    /// Measured on device, 2026-08-16: the iPhone Air holds an effective
-    /// 100MHz with margin and saturates at 200; the A15 Apple TV floors
-    /// at 0.65x realtime at 100 and gets 75. New hardware tiers are what
-    /// the visible setting above is for.
-    #if os(tvOS)
-    static let dreamcastDefaultClock = "150"
-    #else
+    /// Both platforms default to an effective 100MHz. The 2026-08-16
+    /// "tvOS gets 75" tuning was sized to a core that, it turned out,
+    /// never read this option at all (the interpreter ignored Sh4Clock;
+    /// wired 2026-08-19), so every device has actually been running
+    /// 100MHz effective. Keeping 200 here preserves that behaviour
+    /// exactly now that the dial is real; re-tune per platform from
+    /// measurements on the wired core, not before.
     static let dreamcastDefaultClock = "200"
-    #endif
 
     /// Per-platform option sets. A platform absent from this switch has no
     /// options worth exposing, per docs/scope-native-core-settings.md:

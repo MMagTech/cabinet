@@ -200,6 +200,10 @@ cc -arch arm64 -isysroot "$SDK" $MINVERSION_FLAG -O2 \
 nm -g "$BUILD/flycast_libretro.dylib" 2>/dev/null \
     | awk '/ T _retro_/{print $NF}' | sed 's/^_retro_/_dc_retro_/' | sort -u \
     > "$SPIKE/exports-$PLATFORM.txt"
+# TEMPORARY, with the tvOS input-lag investigation: the render-queue
+# depth gauge the app reads via dlsym. Remove with the instrumentation
+# in Renderer_if.cpp.
+echo "_cabinetPvrQueueDepth" >> "$SPIKE/exports-$PLATFORM.txt"
 
 # Swept from the whole build tree, not just flycast_libretro.dir:
 # CMake pulls in its own static-lib subtargets (libzip, at last check)
