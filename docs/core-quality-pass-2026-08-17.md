@@ -482,11 +482,23 @@ measurements is exactly the reasoning this pass exists to avoid. One
 
 Note on PS1 internal resolution, which **was** taken: the macOS bench put it
 at 1.68x core time, which extrapolated to roughly 90% of frame budget and
-looked unaffordable. The device disagreed, and the device was right: 53.3%
-to 64.4% p99. The bench had measured a different slice of the demo, and
-core-time ratios do not transfer to budget percentages when most of the cost
-lands in the tail rather than the median. Worth remembering the next time a
-bench number is used to rule something out.
+looked unaffordable. The device disagreed and the device was right: 53.3%
+to 64.4% p99.
+
+The explanation recorded here at the time was that core-time ratios do not
+transfer to budget percentages when the cost lands in the tail. That was
+wrong, and it was corrected on 2026-08-20. The bench was hashing every frame
+inside the window it used to time emulation, so it was charging the core for
+its own work: measured on FCEUmm, 0.115ms of emulation against 0.228ms of
+hashing. Worse for this particular comparison, the hash cost scales with the
+frame, so doubling the internal resolution roughly quadrupled the harness
+overhead at the same time as it raised the real cost. That is why the ratio
+came out inflated in the wrong direction rather than merely large.
+
+The lesson to keep is narrower than the one first written down: an instrument
+that shares a stopwatch with the thing it measures will mislead you most
+exactly where the thing you changed also changes the instrument's own cost.
+The device did not overrule the Mac here. The Mac was measuring itself.
 
 ## Not attempted, with reasons
 
