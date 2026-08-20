@@ -73,6 +73,35 @@ worth having in the open.
   becomes a real second screen, cover art and browsing while idle, a
   "now playing" view during a game, closer to a console companion app
   than a remote. Layout and interaction are entirely undecided.
+- **Seven more systems, starting with Atari 2600.** Every platform in
+  this group plays today on iPhone through the web player and is
+  invisible on Apple TV, because the TV lists a platform only when a
+  natively compiled core can run it. Each one is a core to add and a
+  control layout to draw, in rough order of what the library actually
+  holds and how well the emulation is understood:
+
+  | System | Core | Notes |
+  |---|---|---|
+  | Atari 2600 | Stella | 50 games already in the library, the obvious first |
+  | ColecoVision | Gearcoleco | needs its own BIOS |
+  | Intellivision | FreeIntv | its disc controller and keypad are the hard part |
+  | Vectrex | vecx | vector display, overlays, its own look |
+  | 3DO | Opera | a control layout already exists, from earlier scoping |
+  | Magnavox Odyssey<sup>2</sup> | O2EM | keyboard-adjacent controls |
+  | Philips CD-i | SAME_CDI | experimental upstream, lowest priority |
+
+  Atari 2600 is the honest starting point: the games are already here,
+  Stella is mature, and the machine is one stick and one button, so the
+  layout work is small. It is also the cleanest test of whether adding a
+  system is now routine, since nothing about it is unusual except being
+  the first of these.
+
+  The two that are genuinely different are Intellivision and Odyssey<sup>2</sup>:
+  both consoles put a numeric keypad in the player's hand, which no
+  layout in this app draws yet, and no amount of core work substitutes
+  for deciding what that should feel like on a touchscreen and on a TV
+  remote. CD-i is last on purpose, its core calls itself experimental.
+
 - **A native touch control restyle.** The current on-screen controls are
   functional but read a little flat next to the rest of the app. A
   restyle direction has been discussed, not built.
