@@ -31,7 +31,6 @@ struct TVPlayerView: View {
 
     @State private var previousSend: ((Int, Int, Bool) -> Void)?
     @State private var previousStick: ((Int, Float, Float) -> Void)?
-    @State private var previousDigitizesLeftStick = true
     @State private var previousMenu: (() -> Void)?
     @State private var previousDisconnect: ((Int) -> Void)?
 
@@ -235,6 +234,8 @@ struct TVPlayerView: View {
             // game the system needs it for back navigation; see
             // GameControllerManager.capturesMenuButton.
             controllers.capturesMenuButton = true
+            // N64 needs its own base bindings; see ControllerBindings.n64.
+            controllers.activePlatform = platform.rawValue
             previousSend = controllers.send
             previousStick = controllers.sendStick
             previousMenu = controllers.onMenu
@@ -245,12 +246,6 @@ struct TVPlayerView: View {
             controllers.sendStick = { [weak renderer] player, x, y in
                 renderer?.setStick(x: Double(x), y: Double(y), port: player)
             }
-            // Same reasoning as iOS: Dreamcast and N64 have a real analog
-            // stick alongside a real d-pad and their cores read the
-            // analog value, so one thumb must not work both controls.
-            previousDigitizesLeftStick = controllers.digitizesLeftStickAsDPad
-            controllers.digitizesLeftStickAsDPad =
-                !NativeCoreOptionsStore.usesTrueAnalogStick(platform)
             // Menu opens the pause menu now, not the player itself: Quit
             // is its own explicit button inside the menu. Before this,
             // Menu was wired straight to dismiss(), so pressing it always
@@ -276,9 +271,13 @@ struct TVPlayerView: View {
         .onDisappear {
             FrameTrace.shared.end()
             controllers.capturesMenuButton = false
+            // Guarded: if another game's view already claimed the
+            // platform (lifecycle interleave), its claim stands.
+            if controllers.activePlatform == platform.rawValue {
+                controllers.activePlatform = nil
+            }
             controllers.send = previousSend
             controllers.sendStick = previousStick
-            controllers.digitizesLeftStickAsDPad = previousDigitizesLeftStick
             controllers.onMenu = previousMenu
             controllers.onDisconnect = previousDisconnect
             if let startedAt {

@@ -21,7 +21,6 @@ struct NativePlayerView: View {
     @ObservedObject private var controllers = GameControllerManager.shared
     @State private var previousControllerSend: ((Int, Int, Bool) -> Void)?
     @State private var previousControllerStick: ((Int, Float, Float) -> Void)?
-    @State private var previousDigitizesLeftStick = true
     @State private var previousControllerMenu: (() -> Void)?
     @State private var previousControllerDisconnect: ((Int) -> Void)?
     @State private var menuVisible = false
@@ -216,6 +215,8 @@ struct NativePlayerView: View {
             // Settings and the remap screen, so a fresh launch straight into
             // a native game left every controller silent.
             GameControllerManager.shared.start()
+            // N64 needs its own base bindings; see ControllerBindings.n64.
+            GameControllerManager.shared.activePlatform = platform.rawValue
             // Same as the webview player: a running game is being watched
             // even when nothing touches the screen, and with a physical
             // controller nothing ever does. Without this the screen dims
@@ -236,13 +237,6 @@ struct NativePlayerView: View {
             GameControllerManager.shared.sendStick = { [weak renderer] player, x, y in
                 renderer?.setStick(x: Double(x), y: Double(y), port: player)
             }
-            // Dreamcast and N64 have a real analog stick alongside a real
-            // d-pad, and their cores read the analog value, so one thumb
-            // must not work both. Restored on disappear like the handlers
-            // above it.
-            previousDigitizesLeftStick = GameControllerManager.shared.digitizesLeftStickAsDPad
-            GameControllerManager.shared.digitizesLeftStickAsDPad =
-                !NativeCoreOptionsStore.usesTrueAnalogStick(platform)
             GameControllerManager.shared.onMenu = { openMenu() }
             // Nobody is holding anything after a disconnect, so pause into
             // the menu rather than letting the game run on unattended. Same
@@ -268,9 +262,13 @@ struct NativePlayerView: View {
         .onDisappear {
             FrameTrace.shared.end()
             UIApplication.shared.isIdleTimerDisabled = false
+            // Guarded: if another game's view already claimed the
+            // platform (lifecycle interleave), its claim stands.
+            if GameControllerManager.shared.activePlatform == platform.rawValue {
+                GameControllerManager.shared.activePlatform = nil
+            }
             GameControllerManager.shared.send = previousControllerSend
             GameControllerManager.shared.sendStick = previousControllerStick
-            GameControllerManager.shared.digitizesLeftStickAsDPad = previousDigitizesLeftStick
             GameControllerManager.shared.onMenu = previousControllerMenu
             GameControllerManager.shared.onDisconnect = previousControllerDisconnect
             // The session POST is what stamps last played; the heartbeat

@@ -30,6 +30,43 @@ final class GameControllerManager: ObservableObject {
     /// independent: one disconnecting must not release the other's held
     /// buttons, and two different controller models each need their own
     /// bindings resolved from their own vendor name.
+    /// The platform of the game currently running, or nil in the shell.
+    /// Only the base binding map depends on it, and only N64 differs; the
+    /// player sets it when a game starts so a controller connected mid
+    /// game resolves the same way as one connected before it.
+    var activePlatform: String? {
+        didSet {
+            guard activePlatform != oldValue else { return }
+            let profile = ControllerBindings.profile(for: activePlatform)
+            if digitizesLeftStickAsDPad != profile.digitizesLeftStick {
+                digitizesLeftStickAsDPad = profile.digitizesLeftStick
+                // Claims from the old mode must not survive into the new
+                // one, or a direction the stick held on the way out stays
+                // pressed with nothing left to release it.
+                for (index, slot) in slots.enumerated() {
+                    guard let slot else { continue }
+                    for id in [RetroPad.left, RetroPad.right, RetroPad.down, RetroPad.up]
+                    where slot.stickDown[id] == true {
+                        setDirection(id, source: .stick, down: false, player: index)
+                    }
+                }
+            }
+            for (index, slot) in slots.enumerated() {
+                guard let slot else { continue }
+                // A held button must not straddle a rebind: its release
+                // would resolve through the new map to a different id and
+                // orphan the old press. Platform changes happen in the
+                // shell, so there is nothing legitimate to keep held.
+                releaseAll(player: index)
+                // The same nil-vendorName fallback attach uses; skipping
+                // instead left a nameless pad on the previous platform's
+                // map forever (review finding, 2026-08-20).
+                let name = slot.controller?.vendorName ?? slot.name ?? "unknown"
+                slot.bindings = ControllerBindings.effective(for: name, platform: activePlatform)
+            }
+        }
+    }
+
     private final class Slot {
         weak var controller: GCController?
         weak var pad: GCExtendedGamepad?
@@ -40,8 +77,11 @@ final class GameControllerManager: ObservableObject {
         /// Hysteresis state per digitized stick direction (RetroPad.up/
         /// down/left/right, or the second-stick ids 20-23), keyed by id.
         /// Same reason as `triggerDown`: a flat threshold with no gap
-        /// chatters an axis resting near the boundary on and off.
+        /// chatters an axis resting near the boundary on and off. Also
+        /// the stick's direction CLAIMS: see setDirection.
         var stickDown: [Int: Bool] = [:]
+        /// The physical d-pad's direction claims: see setDirection.
+        var dpadDown: Set<Int> = []
         var hapticEngines: [GCHapticsLocality: CHHapticEngine] = [:]
         var availableButtons: [String] = []
         /// Raw element names currently held, tracked independent of any
@@ -99,9 +139,10 @@ final class GameControllerManager: ObservableObject {
     /// for the platforms whose cores read the real analog value AND whose
     /// real controller carries a separate d-pad, since there one thumb
     /// would otherwise work two different physical controls at once. The
-    /// player views set it on appear and restore it on disappear, the
-    /// same borrow-and-return the input handlers around it already use.
-    var digitizesLeftStickAsDPad = true
+    /// Driven entirely by activePlatform through the platform profile
+    /// table (ControllerBindings.profile(for:)); nothing else may write
+    /// it, which is what keeps one platform's stick mode out of another's.
+    private var digitizesLeftStickAsDPad = true
     /// Called when the pad's overlay button is pressed.
     var onMenu: (() -> Void)?
     /// Called when a controller disconnects mid game, so play can pause
@@ -230,7 +271,8 @@ final class GameControllerManager: ObservableObject {
         slot.controller = controller
         slot.name = controller.vendorName
         slot.hapticEngines = [:]
-        slot.bindings = ControllerBindings.effective(for: controller.vendorName ?? "unknown")
+        slot.bindings = ControllerBindings.effective(
+            for: controller.vendorName ?? "unknown", platform: activePlatform)
         publishConnection()
 
         // Directions come from the d-pad and the left stick, always, with no
@@ -397,11 +439,59 @@ final class GameControllerManager: ObservableObject {
         button(name, pressed: isDown, player: player)
     }
 
+    /// Which input surface is claiming a direction. A direction reaches
+    /// the game while ANY source holds it, and a source releasing its
+    /// claim can never release another source's: the physical d-pad and
+    /// the digitized stick are different thumbs on different physical
+    /// controls, and one path dropping the other's press is exactly how
+    /// the left stick died on arcade (2026-08-20, the pollNow
+    /// experiment's per-frame d-pad reads clearing stick-held
+    /// directions). Any future writer of direction ids must claim
+    /// through here under its own source.
+    private enum DirectionSource { case dpad, stick }
+
+    private func setDirection(_ id: Int, source: DirectionSource, down: Bool, player: Int) {
+        guard let slot = slots[player] else { return }
+        let wasDown = slot.dpadDown.contains(id) || slot.stickDown[id] == true
+        switch source {
+        case .dpad:
+            if down { slot.dpadDown.insert(id) } else { slot.dpadDown.remove(id) }
+        case .stick:
+            slot.stickDown[id] = down
+        }
+        let nowDown = slot.dpadDown.contains(id) || slot.stickDown[id] == true
+        if nowDown != wasDown {
+            emit(id, nowDown, player: player)
+        }
+    }
+
+#if DEBUG
+    /// Test seam for tools/controls-test: drives the exact internal paths
+    /// a physical pad does, so the direction state machines run on the
+    /// Mac without hardware. A slot is created on demand because no
+    /// GCController ever connects in the harness. Debug builds only.
+    func _testInjectDpad(_ id: Int, down: Bool, player: Int = 0) {
+        ensureTestSlot(player)
+        setDirection(id, source: .dpad, down: down, player: player)
+    }
+    func _testInjectStick(x: Float, y: Float, player: Int = 0) {
+        ensureTestSlot(player)
+        stick(x: x, y: y, player: player)
+    }
+    func _testInjectStick2(x: Float, y: Float, player: Int = 0) {
+        ensureTestSlot(player)
+        stick2(x: x, y: y, player: player)
+    }
+    private func ensureTestSlot(_ player: Int) {
+        if slots[player] == nil { slots[player] = Slot() }
+    }
+#endif
+
     private func direction(_ id: Int, player: Int) -> GCControllerButtonValueChangedHandler {
         { [weak self] _, _, pressed in
             MainActor.assumeIsolated {
                 guard self?.captureHandler == nil else { return }
-                self?.emit(id, pressed, player: player)
+                self?.setDirection(id, source: .dpad, down: pressed, player: player)
             }
         }
     }
@@ -431,8 +521,7 @@ final class GameControllerManager: ObservableObject {
             // to clear it.
             for id in [RetroPad.left, RetroPad.right, RetroPad.down, RetroPad.up]
             where slot.stickDown[id] == true {
-                slot.stickDown[id] = false
-                emit(id, false, player: player)
+                setDirection(id, source: .stick, down: false, player: player)
             }
         }
         sendStick?(player, x, y)
@@ -464,8 +553,7 @@ final class GameControllerManager: ObservableObject {
         let wasDown = slot.stickDown[id] ?? false
         let isDown = wasDown ? magnitude > 0.4 : magnitude > 0.5
         guard isDown != wasDown else { return }
-        slot.stickDown[id] = isDown
-        emit(id, isDown, player: player)
+        setDirection(id, source: .stick, down: isDown, player: player)
     }
 
     /// Routes an input to the game, edges only: the stick handler above
@@ -594,6 +682,8 @@ final class GameControllerManager: ObservableObject {
         for id in slot.pressedInputs { send?(player, id, false) }
         slot.pressedInputs.removeAll()
         slot.triggerDown.removeAll()
+        slot.stickDown.removeAll()
+        slot.dpadDown.removeAll()
         slot.hapticEngines = [:]
     }
 

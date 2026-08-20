@@ -45,6 +45,60 @@ enum ControllerBindings {
         GCInputButtonHome: RetroPad.overlay,
     ]
 
+    /// N64 only. The arcade fold above is wrong for this console in a way
+    /// players notice immediately: mupen64plus reads the N64's own B
+    /// button from RetroPad Y and its C-down from RetroPad A, so the
+    /// arcade defaults put the N64 B on the pad's X and a camera control
+    /// on the pad's B. Hydro Thunder tells you to press B to boost and
+    /// the camera swings instead (reported 2026-08-19).
+    ///
+    /// Here the two face buttons the N64 actually labels sit where they
+    /// are labelled, and the C-buttons take the remaining two. C is also
+    /// on the right stick, which this app already sends, so nothing
+    /// becomes unreachable. Everything else, including the shoulders and
+    /// Z on the left bumper, is unchanged from `defaults`.
+    static let n64: [String: Int] = {
+        var map = defaults
+        map[GCInputButtonA] = RetroPad.b        // N64 A
+        map[GCInputButtonB] = RetroPad.y        // N64 B
+        map[GCInputButtonX] = RetroPad.a        // C-down
+        map[GCInputButtonY] = RetroPad.x        // C-up
+        return map
+    }()
+
+    /// A platform's complete controller personality, resolved from one
+    /// table in one place. The engine (GameControllerManager) is shared
+    /// by every platform; everything platform-specific about how a pad
+    /// reaches a game lives here as data, so editing one platform's row
+    /// cannot change another's. Same principle as the touch layouts:
+    /// layouts are data, not code.
+    struct PlatformProfile {
+        /// The base button map, before any per controller edits the
+        /// player has saved.
+        let base: [String: Int]
+        /// Whether the left stick is digitized into d-pad presses. True
+        /// wherever the digitized bits are the only path a stick has
+        /// into the game (arcade, and every d-pad-only console); false
+        /// only where the core reads the true analog value from a
+        /// controller that also carries a separate d-pad (Dreamcast,
+        /// N64), where one thumb must not press two physical controls
+        /// at once (Rush 2049, reported 2026-08-16).
+        let digitizesLeftStick: Bool
+    }
+
+    /// nil platform is the shell and the webview player: arcade base
+    /// map, digitizing on, exactly the behaviour that predates profiles.
+    static func profile(for platform: String?) -> PlatformProfile {
+        switch platform {
+        case "n64":
+            return PlatformProfile(base: n64, digitizesLeftStick: false)
+        case "dreamcast":
+            return PlatformProfile(base: defaults, digitizesLeftStick: false)
+        default:
+            return PlatformProfile(base: defaults, digitizesLeftStick: true)
+        }
+    }
+
     /// The choices the remap screen offers whole, before any per button
     /// editing.
     static let presets: [(name: String, detail: String, map: [String: Int])] = [
@@ -64,14 +118,33 @@ enum ControllerBindings {
         "com.mmagtech.RommApp.bindings.\(controller)"
     }
 
-    /// Stored overrides merged over the defaults.
-    static func effective(for controller: String) -> [String: Int] {
-        var map = defaults
+    /// Stored overrides applied over the platform base.
+    ///
+    /// A saved map was authored on the remap screen against `defaults`,
+    /// so it is treated as the player's EDITS against defaults, not as a
+    /// complete map: keys whose value differs from defaults carry over,
+    /// keys the player cleared stay cleared, and everything untouched
+    /// resolves from the platform base. On default-base platforms this
+    /// reproduces the old wholesale replacement byte for byte; on N64 it
+    /// keeps the player's deliberate changes while the platform's own
+    /// face-button labels still land (review finding, 2026-08-20: the
+    /// wholesale replacement silently reverted the N64 map for anyone
+    /// who had ever remapped a single button).
+    static func effective(for controller: String, platform: String? = nil) -> [String: Int] {
+        var map = profile(for: platform).base
         if let saved = UserDefaults.standard.dictionary(forKey: key(for: controller))
             as? [String: Int] {
-            // A saved map replaces wholesale rather than merging, so a
-            // deliberate unbinding is not undone by the defaults.
-            map = saved
+            for (element, id) in saved where defaults[element] != id {
+                // A binding the player changed, or added on an element
+                // defaults leaves unbound. Their choice outranks the
+                // platform base on that element.
+                map[element] = id
+            }
+            for element in defaults.keys where saved[element] == nil {
+                // A binding the player deliberately cleared stays
+                // cleared on every platform.
+                map.removeValue(forKey: element)
+            }
         }
         return map
     }
