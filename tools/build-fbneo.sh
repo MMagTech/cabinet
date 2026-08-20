@@ -26,9 +26,11 @@ PLATFORM=${1:-ios}
 case "$PLATFORM" in
 ios)
     SDK=$(xcrun -sdk iphoneos --show-sdk-path)
+    XCRUN_SDK=iphoneos
     MAKE_PLATFORM=ios9 ;;
 tvos)
     SDK=$(xcrun -sdk appletvos --show-sdk-path)
+    XCRUN_SDK=appletvos
     MAKE_PLATFORM=tvos-arm64 ;;
 *)
     echo "unknown platform: $PLATFORM (expected ios or tvos)" >&2; exit 1 ;;
@@ -45,8 +47,28 @@ if [ ! -d "$SRC" ]; then
     git clone --depth 1 https://github.com/libretro/FBNeo.git "$SRC"
 fi
 
-make -C "$LIBRETRO_DIR" clean
-make -C "$LIBRETRO_DIR" platform=$MAKE_PLATFORM -j"$(sysctl -n hw.ncpu)"
+# Same -fno-common PATH shim as build-core.sh, and the same reasoning:
+# an uninitialised non-static global compiles as a tentative-definition
+# "common" symbol that -exported_symbols_list cannot localize, so two
+# cores sharing an internal name silently share one piece of storage.
+# This script never had the shim; the iOS archive came out clean anyway,
+# but the 2026-08-10 tvOS build shipped 46 unscoped commons, among them
+# _z80_readport/_z80_writeport which collide with Genesis Plus GX. The
+# path is absolute because `make -C` changes the working directory and a
+# relative PATH entry stops resolving, the exact silent failure that hit
+# build-core.sh.
+CCWRAP="$(pwd)/$SPIKE/ccwrap-$PLATFORM"
+mkdir -p "$CCWRAP"
+real_cc=$(xcrun -sdk "$XCRUN_SDK" -find clang)
+real_cxx=$(xcrun -sdk "$XCRUN_SDK" -find clang++)
+printf '#!/bin/sh\nexec "%s" -fno-common "$@" -fno-common\n' "$real_cc" > "$CCWRAP/cc"
+printf '#!/bin/sh\nexec "%s" -fno-common "$@" -fno-common\n' "$real_cc" > "$CCWRAP/clang"
+printf '#!/bin/sh\nexec "%s" -fno-common "$@" -fno-common\n' "$real_cxx" > "$CCWRAP/c++"
+printf '#!/bin/sh\nexec "%s" -fno-common "$@" -fno-common\n' "$real_cxx" > "$CCWRAP/clang++"
+chmod +x "$CCWRAP"/*
+
+PATH="$CCWRAP:$PATH" make -C "$LIBRETRO_DIR" clean
+PATH="$CCWRAP:$PATH" make -C "$LIBRETRO_DIR" platform=$MAKE_PLATFORM -j"$(sysctl -n hw.ncpu)"
 
 DYLIB=$(find "$LIBRETRO_DIR" -maxdepth 1 -name '*.dylib' | head -1)
 [ -n "$DYLIB" ] || { echo "no dylib produced" >&2; exit 1; }
