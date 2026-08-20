@@ -46,6 +46,35 @@ design and the reasoning behind it, and most decisions in it are already settled
   full commit description without being asked.
 - `SECURITY.md` stays in the repository root.
 
+## Choosing models for delegated work
+
+Subagents and workflows inherit this session's model unless one is passed,
+and nothing warns about it. Left alone that puts the most expensive tier on
+file surveys and log parsing, which is filing work done at judgement prices.
+Pick the tier as part of scoping a task, the same way you decide whether
+something needs the device or the lab, and say which tier you picked when
+spawning agents so it can be corrected cheaply rather than discovered later.
+
+Haiku for mechanical fan out where the answer is checkable: file surveys,
+finding every caller of something, transcribing structure, parsing traces.
+
+Sonnet for ordinary comprehension: mapping a subsystem, summarising a core's
+options, routine review passes.
+
+Opus for heavier reasoning that is not adversarial: designing a subsystem,
+synthesising several agents' findings into a plan, root causing with a clear
+trail to follow.
+
+Fable only where being wrong is expensive and subtle: adversarial verification
+against invariants the whole codebase relies on, root causing something that
+already survived a wrong explanation, and final judgement on shared code. On
+2026-08-20 exactly that pass found two real bugs in the controller rework
+after 48 harness assertions had already gone green, which is the shape worth
+paying for.
+
+When unsure, the tell is whether the task has a right answer you could check
+cheaply. If it does, it does not need the expensive model.
+
 ## How I like to work
 
 - Scope and mock things before writing code.
