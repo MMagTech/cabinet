@@ -1,5 +1,10 @@
 # Working notes for Claude
 
+This file describes Cabinet: its architecture, its conventions, its history,
+and the technical findings that cost real time to learn. Anything a
+contributor who has never met the author could not act on, or that would be
+just as true on a different project, does not belong here.
+
 Read `docs/scope-v0.1.md` before doing anything substantial. It carries the full
 design and the reasoning behind it, and most decisions in it are already settled.
 
