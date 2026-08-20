@@ -127,9 +127,12 @@ std::atomic<double> gTargetFPS{60.0};
 // main thread before a load; copied under a lock to keep that honest.
 std::mutex gOptionsMutex;
 NSDictionary<NSString *, NSString *> *gOptions = nil;
-// GET_VARIABLE hands out a borrowed pointer, so the string it points into
-// has to outlive the call; cores copy the value immediately by convention,
-// but the buffer must at least survive until the next lookup.
+// GET_VARIABLE hands out a borrowed pointer with no lifetime stated in
+// libretro.h, and nothing stops a core from keeping it across calls. So
+// answered values are interned in a set that only ever grows: a pointer
+// handed out once stays valid for the life of the process, rather than
+// being overwritten by the next lookup the way a single shared buffer
+// would be. The pool stays tiny, one entry per distinct option value.
 //
 // Rumble: a core can call set_rumble_state every frame while an effect
 // holds, not just on the transition, so this only fires a haptic on the
@@ -144,7 +147,7 @@ bool gRumbleWasOn[4][2] = {}; // [port][RETRO_RUMBLE_STRONG/WEAK]
 // wires it, which is why rumbleSetState below still carries its own
 // direct UIImpactFeedbackGenerator fallback for that brief window.
 static void (^gRumbleHandler)(NSInteger port, BOOL strong, uint16_t strength) = nil;
-std::string gLastVariableValue;
+std::set<std::string> gVariableValuePool; // guarded by gOptionsMutex
 
 // Two ports, one per local player. Each port owns its whole input state
 // rather than sharing bits of one word: FBNeo's twin-stick digitizing
@@ -999,8 +1002,7 @@ bool environmentCallback(unsigned cmd, void *data) {
                 variable->value = nullptr;
                 return false; // core falls back to its own default
             }
-            gLastVariableValue = value.UTF8String;
-            variable->value = gLastVariableValue.c_str();
+            variable->value = gVariableValuePool.insert(value.UTF8String).first->c_str();
             return true;
         }
         case RETRO_ENVIRONMENT_GET_RUMBLE_INTERFACE: {
@@ -1090,9 +1092,15 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
         case LibretroCoreIDFlycast:
             return FlycastCoreAPI();
         default:
-            break;
+            // This used to fall through to the PlayStation core, so a
+            // core id with no case did not fail to load: it silently ran
+            // PCSX ReARMed, which read as the new core being broken in a
+            // baffling way rather than as a missing line here. Crash
+            // with the answer instead. tools/lab/wiring/run.sh asserts
+            // every declared id has a case before this can ever fire.
+            NSLog(@"[LibretroFrontend] coreAPI: no case for core id %ld, add one to this switch", (long)coreID);
+            abort();
     }
-    return PCSXReARMedCoreAPI();
 #endif
 }
 
