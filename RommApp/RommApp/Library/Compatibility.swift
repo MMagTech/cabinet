@@ -78,7 +78,7 @@ final class Compatibility: ObservableObject {
 
 /// Dims a cover and badges it when the game is marked.
 ///
-/// Grayscale plus a lowered opacity is how iOS says unavailable, and it
+/// A badge and a light opacity drop is how this reads as set aside, and it
 /// survives any cover art; a badge alone would vanish into a busy one. The
 /// badge sits on a material circle for the same reason.
 private struct CompatibilityBadge: ViewModifier {
@@ -91,13 +91,35 @@ private struct CompatibilityBadge: ViewModifier {
     func body(content: Content) -> some View {
         let marked = compatibility.isMarked(romId)
         return content
-            .grayscale(marked ? 0.85 : 0)
-            .opacity(marked ? 0.55 : 1)
+            // Receding, not disabled. Draining the colour out of cover art
+            // says the game is dead, which contradicts the only thing this
+            // mark actually means: it still plays, someone just decided it
+            // plays badly here. iOS dims controls that cannot be used; it
+            // does not desaturate content that works. The badge carries the
+            // meaning, and a light touch of opacity is enough to let a
+            // marked tile fall behind its neighbours at a glance.
+            .opacity(marked ? 0.72 : 1)
             .overlay(alignment: .topTrailing) {
                 if marked {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(compact ? .caption2 : .footnote)
-                        .foregroundStyle(.orange)
+                        // Muted rather than full orange. This sits on top
+                        // of cover art, where a fully saturated warning
+                        // colour competes with the artwork instead of
+                        // annotating it, and the badge only has to be
+                        // noticed, not obeyed.
+                        .foregroundStyle(.orange.opacity(0.7))
+                        // Sit the triangle so its three corners are the
+                        // same distance from the ring, which is what the
+                        // eye is actually measuring here.
+                        //
+                        // A glyph is centred by its bounding box, but an
+                        // equilateral triangle's circumcentre, the point
+                        // its corners are equidistant from, is a sixth of
+                        // the triangle's height BELOW that box's centre.
+                        // So box centring parks the corners off by exactly
+                        // that much, and the correction is up by h/6.
+                        .offset(y: compact ? -1.5 : -2)
                         .padding(compact ? 4 : 6)
                         .background(.regularMaterial, in: .circle)
                         .padding(compact ? 4 : 6)
@@ -121,6 +143,13 @@ private struct FavoriteBadge: ViewModifier {
                 Image(systemName: "star.fill")
                     .font(compact ? .caption2 : .footnote)
                     .foregroundStyle(.yellow)
+                    // Same idea as the warning triangle next door, much
+                    // smaller correction. A five pointed star's box is
+                    // bounded above by one point and below by two, so its
+                    // centre sits just under the box's, and box centring
+                    // leaves the points unevenly spaced from the ring by
+                    // about a twentieth of the glyph rather than a sixth.
+                    .offset(y: compact ? -0.5 : -0.75)
                     .padding(compact ? 4 : 6)
                     .background(.regularMaterial, in: .circle)
                     .padding(compact ? 4 : 6)

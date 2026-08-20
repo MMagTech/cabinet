@@ -24,6 +24,7 @@ struct TVGameLaunchView: View {
 
     @EnvironmentObject private var session: Session
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var compatibility = Compatibility.shared
 
     @State private var states: [GameState] = []
     @State private var loadingStates = true
@@ -94,6 +95,7 @@ struct TVGameLaunchView: View {
                     if let platform {
                         playButton(platform: platform)
                         statesSection
+                        compatibilityRow
                     } else {
                         // Every platform tvOS can't run lands here: no
                         // native core exists for it, and unlike iOS there
@@ -127,6 +129,50 @@ struct TVGameLaunchView: View {
         .fullScreenCover(item: $launch) { launch in
             TVPlayerView(rom: rom, core: launch.core, initialState: launch.initialState)
         }
+    }
+
+    /// Marking a game as not working, always offered rather than waiting
+    /// for the app to suggest it.
+    ///
+    /// iOS only surfaces its equivalent card once a game has crashed
+    /// repeatedly, because there the deliberate path is a long-press menu
+    /// in every list. Neither half of that reasoning holds here: tvOS has
+    /// no such menu outside the Home shelves, and the crash counter only
+    /// watches web-player deaths, which a natively played game never has.
+    /// A Dreamcast game that runs badly but never crashes would therefore
+    /// never offer anything at all, which is exactly the case this exists
+    /// for. So it is a permanent row, and saying so is its whole job.
+    ///
+    /// The mark is per device (see Compatibility), which is the point on a
+    /// TV: the same game may be perfectly playable on a phone with twice
+    /// the headroom, and marking it here says nothing about there.
+    @ViewBuilder
+    private var compatibilityRow: some View {
+        let marked = compatibility.isMarked(rom.id)
+        Button {
+            compatibility.setMarked(!marked, romId: rom.id)
+        } label: {
+            // Compatible and incompatible, the same pair the long press
+            // menu has always used, now said the same way on both
+            // launchers. One action should not have three vocabularies in
+            // one app. Both labels name what pressing does rather than
+            // describing the state.
+            //
+            // One short line. The explanation this used to carry said
+            // things the screen already answers: Play is right there, so
+            // "it still plays" is visible rather than worth stating, and
+            // you are looking at an Apple TV, so saying the mark is local
+            // to it earns nothing. The launch screen's whole job is the
+            // cover and the game, and a paragraph of hedging next to Play
+            // takes more attention than the action deserves.
+            Label(marked ? "Mark as compatible" : "Mark as incompatible",
+                  systemImage: marked ? "checkmark.circle" : "exclamationmark.triangle")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 10)
+        }
+        .buttonStyle(RowFocusStyle())
     }
 
     @ViewBuilder

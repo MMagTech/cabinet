@@ -1030,12 +1030,12 @@ struct GameLaunchView: View {
     @ViewBuilder
     private var compatibilityCard: some View {
         if compatibility.isMarked(rom.id) {
-            LaunchCard(title: "Marked as not working", systemImage: "exclamationmark.triangle") {
+            LaunchCard(title: "Marked as incompatible", systemImage: "exclamationmark.triangle") {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("You marked this game as not working on this phone. It will still play if you want to try again.")
+                    Text("You marked this game as incompatible on this phone. It will still play if you want to try again.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Button("Remove the mark") {
+                    Button("Mark as compatible") {
                         compatibility.setMarked(false, romId: rom.id)
                     }
                     .font(.callout)
@@ -1047,7 +1047,7 @@ struct GameLaunchView: View {
                     Text("It has closed itself \(compatibility.crashes(romId: rom.id)) times on this phone. Some boards do not survive here, and a different emulator above sometimes fixes it.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Button("Mark it as not working") {
+                    Button("Mark as incompatible") {
                         compatibility.setMarked(true, romId: rom.id)
                     }
                     .font(.callout)

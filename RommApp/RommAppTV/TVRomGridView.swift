@@ -124,6 +124,11 @@ struct TVRomGridView: View {
             }
             .buttonStyle(CoverFocusStyle())
             .focused($focusedRom, equals: rom.id)
+            // The same menu the Home shelves already carry: hold Select
+            // on a cover to favourite it or mark it not working. The grid
+            // has always DRAWN the incompatible badge and dimmed a marked
+            // title without ever offering a way to set one.
+            .gameContextMenu(rom: rom)
 
             // Two lines, not one: at this width a single line truncated
             // almost every real title. Fixed height so the grid rows stay
