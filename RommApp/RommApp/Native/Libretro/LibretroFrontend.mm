@@ -26,9 +26,23 @@
 #endif
 
 #import <UIKit/UIKit.h>
+// CABINET_ANGLE (test builds): GLES comes from ANGLE's Metal backend
+// instead of Apple's deprecated OpenGLES stack. Same GLES3 dialect, so
+// every gl* call in this file compiles against either. The context is
+// EGL (a tiny offscreen pbuffer; all real rendering goes into gFBO), and
+// proc addresses come from eglGetProcAddress. Measured motive: ANGLE's
+// glReadPixels ran 0.7-1.2ms on the Mac lab where Apple's GLES floors at
+// 4.4ms on this hardware; this build exists to take that measurement on
+// the device itself.
+#ifdef CABINET_ANGLE
+#include <EGL/egl.h>
+#include <GLES3/gl3.h>
+#include <GLES2/gl2ext.h>
+#else
 #import <OpenGLES/EAGL.h>
 #import <OpenGLES/ES3/gl.h>
 #import <OpenGLES/ES3/glext.h>
+#endif
 #include <dlfcn.h>
 #include <string>
 #include <vector>
@@ -36,6 +50,8 @@
 #include <atomic>
 #include <chrono>
 #include <set>
+#include <unordered_map>
+#include <algorithm>
 #include <algorithm>
 #include <cstdarg>
 #include <cstdio>
@@ -144,6 +160,19 @@ std::atomic<uint32_t> gRotation{0};
 // case.
 std::atomic<float> gAnalogLeftX[kMaxPorts];
 std::atomic<float> gAnalogLeftY[kMaxPorts];
+// TEST BUILD, with cabinetInputTrace below: samples-per-frame and last
+// value of the core's own analog-X reads on port 0.
+std::atomic<uint32_t> gAnalogReads{0};
+std::atomic<float> gAnalogLastRead{0};
+// Defined in the Flycast core (Renderer_if.cpp in the spikes tree),
+// written at every render-queue enqueue. Resolved at runtime with dlsym
+// rather than linked, so an app paired with a Flycast archive that
+// predates the symbol (the iPhone's, currently) still builds and runs,
+// it just traces -1.
+static int cabinetQueueDepthNow(void) {
+    static int *p = (int *)dlsym(RTLD_DEFAULT, "cabinetPvrQueueDepth");
+    return p ? *p : -1;
+}
 
 // Cartridge sensors, for the Game Boy Advance carts that shipped with
 // hardware inside them. Only mGBA asks for any of this; every other core
@@ -170,7 +199,95 @@ static void (^gMotionSensingHandler)(BOOL wantsAccelerometer, BOOL wantsGyroscop
 // instead of the plain memory-buffer path every other core uses. Kept
 // file-static like the rest of this frontend's state, one core active
 // at a time.
+#ifdef CABINET_ANGLE
+EGLDisplay gEGLDisplay = EGL_NO_DISPLAY;
+EGLContext gEGLContext = EGL_NO_CONTEXT;
+EGLSurface gEGLSurface = EGL_NO_SURFACE;
+// Non-nil sentinel so every `if (gGLContext)` guard in this file keeps
+// meaning "the GL world exists" without rewriting each site.
+void *gGLContext = nullptr;
+static bool cabinetAngleMakeCurrent(void) {
+    // The N64 rainbow-noise root cause (2026-08-19) is fixed inside the
+    // ANGLE frameworks themselves: mtl_buffer_pool.mm stamps retiring
+    // stream buffers with the open command buffer's serial so the pool
+    // cannot recycle memory that recorded draws still reference. The
+    // earlier env-var workaround (flushAfterStreamVertexData) is gone;
+    // it cost 41 vs 58 fps on the Apple TV.
+    if (gEGLDisplay == EGL_NO_DISPLAY) {
+        gEGLDisplay = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+        EGLint maj, min;
+        if (!eglInitialize(gEGLDisplay, &maj, &min)) { gEGLDisplay = EGL_NO_DISPLAY; return false; }
+        EGLint cfgAttrs[] = { EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_RED_SIZE, 8,
+                              EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8,
+                              EGL_DEPTH_SIZE, 24, EGL_STENCIL_SIZE, 8,
+                              EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT, EGL_NONE };
+        EGLConfig cfg; EGLint n;
+        if (!eglChooseConfig(gEGLDisplay, cfgAttrs, &cfg, 1, &n) || n < 1) return false;
+        EGLint pb[] = { EGL_WIDTH, 4, EGL_HEIGHT, 4, EGL_NONE };
+        gEGLSurface = eglCreatePbufferSurface(gEGLDisplay, cfg, pb);
+        EGLint ctxAttrs[] = { EGL_CONTEXT_CLIENT_VERSION, 3,
+#if DEBUG
+                              // Debug contexts carry validation cost; the
+                              // KHR_debug microscope is a Debug-build tool.
+                              0x30FC /*EGL_CONTEXT_OPENGL_DEBUG*/, EGL_TRUE,
+#endif
+                              EGL_NONE };
+        gEGLContext = eglCreateContext(gEGLDisplay, cfg, EGL_NO_CONTEXT, ctxAttrs);
+        if (gEGLContext == EGL_NO_CONTEXT) return false;
+        gGLContext = (void *)1;
+        // TEST BUILD: ANGLE's KHR_debug callback, appended to the same
+        // diag file the frame stats go to. ANGLE's messages name the
+        // exact call and reason, which is the microscope for the N64
+        // texture artifacts. Rate-limited; errors and warnings only.
+        eglMakeCurrent(gEGLDisplay, gEGLSurface, gEGLSurface, gEGLContext);
+#if DEBUG
+        typedef void (*DebugProc)(const void *callback, const void *userParam);
+        DebugProc dbg = (DebugProc)eglGetProcAddress("glDebugMessageCallbackKHR");
+        if (dbg) {
+            static auto cb = [](unsigned source, unsigned type, unsigned id,
+                                unsigned severity, int length, const char *message,
+                                const void *userParam) {
+                (void)source; (void)length; (void)userParam;
+                if (severity == 0x826B /*NOTIFICATION*/) return;
+                static int count = 0;
+                if (count >= 80) return;
+                count++;
+                NSString *dir = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject;
+                FILE *df = fopen([dir stringByAppendingPathComponent:@"hw-diag.txt"].fileSystemRepresentation, "a");
+                if (df) { fprintf(df, "GLDBG type=0x%X sev=0x%X id=%u: %s\n", type, severity, id, message ?: "?"); fclose(df); }
+            };
+            typedef void (GL_APIENTRY *RealDebugProc)(void (GL_APIENTRY *)(unsigned, unsigned, unsigned, unsigned, int, const char *, const void *), const void *);
+            ((RealDebugProc)dbg)([](unsigned a, unsigned b, unsigned c, unsigned d, int e, const char *f, const void *g) GL_APIENTRY { cb(a,b,c,d,e,f,g); }, nullptr);
+            glEnable(0x92E0 /*GL_DEBUG_OUTPUT_KHR*/);
+        }
+#endif
+        // ANGLE's own feature set, name and status, once per process.
+        // The Mac lab renders this core correctly under the same ANGLE
+        // and the same Metal translator, so whatever differs between
+        // the two feature sets is the short list of suspects for a
+        // corruption that only appears on the Apple mobile GPUs.
+        {
+            typedef unsigned (*QDA)(void *, int, intptr_t *);
+            typedef const char *(*QSI)(void *, int, int);
+            QDA qda = (QDA)eglGetProcAddress("eglQueryDisplayAttribANGLE");
+            QSI qsi = (QSI)eglGetProcAddress("eglQueryStringiANGLE");
+            NSString *dir = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject;
+            FILE *ff = fopen([dir stringByAppendingPathComponent:@"angle-features.txt"].fileSystemRepresentation, "w");
+            if (qda && qsi && ff) {
+                intptr_t n = 0;
+                qda(gEGLDisplay, 0x3465 /*EGL_FEATURE_COUNT_ANGLE*/, &n);
+                for (int i = 0; i < (int)n; i++)
+                    fprintf(ff, "%s = %s\n", qsi(gEGLDisplay, 0x3460 /*NAME*/, i),
+                            qsi(gEGLDisplay, 0x3464 /*STATUS*/, i));
+            }
+            if (ff) fclose(ff);
+        }
+    }
+    return eglMakeCurrent(gEGLDisplay, gEGLSurface, gEGLSurface, gEGLContext);
+}
+#else
 EAGLContext *gGLContext = nil;
+#endif
 struct retro_hw_render_callback gHWRender = {};
 bool gUsesHWRender = false;
 GLuint gFBO = 0;
@@ -311,7 +428,11 @@ static void destroyHWContextIfNeeded(void) {
     // The core is about to release GL objects, so the context those
     // objects live in has to be the current one.
     if (gGLContext) {
+#ifdef CABINET_ANGLE
+        cabinetAngleMakeCurrent();
+#else
         [EAGLContext setCurrentContext:gGLContext];
+#endif
     }
     gHWRender.context_destroy();
 }
@@ -324,7 +445,88 @@ uintptr_t hwGetCurrentFramebuffer(void) {
 // via OpenGLES.framework, so a plain dlsym against the running process
 // resolves them; no dynamic loader indirection needed the way EGL/GLX
 // platforms require.
+#ifdef CABINET_ANGLE
+// GLideN64 calls the indexed blend-state entry points, which are ES 3.2;
+// ANGLE's Metal backend is a strict ES 3.0 and rejects them (validator:
+// "glEnablei: Command requires OpenGL ES 3.2", 40 hits in one run), and
+// every rejection left blend state wrong: the rainbow/white polygon
+// tears seen on Hydro Thunder 2026-08-19. Apple's laxer driver let the
+// same calls work. N64 rendering only ever touches draw buffer 0, so
+// translating index 0 to the non-indexed calls is exact; any other index
+// is dropped and counted rather than guessed at.
+static void GL_APIENTRY cabShimEnablei(GLenum target, GLuint index) {
+    if (index == 0) glEnable(target);
+}
+static void GL_APIENTRY cabShimDisablei(GLenum target, GLuint index) {
+    if (index == 0) glDisable(target);
+}
+#endif
+
+#ifdef CABINET_ANGLE
+// Capability camouflage: GLideN64 picks texture-upload and state paths by
+// sniffing extensions. Apple's GLES advertised almost nothing, so it took
+// the plain paths for a week of correct rendering; ANGLE advertises the
+// modern set, steering GLideN64 onto paths that produce silently-unfilled
+// textures (the deterministic rainbow surfaces on Hydro Thunder,
+// 2026-08-19: same scene, same triangle, no GL errors). Filter the
+// extension queries so ANGLE presents Apple's capability surface and the
+// core repeats its known-good choices.
+static const char *cabBlockedExts[] = {
+    "GL_EXT_buffer_storage", "GL_EXT_draw_buffers_indexed",
+    "GL_OES_EGL_image", "GL_EXT_texture_storage", nullptr };
+static bool cabExtBlocked(const char *e, size_t len) {
+    for (int i = 0; cabBlockedExts[i]; i++)
+        if (strlen(cabBlockedExts[i]) == len && strncmp(e, cabBlockedExts[i], len) == 0) return true;
+    return false;
+}
+static const GLubyte *GL_APIENTRY cabShimGetString(GLenum name) {
+    typedef const GLubyte *(GL_APIENTRY *P)(GLenum);
+    static P real = (P)eglGetProcAddress("glGetString");
+    if (name != GL_EXTENSIONS) return real(name);
+    static std::string filtered;
+    if (filtered.empty()) {
+        const char *all = (const char *)real(GL_EXTENSIONS);
+        if (!all) return nullptr;
+        const char *w = all;
+        while (*w) {
+            const char *end = strchr(w, ' ');
+            size_t len = end ? (size_t)(end - w) : strlen(w);
+            if (!cabExtBlocked(w, len)) { filtered.append(w, len); filtered += ' '; }
+            w += len; while (*w == ' ') w++;
+        }
+    }
+    return (const GLubyte *)filtered.c_str();
+}
+static const GLubyte *GL_APIENTRY cabShimGetStringi(GLenum name, GLuint index) {
+    typedef const GLubyte *(GL_APIENTRY *P)(GLenum, GLuint);
+    static P real = (P)eglGetProcAddress("glGetStringi");
+    if (name != GL_EXTENSIONS) return real(name, index);
+    // Serve from the filtered list so indices stay dense.
+    static std::vector<std::string> list;
+    if (list.empty()) {
+        const char *all = (const char *)cabShimGetString(GL_EXTENSIONS);
+        const char *w = all;
+        while (w && *w) {
+            const char *end = strchr(w, ' ');
+            size_t len = end ? (size_t)(end - w) : strlen(w);
+            list.emplace_back(w, len);
+            w += len; while (*w == ' ') w++;
+        }
+    }
+    return index < list.size() ? (const GLubyte *)list[index].c_str() : nullptr;
+}
+#endif
+
 retro_proc_address_t hwGetProcAddress(const char *sym) {
+#ifdef CABINET_ANGLE
+    if (strcmp(sym, "glEnablei") == 0)  return (retro_proc_address_t)cabShimEnablei;
+    if (strcmp(sym, "glDisablei") == 0) return (retro_proc_address_t)cabShimDisablei;
+    if (strcmp(sym, "glGetString") == 0)  return (retro_proc_address_t)cabShimGetString;
+    if (strcmp(sym, "glGetStringi") == 0) return (retro_proc_address_t)cabShimGetStringi;
+    // ANGLE's loader owns these symbols; dlsym would find Apple's.
+    retro_proc_address_t p = (retro_proc_address_t)eglGetProcAddress(sym);
+    if (p) return p;
+#endif
     return (retro_proc_address_t)dlsym(RTLD_DEFAULT, sym);
 }
 
@@ -478,6 +680,28 @@ void videoRefresh(const void *data, unsigned width, unsigned height, size_t pitc
                       width, height, frameCount, nonZeroBytes, gFrameBytes.size(), maxByte,
                       preExistingErr, readbackErr);
             gHWDiagnostic = buf;
+#if DEBUG
+            // Persist the render diagnostics so a headless black-screen
+            // can be diagnosed from a pulled file. Debug builds only.
+            {
+                NSString *dir = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject;
+                FILE *df = fopen([dir stringByAppendingPathComponent:@"hw-diag.txt"].fileSystemRepresentation, "a");
+                if (df) {
+                    fprintf(df, "core=%ld setup=[%s] frame=[%s]\n", (long)gCoreID,
+                            gHWSetupDiagnostic.c_str(), buf);
+                    fclose(df);
+                }
+                // Frame dumps so the artifacts can be SEEN headlessly:
+                // raw RGBA, converted and eyeballed after pulling. Every
+                // 300th frame, up to 12 files a session.
+                if (frameCount % 300 == 0 && frameCount <= 3600) {
+                    NSString *fp = [dir stringByAppendingPathComponent:
+                        [NSString stringWithFormat:@"framedump-%ld-%u-%ux%u.raw", (long)gCoreID, frameCount, width, height]];
+                    FILE *ff = fopen(fp.fileSystemRepresentation, "w");
+                    if (ff) { fwrite(gFrameBytes.data(), 1, gFrameBytes.size(), ff); fclose(ff); }
+                }
+            }
+#endif
         }
         return;
     }
@@ -562,6 +786,12 @@ int16_t inputState(unsigned port, unsigned device, unsigned index, unsigned id) 
         float value = id == RETRO_DEVICE_ID_ANALOG_X ? gAnalogLeftX[port].load(std::memory_order_relaxed)
                     : id == RETRO_DEVICE_ID_ANALOG_Y ? gAnalogLeftY[port].load(std::memory_order_relaxed)
                     : 0.0f;
+        // TEST BUILD trace: how often the core actually samples the axis,
+        // and the last value it saw. Port 0 X only, the steering axis.
+        if (port == 0 && id == RETRO_DEVICE_ID_ANALOG_X) {
+            gAnalogReads.fetch_add(1, std::memory_order_relaxed);
+            gAnalogLastRead.store(value, std::memory_order_relaxed);
+        }
         return (int16_t)(std::clamp(value, -1.0f, 1.0f) * 0x7fff);
     }
     return 0;
@@ -1190,11 +1420,19 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
         // Flycast correctly detect and use the GLES3 path its own
         // compiled code actually needs. A GLES2-only device would need
         // the fallback; every real device this app targets supports GLES3.
+#ifdef CABINET_ANGLE
+        if (!cabinetAngleMakeCurrent()) {
+            gHWSetupDiagnostic = "ANGLE EGL context creation FAILED";
+            return nil;
+        }
+        gHWSetupDiagnostic = (const char *)glGetString(GL_RENDERER) ?: "ANGLE, no renderer string";
+#else
         EAGLRenderingAPI api = kEAGLRenderingAPIOpenGLES3;
         if (!gGLContext || gGLContext.API != api) {
             gGLContext = [[EAGLContext alloc] initWithAPI:api];
         }
         [EAGLContext setCurrentContext:gGLContext];
+#endif
         setupHWFramebuffer(width, height);
         char resetBuf[64];
         if (gHWRender.context_reset) {
@@ -1255,14 +1493,51 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     }
 }
 
+// TEST BUILD input trace: one line per frame, what the core is actually
+// being fed. Answers, without inference: is the analog axis arriving, is
+// anything pressing d-pad directions, and on which port. Buffered, flushed
+// every 60 frames. Delete with the tvOS steering investigation.
+static void cabinetInputTrace(void) {
+    static FILE *f = nullptr;
+    static uint32_t n = 0;
+    if (!f) {
+        const char *home = getenv("HOME");
+        if (!home) return;
+        char path[512];
+        snprintf(path, sizeof(path), "%s/Library/Caches/input-trace.txt", home);
+        f = fopen(path, "w");
+        if (!f) return;
+        fprintf(f, "frame,p0_ax,p0_ay,p0_up,p0_dn,p0_lt,p0_rt,p1_ax,p1_mask,analog_reads,last_read,qdepth\n");
+    }
+    uint32_t m0 = gButtonMask[0].load(std::memory_order_relaxed);
+    uint32_t m1 = gButtonMask[1].load(std::memory_order_relaxed);
+    fprintf(f, "%u,%.3f,%.3f,%d,%d,%d,%d,%.3f,%u,%u,%.3f,%d\n", n++,
+            gAnalogLeftX[0].load(std::memory_order_relaxed),
+            gAnalogLeftY[0].load(std::memory_order_relaxed),
+            (m0 >> RETRO_DEVICE_ID_JOYPAD_UP) & 1,
+            (m0 >> RETRO_DEVICE_ID_JOYPAD_DOWN) & 1,
+            (m0 >> RETRO_DEVICE_ID_JOYPAD_LEFT) & 1,
+            (m0 >> RETRO_DEVICE_ID_JOYPAD_RIGHT) & 1,
+            gAnalogLeftX[1].load(std::memory_order_relaxed), m1,
+            gAnalogReads.exchange(0, std::memory_order_relaxed),
+            gAnalogLastRead.load(std::memory_order_relaxed),
+            cabinetQueueDepthNow());
+    if (n % 60 == 0) fflush(f);
+}
+
 - (void)runFrame {
+    cabinetInputTrace();
     if (gInitialized && gGameLoaded) {
         if (gUsesHWRender && gGLContext) {
             // Nothing else in this app touches GLES, so this should
             // already be current, but making it current is cheap and
             // guards against something else on this thread having
             // changed it between frames.
+#ifdef CABINET_ANGLE
+            cabinetAngleMakeCurrent();
+#else
             [EAGLContext setCurrentContext:gGLContext];
+#endif
             // Flycast is built against libretro-common's GLSM ("GL State
             // Machine"), which normally sits between a full frontend like
             // RetroArch and the core, replaying a handful of GL defaults
