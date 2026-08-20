@@ -5,7 +5,7 @@
 // stick-held directions and killed the left stick on arcade: the class
 // of bug this file exists to catch before a device ever sees it.
 //
-// Build and run: tools/controls-test/run.sh (simctl spawn on a booted
+// Build and run: tools/lab/controls/run.sh (simctl spawn on a booted
 // simulator; no UI, exit code 0 on green).
 
 import Foundation
@@ -130,35 +130,45 @@ func runTests() -> Int {
           "profile[dreamcast]: defaults base, digitizing off")
     let n = ControllerBindings.profile(for: "n64")
     check(!n.digitizesLeftStick, "profile[n64]: digitizing off")
-    check(n.base[GCInputButtonA] == RetroPad.b && n.base[GCInputButtonB] == RetroPad.y
-          && n.base[GCInputButtonX] == RetroPad.a && n.base[GCInputButtonY] == RetroPad.x,
-          "profile[n64]: the four face buttons land on the N64's own labels")
-    check(n.base.filter { ![GCInputButtonA, GCInputButtonB, GCInputButtonX,
-                            GCInputButtonY].contains($0.key) }
-          == d.filter { ![GCInputButtonA, GCInputButtonB, GCInputButtonX,
-                          GCInputButtonY].contains($0.key) },
-          "profile[n64]: everything except the face buttons matches defaults")
+    check(n.base[GCInputButtonA] == RetroPad.b && n.base[GCInputButtonX] == RetroPad.y
+          && n.base[GCInputButtonB] == RetroPad.a && n.base[GCInputButtonY] == RetroPad.x,
+          "profile[n64]: faces follow the established Xbox layout (A, B-on-X, C on B/Y)")
+    check(n.base[GCInputLeftTrigger] == RetroPad.l2
+          && n.base[GCInputLeftShoulder] == RetroPad.select
+          && n.base[GCInputRightShoulder] == RetroPad.r2
+          && n.base[GCInputRightTrigger] == RetroPad.r2,
+          "profile[n64]: Z on LT, N64 L/R on the bumpers via the alt-map ids")
+    let n64Touched = [GCInputButtonA, GCInputButtonB, GCInputButtonX, GCInputButtonY,
+                      GCInputLeftTrigger, GCInputLeftShoulder,
+                      GCInputRightShoulder, GCInputRightTrigger]
+    check(n.base.filter { !n64Touched.contains($0.key) }
+          == d.filter { !n64Touched.contains($0.key) },
+          "profile[n64]: everything outside the row's own edits matches defaults")
 
     // 9. Saved remaps are edits against defaults, applied over the
     // platform base (review finding 2026-08-20: wholesale replacement
     // silently reverted the N64 map for anyone who ever remapped).
     let testPad = "harness-test-pad"
     var edited = ControllerBindings.defaults
-    edited[GCInputLeftShoulder] = RetroPad.select      // moved Coin
+    edited[GCInputLeftShoulder] = RetroPad.start       // a deliberate oddball,
+                                                       // distinct from BOTH the
+                                                       // default (l2) and the
+                                                       // n64 row (select), so
+                                                       // precedence is proven
     edited.removeValue(forKey: GCInputButtonOptions)   // cleared a binding
     ControllerBindings.save(edited, for: testPad)
     let onDefaults = ControllerBindings.effective(for: testPad)
-    check(onDefaults[GCInputLeftShoulder] == RetroPad.select
+    check(onDefaults[GCInputLeftShoulder] == RetroPad.start
           && onDefaults[GCInputButtonOptions] == nil,
           "remap: edit and clear both stick on default-base platforms")
     check(onDefaults == edited,
           "remap: default-base result reproduces old wholesale behaviour")
     let onN64 = ControllerBindings.effective(for: testPad, platform: "n64")
-    check(onN64[GCInputButtonB] == RetroPad.y,
-          "remap: untouched face buttons still get the N64 labels")
-    check(onN64[GCInputLeftShoulder] == RetroPad.select
+    check(onN64[GCInputButtonX] == RetroPad.y,
+          "remap: untouched faces still get the standard N64 layout")
+    check(onN64[GCInputLeftShoulder] == RetroPad.start
           && onN64[GCInputButtonOptions] == nil,
-          "remap: the player's edit and clear survive on N64")
+          "remap: the player's edit and clear outrank the N64 row")
     var faceEdit = ControllerBindings.defaults
     faceEdit[GCInputButtonB] = RetroPad.l2              // deliberate face change
     ControllerBindings.save(faceEdit, for: testPad)

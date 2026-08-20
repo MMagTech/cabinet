@@ -3,7 +3,7 @@
 # iOS simulator and runs it there headless. Green exit 0. Needs a booted
 # simulator (any iPhone); boots the first available one if none is.
 set -e
-cd "$(dirname "$0")/../.."
+cd "$(dirname "$0")/../../.."
 
 SDK=$(xcrun --show-sdk-path --sdk iphonesimulator)
 OUT=/tmp/cabinet-controls-test
@@ -12,8 +12,8 @@ xcrun swiftc \
   -D DEBUG \
   RommApp/RommApp/Controls/ControllerBindings.swift \
   RommApp/RommApp/Controls/GameControllerManager.swift \
-  tools/controls-test/FrontendStub.swift \
-  tools/controls-test/main.swift \
+  tools/lab/controls/FrontendStub.swift \
+  tools/lab/controls/main.swift \
   -o "$OUT"
 
 BOOTED=$(xcrun simctl list devices booted | grep -o '[A-F0-9-]\{36\}' | head -1)

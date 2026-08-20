@@ -4,7 +4,7 @@
 # rom list is not limited to kept games here: tvOS has no kept-games mirror
 # at all, so every title is fetched, which the harness now supports.
 SECS=${1:-40}
-cd "$(dirname "$0")/../.."
+cd "$(dirname "$0")/../../.."
 DEVICE=${CABINET_TV_DEVICE:-539DFD4E-FAAB-56D5-A39D-34D941DA2754}
 BUNDLE=com.mmagtech.CabinetDev.tv
 OUT=${CABINET_BENCH_OUT:-/tmp/cabinet-tv}

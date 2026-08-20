@@ -7,7 +7,7 @@
 // the files it writes are exactly what the generator produces and
 // exactly the shape the editor round trips.
 //
-// Run: sh tools/arcade-layouts/run.sh   (writes into Resources/ControlLayouts)
+// Run: sh tools/lab/arcade/run.sh   (writes into Resources/ControlLayouts)
 
 import Foundation
 

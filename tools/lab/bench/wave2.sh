@@ -1,6 +1,6 @@
 #!/bin/sh
 # Measure one candidate option against the shipping defaults on device.
-# Usage: tools/bench/wave2.sh <romId> <coreName> <label> "<key=value;key=value>" [seconds]
+# Usage: tools/lab/bench/wave2.sh <romId> <coreName> <label> "<key=value;key=value>" [seconds]
 set -e
 DEVICE=${CABINET_BENCH_DEVICE:-4B536CB7-E086-5C97-AA3F-6C38C6395301}
 BUNDLE=com.mmagtech.CabinetDev

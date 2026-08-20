@@ -1,7 +1,7 @@
 #!/bin/sh
 # One measured run of one kept game on the iPhone, start to numbers.
 #
-# Usage: tools/bench/device_bench.sh <romId> <coreName> <seconds> [stock] 
+# Usage: tools/lab/bench/device_bench.sh <romId> <coreName> <seconds> [stock] 
 #   stock: pass "stock" to run with the pre-2026-08-17 core options, for A/B.
 #
 # Needs the DEBUG build installed; see NativeBenchHarness for the contract.

@@ -1,0 +1,147 @@
+#!/bin/sh
+# The lab: everything that can be learned about Cabinet without a device.
+#
+# Four tools grew here separately, each answering the question in front of
+# it at the time, with no shared way in and no shared idea of what "before"
+# looked like. This is the way in. Stations live in subdirectories and are
+# free to be written in whatever language suits them; this only has to know
+# how to start them and how to add up what they said.
+#
+# Two kinds of station, and the difference is the point:
+#
+#   check   asserts. Exits nonzero when something is wrong. Run it before
+#           calling any change done, and before handing over a build.
+#   bench   measures. Exits zero. Prints numbers for a person to judge.
+#
+# Everything here runs on this Mac. What genuinely needs hardware or eyes
+# is listed at the bottom of README.md rather than pretended at.
+
+set -e
+cd "$(dirname "$0")"
+LAB="$(pwd)"
+REPO="$(cd ../.. && pwd)"
+export LAB REPO
+
+usage() {
+    cat <<'USAGE'
+usage: tools/lab/lab <command> [args]
+
+  check [station]     run every assertion, or one station's
+                      stations: controls arcade
+  bench <args>        measure a core headless (see bench/README or -h)
+  core <name>         bring-up status for one core, as a checklist
+  hw <args>           the Dreamcast/ANGLE station, needs ANGLE built
+  device <args>       drivers that need a real device attached
+  stations            list what exists and what each one covers
+
+Exit code is nonzero if any assertion failed. Measuring never fails.
+USAGE
+}
+
+# Stations that assert, and the exact script that does the asserting.
+#
+# Named explicitly rather than guessed from the directory, because
+# guessing got this wrong once already: arcade holds both a generator
+# (run.sh, which rewrites the layout files from the generator and would
+# discard hand tuning) and a checker (verify.sh). Picking the first
+# plausible filename meant "check" silently regenerated the layouts. It
+# was harmless only because nothing had been tuned yet.
+#
+# A check must never modify the working tree. The tripwire below enforces
+# that rather than trusting it.
+CHECK_STATIONS="controls arcade"
+check_script_for() {
+    case "$1" in
+    controls) echo "$LAB/controls/run.sh" ;;
+    arcade)   echo "$LAB/arcade/verify.sh" ;;
+    *)        echo "" ;;
+    esac
+}
+
+run_check() {
+    station="$1"
+    script="$(check_script_for "$station")"
+    if [ -z "$script" ] || [ ! -f "$script" ]; then
+        echo "no such station: $station" >&2
+        return 2
+    fi
+    echo "=== $station"
+    if sh "$script" > "$TMP/$station.log" 2>&1; then
+        tail -1 "$TMP/$station.log" | sed 's/^/    /'
+        return 0
+    else
+        echo "    FAILED. Full output:"
+        sed 's/^/    /' "$TMP/$station.log"
+        return 1
+    fi
+}
+
+cmd="${1:-}"
+[ $# -gt 0 ] && shift
+
+case "$cmd" in
+check)
+    TMP="$(mktemp -d)"
+    trap 'rm -rf "$TMP"' EXIT
+    failed=0
+    # A check that changes the repository is not a check. Snapshot first,
+    # compare after, and say so loudly rather than letting a station
+    # quietly rewrite something a person had tuned by hand.
+    before="$(cd "$REPO" && git status --porcelain 2>/dev/null | shasum | cut -d" " -f1)"
+    if [ $# -gt 0 ]; then
+        run_check "$1" || failed=1
+    else
+        for s in $CHECK_STATIONS; do
+            run_check "$s" || failed=1
+        done
+    fi
+    after="$(cd "$REPO" && git status --porcelain 2>/dev/null | shasum | cut -d" " -f1)"
+    echo
+    if [ "$before" != "$after" ]; then
+        echo "lab: a check MODIFIED the working tree. That is a bug in the"
+        echo "     station, not a finding. Inspect git status before trusting"
+        echo "     anything above."
+        failed=1
+    fi
+    if [ "$failed" -eq 0 ]; then
+        echo "lab: all checks passed"
+    else
+        echo "lab: FAILURES above"
+    fi
+    exit "$failed"
+    ;;
+bench)
+    [ -x "$LAB/bench/libretro_bench" ] || sh "$LAB/bench/build.sh"
+    exec "$LAB/bench/libretro_bench" "$@"
+    ;;
+core)
+    exec sh "$LAB/core-status.sh" "$@"
+    ;;
+hw)
+    echo "the Dreamcast/ANGLE station: see tools/lab/hw/README.md" >&2
+    echo "it needs an ANGLE build and a ROM, so it is driven by hand" >&2
+    exit 2
+    ;;
+device)
+    echo "device drivers live in tools/lab/bench/*.sh and need hardware attached" >&2
+    ls "$LAB"/bench/*.sh | sed 's|.*/|  |' >&2
+    exit 2
+    ;;
+stations)
+    cat <<'LIST'
+controls  asserts   the real controller state machines, headless in the simulator
+arcade    asserts   the bundled arcade layouts still match their generator
+bench     measures  any core headless: frame time, audio rate, geometry, hashes
+hw        measures  Dreamcast on ANGLE, with the SH4 profiler. Needs ANGLE.
+core      reports   bring-up status for one core, as a checklist
+LIST
+    ;;
+""|-h|--help|help)
+    usage
+    ;;
+*)
+    echo "unknown command: $cmd" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

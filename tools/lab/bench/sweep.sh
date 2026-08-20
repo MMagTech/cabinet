@@ -1,8 +1,8 @@
 #!/bin/sh
 # Every eligible core, both option sets, one row of numbers each.
-# Usage: tools/bench/sweep.sh [seconds]
+# Usage: tools/lab/bench/sweep.sh [seconds]
 SECS=${1:-40}
-cd "$(dirname "$0")/../.."
+cd "$(dirname "$0")/../../.."
 # romId coreName  (one representative kept game per eligible core)
 set -- \
   "383 fceumm" \
@@ -29,7 +29,7 @@ for entry in "$@"; do
     # share one core (Genesis/Game Gear/Sega CD are all genesisPlusGX), and
     # naming by core meant the later row's copy overwrote the earlier row's
     # results before they were renamed.
-    out=$(CABINET_BENCH_OUT=/tmp/cabinet-bench sh tools/bench/device_bench.sh "$rom" "$core" "$SECS" "$mode" "$label" 2>/dev/null)
+    out=$(CABINET_BENCH_OUT=/tmp/cabinet-bench sh tools/lab/bench/device_bench.sh "$rom" "$core" "$SECS" "$mode" "$label" 2>/dev/null)
     if [ -f "$out" ]; then
       echo "ok   $label $mode"
     else

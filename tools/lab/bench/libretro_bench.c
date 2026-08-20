@@ -8,7 +8,7 @@
 // exactly what leaves a core on its own compiled-in defaults. A harness that
 // answered them would measure a core Cabinet never runs.
 //
-// Build: tools/bench/build.sh
+// Build: tools/lab/bench/build.sh
 // Usage: libretro_bench <core.dylib> <rom> [-o key=value]... [-f frames]
 //                       [-s systemdir] [-d dumpdir] [-c csv]
 //

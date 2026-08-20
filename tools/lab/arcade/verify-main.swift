@@ -7,7 +7,7 @@
 // unreachable from the app once a file exists, so this is the only thing
 // standing between a bad export and fourteen wrong layouts.
 //
-// Run: sh tools/arcade-layouts/verify.sh
+// Run: sh tools/lab/arcade/verify.sh
 // Expected after a fresh dump: every variant within the exporter's own
 // 4-decimal rounding (1e-4), which is a hundredth of a point on screen.
 
