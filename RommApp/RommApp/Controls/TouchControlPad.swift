@@ -30,6 +30,10 @@ struct TouchControlPad: UIViewRepresentable {
     /// webview player leaves the default no-op, so a layout carrying
     /// these kinds is inert there rather than wrong.
     var sendRelative: (_ dx: Int, _ dy: Int) -> Void = { _, _ in }
+    /// Absolute aim on the picture, -1..1 each axis plus whether a
+    /// finger is down. The native player wires this to the frontend's
+    /// pointer channel; the webview leaves it inert.
+    var sendPointer: (_ x: Double, _ y: Double, _ down: Bool) -> Void = { _, _, _ in }
     /// The layout's system, for theme colours. The webview player sets
     /// this on its pad directly; this wrapper carries it for hosts that
     /// use the SwiftUI view, so both players draw the same controls.
@@ -45,7 +49,9 @@ struct TouchControlPad: UIViewRepresentable {
     var opacity: Double = 1
 
     func makeUIView(context: Context) -> ControlPadView {
-        let view = ControlPadView(items: items, send: send, sendStick: sendStick, sendRelative: sendRelative)
+        let view = ControlPadView(
+            items: items, send: send, sendStick: sendStick,
+            sendRelative: sendRelative, sendPointer: sendPointer)
         view.backgroundColor = .clear
         view.isMultipleTouchEnabled = true
         return view
@@ -75,6 +81,7 @@ final class ControlPadView: UIView {
     private let send: (Int, Bool) -> Void
     private let sendStick: (_ ids: [Int], _ x: Double, _ y: Double) -> Void
     private let sendRelative: (_ dx: Int, _ dy: Int) -> Void
+    private let sendPointer: (_ x: Double, _ y: Double, _ down: Bool) -> Void
     private let haptic = UIImpactFeedbackGenerator(style: .light)
     private let detent = UIImpactFeedbackGenerator(style: .light)
 
@@ -96,6 +103,18 @@ final class ControlPadView: UIView {
     private var trackballRemainder = (x: 0.0, y: 0.0)
     private var momentum: CADisplayLink?
 
+    // Wheel: a horizontal drag turns it, and the turn's CHANGE is what
+    // reaches the game, because MAME's steering ports are positional and
+    // the core integrates the relative counts back into a position. Same
+    // path the spinner proved, different shape under the thumb.
+    private var wheelTouch: UITouch?
+    private var wheelLastX: CGFloat?
+    private var wheelRemainder = 0.0
+    private var wheelAngle = 0.0
+
+    // Gun: one touch aims and fires, straight onto the picture.
+    private var gunTouch: UITouch?
+
     /// Inputs currently held down, across all touches.
     private var pressed: Set<Int> = []
     /// What each live touch is contributing. A d-pad touch owns several.
@@ -110,12 +129,14 @@ final class ControlPadView: UIView {
     init(
         items: [ControlLayout.Item], send: @escaping (Int, Bool) -> Void,
         sendStick: @escaping (_ ids: [Int], _ x: Double, _ y: Double) -> Void = { _, _, _ in },
-        sendRelative: @escaping (_ dx: Int, _ dy: Int) -> Void = { _, _ in }
+        sendRelative: @escaping (_ dx: Int, _ dy: Int) -> Void = { _, _ in },
+        sendPointer: @escaping (_ x: Double, _ y: Double, _ down: Bool) -> Void = { _, _, _ in }
     ) {
         self.items = items
         self.send = send
         self.sendStick = sendStick
         self.sendRelative = sendRelative
+        self.sendPointer = sendPointer
         super.init(frame: .zero)
         contentMode = .redraw
     }
@@ -154,6 +175,16 @@ final class ControlPadView: UIView {
                 spinnerLastAngle = nil
                 continue
             }
+            if wheelTouch == nil, item(of: .wheel, at: point) != nil {
+                wheelTouch = touch
+                wheelLastX = point.x
+                continue
+            }
+            if gunTouch == nil, let gun = item(of: .gun, at: point) {
+                gunTouch = touch
+                updateGun(gun, at: point, down: true)
+                continue
+            }
             if trackballTouch == nil, item(of: .trackball, at: point) != nil {
                 // A finger on the ball stops the coast, exactly like a
                 // hand on a real one.
@@ -176,6 +207,14 @@ final class ControlPadView: UIView {
             }
             if touch == spinnerTouch, let item = items.first(where: { $0.kind == .spinner }) {
                 updateSpinner(item, at: touch.location(in: self))
+                continue
+            }
+            if touch == wheelTouch, let item = items.first(where: { $0.kind == .wheel }) {
+                updateWheel(item, at: touch.location(in: self))
+                continue
+            }
+            if touch == gunTouch, let gun = items.first(where: { $0.kind == .gun }) {
+                updateGun(gun, at: touch.location(in: self), down: true)
                 continue
             }
             if touch == trackballTouch, let item = items.first(where: { $0.kind == .trackball }) {
@@ -204,6 +243,30 @@ final class ControlPadView: UIView {
                 spinnerTouch = nil
                 spinnerLastAngle = nil
                 spinnerDetentAccum = 0
+                continue
+            }
+            if touch == wheelTouch {
+                wheelTouch = nil
+                wheelLastX = nil
+                // The wheel self-centres, as a sprung cabinet wheel does.
+                if let item = items.first(where: { $0.kind == .wheel }) {
+                    let counts = -wheelAngle * ((item.sensitivity ?? 500) / 100)
+                    let whole = counts.rounded(.towardZero)
+                    if whole != 0 { sendRelative(Int(whole), 0) }
+                    wheelAngle = 0
+                    wheelRemainder = 0
+                    setNeedsDisplay(item.frame.resolved(in: bounds.size).insetBy(dx: -8, dy: -8))
+                }
+                continue
+            }
+            if touch == gunTouch {
+                gunTouch = nil
+                if let gun = items.first(where: { $0.kind == .gun }) {
+                    // Released: aim holds, trigger lifts.
+                    let frame = gun.frame.resolved(in: bounds.size)
+                    _ = frame
+                    sendPointer(0, 0, false)
+                }
                 continue
             }
             if touch == trackballTouch {
@@ -268,6 +331,35 @@ final class ControlPadView: UIView {
         trackballVelocity = CGVector(
             dx: (point.x - last.point.x) / dt, dy: (point.y - last.point.y) / dt)
         trackballLast = (point, touch.timestamp)
+    }
+
+    /// A wheel's travel is horizontal: how far the thumb has dragged
+    /// from where it grabbed, capped at full lock, with the CHANGE in
+    /// that angle sent as counts. Holding the wheel turned therefore
+    /// holds a steering position rather than spinning forever.
+    private func updateWheel(_ item: ControlLayout.Item, at point: CGPoint) {
+        let frame = item.frame.resolved(in: bounds.size)
+        guard let lastX = wheelLastX else { wheelLastX = point.x; return }
+        let travel = frame.width / 2
+        let previous = wheelAngle
+        wheelAngle = max(-1, min(1, wheelAngle + Double((point.x - lastX) / travel)))
+        wheelLastX = point.x
+        let scale = (item.sensitivity ?? 500) / 100
+        let counts = (wheelAngle - previous) * scale + wheelRemainder
+        let whole = counts.rounded(.towardZero)
+        wheelRemainder = counts - whole
+        if whole != 0 { sendRelative(Int(whole), 0) }
+        setNeedsDisplay(frame.insetBy(dx: -8, dy: -8))
+    }
+
+    /// Aim is where the finger is, expressed against the gun item's own
+    /// frame, which the layout places over the picture.
+    private func updateGun(_ gun: ControlLayout.Item, at point: CGPoint, down: Bool) {
+        let frame = gun.frame.resolved(in: bounds.size)
+        guard frame.width > 0, frame.height > 0 else { return }
+        let x = Double((point.x - frame.midX) / (frame.width / 2))
+        let y = Double((point.y - frame.midY) / (frame.height / 2))
+        sendPointer(max(-1, min(1, x)), max(-1, min(1, y)), down)
     }
 
     private func startTrackballMomentum() {
@@ -384,6 +476,12 @@ final class ControlPadView: UIView {
                     if unit.x < 0.40 { held.insert(ids[2]) }   // left
                     if unit.x > 0.60 { held.insert(ids[3]) }   // right
                 }
+            case .pedal:
+                // A pedal presses like a button; MAME's analog pedal
+                // ports accept a full press, which is how anyone plays
+                // a driving game on anything but a real cabinet.
+                guard let id = item.input else { break }
+                held.insert(id)
             case .button, .pill:
                 guard let id = item.input else { break }
                 let frame = item.frame.resolved(in: bounds.size)
@@ -393,7 +491,7 @@ final class ControlPadView: UIView {
                 if nearestButton == nil || distance < nearestButton!.distance {
                     nearestButton = (id, distance)
                 }
-            case .stick, .spinner, .trackball:
+            case .stick, .spinner, .trackball, .wheel, .gun:
                 // Handled separately: each is claimed by a touch in
                 // touchesBegan and tracked through its own update path,
                 // not through this digital held-id path.
@@ -448,6 +546,16 @@ final class ControlPadView: UIView {
                 drawSpinner(in: frame)
             case .trackball:
                 drawTrackball(in: frame)
+            case .wheel:
+                drawWheel(in: frame)
+            case .pedal:
+                drawPill(
+                    in: frame, label: item.label, tint: tint,
+                    active: item.input.map(pressed.contains) ?? false)
+            case .gun:
+                // Nothing drawn: the picture is the sight, and a frame
+                // over the game would only hide it.
+                break
             }
         }
     }
@@ -472,6 +580,28 @@ final class ControlPadView: UIView {
                 x: center.x + cos(a) * (radius - 3), y: center.y + sin(a) * (radius - 3))
             ctx.move(to: inner); ctx.addLine(to: outer)
         }
+        ctx.strokePath()
+    }
+
+    /// An arc that tilts with the wheel's travel, so the control shows
+    /// its own steering angle the way a wheel's spokes do.
+    private func drawWheel(in frame: CGRect) {
+        guard let ctx = UIGraphicsGetCurrentContext() else { return }
+        let radius = min(frame.width, frame.height * 2) / 2 - 6
+        let center = CGPoint(x: frame.midX, y: frame.maxY)
+        ctx.setStrokeColor(UIColor.white.withAlphaComponent(0.4).cgColor)
+        ctx.setLineWidth(9)
+        ctx.addArc(center: center, radius: radius,
+                   startAngle: .pi * 1.15, endAngle: .pi * 1.85, clockwise: false)
+        ctx.strokePath()
+        // The grip mark, showing how far the wheel is turned.
+        let a = .pi * 1.5 + wheelAngle * (.pi * 0.35)
+        ctx.setStrokeColor(UIColor.white.withAlphaComponent(0.75).cgColor)
+        ctx.setLineWidth(5)
+        ctx.move(to: CGPoint(x: center.x + cos(a) * (radius - 14),
+                             y: center.y + sin(a) * (radius - 14)))
+        ctx.addLine(to: CGPoint(x: center.x + cos(a) * (radius + 5),
+                                y: center.y + sin(a) * (radius + 5)))
         ctx.strokePath()
     }
 

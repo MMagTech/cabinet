@@ -50,6 +50,17 @@ struct ControlLayout: Decodable {
             /// A ball you flick: relative x/y with momentum, same
             /// channel, both axes.
             case trackball
+            /// A wheel you turn: absolute steering angle from the phone's
+            /// roll, gravity-referenced so it never drifts, into the
+            /// analog stick's x axis the driving cores already read.
+            case wheel
+            /// A pedal: a pressure pad reported as an analog axis rather
+            /// than a button, so a feathered throttle is possible.
+            case pedal
+            /// Point at the picture itself: absolute coordinates into the
+            /// frontend's pointer channel, which is what a lightgun means
+            /// on a touchscreen.
+            case gun
         }
 
         let kind: Kind

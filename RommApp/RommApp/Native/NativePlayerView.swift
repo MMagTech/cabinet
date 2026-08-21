@@ -107,6 +107,10 @@ struct NativePlayerView: View {
         LibretroFrontend.shared.addMouseDeltaX(dx, y: dy, port: 0)
     }
 
+    private func handlePointer(_ x: Double, _ y: Double, _ down: Bool) {
+        LibretroFrontend.shared.setPointerX(Float(x), y: Float(y), down: down, port: 0)
+    }
+
     private func handleInput(_ id: Int, down: Bool) {
         if id == RetroPad.overlay {
             if down { openMenu() }
@@ -169,7 +173,7 @@ struct NativePlayerView: View {
                     ZStack {
                         MetalGameView(renderer: renderer)
                         if showsControls {
-                            TouchControlPad(items: layoutItems(landscape: true), send: handleInput, sendStick: handleStick, sendRelative: handleRelative, system: controlLayout.system, opacity: controlOpacity)
+                            TouchControlPad(items: layoutItems(landscape: true), send: handleInput, sendStick: handleStick, sendRelative: handleRelative, sendPointer: handlePointer, system: controlLayout.system, opacity: controlOpacity)
                         }
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
@@ -194,7 +198,7 @@ struct NativePlayerView: View {
                     ZStack(alignment: .top) {
                         MetalGameView(renderer: renderer)
                             .frame(height: max(geometry.size.height - controlStripHeight, 0))
-                        TouchControlPad(items: layoutItems(landscape: false), send: handleInput, sendStick: handleStick, sendRelative: handleRelative, system: controlLayout.system, opacity: controlOpacity)
+                        TouchControlPad(items: layoutItems(landscape: false), send: handleInput, sendStick: handleStick, sendRelative: handleRelative, sendPointer: handlePointer, system: controlLayout.system, opacity: controlOpacity)
                             .frame(height: padHeight)
                             .frame(maxHeight: .infinity, alignment: .bottom)
                     }

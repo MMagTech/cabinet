@@ -166,7 +166,12 @@ enum NativeLauncher {
         await restoreCoreFileSaveIfNeeded(
             rom: rom, session: session, platform: platform, loadURL: loadURL, saveDir: saveDir
         )
-        return try activate(platform: platform, core: core, loadURL: loadURL, workDir: workDir, saveDir: saveDir)
+        // A gun cabinet's aim is absolute, so the core reads the pointer
+        // channel; everything else reads relative mouse deltas.
+        let gunCabinet = (AnalogControls.controls(forShortname: rom.fsNameNoExt)?.lightgun ?? 0) > 0
+        return try activate(
+            platform: platform, core: core, loadURL: loadURL,
+            workDir: workDir, saveDir: saveDir, gunCabinet: gunCabinet)
     }
 
     /// The persistent per-game directory handed to the core as its save
@@ -313,7 +318,7 @@ enum NativeLauncher {
         }
     }
 
-    private static func activate(platform: NativePlatform, core: NativeCore, loadURL: URL, workDir: URL, saveDir: URL) throws -> NativeCore {
+    private static func activate(platform: NativePlatform, core: NativeCore, loadURL: URL, workDir: URL, saveDir: URL, gunCabinet: Bool = false) throws -> NativeCore {
         #if targetEnvironment(simulator)
         // A simulator build links no cores: they are built for real
         // hardware and rebuilding emulator cores for a simulator proves
@@ -334,7 +339,9 @@ enum NativeLauncher {
             // trackball and paddle is dead however hard the spinner
             // spins. Answered here, next to the core it describes, until
             // this core gets its full options pass.
-            coreOptions["mame2003-plus_xy_device"] = "mouse"
+            // Gun cabinets want the pointer (a touch IS an absolute aim);
+            // dials, paddles and trackballs want relative mouse deltas.
+            coreOptions["mame2003-plus_xy_device"] = gunCabinet ? "pointer" : "mouse"
             // Same class, second victim, found by ear: unanswered, the
             // core's sample rate global stays zero and it produces no
             // audio at all. Verified in the bench: bare run emitted 0

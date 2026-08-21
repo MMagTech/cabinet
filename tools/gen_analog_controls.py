@@ -64,19 +64,46 @@ def main(src):
                 # stop. Without both conditions this file attributed The
                 # Irritating Maze's trackball to every Neo Geo game.
                 if m.group(1).isupper():
-                    file_fallback.setdefault(path, mech)
+                    file_fallback.setdefault(path, []).append(mech)
         for g in game_re.findall(re.sub(r'\s+', ' ', text)):
             games.append((g[0], g[1], g[2], path))
+
+    # How many games share each port block. A block written for one
+    # cabinet describes that cabinet; a block serving a whole PCB family
+    # (Taito F3 declares dials in the one block all forty of its games
+    # use) describes what the hardware could accept, not what any
+    # particular machine had on its panel. Bubble Bobble 2 is not a
+    # spinner game. listxml does not help here, since it walks the same
+    # shared block; the sharing itself is the signal.
+    # Counted over distinct PARENT games only: a block shared by one
+    # game's own revisions (every Tempest set) still describes one
+    # cabinet, while a block shared by forty different titles describes
+    # a PCB family.
+    import collections as _c
+    share = _c.Counter(
+        port for short, parent, port, _ in games if parent in ('0', 'NULL'))
+    SHARED = 4
 
     out = {}
     port_of = {short: port for short, parent, port, _ in games}
     for short, parent, port, path in games:
         mech = port_controls.get(port)
+        if mech is not None and share[port] >= SHARED:
+            mech = None
         # Clones without their own port block inherit the parent's.
         if mech is None and parent not in ('0', 'NULL'):
-            mech = port_controls.get(port_of.get(parent, ''))
+            pport = port_of.get(parent, '')
+            if share[pport] < SHARED:
+                mech = port_controls.get(pport)
         if mech is None and port not in all_ports:
-            mech = file_fallback.get(path)
+            # Only when the file's macro blocks AGREE. Taito F2 declares
+            # both a Cameltry-style dial block and plain ones through
+            # macros; taking any single one handed Bubble Bobble 2 a dial
+            # it does not have. Ambiguity means no answer, which costs a
+            # d-pad and never invents a control.
+            candidates = file_fallback.get(path) or []
+            uniq = {tuple(sorted(c.items())) for c in candidates}
+            mech = candidates[0] if len(uniq) == 1 else None
         if mech: out[short] = mech
 
     dest = os.path.join(os.path.dirname(__file__), '..',

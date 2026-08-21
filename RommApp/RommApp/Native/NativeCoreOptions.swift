@@ -164,11 +164,21 @@ enum NativeCoreOptions {
             // "GBC" is deliberately not offered: this list only ever loads
             // GBA carts, never GBC ones, which is Gambatte's system.
             choices: [
-                .init(value: "Off", label: "Off"),
+                // "OFF" uppercase, matching mGBA's own value list exactly
+                // (libretro_core_options.h:185). This read "Off" until
+                // 2026-08-17, which mGBA matches against none of its three
+                // known strings and so lands on ccType 0, the off path, by
+                // accident rather than by agreement. Harmless today and
+                // exactly the shape of the FBNeo frameskip casing bug
+                // above, so corrected while the values were being checked.
+                // A stored "Off" from before now fails the choices check in
+                // `value(_:for:)` and falls back to this default, which is
+                // the same setting it always meant.
+                .init(value: "OFF", label: "Off"),
                 .init(value: "GBA", label: "GBA / GBA SP"),
                 .init(value: "Auto", label: "Auto"),
             ],
-            defaultValue: "Off"
+            defaultValue: "OFF"
         ),
         NativeCoreOption(
             key: "mgba_interframe_blending",
@@ -319,6 +329,20 @@ enum NativePadDevice {
 /// option's own default when unset, matching how the core itself treats a
 /// missing key.
 enum NativeCoreOptionsStore {
+    /// Debug-only escape hatch so one build can measure both sides of the
+    /// 2026-08-17 quality pass. With `-cabinetBenchStockOptions 1` on the
+    /// command line, `dictionary(for:)` reverts to what it did before that
+    /// pass: only options somebody changed, and none of the restored
+    /// defaults. Nothing but `NativeBenchHarness` ever passes it, and it
+    /// compiles away entirely in a release build.
+    static var benchWantsStockOptions: Bool {
+        #if DEBUG
+        return UserDefaults.standard.bool(forKey: "cabinetBenchStockOptions")
+        #else
+        return false
+        #endif
+    }
+
     private static func key(platform: NativePlatform, option: String) -> String {
         "com.mmagtech.RommApp.nativeCoreOption.\(platform.storageKey).\(option)"
     }
@@ -340,21 +364,49 @@ enum NativeCoreOptionsStore {
     }
 
     /// The options dictionary for a platform, ready for
-    /// `LibretroFrontend.setCoreOptions:`. Deliberately only the keys
-    /// someone actually changed in Settings, not every option at its
-    /// default: sending a value the core recognizes still changes how
-    /// some drivers behave versus never calling `SET_CORE_OPTIONS`/
-    /// `GET_VARIABLE` for that key at all, since `LibretroFrontend` still
-    /// doesn't answer `SET_CORE_OPTIONS_V2` (a real, already-known gap).
-    /// Games nobody has touched a core option for get exactly the empty
-    /// dictionary this app always sent before this feature existed.
+    /// `LibretroFrontend.setCoreOptions:`.
+    ///
+    /// Every exposed option is sent at its resolved value, not only the
+    /// ones somebody changed. This used to send only changed keys, on the
+    /// reasoning that an untouched game should reach the core exactly as
+    /// it did before core settings existed. That reasoning had a hole:
+    /// `LibretroFrontend` answers neither `SET_VARIABLES` nor
+    /// `SET_CORE_OPTIONS_V2`, so a key nobody answers does not fall back
+    /// to the value the option table declares, it falls back to whatever
+    /// the core's own C global happens to be initialised to, and those
+    /// two are not the same thing. RetroArch never sees the difference
+    /// because registering the options is what seeds its answers.
+    ///
+    /// Measured 2026-08-17 with `tools/bench/libretro_bench`, which
+    /// answers exactly what this frontend answers: FBNeo's
+    /// `bAllowDepth32` is a static `false` while this app's own Settings
+    /// screen showed "enabled", so every arcade game rendered 16-bit;
+    /// FCEUmm's `current_palette` is a static `0`, which is the
+    /// third-party "asqrealc" palette rather than the core's default NES
+    /// one, and 98% of pixels in a Contra frame differed between them.
+    /// Sending the resolved value always is what makes the Settings
+    /// screen describe the machine that is actually running.
+    ///
+    /// Nintendo 64 and Dreamcast are explicitly excluded from the change,
+    /// not merely unaffected by it. N64 exposes no options at all and
+    /// Dreamcast already always-sent its one option below, so both would
+    /// build a byte-identical dictionary either way; the guard is here so
+    /// that stays true by construction rather than by coincidence, since
+    /// both are separate in-flight investigations this pass must not
+    /// perturb.
     ///
     /// The pad type is excluded: it is not a core variable, it reaches the
     /// core through `padDevice(for:)` instead.
     static func dictionary(for platform: NativePlatform) -> [String: String] {
         var result: [String: String] = [:]
+        let alwaysSendResolved = platform != .n64 && platform != .dreamcast
+            && !benchWantsStockOptions
         for option in NativeCoreOptions.options(for: platform)
         where option.key != NativeCoreOptions.genesisPad.key {
+            if alwaysSendResolved {
+                result[option.key] = value(option, for: platform)
+                continue
+            }
             let storageKey = key(platform: platform, option: option.key)
             guard let stored = UserDefaults.standard.string(forKey: storageKey),
                   option.choices.contains(where: { $0.value == stored })
@@ -370,8 +422,36 @@ enum NativeCoreOptionsStore {
             result[clock.key] = value(clock, for: platform)
         }
         result.merge(forcedOptions(for: platform)) { _, forced in forced }
+        result.merge(restoredDefaults(for: platform)) { _, restored in restored }
+        result.merge(qualityUpgrades(for: platform)) { _, upgrade in upgrade }
+        #if DEBUG
+        // Bench overrides land last so a single -cabinetBenchOption on the
+        // command line can A/B one key against everything above it without
+        // a rebuild. See NativeBenchHarness.
+        result.merge(benchOptionOverrides) { _, override in override }
+        #endif
         return result
     }
+
+    #if DEBUG
+    /// `-cabinetBenchOption "key=value;key2=value2"`, for measuring one
+    /// option against the current defaults on a real device without a
+    /// rebuild. Debug only, and empty unless the harness put it there.
+    ///
+    /// One semicolon-separated string rather than a repeated flag: the
+    /// argument domain keeps only the last occurrence of a key, so
+    /// repeating the flag would silently measure just the final pair.
+    static var benchOptionOverrides: [String: String] {
+        guard let raw = UserDefaults.standard.string(forKey: "cabinetBenchOption")
+        else { return [:] }
+        var out: [String: String] = [:]
+        for pair in raw.split(separator: ";") {
+            guard let split = pair.firstIndex(of: "=") else { continue }
+            out[String(pair[pair.startIndex..<split])] = String(pair[pair.index(after: split)...])
+        }
+        return out
+    }
+    #endif
 
     /// Options that are never a user choice, always sent, and never listed
     /// in `NativeCoreOptions.options(for:)`: not preferences, hard
@@ -603,6 +683,314 @@ enum NativeCoreOptionsStore {
         }
     }
 
+    /// Core defaults this app was silently not applying, restored
+    /// 2026-08-17.
+    ///
+    /// Kept apart from `forcedOptions` on purpose. That function is hard
+    /// requirements this frontend imposes on a core, things that are not
+    /// anybody's preference and never were. This one is different: every
+    /// entry here is a value the core's own option table already calls its
+    /// default, which never took effect because `LibretroFrontend` answers
+    /// neither `SET_VARIABLES` nor `SET_CORE_OPTIONS_V2`, so the key was
+    /// never asked for and the core ran on whatever its C global was
+    /// initialised to instead. Under RetroArch none of these would differ.
+    ///
+    /// Each was found by running the core headless under
+    /// `tools/bench/libretro_bench`, which answers exactly what this
+    /// frontend answers, once with that silence and once with the
+    /// documented defaults filled in, and comparing frame hashes. The
+    /// per-platform comments record what actually differed.
+    ///
+    /// Nintendo 64 and Dreamcast are deliberately absent and must stay
+    /// absent: both are separate in-flight investigations, and a default
+    /// restored underneath either of them would land in the middle of
+    /// someone else's measurements.
+    static func restoredDefaults(for platform: NativePlatform) -> [String: String] {
+        if benchWantsStockOptions { return [:] }
+        switch platform {
+        case .nes:
+            // Three C globals FCEUmm never initialises to the values its
+            // own option table calls the defaults, all found 2026-08-17
+            // with tools/bench/libretro_bench and confirmed in the core's
+            // source. Same gap-class as N64's zeroed globals: the core
+            // declares a default, the frontend never answers the key, and
+            // the declared default is not what the global was born with.
+            //
+            // The palette is the big one. `current_palette` is a static 0
+            // (libretro.c:327), and 0 is not the NES palette, it is
+            // palettes[0], the third-party "asqrealc" set; the core's own
+            // default is the separate PAL_DEFAULT sentinel
+            // (PAL_INTERNAL + 1, libretro.c:458), which is the branch that
+            // generates the real NES colours. Measured on a Contra frame:
+            // 98.3% of pixels differed, black sat at (16,16,16) instead of
+            // (0,0,0) and grass rendered olive (88,100,0) instead of green
+            // (0,150,0). Every NES game this app has ever run has been
+            // showing a washed-out third-party palette.
+            //
+            // Overscan: the NES draws 240 lines but the top and bottom 8
+            // were behind the bezel on real hardware, which is why the
+            // core's own default crops them and why RetroArch, Nestopia
+            // and Mesen all ship cropped. Unanswered, `overscan_v_top` and
+            // `overscan_v_bottom` stay 0 and the full 256x240 buffer is
+            // handed over, garbage rows included, and the picture is then
+            // aspect-fitted as if those rows were content.
+            //
+            // Volume: the core inits `sndvolume` to 150 of 256
+            // (libretro.c:4038) but documents 7-of-7 as the default, which
+            // its own arithmetic turns into 179. Answering it is a 19%
+            // level increase, not a tone change.
+            return [
+                "fceumm_palette": "default",
+                "fceumm_overscan_v_top": "8",
+                "fceumm_overscan_v_bottom": "8",
+                "fceumm_overscan_h_left": "0",
+                "fceumm_overscan_h_right": "0",
+                "fceumm_sndvolume": "7",
+            ]
+        case .arcade:
+            // FBNeo's two audio interpolation levels, both declared
+            // "4-point 3rd order" in its own option table and neither ever
+            // reaching that value, because the globals are born elsewhere:
+            // `INT32 nInterpolation = 1` and `INT32 nFMInterpolation = 0`
+            // (burn.cpp:79-80). So sample playback has been running at
+            // 2-point and FM synthesis at no interpolation at all, on
+            // boards whose whole sound is FM (Neo Geo's YM2610, CPS's
+            // YM2151, the CAVE boards' YM2610B).
+            //
+            // The strings must match FBNeo's own list exactly; its parser
+            // falls through to the top level on anything unrecognised
+            // (retro_common.cpp:1950, :1962), which would work by accident
+            // and stop working the moment somebody tightened it.
+            //
+            // `fbneo-samplerate` is left alone deliberately even though it
+            // has the same shape of mismatch (declared 48000, unanswered
+            // 44100). The core's own source carries a comment that Neo Geo
+            // CD's CDDA playback has issues at anything but 44100, and this
+            // frontend fixes its audio format when playback starts, so that
+            // one is a real risk for a marginal gain.
+            return [
+                "fbneo-sample-interpolation": "4-point 3rd order",
+                "fbneo-fm-interpolation": "4-point 3rd order",
+            ]
+        case .tg16, .tgCD:
+            // Beetle PCE Fast renders scanlines 0 through 242 unless told
+            // where the picture starts, so this app has been handing the
+            // renderer a 256x243 frame whose first three rows are always
+            // black. Verified 2026-08-17: rows 3...242 of the current
+            // output are byte-identical to the whole of the corrected
+            // 240-row output, so the only thing those rows carry is a
+            // black band at the top and a 1.25% vertical stretch error in
+            // the aspect fit. 3 and 242 are the core's own documented
+            // defaults.
+            return [
+                "pce_fast_initial_scanline": "3",
+                "pce_fast_last_scanline": "242",
+            ]
+        case .ngpc:
+            // The Neo Geo Pocket BIOS carries a language flag and Beetle
+            // NGP's `setting_ngp_language` global is a static 0, which is
+            // Japanese; the core's own documented default is english.
+            // Changed both picture and audio in the harness on SNK vs
+            // Capcom, which is a bilingual cart booting in the wrong one.
+            return ["ngp_language": "english"]
+        case .gb, .gbc:
+            // A Game Boy Color's screen was far darker and less saturated
+            // than a modern display, and Gambatte ships a correction for
+            // exactly that, defaulted on for CGB titles. Its `colorCorrection`
+            // global is a static 0 (libretro.cpp:2320) and the key was never
+            // answered, so every GBC game has been rendering raw, oversaturated
+            // values. Inert on true mono Game Boy roms, which is why it is
+            // safe to send for both platforms rather than only .gbc.
+            return ["gambatte_gbc_color_correction": "GBC only"]
+        case .saturn:
+            // `bool setting_midsync;` is an uninitialised global
+            // (libretro_settings.c:17), so it is false, while the core's
+            // own table declares it enabled. It is what feeds
+            // `AllowMidSync` (mednafen/ss/ss.c:1502), the flag that lets
+            // the emulator break out mid-frame to re-read input instead of
+            // sampling it once per frame, which is worth roughly a frame
+            // of input latency on a system where that is felt. Measured at
+            // 1.01x core time, with byte-identical video and audio, on the
+            // heaviest core in this app.
+            return ["beetle_saturn_midsync": "enabled"]
+
+        // Saturn's scanline-crop pair is deliberately absent from the
+        // midsync entry above, checked and turned down rather than
+        // missed. Beetle Saturn has the same unanswered
+        // scanline pair Beetle PCE Fast does (initial 8, last 231, which
+        // would take Die Hard Arcade from 704x240 to 704x224), but the
+        // rows it would remove are not the same kind of rows: PCE's three
+        // are pure black in every frame checked, while Saturn's bottom
+        // eight carry real drawn pixels, 146 to 154 distinct colours per
+        // row. Cropping them is a judgement about what a CRT would have
+        // hidden, not a correction of something plainly wrong, so it is
+        // Marcus's call and not this pass's.
+        case .psx:
+            // Gaussian is what the PlayStation's SPU actually did: the
+            // hardware interpolates sample playback with a fixed 4-point
+            // Gaussian kernel, and "simple" is pcsx_rearmed's cheap
+            // approximation of it, kept as its default for handhelds that
+            // could not afford the real thing. Measured 2026-08-17 over
+            // Crash Bandicoot 2's attract demo: 0.98x the core time of
+            // "simple", inside run-to-run noise, for audio that matches
+            // the hardware.
+            return ["pcsx_rearmed_spu_interpolation": "gaussian"]
+        default:
+            return [:]
+        }
+    }
+
+    /// Deliberate choices above what the core itself defaults to, each one
+    /// bought with a measured cost rather than added because the option
+    /// existed.
+    ///
+    /// Kept separate from `restoredDefaults` because the two need different
+    /// arguments. That one only has to show the core was not in the state
+    /// it claimed. This one has to show the upgrade is worth what it costs,
+    /// and every entry below carries the number it was judged on, measured
+    /// through `tools/bench/libretro_bench` and then confirmed against real
+    /// frame budget on an iPhone with `tools/bench/sweep.sh`.
+    ///
+    /// What is deliberately NOT here: anything that changes what the
+    /// hardware did rather than how faithfully it is reproduced. CPU
+    /// overclocks, sprite-limit removal, NTSC composite filters, interframe
+    /// blending and widescreen hacks were all measured and all left alone.
+    /// Cabinet already offers the look-based ones as shaders, which is
+    /// where a look belongs.
+    ///
+    /// Nintendo 64 and Dreamcast are absent and must stay absent.
+    static func qualityUpgrades(for platform: NativePlatform) -> [String: String] {
+        if benchWantsStockOptions { return [:] }
+        switch platform {
+        case .nes:
+            // FCEUmm's "Low" runs the APU at the output rate; 1 and 2 run
+            // it at the CPU clock and decimate afterwards, which is the
+            // accurate way and the reason the option exists. Not a filter
+            // and not a preference: `FCEUI_SetSoundQuality` feeds
+            // `FSettings.soundq`, which selects the emulation path.
+            // Measured 1.27x core time, against a core using 8.9% of an
+            // NES frame budget on an iPhone Air, so the whole increase is
+            // about three percent of a frame.
+            return ["fceumm_sndquality": "Very High"]
+        case .psx:
+            // Double the PlayStation's own render resolution, 512x240 to
+            // 1024x480, through pcsx_rearmed's NEON GPU. Measured over a
+            // 260-second run of Crash Bandicoot 2's attract demo (its own
+            // recorded gameplay, so it is real 3D and it replays the same
+            // way every time): p99 of frame budget goes from 53.3% to
+            // 64.4%, audio holds at exactly 44,098 frames a second against
+            // 44,100 declared, and the OS stayed at thermal nominal
+            // throughout. The median barely moves at all; the whole cost
+            // lands in heavy scenes and in this app's own texture upload,
+            // which goes from 0.20ms to 0.50ms.
+            //
+            // **iOS only, deliberately.** The Apple TV 4K 3rd gen is
+            // fanless and throttles itself under sustained load on a
+            // roughly two-minute rhythm, measured directly during the
+            // Dreamcast investigation (a fixed-work calibration loop
+            // slowed by 40% with nobody even playing). Spending another
+            // eleven points of frame budget there, on a box already known
+            // to be about 15% over its heat budget, is exactly the wrong
+            // move to make without measuring it, and neither Apple TV was
+            // available to this pass. tvOS keeps native resolution until
+            // somebody runs the same 260-second trace on the hardware.
+            //
+            // 32-bit output rides along with it. The PlayStation renders
+            // 15-bit internally, so this is not extra precision in the
+            // rasteriser, but full-motion video is 24-bit source material
+            // and a 16-bit output path crushes it; this is also what moves
+            // Cabinet's renderer off its RGB565 unpack pass onto a direct
+            // upload. Measured on the same 260-second attract demo, and
+            // the two do NOT compound the way the macOS bench implied
+            // (it had them at 2.40x combined against 1.68x for resolution
+            // alone): 2x alone is 65.0% of budget at p99 on a fresh
+            // control run, 2x with 32-bit output is 67.8%. Under three
+            // points, audio holding 44,098 frames a second against 44,100,
+            // thermal nominal throughout.
+            //
+            // Measured on the Apple TV 4K 3rd gen too, once that device
+            // became available: 51.3% of budget at p99 native against
+            // 58.8% with both options, a 7.5 point cost, which is
+            // narrower than the iPhone's own 14.5. Audio at exactly
+            // realtime, and the 261-second trace shows no drift at all
+            // across its own duration, core time holding 6.255ms median
+            // in the first window and 6.271ms in the last. The thermal
+            // duty-cycling the Dreamcast work measured on that box needs
+            // a workload pinning the SH4 interpreter near 100%; PS1 at
+            // 40% of budget never gets it warm enough. So this ships on
+            // both platforms rather than iOS alone.
+            return [
+                "pcsx_rearmed_neon_enhancement_enable": "enabled",
+                "pcsx_rearmed_rgb32_output": "enabled",
+            ]
+        case .snes:
+            // Mode 7 planes rendered at 4x horizontally and vertically,
+            // 1024x448 instead of 256x224, which is sixteen times the
+            // pixels for the frames that use it.
+            //
+            // Measured on device on F-Zero, which is Mode 7 for
+            // essentially its whole running time, same 45-second window
+            // both ways: p95 of frame budget 20.4% to 33.1%, p99 37.7%,
+            // core 2.72ms to 4.24ms, upload 0.34ms to 0.57ms, audio
+            // holding 32,032 frames a second against 32,040 declared, and
+            // the OS at thermal nominal.
+            //
+            // That core figure is 1.56x, NOT the 1.02x an earlier macOS
+            // bench reported. The bench run had F-Zero sitting in menus
+            // for its whole measurement window, so it timed Mode 7 being
+            // switched on while Mode 7 was never drawn. Worth remembering:
+            // a feature that only costs anything while it is active has to
+            // be measured with it active, and the harness will happily
+            // report a confident number for a window where nothing
+            // happened.
+            //
+            // A game that only uses Mode 7 for one stage (Contra III)
+            // stays at 256x224 for everything else, with a single size
+            // transition in 3000 frames rather than per-frame thrash, and
+            // the option is inert until Mode 7 is actually drawn.
+            //
+            // Not gated to iOS, unlike the PS1 and Genesis upgrades: those
+            // sit at 64% and 37% of budget on the faster device, this one
+            // leaves roughly two thirds of the frame free.
+            //
+            // Aspect is safe: snes9x reports a fixed 4:3 from
+            // get_aspect_ratio regardless of buffer size.
+            return ["snes9x_mode7_hires": "4x_hv"]
+        case .genesis, .segaCD:
+            // Nuked OPN2 is the die-shot-accurate YM2612; MAME's model is
+            // the fast approximation, and it is the default purely because
+            // of what the accurate one costs. This is the textbook case of
+            // an accuracy option switched off for performance on hardware
+            // that no longer needs to make that trade.
+            //
+            // Measured 2.31x to 2.33x the core's time across Gunstar
+            // Heroes, and video output was byte-identical in every run,
+            // which matters more than it sounds: Genesis games poll the
+            // YM2612's status register for timing, so a different chip
+            // model could have changed game behaviour and demonstrably
+            // does not here.
+            //
+            // Scoped to the two platforms with the chip. Master System and
+            // Game Gear share this core but have no YM2612 at all, and the
+            // option measured at 1.01x with identical audio on Game Gear,
+            // so sending it there would be noise in the settings rather
+            // than a change. 32X is PicoDrive, a different core entirely.
+            //
+            // This was iOS-only for a while, on an estimate that the
+            // fanless A15 Apple TV would land near 55% to 75% of budget
+            // and might not afford it. The estimate was wrong and the
+            // measurement is better: 43.1% at p99 on Gunstar Heroes and
+            // 42.5% on Thunder Force III, against a 25.9% MAME baseline,
+            // audio at exactly realtime and thermal nominal. So it ships
+            // on both platforms, and Genesis sounds the same in the
+            // living room as it does in your hand, which is what CLAUDE.md
+            // asks for.
+            return ["genesis_plus_gx_ym2612": "nuked (ym2612)"]
+        default:
+            return [:]
+        }
+    }
+
     /// The RetroPad device port 0 should present, or 0 to leave the core's
     /// own default in place.
     ///
@@ -635,17 +1023,4 @@ enum NativeCoreOptionsStore {
         return UInt32(value(option, for: platform)) ?? 0
     }
 
-    /// Whether this platform's real controller has a separate analog
-    /// stick and d-pad, with a core that reads the analog value. On those
-    /// the left stick must not also press d-pad directions; see
-    /// `GameControllerManager.digitizesLeftStickAsDPad`.
-    ///
-    /// The same two platforms `padDevice` calls out above, for a related
-    /// reason: they are the ones with a real analog stick to configure.
-    /// Every other native platform's controller is d-pad only (or is an
-    /// arcade stick), so digitizing is the only way its stick reaches the
-    /// game at all.
-    static func usesTrueAnalogStick(_ platform: NativePlatform) -> Bool {
-        platform == .dreamcast || platform == .n64
-    }
 }

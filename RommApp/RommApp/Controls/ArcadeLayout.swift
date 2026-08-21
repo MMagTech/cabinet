@@ -23,60 +23,113 @@ enum ArcadeLayout {
     /// running core's mouse channel is actually wired, so the webview
     /// player keeps its d-pad and nothing changes for it.
     static func build(for profile: ArcadeProfile, analog: AnalogControls? = nil) -> ControlLayout {
-        // Arcade accurate: the cabinet's own control panel decides, so
-        // the driver data alone gates this, never the profile bucket.
-        // Gating on "special" was wrong and provably so: MAME classifies
-        // Centipede as a one-button game, so its trackball never
-        // appeared. A game whose driver declares a dial or trackball had
-        // one on the panel, whatever else the classifier called it.
-        if let analog {
-            let kind: ControlLayout.Item.Kind? =
-                (analog.trackball ?? 0) > 0 ? .trackball :
-                ((analog.dial ?? 0) > 0 || (analog.paddle ?? 0) > 0) ? .spinner : nil
-            // A game with a real joystick keeps it and gains the analog
-            // control beside it, the way its panel had both. Only a game
-            // with no joystick gives up the d-pad slot.
-            let hasJoystick = profile.profile != "special"
-            if let kind {
-                let name = "arcade-\(kind == .spinner ? "spinner" : "trackball")\(max(0, min(profile.buttons, 6)))"
-                if let url = Bundle.main.url(forResource: name, withExtension: "json"),
-                   let data = try? Data(contentsOf: url),
-                   let file = try? JSONDecoder().decode(ControlLayout.self, from: data) {
-                    return file
-                }
-                // No tuned file for this shape yet: the standard layout
-                // with its d-pad item transmuted in place, same slot,
-                // same reach.
-                let base = buildStandard(for: profile)
-                guard !hasJoystick else {
-                    // Panel had both: leave the stick alone and place the
-                    // analog control where a tuned file will refine it.
-                    return withAnalogBeside(base, kind: kind)
-                }
-                let items = base.items.map { item -> ControlLayout.Item in
-                    guard item.kind == .dpad else { return item }
-                    return ControlLayout.Item(
-                        kind: kind, label: nil, input: nil, inputs: nil,
-                        frame: item.frame, extended: item.extended,
-                        fourWay: nil,
-                        sensitivity: kind == .spinner ? 768 : 300)
-                }
-                let wideItems = base.landscapeItems.map { wide in
-                    wide.map { item -> ControlLayout.Item in
+        // Arcade accurate: the panel the player stood at. The driver
+        // data says which analog controls the cabinet had; the profile
+        // says whether a joystick was there too. Between them every
+        // shape in the library is one of a dozen panels.
+        if let analog, let panel = panel(for: profile, analog: analog) {
+            return panel
+        }
+        return buildStandard(for: profile)
+    }
+
+    /// Assembles the cabinet's panel: the analog controls the driver
+    /// declares, the joystick if the machine had one, and the buttons.
+    ///
+    /// A tuned file always wins, so the LayoutEditor stays the way these
+    /// get made properly; this is what a shape looks like before anyone
+    /// has tuned it, which is the same relationship every arcade layout
+    /// has always had to its generator.
+    private static func panel(for profile: ArcadeProfile, analog: AnalogControls) -> ControlLayout? {
+        let hasJoystick = profile.profile != "special"
+        var analogKinds: [ControlLayout.Item.Kind] = []
+        if (analog.trackball ?? 0) > 0 { analogKinds.append(.trackball) }
+        if (analog.dial ?? 0) > 0 || (analog.paddle ?? 0) > 0 { analogKinds.append(.spinner) }
+        if (analog.axis ?? 0) > 0 && analogKinds.isEmpty { analogKinds.append(.wheel) }
+        let gun = (analog.lightgun ?? 0) > 0
+        let pedals = (analog.pedals ?? 0) > 0
+        // An analog stick is a stick: the existing kind already serves
+        // it, and the standard layout already draws one.
+        if analogKinds.isEmpty && !gun && !pedals { return nil }
+
+        if let tuned = tunedPanel(for: profile, kinds: analogKinds, gun: gun, pedals: pedals) {
+            return tuned
+        }
+
+        let base = buildStandard(for: profile)
+        var items = base.items
+        var wide = base.landscapeItems ?? base.items
+
+        // A gun cabinet aims at the picture, so its surface is the whole
+        // screen and the panel keeps only its buttons. Landscape only:
+        // in portrait the pad occupies a strip and cannot reach the
+        // picture, and every gun cabinet was landscape anyway.
+        if gun {
+            let surface = ControlLayout.Item(
+                kind: .gun, label: nil, input: nil, inputs: nil,
+                frame: ControlLayout.Rect(x: 0, y: 0, w: 1, h: 1),
+                extended: ControlLayout.Rect(x: 0, y: 0, w: 1, h: 1),
+                fourWay: nil, sensitivity: nil)
+            wide = [surface] + wide.filter { $0.kind != .dpad && $0.kind != .stick }
+        }
+
+        for (index, kind) in analogKinds.enumerated() {
+            let sens: Double = kind == .spinner ? 768 : (kind == .wheel ? 500 : 300)
+            if !hasJoystick && index == 0 {
+                // No stick on this panel: the analog control takes its
+                // slot and its reach.
+                func swap(_ list: [ControlLayout.Item]) -> [ControlLayout.Item] {
+                    list.map { item in
                         guard item.kind == .dpad else { return item }
                         return ControlLayout.Item(
                             kind: kind, label: nil, input: nil, inputs: nil,
                             frame: item.frame, extended: item.extended,
-                            fourWay: nil,
-                            sensitivity: kind == .spinner ? 768 : 300)
+                            fourWay: nil, sensitivity: sens)
                     }
                 }
-                return ControlLayout(
-                    system: base.system, items: items,
-                    landscapeItems: wideItems, headroom: base.headroom)
+                items = swap(items); wide = swap(wide)
+            } else {
+                // Beside the stick, upper right, clear of the buttons.
+                let y = 0.06 + Double(index) * 0.34
+                let item = ControlLayout.Item(
+                    kind: kind, label: nil, input: nil, inputs: nil,
+                    frame: ControlLayout.Rect(x: 0.62, y: y, w: 0.28, h: 0.28),
+                    extended: ControlLayout.Rect(x: 0.58, y: y - 0.04, w: 0.36, h: 0.36),
+                    fourWay: nil, sensitivity: sens)
+                items.append(item); wide.append(item)
             }
         }
-        return buildStandard(for: profile)
+
+        if pedals {
+            // Gas and brake, right edge, stacked where a thumb rests.
+            for (i, name) in ["Gas", "Brake"].enumerated() {
+                let pedal = ControlLayout.Item(
+                    kind: .pedal, label: name, input: i == 0 ? 0 : 8, inputs: nil,
+                    frame: ControlLayout.Rect(x: 0.86, y: 0.42 + Double(i) * 0.26, w: 0.12, h: 0.22),
+                    extended: ControlLayout.Rect(x: 0.82, y: 0.38 + Double(i) * 0.26, w: 0.18, h: 0.28),
+                    fourWay: nil, sensitivity: nil)
+                items.append(pedal); wide.append(pedal)
+            }
+        }
+
+        return ControlLayout(
+            system: base.system, items: items,
+            landscapeItems: wide, headroom: base.headroom)
+    }
+
+    /// A hand-tuned panel file, named for its shape, if one exists yet.
+    private static func tunedPanel(
+        for profile: ArcadeProfile, kinds: [ControlLayout.Item.Kind], gun: Bool, pedals: Bool
+    ) -> ControlLayout? {
+        guard !gun, !pedals, kinds.count == 1 else { return nil }
+        let stem = kinds[0] == .spinner ? "spinner" : (kinds[0] == .trackball ? "trackball" : "wheel")
+        let name = "arcade-\(stem)\(max(0, min(profile.buttons, 6)))"
+        guard profile.profile == "special",
+              let url = Bundle.main.url(forResource: name, withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let file = try? JSONDecoder().decode(ControlLayout.self, from: data)
+        else { return nil }
+        return file
     }
 
     /// A cabinet whose panel carried a joystick AND a dial or trackball
