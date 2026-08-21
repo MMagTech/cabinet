@@ -79,14 +79,45 @@ about 250 games that 2010 runs as-is. "Partial" means most files match and
 some are missing: Arkanoid is one, wanting an MCU dump the older set does
 not carry, which is worth knowing since it is a headline dial game.
 
-## Decision
+## Decision: mame2003-plus
 
-**mame2010.** It is simultaneously the oldest version with the metadata the
-feature needs, the newest version that is practical to build, and the best
-romset match for an existing 0.78 collection. Unusually, the evidence
-converges instead of trading off.
+The first pass of this document recommended mame2010, on the strength of
+its per-game analog tuning metadata. That reasoning had a hole in it: the
+metadata source and the emulator do not have to be the same thing.
 
-Cost against 2003-plus is 18MB of binary and a per-frame time that is still
-noise. The one thing to keep in mind is that this core's value for general
-arcade play is a separate question from its value here; heavier boards on
-0.139 were not measured.
+MAME's listxml carries `sensitivity`, `keydelta`, `minimum`, `maximum` and
+`reverse` on every `<control>`, and shortnames and physical controls are
+identical across versions. So the tuning data can be generated once from a
+modern MAME as a data file and shipped alongside the app, exactly the way
+`tools/profiles.json` already reaches `ArcadeProfiles.swift` today, while
+the games run on whichever core is best to actually run them. (For the
+record: mame2003-plus's own `info.c` emits only `type` and `buttons`, so
+the file has to come from a newer MAME. That is a build step, not a
+constraint on the core.)
+
+Once the metadata travels separately, everything else favours 2003-plus:
+
+- **Romsets.** A MAME 2003-Plus set runs all of its games. The same set
+  gives mame2010 2,816 identical and about two thousand needing files
+  topped up. For anyone whose collection is already 0.78, this is the
+  single biggest practical difference.
+- **Cost.** 30MB against 48MB, and 1.5x to 3.6x faster per frame. Neither
+  mattered on its own, both point the same way.
+- **Libretro surface.** 2003-plus exposes `xy_device`, `dialsharexy`,
+  `override_ad_stick` and a built-in crosshair. mame2010 exposes a plain
+  `mouse_mode` and none of the rest. These options exist for exactly this
+  problem.
+- **Upstream.** Committing this week, against mame2010's July.
+
+What 2010 keeps is `IPT_POSITIONAL`, the rotary joystick class, which
+2003-plus does not have. That turns out not to matter: it represents Ikari
+Warriors, Heavy Barrel and Jackal as `IPT_DIAL`, so those games are
+playable and arrive as a mechanism a phone already implements well.
+
+One assumption to verify rather than trust: sensitivity values measured
+against a modern MAME's analog implementation, applied to a 0.78 core's,
+may not mean precisely the same thing. Cheap to check on a couple of games
+once the pipeline exists.
+
+The performance and size numbers above stand as measured; only the
+conclusion drawn from them changed.
