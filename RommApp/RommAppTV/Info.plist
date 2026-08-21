@@ -39,5 +39,11 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Cabinet uses your local network to reach your RomM server directly, instead of going out to the internet and back.</string>
+	<!-- The lab's controller-link probe (see Lab/NetProbe.swift): the TV
+	     side scans for the phone's GATT service as a Bluetooth central.
+	     DEBUG-only code path; the key rides along in release where it
+	     never runs. -->
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Cabinet uses Bluetooth to measure the link between your iPhone and Apple TV for controller features.</string>
 </dict>
 </plist>

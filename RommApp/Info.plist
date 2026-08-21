@@ -39,5 +39,16 @@
 	     talks to an address on the local network. -->
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Cabinet uses your local network to reach your RomM server directly when you are at home, instead of going out to the internet and back.</string>
+	<!-- The lab's controller-link probe (see Lab/NetProbe.swift). Bonjour
+	     browsing needs its service type declared here or iOS denies the
+	     browse outright; the Bluetooth key covers the probe's GATT link.
+	     Both are DEBUG-only code paths, but Info.plist has no DEBUG, so
+	     the keys ride along in release where the code never runs. -->
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_cabinet-probe._udp</string>
+	</array>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Cabinet uses Bluetooth to measure the link between your iPhone and Apple TV for controller features.</string>
 </dict>
 </plist>

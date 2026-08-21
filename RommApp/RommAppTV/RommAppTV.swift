@@ -22,7 +22,26 @@ struct RommAppTV: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            // The transport probe for the phone-as-controller idea, the TV
+            // as receiver. Same early exit as the iOS side: no session, no
+            // pairing, just listeners and a trace. Debug builds without
+            // the launch argument evaluate one nil check.
+            #if DEBUG
+            if let aim = AimLab.launchRole, case .receive = aim {
+                AimReceiverView()
+            } else if case .receiver = NetProbe.launchRole {
+                NetProbeView(role: .receiver)
+            } else {
+                appContent
+            }
+            #else
+            appContent
+            #endif
+        }
+    }
+
+    private var appContent: some View {
+        RootView()
                 .environmentObject(session)
                 // The very first pairing, ServerSetupView + PairingView
                 // through the live Session, is the household's first
@@ -63,7 +82,6 @@ struct RommAppTV: App {
                     guard phase == .active, session.stage == .ready else { return }
                     TVTopShelfWriter.refresh(session: session)
                 }
-        }
     }
 
     /// Two cases, not one: a genuinely fresh install (`TVProfileStore` has

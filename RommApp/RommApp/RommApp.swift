@@ -9,13 +9,21 @@ struct RommApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environmentObject(session)
-                .task {
-                    // A native core crash takes the whole app, so the only
-                    // moment it can be counted is the next launch.
-                    NativeSessionMarker.settleAtLaunch()
-                }
+            // The transport probe for the phone-as-controller idea, taken
+            // this early because it needs no session, no server and no
+            // pairing, only a radio. Debug builds with no such launch
+            // argument evaluate one nil check here and boot normally.
+            #if DEBUG
+            if let aim = AimLab.launchRole, case .send = aim {
+                AimSenderView()
+            } else if let role = NetProbe.launchRole {
+                NetProbeView(role: role)
+            } else {
+                appContent
+            }
+            #else
+            appContent
+            #endif
         }
         // Edits in the Files app happen while this app is not looking,
         // and the moment it can look again is exactly here. Without
@@ -50,6 +58,16 @@ struct RommApp: App {
             if !isManualOffline { KeptGameStore.shared.healCanonicalSlugs(session: session) }
             syncIfOnline()
         }
+    }
+
+    private var appContent: some View {
+        RootView()
+            .environmentObject(session)
+            .task {
+                // A native core crash takes the whole app, so the only
+                // moment it can be counted is the next launch.
+                NativeSessionMarker.settleAtLaunch()
+            }
     }
 
     private func syncIfOnline() {
