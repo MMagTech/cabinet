@@ -325,7 +325,18 @@ enum NativeLauncher {
         throw LaunchError.unsupportedFormat("Games can't run in the Simulator. Use a real Apple TV.")
         #else
         LibretroFrontend.shared.activateCore(core.coreID)
-        LibretroFrontend.shared.setCoreOptions(NativeCoreOptionsStore.dictionary(for: platform))
+        var coreOptions = NativeCoreOptionsStore.dictionary(for: platform)
+        if core == .mame2003Plus {
+            // The core-option-defaults class, biting the new core on day
+            // one: an unanswered GET_VARIABLE for xy_device leaves it at
+            // RETRO_DEVICE_NONE, and at NONE the core's own read function
+            // returns zero deltas unconditionally, so every dial,
+            // trackball and paddle is dead however hard the spinner
+            // spins. Answered here, next to the core it describes, until
+            // this core gets its full options pass.
+            coreOptions["mame2003-plus_xy_device"] = "mouse"
+        }
+        LibretroFrontend.shared.setCoreOptions(coreOptions)
         let padDevice = NativeCoreOptionsStore.padDevice(for: platform)
         LibretroFrontend.shared.setControllerPortDevice(padDevice, port: 0)
         // Player 2 gets the same device type as player 1: nothing here

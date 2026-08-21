@@ -98,7 +98,20 @@ struct NativePlayerView: View {
     }
 
     private func layoutItems(landscape: Bool) -> [ControlLayout.Item] {
-        controlLayout.items(landscape: landscape)
+        let items = controlLayout.items(landscape: landscape)
+        // Cabinet-authentic controls: a game whose real cabinet was a
+        // spinner and buttons shows a spinner and buttons, no directional
+        // pad it never had. Only for "special" profiles, which by the
+        // classifier's own construction means no joystick exists (any
+        // game with one classifies as a joystick game first), so mixed
+        // layouts like Discs of Tron keep their stick beside the dial.
+        // A physical controller is untouched: its d-pad feeds the joypad
+        // bits directly and still steps the dial the way MAME always
+        // allows.
+        if wantsSpinner && profile.profile == "special" {
+            return items.filter { $0.kind != .dpad && $0.kind != .stick }
+        }
+        return items
     }
 
     /// Matches PlayerView.controlStripHeight exactly: only arcade's vertical
