@@ -23,14 +23,20 @@ enum ArcadeLayout {
     /// running core's mouse channel is actually wired, so the webview
     /// player keeps its d-pad and nothing changes for it.
     static func build(for profile: ArcadeProfile, analog: AnalogControls? = nil) -> ControlLayout {
-        // A special-profile game with a known analog mechanism swaps the
-        // d-pad for the real control. Special means the classifier saw no
-        // joystick, so nothing is lost; mixed layouts never classify
-        // special and keep their stick.
-        if profile.profile == "special", let analog {
+        // Arcade accurate: the cabinet's own control panel decides, so
+        // the driver data alone gates this, never the profile bucket.
+        // Gating on "special" was wrong and provably so: MAME classifies
+        // Centipede as a one-button game, so its trackball never
+        // appeared. A game whose driver declares a dial or trackball had
+        // one on the panel, whatever else the classifier called it.
+        if let analog {
             let kind: ControlLayout.Item.Kind? =
                 (analog.trackball ?? 0) > 0 ? .trackball :
                 ((analog.dial ?? 0) > 0 || (analog.paddle ?? 0) > 0) ? .spinner : nil
+            // A game with a real joystick keeps it and gains the analog
+            // control beside it, the way its panel had both. Only a game
+            // with no joystick gives up the d-pad slot.
+            let hasJoystick = profile.profile != "special"
             if let kind {
                 let name = "arcade-\(kind == .spinner ? "spinner" : "trackball")\(max(0, min(profile.buttons, 6)))"
                 if let url = Bundle.main.url(forResource: name, withExtension: "json"),
@@ -41,7 +47,12 @@ enum ArcadeLayout {
                 // No tuned file for this shape yet: the standard layout
                 // with its d-pad item transmuted in place, same slot,
                 // same reach.
-                let base = build(for: profile)
+                let base = buildStandard(for: profile)
+                guard !hasJoystick else {
+                    // Panel had both: leave the stick alone and place the
+                    // analog control where a tuned file will refine it.
+                    return withAnalogBeside(base, kind: kind)
+                }
                 let items = base.items.map { item -> ControlLayout.Item in
                     guard item.kind == .dpad else { return item }
                     return ControlLayout.Item(
@@ -66,6 +77,23 @@ enum ArcadeLayout {
             }
         }
         return buildStandard(for: profile)
+    }
+
+    /// A cabinet whose panel carried a joystick AND a dial or trackball
+    /// (Discs of Tron, the joystick-plus-spinner family). The stick keeps
+    /// its slot; the analog control takes the upper right, clear of the
+    /// action buttons below it.
+    private static func withAnalogBeside(_ base: ControlLayout, kind: ControlLayout.Item.Kind) -> ControlLayout {
+        let sens: Double = kind == .spinner ? 768 : 300
+        let item = ControlLayout.Item(
+            kind: kind, label: nil, input: nil, inputs: nil,
+            frame: ControlLayout.Rect(x: 0.60, y: 0.06, w: 0.30, h: 0.30),
+            extended: ControlLayout.Rect(x: 0.56, y: 0.02, w: 0.38, h: 0.38),
+            fourWay: nil, sensitivity: sens)
+        return ControlLayout(
+            system: base.system, items: base.items + [item],
+            landscapeItems: base.landscapeItems.map { $0 + [item] },
+            headroom: base.headroom)
     }
 
     private static func buildStandard(for profile: ArcadeProfile) -> ControlLayout {
