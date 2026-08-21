@@ -341,6 +341,17 @@ enum NativeLauncher {
             // audio frames over ten seconds, answered it emitted exactly
             // rate x seconds.
             coreOptions["mame2003-plus_sample_rate"] = "48000"
+            // Third and fourth victims, found as "a whole background
+            // layer is missing": zeroed brightness and gamma crush the
+            // palette-driven background layers to black while sprites
+            // survive, which reads exactly like a renderer dropping a
+            // layer. Cameltry's maze walls were there all along,
+            // invisible, and the ball bouncing off nothing was the tell.
+            // This core is now four-for-four on the defaults class and
+            // plainly owes the full options pass the project notes
+            // prescribe for every new core.
+            coreOptions["mame2003-plus_brightness"] = "1.0"
+            coreOptions["mame2003-plus_gamma"] = "1.0"
         }
         LibretroFrontend.shared.setCoreOptions(coreOptions)
         let padDevice = NativeCoreOptionsStore.padDevice(for: platform)
