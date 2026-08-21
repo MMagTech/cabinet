@@ -1,0 +1,142 @@
+{
+  "system": "arcade:trackball:0",
+  "_ergonomics": "Generated from arcade-stick0 by replacing the d-pad with a trackball in the same slot, per the cabinet-authentic rule: a special-profile game had no stick, so the analog control takes its place and its reach. sensitivity is the control feel knob: spinner counts per revolution, trackball counts per point of travel x100.",
+  "items": [
+    {
+      "kind": "trackball",
+      "frame": {
+        "x": 0.07,
+        "y": 0.38,
+        "w": 0.4,
+        "h": 0.52
+      },
+      "extended": {
+        "x": 0.02,
+        "y": 0.3,
+        "w": 0.5,
+        "h": 0.68
+      },
+      "sensitivity": 300.0
+    },
+    {
+      "kind": "button",
+      "label": "Coin",
+      "input": 2,
+      "frame": {
+        "x": 0.05,
+        "y": 0.07,
+        "w": 0.14,
+        "h": 0.17
+      },
+      "extended": {
+        "x": 0.01,
+        "y": 0.03,
+        "w": 0.22,
+        "h": 0.26
+      }
+    },
+    {
+      "kind": "pill",
+      "label": "Start",
+      "input": 3,
+      "frame": {
+        "x": 0.4,
+        "y": 0.1,
+        "w": 0.2,
+        "h": 0.1
+      },
+      "extended": {
+        "x": 0.36,
+        "y": 0.05,
+        "w": 0.28,
+        "h": 0.2
+      }
+    },
+    {
+      "kind": "pill",
+      "label": "Menu",
+      "input": -1,
+      "frame": {
+        "x": 0.72,
+        "y": 0.1,
+        "w": 0.17,
+        "h": 0.1
+      },
+      "extended": {
+        "x": 0.68,
+        "y": 0.05,
+        "w": 0.25,
+        "h": 0.2
+      }
+    }
+  ],
+  "landscapeItems": [
+    {
+      "kind": "trackball",
+      "frame": {
+        "x": 0.03,
+        "y": 0.42,
+        "w": 0.19,
+        "h": 0.42
+      },
+      "extended": {
+        "x": 0.0,
+        "y": 0.32,
+        "w": 0.24,
+        "h": 0.58
+      },
+      "sensitivity": 300.0
+    },
+    {
+      "kind": "button",
+      "label": "Coin",
+      "input": 2,
+      "frame": {
+        "x": 0.025,
+        "y": 0.06,
+        "w": 0.065,
+        "h": 0.15
+      },
+      "extended": {
+        "x": 0.0,
+        "y": 0.02,
+        "w": 0.1,
+        "h": 0.24
+      }
+    },
+    {
+      "kind": "pill",
+      "label": "Start",
+      "input": 3,
+      "frame": {
+        "x": 0.87,
+        "y": 0.07,
+        "w": 0.1,
+        "h": 0.09
+      },
+      "extended": {
+        "x": 0.84,
+        "y": 0.03,
+        "w": 0.15,
+        "h": 0.16
+      }
+    },
+    {
+      "kind": "pill",
+      "label": "Menu",
+      "input": -1,
+      "frame": {
+        "x": 0.105,
+        "y": 0.07,
+        "w": 0.1,
+        "h": 0.09
+      },
+      "extended": {
+        "x": 0.1,
+        "y": 0.03,
+        "w": 0.14,
+        "h": 0.16
+      }
+    }
+  ]
+}

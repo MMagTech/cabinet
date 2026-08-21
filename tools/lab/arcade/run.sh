@@ -11,6 +11,7 @@ xcrun swiftc -sdk "$SDK" -target arm64-apple-ios17.0-simulator \
   RommApp/RommApp/Controls/ControlLayout.swift \
   RommApp/RommApp/Controls/ControllerBindings.swift \
   RommApp/RommApp/Controls/ArcadeProfiles.swift \
+  RommApp/RommApp/Controls/AnalogControls.swift \
   RommApp/RommApp/Controls/ArcadeLayout.swift \
   RommApp/LayoutEditor/EditableLayout.swift \
   tools/lab/arcade/main.swift \

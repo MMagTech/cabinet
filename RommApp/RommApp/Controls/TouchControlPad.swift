@@ -25,6 +25,11 @@ struct TouchControlPad: UIViewRepresentable {
     /// x-positive/x-negative/y-positive/y-negative order, and the current
     /// x/y each from -1 to 1. Defaults to a no-op for layouts with no stick.
     var sendStick: (_ ids: [Int], _ x: Double, _ y: Double) -> Void = { _, _, _ in }
+    /// Relative counts from a spinner or trackball item, dx/dy. The
+    /// native player wires this into the frontend's mouse channel; the
+    /// webview player leaves the default no-op, so a layout carrying
+    /// these kinds is inert there rather than wrong.
+    var sendRelative: (_ dx: Int, _ dy: Int) -> Void = { _, _ in }
     /// The layout's system, for theme colours. The webview player sets
     /// this on its pad directly; this wrapper carries it for hosts that
     /// use the SwiftUI view, so both players draw the same controls.
@@ -40,7 +45,7 @@ struct TouchControlPad: UIViewRepresentable {
     var opacity: Double = 1
 
     func makeUIView(context: Context) -> ControlPadView {
-        let view = ControlPadView(items: items, send: send, sendStick: sendStick)
+        let view = ControlPadView(items: items, send: send, sendStick: sendStick, sendRelative: sendRelative)
         view.backgroundColor = .clear
         view.isMultipleTouchEnabled = true
         return view
@@ -69,7 +74,27 @@ final class ControlPadView: UIView {
 
     private let send: (Int, Bool) -> Void
     private let sendStick: (_ ids: [Int], _ x: Double, _ y: Double) -> Void
+    private let sendRelative: (_ dx: Int, _ dy: Int) -> Void
     private let haptic = UIImpactFeedbackGenerator(style: .light)
+    private let detent = UIImpactFeedbackGenerator(style: .light)
+
+    // Spinner state: one touch owns it, angle deltas accumulate into
+    // counts with the fraction carried so slow precise spins are not
+    // truncated away, and the visual angle drives the tick marks.
+    private var spinnerTouch: UITouch?
+    private var spinnerLastAngle: Double?
+    private var spinnerRemainder = 0.0
+    private var spinnerDetentAccum = 0.0
+    private var spinnerVisual = 0.0
+
+    // Trackball state: pan deltas stream as counts; on release the last
+    // velocity decays through a display link, the coast a real ball's
+    // mass gives it, until it falls below a count per frame.
+    private var trackballTouch: UITouch?
+    private var trackballLast: (point: CGPoint, time: TimeInterval)?
+    private var trackballVelocity = CGVector.zero
+    private var trackballRemainder = (x: 0.0, y: 0.0)
+    private var momentum: CADisplayLink?
 
     /// Inputs currently held down, across all touches.
     private var pressed: Set<Int> = []
@@ -84,11 +109,13 @@ final class ControlPadView: UIView {
 
     init(
         items: [ControlLayout.Item], send: @escaping (Int, Bool) -> Void,
-        sendStick: @escaping (_ ids: [Int], _ x: Double, _ y: Double) -> Void = { _, _, _ in }
+        sendStick: @escaping (_ ids: [Int], _ x: Double, _ y: Double) -> Void = { _, _, _ in },
+        sendRelative: @escaping (_ dx: Int, _ dy: Int) -> Void = { _, _ in }
     ) {
         self.items = items
         self.send = send
         self.sendStick = sendStick
+        self.sendRelative = sendRelative
         super.init(frame: .zero)
         contentMode = .redraw
     }
@@ -122,6 +149,20 @@ final class ControlPadView: UIView {
                 updateStick(stick, at: point)
                 continue
             }
+            if spinnerTouch == nil, item(of: .spinner, at: point) != nil {
+                spinnerTouch = touch
+                spinnerLastAngle = nil
+                continue
+            }
+            if trackballTouch == nil, item(of: .trackball, at: point) != nil {
+                // A finger on the ball stops the coast, exactly like a
+                // hand on a real one.
+                momentum?.invalidate(); momentum = nil
+                trackballTouch = touch
+                trackballLast = (point, touch.timestamp)
+                trackballVelocity = .zero
+                continue
+            }
             touchInputs[touch] = inputs(at: point)
         }
         reconcile()
@@ -131,6 +172,14 @@ final class ControlPadView: UIView {
         for touch in touches {
             if touch == stickTouch, let stick = items.first(where: { $0.kind == .stick }) {
                 updateStick(stick, at: touch.location(in: self))
+                continue
+            }
+            if touch == spinnerTouch, let item = items.first(where: { $0.kind == .spinner }) {
+                updateSpinner(item, at: touch.location(in: self))
+                continue
+            }
+            if touch == trackballTouch, let item = items.first(where: { $0.kind == .trackball }) {
+                updateTrackball(item, touch: touch)
                 continue
             }
             if touchInputs[touch] != nil {
@@ -151,6 +200,18 @@ final class ControlPadView: UIView {
                 setNeedsDisplay()
                 continue
             }
+            if touch == spinnerTouch {
+                spinnerTouch = nil
+                spinnerLastAngle = nil
+                spinnerDetentAccum = 0
+                continue
+            }
+            if touch == trackballTouch {
+                trackballTouch = nil
+                trackballLast = nil
+                startTrackballMomentum()
+                continue
+            }
             touchInputs[touch] = nil
         }
         reconcile()
@@ -159,6 +220,85 @@ final class ControlPadView: UIView {
     /// The stick item whose extended frame contains this point, if any.
     private func stickItem(at point: CGPoint) -> ControlLayout.Item? {
         items.first { $0.kind == .stick && $0.extended.resolved(in: bounds.size).contains(point) }
+    }
+
+    private func item(of kind: ControlLayout.Item.Kind, at point: CGPoint) -> ControlLayout.Item? {
+        items.first { $0.kind == kind && $0.extended.resolved(in: bounds.size).contains(point) }
+    }
+
+    /// The lab's proven spinner mechanism, in the pad's own idiom: thumb
+    /// angle about the item's centre, lift jumps rejected, fractions
+    /// carried, a detent tick every few degrees for the bearing feel.
+    private func updateSpinner(_ item: ControlLayout.Item, at point: CGPoint) {
+        let frame = item.frame.resolved(in: bounds.size)
+        let angle = Double(atan2(point.y - frame.midY, point.x - frame.midX))
+        defer { spinnerLastAngle = angle }
+        guard let last = spinnerLastAngle else { return }
+        var d = angle - last
+        while d > .pi { d -= 2 * .pi }
+        while d < -.pi { d += 2 * .pi }
+        guard abs(d) < 1.0 else { return }
+        spinnerVisual += d
+        let perTurn = item.sensitivity ?? 768
+        let counts = (d / (2 * .pi)) * perTurn + spinnerRemainder
+        let whole = counts.rounded(.towardZero)
+        spinnerRemainder = counts - whole
+        if whole != 0 { sendRelative(Int(whole), 0) }
+        spinnerDetentAccum += abs(d)
+        if spinnerDetentAccum >= 12.0 * .pi / 180 {
+            spinnerDetentAccum = 0
+            detent.impactOccurred(intensity: 0.6)
+        }
+        setNeedsDisplay(frame.insetBy(dx: -8, dy: -8))
+    }
+
+    private func updateTrackball(_ item: ControlLayout.Item, touch: UITouch) {
+        let point = touch.location(in: self)
+        guard let last = trackballLast else {
+            trackballLast = (point, touch.timestamp)
+            return
+        }
+        let dt = max(touch.timestamp - last.time, 0.001)
+        let scale = (item.sensitivity ?? 300) / 100
+        let dx = Double(point.x - last.point.x) * scale + trackballRemainder.x
+        let dy = Double(point.y - last.point.y) * scale + trackballRemainder.y
+        let wx = dx.rounded(.towardZero), wy = dy.rounded(.towardZero)
+        trackballRemainder = (dx - wx, dy - wy)
+        if wx != 0 || wy != 0 { sendRelative(Int(wx), Int(wy)) }
+        trackballVelocity = CGVector(
+            dx: (point.x - last.point.x) / dt, dy: (point.y - last.point.y) / dt)
+        trackballLast = (point, touch.timestamp)
+    }
+
+    private func startTrackballMomentum() {
+        let speed = (trackballVelocity.dx * trackballVelocity.dx
+                     + trackballVelocity.dy * trackballVelocity.dy).squareRoot()
+        guard speed > 40 else { return }
+        momentum?.invalidate()
+        let link = CADisplayLink(target: self, selector: #selector(momentumTick))
+        link.add(to: .main, forMode: .common)
+        momentum = link
+    }
+
+    @objc private func momentumTick(_ link: CADisplayLink) {
+        guard let item = items.first(where: { $0.kind == .trackball }) else {
+            link.invalidate(); momentum = nil; return
+        }
+        let dt = link.duration
+        let scale = (item.sensitivity ?? 300) / 100
+        let dx = Double(trackballVelocity.dx) * dt * scale + trackballRemainder.x
+        let dy = Double(trackballVelocity.dy) * dt * scale + trackballRemainder.y
+        let wx = dx.rounded(.towardZero), wy = dy.rounded(.towardZero)
+        trackballRemainder = (dx - wx, dy - wy)
+        if wx != 0 || wy != 0 { sendRelative(Int(wx), Int(wy)) }
+        // The coast: a shade over a second from a hard flick to rest,
+        // tuned against the feel of a real ball's bearing, or as close
+        // as arithmetic gets before thumbs weigh in.
+        trackballVelocity.dx *= 0.94
+        trackballVelocity.dy *= 0.94
+        let speed = (trackballVelocity.dx * trackballVelocity.dx
+                     + trackballVelocity.dy * trackballVelocity.dy).squareRoot()
+        if speed < 8 { link.invalidate(); momentum = nil }
     }
 
     /// A stick's position is its offset from its own frame's center, capped
@@ -253,10 +393,10 @@ final class ControlPadView: UIView {
                 if nearestButton == nil || distance < nearestButton!.distance {
                     nearestButton = (id, distance)
                 }
-            case .stick:
-                // Handled separately: a stick is claimed by a touch in
-                // touchesBegan and tracked through updateStick, not through
-                // this digital held-id path.
+            case .stick, .spinner, .trackball:
+                // Handled separately: each is claimed by a touch in
+                // touchesBegan and tracked through its own update path,
+                // not through this digital held-id path.
                 break
             }
         }
@@ -304,8 +444,52 @@ final class ControlPadView: UIView {
                 )
             case .stick:
                 drawStick(in: frame)
+            case .spinner:
+                drawSpinner(in: frame)
+            case .trackball:
+                drawTrackball(in: frame)
             }
         }
+    }
+
+    /// A ring with tick marks that rotate with the accumulated spin, so
+    /// the control visibly turns under the thumb the way the knob did.
+    private func drawSpinner(in frame: CGRect) {
+        guard let ctx = UIGraphicsGetCurrentContext() else { return }
+        let radius = min(frame.width, frame.height) / 2 - 4
+        let center = CGPoint(x: frame.midX, y: frame.midY)
+        ctx.setStrokeColor(UIColor.white.withAlphaComponent(0.45).cgColor)
+        ctx.setLineWidth(7)
+        ctx.strokeEllipse(in: CGRect(
+            x: center.x - radius, y: center.y - radius,
+            width: radius * 2, height: radius * 2))
+        ctx.setLineWidth(2.5)
+        for i in 0..<12 {
+            let a = spinnerVisual + Double(i) * .pi / 6
+            let inner = CGPoint(
+                x: center.x + cos(a) * (radius - 12), y: center.y + sin(a) * (radius - 12))
+            let outer = CGPoint(
+                x: center.x + cos(a) * (radius - 3), y: center.y + sin(a) * (radius - 3))
+            ctx.move(to: inner); ctx.addLine(to: outer)
+        }
+        ctx.strokePath()
+    }
+
+    /// A filled ball in a shallow well. Deliberately plain: the picture
+    /// is the game's, this only has to read as "roll me".
+    private func drawTrackball(in frame: CGRect) {
+        guard let ctx = UIGraphicsGetCurrentContext() else { return }
+        let radius = min(frame.width, frame.height) / 2 - 4
+        let center = CGPoint(x: frame.midX, y: frame.midY)
+        ctx.setStrokeColor(UIColor.white.withAlphaComponent(0.3).cgColor)
+        ctx.setLineWidth(4)
+        ctx.strokeEllipse(in: CGRect(
+            x: center.x - radius, y: center.y - radius,
+            width: radius * 2, height: radius * 2))
+        ctx.setFillColor(UIColor.white.withAlphaComponent(0.14).cgColor)
+        let ball = radius * 0.72
+        ctx.fillEllipse(in: CGRect(
+            x: center.x - ball, y: center.y - ball, width: ball * 2, height: ball * 2))
     }
 
     private func drawStick(in frame: CGRect) {

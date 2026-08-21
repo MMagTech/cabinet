@@ -40,6 +40,7 @@ struct EditableItem: Identifiable {
     var frame: EditRect
     var extended: EditRect
     var fourWay: Bool?
+    var sensitivity: Double? = nil
 
     /// What the pad draws for this item. Built through `ControlLayout.Item`'s
     /// own initialiser so the editor can never render something the player
@@ -47,7 +48,8 @@ struct EditableItem: Identifiable {
     var rendered: ControlLayout.Item {
         ControlLayout.Item(
             kind: kind, label: label, input: input, inputs: inputs,
-            frame: frame.rendered, extended: extended.rendered, fourWay: fourWay
+            frame: frame.rendered, extended: extended.rendered, fourWay: fourWay,
+            sensitivity: sensitivity
         )
     }
 
@@ -170,7 +172,8 @@ extension EditableLayout {
                 inputs: entry["inputs"] as? [Int],
                 frame: frame,
                 extended: extended,
-                fourWay: entry["fourWay"] as? Bool
+                fourWay: entry["fourWay"] as? Bool,
+                sensitivity: entry["sensitivity"] as? Double
             )
         }
     }
@@ -229,6 +232,7 @@ extension EditableLayout {
             lines.append("\(field)\"frame\": \(rect(item.frame))")
             lines.append("\(field)\"extended\": \(rect(item.extended))")
             if let fourWay = item.fourWay { lines.append("\(field)\"fourWay\": \(fourWay)") }
+            if let sensitivity = item.sensitivity { lines.append("\(field)\"sensitivity\": \(sensitivity)") }
             return "\(inner){\n" + lines.joined(separator: ",\n") + "\n\(inner)}"
         }.joined(separator: ",\n")
         out += "\n\(pad)]"

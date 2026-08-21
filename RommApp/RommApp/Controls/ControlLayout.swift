@@ -44,6 +44,12 @@ struct ControlLayout: Decodable {
             /// EmulatorJS's own on screen stick, `data/src/emulator.js`,
             /// not assumed from the RetroPad table above.
             case dpad, button, pill, stick
+            /// A dial you roll: relative rotation into the frontend's
+            /// mouse channel, for the spinner/paddle-knob cabinets.
+            case spinner
+            /// A ball you flick: relative x/y with momentum, same
+            /// channel, both axes.
+            case trackball
         }
 
         let kind: Kind
@@ -60,6 +66,10 @@ struct ControlLayout: Decodable {
         /// D-pad only. Four way sticks actively suppress diagonals: Pac-Man
         /// and Donkey Kong misbehave when fed two directions at once.
         let fourWay: Bool?
+        /// Spinner: counts per full revolution (default 768, the
+        /// thumbs-on-glass verdict). Trackball: counts per point of
+        /// travel x100 (default 300). Data so the editor owns feel.
+        var sensitivity: Double? = nil
     }
 
     struct Rect: Decodable {

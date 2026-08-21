@@ -60,23 +60,18 @@ struct NativePlayerView: View {
     /// which was correct while FBNeo was the only native core, and wrong
     /// the moment Saturn joined it: every Saturn game got FBNeo's fallback
     /// arcade pad, Coin button included, since nothing here ever branched.
-    /// The on-screen spinner, for MAME 2003-Plus games whose cabinet
-    /// control was a dial or paddle knob. Scoped to that one core on
-    /// purpose, the narrow end of the blast-radius rule: it is the only
-    /// core whose mouse channel has been wired and verified, and FBNeo
-    /// carries its own standing input landmines. The pad stays
-    /// underneath, buttons and all; MAME also steps every analog control
-    /// from the d-pad, so the spinner adds the real mechanism without
-    /// taking anything away.
-    private var wantsSpinner: Bool {
-        guard core == .mame2003Plus,
-              let controls = AnalogControls.controls(forShortname: rom.fsNameNoExt) else { return false }
-        return (controls.dial ?? 0) > 0 || (controls.paddle ?? 0) > 0
+    /// What the game's own driver says it wants in your hands, passed to
+    /// the arcade layout builder only when the running core's mouse
+    /// channel is wired (MAME 2003-Plus today). Nil keeps every other
+    /// core's layouts byte-identical.
+    private var analogControls: AnalogControls? {
+        guard core == .mame2003Plus else { return nil }
+        return AnalogControls.controls(forShortname: rom.fsNameNoExt)
     }
 
     private var controlLayout: ControlLayout {
         if rom.isArcade {
-            return ArcadeLayout.build(for: profile)
+            return ArcadeLayout.build(for: profile, analog: analogControls)
         }
         // The six-button Genesis pad follows the Controller core setting,
         // the same lever that already tells the core which pad port 0
@@ -98,20 +93,7 @@ struct NativePlayerView: View {
     }
 
     private func layoutItems(landscape: Bool) -> [ControlLayout.Item] {
-        let items = controlLayout.items(landscape: landscape)
-        // Cabinet-authentic controls: a game whose real cabinet was a
-        // spinner and buttons shows a spinner and buttons, no directional
-        // pad it never had. Only for "special" profiles, which by the
-        // classifier's own construction means no joystick exists (any
-        // game with one classifies as a joystick game first), so mixed
-        // layouts like Discs of Tron keep their stick beside the dial.
-        // A physical controller is untouched: its d-pad feeds the joypad
-        // bits directly and still steps the dial the way MAME always
-        // allows.
-        if wantsSpinner && profile.profile == "special" {
-            return items.filter { $0.kind != .dpad && $0.kind != .stick }
-        }
-        return items
+        controlLayout.items(landscape: landscape)
     }
 
     /// Matches PlayerView.controlStripHeight exactly: only arcade's vertical
@@ -119,6 +101,10 @@ struct NativePlayerView: View {
     /// flat height.
     private var controlStripHeight: CGFloat {
         rom.isArcade && profile.vertical ? 280 : 330
+    }
+
+    private func handleRelative(_ dx: Int, _ dy: Int) {
+        LibretroFrontend.shared.addMouseDeltaX(dx, y: dy, port: 0)
     }
 
     private func handleInput(_ id: Int, down: Bool) {
@@ -183,16 +169,7 @@ struct NativePlayerView: View {
                     ZStack {
                         MetalGameView(renderer: renderer)
                         if showsControls {
-                            TouchControlPad(items: layoutItems(landscape: true), send: handleInput, sendStick: handleStick, system: controlLayout.system, opacity: controlOpacity)
-                            if wantsSpinner {
-                                TouchSpinner(
-                                    onSpin: { LibretroFrontend.shared.addMouseDeltaX($0, y: 0, port: 0) },
-                                    opacity: controlOpacity
-                                )
-                                .frame(width: 150, height: 150)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-                                .padding(.trailing, 24)
-                            }
+                            TouchControlPad(items: layoutItems(landscape: true), send: handleInput, sendStick: handleStick, sendRelative: handleRelative, system: controlLayout.system, opacity: controlOpacity)
                         }
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
@@ -217,21 +194,9 @@ struct NativePlayerView: View {
                     ZStack(alignment: .top) {
                         MetalGameView(renderer: renderer)
                             .frame(height: max(geometry.size.height - controlStripHeight, 0))
-                        TouchControlPad(items: layoutItems(landscape: false), send: handleInput, sendStick: handleStick, system: controlLayout.system, opacity: controlOpacity)
+                        TouchControlPad(items: layoutItems(landscape: false), send: handleInput, sendStick: handleStick, sendRelative: handleRelative, system: controlLayout.system, opacity: controlOpacity)
                             .frame(height: padHeight)
                             .frame(maxHeight: .infinity, alignment: .bottom)
-                        if wantsSpinner {
-                            // Above the strip, right side, clear of both
-                            // the picture and the buttons.
-                            TouchSpinner(
-                                onSpin: { LibretroFrontend.shared.addMouseDeltaX($0, y: 0, port: 0) },
-                                opacity: controlOpacity
-                            )
-                            .frame(width: 130, height: 130)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                            .padding(.trailing, 16)
-                            .padding(.bottom, padHeight + 12)
-                        }
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
                 }

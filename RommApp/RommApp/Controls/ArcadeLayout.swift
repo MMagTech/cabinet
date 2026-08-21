@@ -18,7 +18,57 @@ import Foundation
 /// Coin is a primary control, not a small central pill. People feed arcade
 /// machines coins constantly.
 enum ArcadeLayout {
-    static func build(for profile: ArcadeProfile) -> ControlLayout {
+    /// `analog` is what the game's own driver says it wants
+    /// (analog-controls.json); passed only by the native player when the
+    /// running core's mouse channel is actually wired, so the webview
+    /// player keeps its d-pad and nothing changes for it.
+    static func build(for profile: ArcadeProfile, analog: AnalogControls? = nil) -> ControlLayout {
+        // A special-profile game with a known analog mechanism swaps the
+        // d-pad for the real control. Special means the classifier saw no
+        // joystick, so nothing is lost; mixed layouts never classify
+        // special and keep their stick.
+        if profile.profile == "special", let analog {
+            let kind: ControlLayout.Item.Kind? =
+                (analog.trackball ?? 0) > 0 ? .trackball :
+                ((analog.dial ?? 0) > 0 || (analog.paddle ?? 0) > 0) ? .spinner : nil
+            if let kind {
+                let name = "arcade-\(kind == .spinner ? "spinner" : "trackball")\(max(0, min(profile.buttons, 6)))"
+                if let url = Bundle.main.url(forResource: name, withExtension: "json"),
+                   let data = try? Data(contentsOf: url),
+                   let file = try? JSONDecoder().decode(ControlLayout.self, from: data) {
+                    return file
+                }
+                // No tuned file for this shape yet: the standard layout
+                // with its d-pad item transmuted in place, same slot,
+                // same reach.
+                let base = build(for: profile)
+                let items = base.items.map { item -> ControlLayout.Item in
+                    guard item.kind == .dpad else { return item }
+                    return ControlLayout.Item(
+                        kind: kind, label: nil, input: nil, inputs: nil,
+                        frame: item.frame, extended: item.extended,
+                        fourWay: nil,
+                        sensitivity: kind == .spinner ? 768 : 300)
+                }
+                let wideItems = base.landscapeItems.map { wide in
+                    wide.map { item -> ControlLayout.Item in
+                        guard item.kind == .dpad else { return item }
+                        return ControlLayout.Item(
+                            kind: kind, label: nil, input: nil, inputs: nil,
+                            frame: item.frame, extended: item.extended,
+                            fourWay: nil,
+                            sensitivity: kind == .spinner ? 768 : 300)
+                    }
+                }
+                return ControlLayout(
+                    system: base.system, items: items,
+                    landscapeItems: wideItems, headroom: base.headroom)
+            }
+        }
+        return buildStandard(for: profile)
+    }
+
+    private static func buildStandard(for profile: ArcadeProfile) -> ControlLayout {
         // A tuned file wins over the generated arrangement. The generator
         // below is what produced these files in the first place
         // (tools/arcade-layouts), so this changes nothing until one is
