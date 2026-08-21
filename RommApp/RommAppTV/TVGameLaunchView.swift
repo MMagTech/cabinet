@@ -32,6 +32,9 @@ struct TVGameLaunchView: View {
     @State private var progress: Double = 0
     @State private var error: String?
     @State private var launch: Launch?
+    /// Mirrors NativeCoreChoice so the emulator row's label updates the
+    /// moment it is clicked; the store itself is the source of truth.
+    @State private var chosenCore: NativeCore?
 
     private struct Launch: Identifiable {
         let id = UUID()
@@ -95,6 +98,9 @@ struct TVGameLaunchView: View {
                     if let platform {
                         playButton(platform: platform)
                         statesSection
+                        if platform.cores.count > 1 {
+                            emulatorRow(platform: platform)
+                        }
                         compatibilityRow
                     } else {
                         // Every platform tvOS can't run lands here: no
@@ -146,6 +152,30 @@ struct TVGameLaunchView: View {
     /// The mark is per device (see Compatibility), which is the point on a
     /// TV: the same game may be perfectly playable on a phone with twice
     /// the headroom, and marking it here says nothing about there.
+    /// The native emulator choice, shown only where a real one exists
+    /// (arcade: FinalBurn Neo or MAME 2003-Plus). A click cycles rather
+    /// than opening a picker: two options, and every other row on this
+    /// screen is a single-press action, so a submenu would be the odd
+    /// one out. Same choice store as iOS's launch screen, so the two
+    /// launchers always agree on which emulator a game gets.
+    @ViewBuilder
+    private func emulatorRow(platform: NativePlatform) -> some View {
+        let current = chosenCore ?? NativeCoreChoice.resolved(for: rom, platform: platform)
+        Button {
+            let cores = platform.cores
+            let next = cores[((cores.firstIndex(of: current) ?? 0) + 1) % cores.count]
+            NativeCoreChoice.remember(next, rom: rom, platform: platform)
+            chosenCore = next
+        } label: {
+            Label("Emulator: \(current.displayName)", systemImage: "cpu")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 10)
+        }
+        .buttonStyle(RowFocusStyle())
+    }
+
     @ViewBuilder
     private var compatibilityRow: some View {
         let marked = compatibility.isMarked(rom.id)

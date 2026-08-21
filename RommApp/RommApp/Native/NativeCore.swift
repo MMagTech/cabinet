@@ -18,6 +18,7 @@ enum NativeCore {
     case pcsxReARMed
     case flycast
     case mupen64Plus
+    case mame2003Plus
 
     /// The frontend's identifier for the statically linked core.
     var coreID: LibretroCoreID {
@@ -36,6 +37,7 @@ enum NativeCore {
         case .pcsxReARMed: return .pcsxReARMed
         case .flycast: return .flycast
         case .mupen64Plus: return .mupen64Plus
+        case .mame2003Plus: return .mame2003Plus
         }
     }
 
@@ -62,6 +64,7 @@ enum NativeCore {
         case .pcsxReARMed: return "pcsx-rearmed-native"
         case .flycast: return "flycast-native"
         case .mupen64Plus: return "mupen64plus-native"
+        case .mame2003Plus: return "mame2003plus-native"
         }
     }
 
@@ -83,6 +86,42 @@ enum NativeCore {
         case .pcsxReARMed: return "pcsxReARMed"
         case .flycast: return "flycast"
         case .mupen64Plus: return "mupen64Plus"
+        case .mame2003Plus: return "mame2003Plus"
+        }
+    }
+
+    /// What the emulator picker calls this core. The two arcade cores
+    /// use the same names the webview's own picker shows for the same
+    /// emulators, so a person sees one name per emulator regardless of
+    /// which player runs it.
+    var displayName: String {
+        switch self {
+        case .fbneo: return "FinalBurn Neo"
+        case .mame2003Plus: return "MAME 2003-Plus"
+        case .beetleSaturn: return "Beetle Saturn"
+        case .gambatte: return "Gambatte"
+        case .mgba: return "mGBA"
+        case .genesisPlusGX: return "Genesis Plus GX"
+        case .beetlePCEFast: return "Beetle PCE Fast"
+        case .snes9x: return "Snes9x"
+        case .fceumm: return "FCEUmm"
+        case .beetleNGP: return "Beetle NeoPop"
+        case .prosystem: return "ProSystem"
+        case .picoDrive: return "PicoDrive"
+        case .pcsxReARMed: return "PCSX ReARMed"
+        case .flycast: return "Flycast"
+        case .mupen64Plus: return "Mupen64Plus"
+        }
+    }
+
+    /// The webview hint slug for this core, where one exists. CoreHints
+    /// speaks the webview catalogue's names; the two arcade cores exist
+    /// in both worlds under these names.
+    var hintSlug: String? {
+        switch self {
+        case .fbneo: return "fbneo"
+        case .mame2003Plus: return "mame2003_plus"
+        default: return nil
         }
     }
 
@@ -91,7 +130,8 @@ enum NativeCore {
     /// `rom.platformSlug`: see `NativePlatform.platform(for:canonicalSlug:)`
     /// for why matching against the raw metadata slug is wrong.
     static func core(for rom: Rom, canonicalSlug: String) -> NativeCore? {
-        NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug)?.core
+        guard let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug) else { return nil }
+        return NativeCoreChoice.resolved(for: rom, platform: platform)
     }
 
     /// The native core for an already-resolved slug, for callers with no
@@ -125,6 +165,17 @@ enum NativePlatform: String, CaseIterable {
     case psx
     case dreamcast
     case n64
+
+    /// Every core that can run this platform, default first. Arcade is
+    /// the only platform with a real set; everywhere else this is the
+    /// one-member wrapper around `core`, so no other platform's behavior
+    /// can change by construction.
+    var cores: [NativeCore] {
+        switch self {
+        case .arcade: return [.fbneo, .mame2003Plus]
+        default: return [core]
+        }
+    }
 
     var core: NativeCore {
         switch self {

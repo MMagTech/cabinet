@@ -151,13 +151,22 @@ enum NativeLauncher {
     private static func finishLaunch(
         platform: NativePlatform, rom: Rom, session: Session, romURL: URL, workDir: URL
     ) async throws -> NativeCore {
-        let loadURL = try extractedIfArchived(romURL, core: platform.core, in: workDir)
-        let saveDir = coreSaveDirectory(romId: rom.id)
+        // The person's pick where the platform offers one; the platform
+        // default everywhere else, byte-identically.
+        let core = NativeCoreChoice.resolved(for: rom, platform: platform)
+        let loadURL = try extractedIfArchived(romURL, core: core, in: workDir)
+        // On a platform with one core the directory is exactly what it
+        // has always been. Only a multi-core platform namespaces by
+        // core, so two arcade emulators can never write their NVRAM and
+        // high scores over each other's. Existing arcade files are left
+        // where they are on purpose (alpha, one user, high scores).
+        let saveDir = coreSaveDirectory(
+            romId: rom.id, core: platform.cores.count > 1 ? core : nil)
         await restoreVMUSaveIfNeeded(rom: rom, session: session, platform: platform, workDir: workDir)
         await restoreCoreFileSaveIfNeeded(
             rom: rom, session: session, platform: platform, loadURL: loadURL, saveDir: saveDir
         )
-        return try activate(platform: platform, loadURL: loadURL, workDir: workDir, saveDir: saveDir)
+        return try activate(platform: platform, core: core, loadURL: loadURL, workDir: workDir, saveDir: saveDir)
     }
 
     /// The persistent per-game directory handed to the core as its save
@@ -170,15 +179,18 @@ enum NativeLauncher {
     /// match that platform's transient storage model; losing it there
     /// costs a re-download from RomM at worst, same deal as the ROM
     /// cache itself.
-    static func coreSaveDirectory(romId: Int) -> URL {
+    static func coreSaveDirectory(romId: Int, core: NativeCore? = nil) -> URL {
         #if os(tvOS)
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         #else
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         #endif
-        let dir = base
+        var dir = base
             .appendingPathComponent("CoreSaves", isDirectory: true)
             .appendingPathComponent(String(romId), isDirectory: true)
+        if let core {
+            dir = dir.appendingPathComponent(core.storageKey, isDirectory: true)
+        }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
@@ -301,7 +313,7 @@ enum NativeLauncher {
         }
     }
 
-    private static func activate(platform: NativePlatform, loadURL: URL, workDir: URL, saveDir: URL) throws -> NativeCore {
+    private static func activate(platform: NativePlatform, core: NativeCore, loadURL: URL, workDir: URL, saveDir: URL) throws -> NativeCore {
         #if targetEnvironment(simulator)
         // A simulator build links no cores: they are built for real
         // hardware and rebuilding emulator cores for a simulator proves
@@ -312,7 +324,6 @@ enum NativeLauncher {
         // does not label every one of them unplayable.
         throw LaunchError.unsupportedFormat("Games can't run in the Simulator. Use a real Apple TV.")
         #else
-        let core = platform.core
         LibretroFrontend.shared.activateCore(core.coreID)
         LibretroFrontend.shared.setCoreOptions(NativeCoreOptionsStore.dictionary(for: platform))
         let padDevice = NativeCoreOptionsStore.padDevice(for: platform)
@@ -346,7 +357,10 @@ enum NativeLauncher {
     /// permanently blank VDP state for the rest of the session.
     private static func extractedIfArchived(_ romURL: URL, core: NativeCore, in workDir: URL) throws -> URL {
         let ext = romURL.pathExtension.lowercased()
-        guard core != .fbneo, ext == "zip" || ext == "7z" else { return romURL }
+        // The two arcade cores load the archive itself: a romset zip IS
+        // the rom, and extracting its first file would hand the core one
+        // loose chip dump from a set of dozens.
+        guard core != .fbneo, core != .mame2003Plus, ext == "zip" || ext == "7z" else { return romURL }
         var nameBuffer = [CChar](repeating: 0, count: 1024)
         let ok = romURL.path.withCString { archivePath in
             workDir.path.withCString { destDir in

@@ -25,6 +25,10 @@ struct GameLaunchView: View {
 
     @State private var cores: [String] = []
     @State private var selectedCore: String?
+    /// The native emulator, on the platforms where more than one exists
+    /// (arcade: FinalBurn Neo or MAME 2003-Plus). Same card, same picker
+    /// shape, same memory behavior as the web player's emulator choice.
+    @State private var selectedNativeCore: NativeCore?
     @State private var selectedBackend: LaunchChoices.PlayerBackend = .webview
     @State private var playingNative = false
     @State private var nativeInitialState: Data?
@@ -310,6 +314,10 @@ struct GameLaunchView: View {
         // exists. Remembered as soon as a deliberate pick happens, not
         // deferred to Play: leaving the screen any other way, Close among
         // them, must not silently drop it.
+        .onChange(of: selectedNativeCore) { _, _ in
+            guard let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug) else { return }
+            NativeCoreChoice.remember(selectedNativeCore, rom: rom, platform: platform)
+        }
         .onChange(of: selectedCore) { _, _ in
             guard !loading else { return }
             LaunchChoices.remember(core: selectedCore, canonicalSlug: canonicalSlug, for: rom)
@@ -1108,6 +1116,27 @@ struct GameLaunchView: View {
                 Text("Runs the game in a natively compiled core instead of the web player. Save states stay separate per player.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug),
+                   platform.cores.count > 1 {
+                    Divider()
+                    LabeledContent {
+                        Picker("Emulator", selection: $selectedNativeCore) {
+                            ForEach(platform.cores, id: \.storageKey) { core in
+                                Text(core.displayName).tag(Optional(core))
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                    } label: {
+                        Text("Emulator")
+                    }
+                    if let chosen = selectedNativeCore,
+                       NativeCoreChoice.isRecommended(chosen, rom: rom, platform: platform) {
+                        Text("Recommended for this game's board. The general arcade core runs it too, but not reliably.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             } else if Compatibility.shared.crashes(romId: rom.id) >= 3 {
                 Text("The web player has crashed repeatedly on this game. The native player may hold up better.")
                     .font(.caption)
@@ -1641,6 +1670,10 @@ struct GameLaunchView: View {
         isComputerPlatform = ComputerPlatforms.contains(canonicalSlug)
         cores = CoreCatalog.cores(for: canonicalSlug)
         selectedCore = LaunchChoices.defaultCore(rom: rom, canonicalSlug: canonicalSlug, from: cores)
+        if let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug),
+           platform.cores.count > 1 {
+            selectedNativeCore = NativeCoreChoice.resolved(for: rom, platform: platform)
+        }
         // Offline, there is exactly one player that can work, the same
         // situation Saturn is always in, which is why Saturn never
         // shows a picker at all. Arcade's real choice, web or native,
