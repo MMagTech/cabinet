@@ -45,6 +45,11 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
     // than trusted. Passed its go/no-go 2026-08-11 and is wired into
     // NativePlatform as of the same week.
     LibretroCoreIDMupen64Plus NS_SWIFT_NAME(mupen64Plus) = 13,
+    // Cabinet's second arcade core, for the early-80s boards FinalBurn
+    // Neo does not cover: dials, spinners, trackballs, paddles, guns.
+    // Pure software rendering, no JIT, interpreter-era MAME (0.78+).
+    // docs/mame-core-comparison-2026-08-21.md records why this version.
+    LibretroCoreIDMAME2003Plus NS_SWIFT_NAME(mame2003Plus) = 14,
 };
 
 @interface LibretroFrame : NSObject

@@ -59,6 +59,15 @@ prosystem)
 picodrive)
     PREFIX=pico; REPO=https://github.com/libretro/picodrive.git
     MAKEDIR=.; MAKEFILE=Makefile.libretro; OUT=PicoDrive; LIB=libpicodrive_ios.a ;;
+mame2003_plus)
+    # The arcade core for the boards FinalBurn Neo does not cover: the
+    # early-80s Atari and Midway machines whose controls were dials,
+    # spinners, trackballs, paddles and guns. Chosen over mame2010 after
+    # measuring both; see docs/mame-core-comparison-2026-08-21.md, and
+    # note in particular that the per-game analog tuning metadata comes
+    # from a newer MAME's listxml as data rather than from this core.
+    PREFIX=m2003p; REPO=https://github.com/libretro/mame2003-plus-libretro.git
+    MAKEDIR=.; MAKEFILE=Makefile; OUT=MAME2003Plus; LIB=libmame2003_plus_ios.a ;;
 pcsx_rearmed)
     # platform=ios-arm64 (or tvos-arm64) forces DYNAREC=0 in this core's
     # own Makefile, a pure interpreter build, the same no-JIT exception
@@ -99,10 +108,12 @@ fi
 # and corrupts stdio.h's real fdopen() declaration under a modern SDK,
 # breaking both iOS and tvOS builds, not something new about tvOS. Patch it
 # back rather than build a permanently-broken core.
-ZUTIL_H="$SRC/deps/zlib-1.2.11/zutil.h"
-if [ -f "$ZUTIL_H" ]; then
+# Applied to every bundled copy rather than one hardcoded path: Beetle
+# PCE Fast keeps its zlib under deps/zlib-1.2.11, MAME 2003-Plus under
+# src/lib/zlib, and any future core is free to invent a third home.
+find "$SRC" -name zutil.h -print0 | while IFS= read -r -d '' ZUTIL_H; do
     sed -i '' 's/#if defined(MACOS) || defined(TARGET_OS_MAC)$/#if (defined(MACOS) || defined(TARGET_OS_MAC)) \&\& !defined(__APPLE__)/' "$ZUTIL_H"
-fi
+done
 
 if [ "$MAKEFILE" = cmake ]; then
     # mGBA dropped Makefile.libretro; its CMake build has a libretro

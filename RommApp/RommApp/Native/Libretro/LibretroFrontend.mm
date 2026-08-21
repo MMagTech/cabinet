@@ -23,6 +23,7 @@
 #import "PCSXReARMedCore.h"
 #import "N64Core.h"
 #import "FlycastCore.h"
+#import "MAME2003PlusCore.h"
 #endif
 
 #import <UIKit/UIKit.h>
@@ -1091,6 +1092,8 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
             return N64CoreAPI();
         case LibretroCoreIDFlycast:
             return FlycastCoreAPI();
+        case LibretroCoreIDMAME2003Plus:
+            return MAME2003PlusCoreAPI();
         default:
             // This used to fall through to the PlayStation core, so a
             // core id with no case did not fail to load: it silently ran

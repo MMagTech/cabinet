@@ -56,6 +56,7 @@
 				Native/Gambatte/libgambatte_ios.a,
 				Native/GenesisPlusGX/libgenesis_plus_gx_ios.a,
 				Native/MGBA/libmgba_ios.a,
+				Native/MAME2003Plus/libmame2003_plus_ios.a,
 				Native/Mupen64Plus/libmupen64plus_ios.a,
 				Native/NativePlayerView.swift,
 				Native/PCSXReARMed/libpcsx_rearmed_ios.a,
@@ -500,6 +501,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Snes9x",
 					"$(PROJECT_DIR)/RommApp/Native/Flycast",
 					"$(PROJECT_DIR)/RommApp/Native/Mupen64Plus",
+					"$(PROJECT_DIR)/RommApp/Native/MAME2003Plus",
 				);
 				MARKETING_VERSION = 0.1.0;
 				OTHER_LDFLAGS = "-lz";
@@ -625,6 +627,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/PCSXReARMed",
 					"$(PROJECT_DIR)/RommApp/Native/Flycast",
 					"$(PROJECT_DIR)/RommApp/Native/Mupen64Plus",
+					"$(PROJECT_DIR)/RommApp/Native/MAME2003Plus",
 				);
 				MARKETING_VERSION = 0.1;
 				OTHER_LDFLAGS = (
@@ -709,6 +712,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/PCSXReARMed",
 					"$(PROJECT_DIR)/RommApp/Native/Flycast",
 					"$(PROJECT_DIR)/RommApp/Native/Mupen64Plus",
+					"$(PROJECT_DIR)/RommApp/Native/MAME2003Plus",
 				);
 				MARKETING_VERSION = 0.1;
 				OTHER_LDFLAGS = (
@@ -890,6 +894,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Snes9x",
 					"$(PROJECT_DIR)/RommApp/Native/Flycast",
 					"$(PROJECT_DIR)/RommApp/Native/Mupen64Plus",
+					"$(PROJECT_DIR)/RommApp/Native/MAME2003Plus",
 				);
 				MARKETING_VERSION = 0.1;
 				OTHER_LDFLAGS = "-lz";
