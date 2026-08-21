@@ -25,6 +25,14 @@ struct AnalogControls: Decodable {
 
     static func controls(forShortname raw: String) -> AnalogControls? {
         let name = raw.lowercased()
+        // Curated cabinet facts beat generated inference, always. The
+        // generated file records which input ports a board reads, which
+        // is not the same question as what the player's hands were on:
+        // inferring the second from the first split rotary joysticks in
+        // half, handed out pedals nobody had, and missed Atari's rotary
+        // games entirely. Anything in arcade-panels.json is a statement
+        // about a real machine.
+        if let curated = curatedTable[name] { return curated }
         if let hit = table[name] { return hit }
         // "progear (world)" style names happen; first token is the
         // romset, the same fallback CoreHints and the profile map use.
@@ -33,6 +41,27 @@ struct AnalogControls: Decodable {
         }
         return nil
     }
+
+    private static let curatedTable: [String: AnalogControls] = {
+        guard let url = Bundle.main.url(forResource: "arcade-panels", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let raw = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            assertionFailure("arcade-panels.json missing from the bundle")
+            return [:]
+        }
+        // The file carries "_"-prefixed notes explaining each group, for
+        // whoever corrects it next; they are not games.
+        var out: [String: AnalogControls] = [:]
+        for (key, value) in raw where !key.hasPrefix("_") {
+            guard let dict = value as? [String: Int],
+                  let encoded = try? JSONSerialization.data(withJSONObject: dict),
+                  let decoded = try? JSONDecoder().decode(AnalogControls.self, from: encoded)
+            else { continue }
+            out[key] = decoded
+        }
+        return out
+    }()
 
     private static let table: [String: AnalogControls] = {
         guard let url = Bundle.main.url(forResource: "analog-controls", withExtension: "json"),
