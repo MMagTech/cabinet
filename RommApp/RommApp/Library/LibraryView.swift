@@ -398,7 +398,9 @@ struct LibraryScreen: View {
     /// different reason, no core exists at all rather than no touch input.
     private func isSupported(_ platform: Platform) -> Bool {
         let canonicalSlug = (session.platformsVersions[platform.fsSlug] ?? platform.fsSlug).lowercased()
-        return PlatformSupport.isSupported(canonicalSlug: canonicalSlug)
+        return PlatformSupport.isSupported(
+            canonicalSlug: canonicalSlug,
+            isArcade: PlatformSupport.arcadeSlugs.contains(platform.slug))
     }
 
     private var supportedPlatforms: [Platform] { platforms.filter(isSupported) }

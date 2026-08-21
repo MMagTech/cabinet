@@ -81,7 +81,7 @@ struct Rom: Codable, Identifiable, Hashable {
     /// RomM's ARCADE_SYSTEMS: platforms whose games run on MAME or FBNeo
     /// cores and resolve controls per game through the profile map.
     var isArcade: Bool {
-        ["arcade", "neogeoaes", "neogeomvs", "neo-geo-cd"].contains(platformSlug)
+        PlatformSupport.arcadeSlugs.contains(platformSlug)
     }
 
     /// The short name EmulatorJS's own core catalogue actually indexes by,

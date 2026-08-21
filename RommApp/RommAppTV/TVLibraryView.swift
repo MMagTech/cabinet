@@ -376,8 +376,9 @@ struct TVLibraryView: View {
 
     private func isSupported(_ platform: Platform) -> Bool {
         let canonicalSlug = (session.platformsVersions[platform.fsSlug] ?? platform.fsSlug).lowercased()
-        return PlatformSupport.isSupported(canonicalSlug: canonicalSlug)
-            && NativePlatform.platform(bySlug: canonicalSlug, isArcade: canonicalSlug == "arcade") != nil
+        let isArcade = PlatformSupport.arcadeSlugs.contains(platform.slug)
+        return PlatformSupport.isSupported(canonicalSlug: canonicalSlug, isArcade: isArcade)
+            && NativePlatform.platform(bySlug: canonicalSlug, isArcade: isArcade) != nil
     }
 }
 

@@ -668,7 +668,7 @@ struct HomeView: View {
         #else
         let canonicalSlug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
         let cores = CoreCatalog.cores(for: canonicalSlug)
-        guard PlatformSupport.isSupported(canonicalSlug: canonicalSlug), !cores.isEmpty else {
+        guard PlatformSupport.isSupported(canonicalSlug: canonicalSlug, isArcade: rom.isArcade), !cores.isEmpty else {
             resuming = rom
             return
         }

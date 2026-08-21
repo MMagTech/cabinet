@@ -44,12 +44,22 @@ enum ComputerPlatforms {
 /// Supported/Unsupported sections and the launch screen's own Play guard,
 /// so the two can never disagree about which games this covers.
 enum PlatformSupport {
-    static func isSupported(canonicalSlug: String) -> Bool {
+    /// RomM's ARCADE_SYSTEMS, the metadata slugs whose games run on the
+    /// arcade cores. One copy, shared with `Rom.isArcade`, so the library
+    /// sections and the rom-level checks cannot drift apart.
+    static let arcadeSlugs: Set<String> = ["arcade", "neogeoaes", "neogeomvs", "neo-geo-cd"]
+
+    static func isSupported(canonicalSlug: String, isArcade: Bool = false) -> Bool {
+        // Arcade is supported by its native cores no matter what the
+        // folder is called. The check below used to assume every arcade
+        // folder resolves through PLATFORMS_VERSIONS to a cores.json key,
+        // which is only true for folders someone has mapped in RomM's
+        // config.yml: a fresh "MAME2003" folder resolved to a slug
+        // nothing knew and a fully playable platform read as Unsupported.
+        // RomM's own metadata slug already says it is arcade; believe it.
+        if isArcade { return true }
         guard !ComputerPlatforms.contains(canonicalSlug) else { return false }
         if !CoreCatalog.cores(for: canonicalSlug).isEmpty { return true }
-        // isArcade: false, not a real lookup: every arcade slug already
-        // carries webview cores in cores.json and returns true above, so
-        // this only ever matters for non-arcade slugs anyway.
         return NativeCore.core(bySlug: canonicalSlug, isArcade: false) != nil
     }
 }

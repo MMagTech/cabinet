@@ -433,7 +433,7 @@ struct GameLaunchView: View {
     /// the real check when it grew native-core awareness, exactly the
     /// class of bug a single source of truth is supposed to prevent.
     private var isPlatformSupported: Bool {
-        PlatformSupport.isSupported(canonicalSlug: canonicalSlug)
+        PlatformSupport.isSupported(canonicalSlug: canonicalSlug, isArcade: rom.isArcade)
     }
 
     /// Whether a real Web player / Native picker is offered, matching
