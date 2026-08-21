@@ -48,6 +48,10 @@
 	<array>
 		<string>_cabinet-probe._udp</string>
 	</array>
+	<!-- Tilt aiming for the rotary joystick cabinets, whose one hand did
+	     both movement and aim: the phone itself becomes the twist. -->
+	<key>NSMotionUsageDescription</key>
+	<string>Cabinet uses motion to let you aim by tilting, for arcade games whose joystick also rotated.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Cabinet uses Bluetooth to measure the link between your iPhone and Apple TV for controller features.</string>
 </dict>

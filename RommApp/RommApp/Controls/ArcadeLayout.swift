@@ -52,18 +52,22 @@ enum ArcadeLayout {
         // thumb reaches, above the buttons.
         if (analog.rotary ?? 0) > 0 {
             let base = buildStandard(for: profile)
-            let twist = ControlLayout.Item(
-                kind: .spinner, label: nil, input: nil, inputs: nil,
-                frame: ControlLayout.Rect(x: 0.63, y: 0.05, w: 0.30, h: 0.30),
-                extended: ControlLayout.Rect(x: 0.59, y: 0.01, w: 0.38, h: 0.38),
-                // Twelve detented positions, not free rotation, so a
-                // shorter sweep covers the whole ring than a smooth
-                // spinner wants.
-                fourWay: nil, sensitivity: 384)
+            // The stick becomes a rotary item purely as a marker: the pad
+            // reads it as a d-pad for direction and, seeing it, turns on
+            // tilt aiming. Nothing extra is drawn, because the third
+            // control is the phone.
+            func mark(_ list: [ControlLayout.Item]) -> [ControlLayout.Item] {
+                list.map { item in
+                    guard item.kind == .dpad else { return item }
+                    return ControlLayout.Item(
+                        kind: .rotary, label: nil, input: nil, inputs: item.inputs,
+                        frame: item.frame, extended: item.extended,
+                        fourWay: false, sensitivity: nil)
+                }
+            }
             return ControlLayout(
-                system: base.system, items: base.items + [twist],
-                landscapeItems: base.landscapeItems.map { $0 + [twist] },
-                headroom: base.headroom)
+                system: base.system, items: mark(base.items),
+                landscapeItems: base.landscapeItems.map(mark), headroom: base.headroom)
         }
         if (analog.trackball ?? 0) > 0 { analogKinds.append(.trackball) }
         if (analog.dial ?? 0) > 0 || (analog.paddle ?? 0) > 0 { analogKinds.append(.spinner) }

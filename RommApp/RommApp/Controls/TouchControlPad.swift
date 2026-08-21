@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import CoreMotion
 
 
 /// The native touch controls, drawn as vectors over the webview.
@@ -120,6 +121,17 @@ final class ControlPadView: UIView {
     /// twist at the same time, which is the whole point of the control.
     private var rotaryTwistTouch: UITouch?
 
+    /// Tilt-to-turn, for the rotary joystick cabinets. Those machines
+    /// gave one hand both movement and aim while the other fired, three
+    /// things at once from two hands; two thumbs cannot cover that, so
+    /// the aim moves off the glass entirely and onto the phone. Tilting
+    /// turns the aim at a rate, the same rate-control the wheel uses, so
+    /// a small steady tilt sweeps the ring and level holds it. Both
+    /// thumbs stay free for the stick and the buttons.
+    private let motion = CMMotionManager()
+    private var tiltRemainder = 0.0
+    private var tiltActive = false
+
     /// Inputs currently held down, across all touches.
     private var pressed: Set<Int> = []
     /// What each live touch is contributing. A d-pad touch owns several.
@@ -155,7 +167,41 @@ final class ControlPadView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         setNeedsDisplay()
+        updateTiltTracking()
     }
+
+    /// Runs only while a layout actually asks for tilt aiming, so no
+    /// other game pays for the sensor.
+    private func updateTiltTracking() {
+        let wants = items.contains { $0.kind == .rotary }
+        if wants, !tiltActive, motion.isDeviceMotionAvailable {
+            tiltActive = true
+            motion.deviceMotionUpdateInterval = 1.0 / 60
+            let queue = OperationQueue()
+            queue.maxConcurrentOperationCount = 1
+            motion.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: queue) { [weak self] m, _ in
+                guard let self, let m else { return }
+                // Gravity gives the tilt absolutely, so it never drifts.
+                // Held level the aim holds still; the dead zone keeps a
+                // resting hand from creeping.
+                let tilt = atan2(m.gravity.x, -m.gravity.y)
+                let deadZone = 0.12
+                let magnitude = abs(tilt) < deadZone ? 0 : (abs(tilt) - deadZone) * (tilt < 0 ? -1 : 1)
+                guard magnitude != 0 else { return }
+                DispatchQueue.main.async {
+                    let counts = magnitude * 22 + self.tiltRemainder
+                    let whole = counts.rounded(.towardZero)
+                    self.tiltRemainder = counts - whole
+                    if whole != 0 { self.sendRelative(Int(whole), 0) }
+                }
+            }
+        } else if !wants, tiltActive {
+            tiltActive = false
+            motion.stopDeviceMotionUpdates()
+        }
+    }
+
+    deinit { motion.stopDeviceMotionUpdates() }
 
     /// Touches land here only inside a control's extended frame. Everything
     /// else passes through to the webview underneath, which matters in
@@ -182,18 +228,6 @@ final class ControlPadView: UIView {
             }
             // A rotary stick: the collar twists, the middle pushes. Which
             // one this touch owns depends on how far out it landed.
-            if let rot = item(of: .rotary, at: point) {
-                let frame = rot.frame.resolved(in: bounds.size)
-                let r = hypot(point.x - frame.midX, point.y - frame.midY)
-                    / (min(frame.width, frame.height) / 2)
-                if r > 0.62, rotaryTwistTouch == nil {
-                    rotaryTwistTouch = touch
-                    spinnerLastAngle = nil
-                    continue
-                }
-                touchInputs[touch] = inputs(at: point)
-                continue
-            }
             if wheelTouch == nil, item(of: .wheel, at: point) != nil {
                 wheelTouch = touch
                 wheelLastX = point.x
@@ -576,10 +610,10 @@ final class ControlPadView: UIView {
             case .trackball:
                 drawTrackball(in: frame)
             case .rotary:
+                // Drawn as the stick it is. The twist lives in the
+                // phone's own tilt, so there is nothing to draw for it.
                 let rotTint = theme.tint(system: system, input: item.inputs?.first)
-                drawDpad(in: frame.insetBy(dx: frame.width * 0.20, dy: frame.height * 0.20),
-                         inputs: item.inputs ?? [], label: nil, tint: rotTint)
-                drawSpinner(in: frame)
+                drawDpad(in: frame, inputs: item.inputs ?? [], label: item.label, tint: rotTint)
             case .wheel:
                 drawWheel(in: frame)
             case .pedal:
