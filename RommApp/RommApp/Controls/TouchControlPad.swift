@@ -129,8 +129,23 @@ final class ControlPadView: UIView {
     /// a small steady tilt sweeps the ring and level holds it. Both
     /// thumbs stay free for the stick and the buttons.
     private let motion = CMMotionManager()
-    private var tiltRemainder = 0.0
     private var tiltActive = false
+    /// Directions the tilt is currently asserting, kept apart from touch
+    /// state so a thumb on the ring and a tilted phone never fight over
+    /// the same set.
+    private var tiltHeld: Set<Int> = []
+    private var tiltDirectionIDs: [Int]? {
+        items.first { $0.kind == .rotary }?.inputs
+    }
+
+    private func reconcileTilt() {
+        touchInputs[tiltKey] = tiltHeld
+        reconcile()
+    }
+    /// A stand-in touch object so tilt can live in the same held-inputs
+    /// map every real touch uses, and reconcile stays the one place
+    /// presses are diffed and sent.
+    private let tiltKey = UITouch()
 
     /// Inputs currently held down, across all touches.
     private var pressed: Set<Int> = []
@@ -170,8 +185,8 @@ final class ControlPadView: UIView {
         updateTiltTracking()
     }
 
-    /// Runs only while a layout actually asks for tilt aiming, so no
-    /// other game pays for the sensor.
+    /// Runs only while a layout actually asks for tilt, so no other game
+    /// pays for the sensor.
     private func updateTiltTracking() {
         let wants = items.contains { $0.kind == .rotary }
         if wants, !tiltActive, motion.isDeviceMotionAvailable {
@@ -181,18 +196,29 @@ final class ControlPadView: UIView {
             queue.maxConcurrentOperationCount = 1
             motion.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: queue) { [weak self] m, _ in
                 guard let self, let m else { return }
-                // Gravity gives the tilt absolutely, so it never drifts.
-                // Held level the aim holds still; the dead zone keeps a
-                // resting hand from creeping.
-                let tilt = atan2(m.gravity.x, -m.gravity.y)
-                let deadZone = 0.12
-                let magnitude = abs(tilt) < deadZone ? 0 : (abs(tilt) - deadZone) * (tilt < 0 ? -1 : 1)
-                guard magnitude != 0 else { return }
+                // Gravity is absolute, so this never drifts: level is
+                // always level however long the game runs. Movement is
+                // eight coarse directions, so the tilt resolves to
+                // digital presses with a dead zone that keeps a resting
+                // hand still and a hysteresis gap so a direction does not
+                // chatter at its own threshold.
+                let g = m.gravity
+                let on = 0.22, off = 0.15
                 DispatchQueue.main.async {
-                    let counts = magnitude * 22 + self.tiltRemainder
-                    let whole = counts.rounded(.towardZero)
-                    self.tiltRemainder = counts - whole
-                    if whole != 0 { self.sendRelative(Int(whole), 0) }
+                    guard let ids = self.tiltDirectionIDs, ids.count == 4 else { return }
+                    func decide(_ v: Double, _ negID: Int, _ posID: Int) {
+                        let held = self.tiltHeld
+                        if v < -on { self.tiltHeld.insert(negID); self.tiltHeld.remove(posID) }
+                        else if v > on { self.tiltHeld.insert(posID); self.tiltHeld.remove(negID) }
+                        else if abs(v) < off { self.tiltHeld.remove(negID); self.tiltHeld.remove(posID) }
+                        _ = held
+                    }
+                    // Landscape: gravity x runs across the screen, y along
+                    // it, which is what the hands feel as left/right and
+                    // forward/back while holding the phone.
+                    decide(g.x, ids[2], ids[3])
+                    decide(-g.y - 0.5, ids[0], ids[1])
+                    self.reconcileTilt()
                 }
             }
         } else if !wants, tiltActive {
@@ -228,6 +254,11 @@ final class ControlPadView: UIView {
             }
             // A rotary stick: the collar twists, the middle pushes. Which
             // one this touch owns depends on how far out it landed.
+            if rotaryTwistTouch == nil, item(of: .rotary, at: point) != nil {
+                rotaryTwistTouch = touch
+                spinnerLastAngle = nil
+                continue
+            }
             if wheelTouch == nil, item(of: .wheel, at: point) != nil {
                 wheelTouch = touch
                 wheelLastX = point.x
@@ -511,7 +542,11 @@ final class ControlPadView: UIView {
             guard extended.contains(point) else { continue }
 
             switch item.kind {
-            case .dpad, .rotary:
+            case .rotary:
+                // Directions come from tilt, never from this touch: the
+                // finger here is turning the aim.
+                break
+            case .dpad:
                 guard let ids = item.inputs, ids.count == 4 else { break }
                 let unit = CGPoint(
                     x: (point.x - extended.minX) / extended.width,
@@ -610,10 +645,9 @@ final class ControlPadView: UIView {
             case .trackball:
                 drawTrackball(in: frame)
             case .rotary:
-                // Drawn as the stick it is. The twist lives in the
-                // phone's own tilt, so there is nothing to draw for it.
-                let rotTint = theme.tint(system: system, input: item.inputs?.first)
-                drawDpad(in: frame, inputs: item.inputs ?? [], label: item.label, tint: rotTint)
+                // The aim ring, under a thumb. Movement is the phone's
+                // own tilt, so there is no stick to draw.
+                drawSpinner(in: frame)
             case .wheel:
                 drawWheel(in: frame)
             case .pedal:

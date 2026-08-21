@@ -52,17 +52,18 @@ enum ArcadeLayout {
         // thumb reaches, above the buttons.
         if (analog.rotary ?? 0) > 0 {
             let base = buildStandard(for: profile)
-            // The stick becomes a rotary item purely as a marker: the pad
-            // reads it as a d-pad for direction and, seeing it, turns on
-            // tilt aiming. Nothing extra is drawn, because the third
-            // control is the phone.
+            // The stick's slot becomes the aim ring, and the four
+            // direction ids ride along on it for the tilt to assert.
+            // Marcus's split, and the better one: aiming is the precise
+            // act (twelve exact positions, worth a thumb) while movement
+            // is eight coarse directions a tilt covers easily.
             func mark(_ list: [ControlLayout.Item]) -> [ControlLayout.Item] {
                 list.map { item in
                     guard item.kind == .dpad else { return item }
                     return ControlLayout.Item(
                         kind: .rotary, label: nil, input: nil, inputs: item.inputs,
                         frame: item.frame, extended: item.extended,
-                        fourWay: false, sensitivity: nil)
+                        fourWay: false, sensitivity: 384)
                 }
             }
             return ControlLayout(
