@@ -335,6 +335,12 @@ enum NativeLauncher {
             // spins. Answered here, next to the core it describes, until
             // this core gets its full options pass.
             coreOptions["mame2003-plus_xy_device"] = "mouse"
+            // Same class, second victim, found by ear: unanswered, the
+            // core's sample rate global stays zero and it produces no
+            // audio at all. Verified in the bench: bare run emitted 0
+            // audio frames over ten seconds, answered it emitted exactly
+            // rate x seconds.
+            coreOptions["mame2003-plus_sample_rate"] = "48000"
         }
         LibretroFrontend.shared.setCoreOptions(coreOptions)
         let padDevice = NativeCoreOptionsStore.padDevice(for: platform)
