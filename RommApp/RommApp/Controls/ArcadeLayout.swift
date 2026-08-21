@@ -47,7 +47,8 @@ enum ArcadeLayout {
         if (analog.dial ?? 0) > 0 || (analog.paddle ?? 0) > 0 { analogKinds.append(.spinner) }
         if (analog.axis ?? 0) > 0 && analogKinds.isEmpty { analogKinds.append(.wheel) }
         let gun = (analog.lightgun ?? 0) > 0
-        let pedals = (analog.pedals ?? 0) > 0
+        let pedalCount = analog.pedals ?? 0
+        let pedals = pedalCount > 0
         // An analog stick is a stick: the existing kind already serves
         // it, and the standard layout already draws one.
         if analogKinds.isEmpty && !gun && !pedals { return nil }
@@ -100,21 +101,35 @@ enum ArcadeLayout {
             }
         }
 
-        if pedals {
-            // Gas and brake, right edge, stacked where a thumb rests.
-            for (i, name) in ["Gas", "Brake"].enumerated() {
-                let pedal = ControlLayout.Item(
-                    kind: .pedal, label: name, input: i == 0 ? 0 : 8, inputs: nil,
-                    frame: ControlLayout.Rect(x: 0.86, y: 0.42 + Double(i) * 0.26, w: 0.12, h: 0.22),
-                    extended: ControlLayout.Rect(x: 0.82, y: 0.38 + Double(i) * 0.26, w: 0.18, h: 0.28),
-                    fourWay: nil, sensitivity: nil)
-                items.append(pedal); wide.append(pedal)
-            }
+        // Pedals ride RetroPad R and L, which is where this core puts
+        // them: it maps MAME's button 6 to R and button 5 to L and
+        // renames them "Pedal" and "Pedal2" when a driver declares them.
+        // Guessed ids sent a Super Off Road accelerator to the wrong
+        // button entirely. And the count is the driver's: that cabinet
+        // has one pedal, so drawing a brake it never had is exactly the
+        // invention this rule exists to prevent.
+        for (i, spec) in pedalSpecs(count: pedalCount).enumerated() {
+            let pedal = ControlLayout.Item(
+                kind: .pedal, label: spec.label, input: spec.input, inputs: nil,
+                frame: ControlLayout.Rect(x: 0.855, y: 0.40 + Double(i) * 0.27, w: 0.125, h: 0.23),
+                extended: ControlLayout.Rect(x: 0.815, y: 0.36 + Double(i) * 0.27, w: 0.185, h: 0.29),
+                fourWay: nil, sensitivity: nil)
+            items.append(pedal); wide.append(pedal)
         }
 
         return ControlLayout(
             system: base.system, items: items,
             landscapeItems: wide, headroom: base.headroom)
+    }
+
+    /// One pedal is an accelerator and says so; two are gas and brake.
+    /// Short labels because a pedal is drawn as a narrow pill and a long
+    /// word truncates to initials, which is how "Gas" and "Brake" first
+    /// appeared on screen as G and B.
+    private static func pedalSpecs(count: Int) -> [(label: String, input: Int)] {
+        count >= 2
+            ? [("Gas", RetroPad.r), ("Brake", RetroPad.l)]
+            : [("Gas", RetroPad.r)]
     }
 
     /// A hand-tuned panel file, named for its shape, if one exists yet.

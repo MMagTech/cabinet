@@ -549,7 +549,7 @@ final class ControlPadView: UIView {
             case .wheel:
                 drawWheel(in: frame)
             case .pedal:
-                drawPill(
+                drawPedal(
                     in: frame, label: item.label, tint: tint,
                     active: item.input.map(pressed.contains) ?? false)
             case .gun:
@@ -581,6 +581,36 @@ final class ControlPadView: UIView {
             ctx.move(to: inner); ctx.addLine(to: outer)
         }
         ctx.strokePath()
+    }
+
+    /// A tall pedal with its label laid out to fit the width it has:
+    /// the pill renderer centres a fixed-size string and let "Brake"
+    /// truncate to an initial.
+    private func drawPedal(in frame: CGRect, label: String?, tint: UIColor?, active: Bool) {
+        guard let ctx = UIGraphicsGetCurrentContext() else { return }
+        let path = UIBezierPath(roundedRect: frame, cornerRadius: min(frame.width, frame.height) * 0.28)
+        let fill = tint ?? UIColor.white
+        ctx.setFillColor(fill.withAlphaComponent(active ? 0.55 : 0.22).cgColor)
+        ctx.addPath(path.cgPath); ctx.fillPath()
+        ctx.setStrokeColor(UIColor.white.withAlphaComponent(0.35).cgColor)
+        ctx.setLineWidth(2)
+        ctx.addPath(path.cgPath); ctx.strokePath()
+        guard let label, !label.isEmpty else { return }
+        var size: CGFloat = min(frame.height * 0.26, 20)
+        var attrs: [NSAttributedString.Key: Any] = [
+            .foregroundColor: UIColor.white.withAlphaComponent(0.85),
+            .font: UIFont.systemFont(ofSize: size, weight: .semibold),
+        ]
+        // Shrink until it fits rather than truncating, which is the whole
+        // point of drawing this separately from a pill.
+        var text = label.size(withAttributes: attrs)
+        while text.width > frame.width - 8 && size > 8 {
+            size -= 1
+            attrs[.font] = UIFont.systemFont(ofSize: size, weight: .semibold)
+            text = label.size(withAttributes: attrs)
+        }
+        label.draw(at: CGPoint(
+            x: frame.midX - text.width / 2, y: frame.midY - text.height / 2), withAttributes: attrs)
     }
 
     /// An arc that tilts with the wheel's travel, so the control shows
