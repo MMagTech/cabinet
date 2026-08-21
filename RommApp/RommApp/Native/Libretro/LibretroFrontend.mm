@@ -164,6 +164,23 @@ std::atomic<uint32_t> gRotation{0};
 // case.
 std::atomic<float> gAnalogLeftX[kMaxPorts];
 std::atomic<float> gAnalogLeftY[kMaxPorts];
+// Relative pointing devices: dials, spinners and trackballs arrive from
+// the cores' side as RETRO_DEVICE_MOUSE deltas. The UI accumulates
+// counts here; the poll callback latches them so every read inside one
+// frame sees the same value, and a frame with no input reads zero.
+// Nothing feeds these except the analog touch controls, so every core
+// that does not ask, and every game without such a control, is exactly
+// where it was when these did not exist.
+std::atomic<int32_t> gMouseAccumX[kMaxPorts];
+std::atomic<int32_t> gMouseAccumY[kMaxPorts];
+int16_t gMouseLatchedX[kMaxPorts];
+int16_t gMouseLatchedY[kMaxPorts];
+// Absolute pointing: a touch on the game's own picture, which is what a
+// lightgun means on a touchscreen. -0x7fff..0x7fff in libretro's
+// convention, pressed while the finger is down.
+std::atomic<int16_t> gPointerX[kMaxPorts];
+std::atomic<int16_t> gPointerY[kMaxPorts];
+std::atomic<bool> gPointerDown[kMaxPorts];
 // TEST BUILD, with cabinetInputTrace below: samples-per-frame and last
 // value of the core's own analog-X reads on port 0.
 std::atomic<uint32_t> gAnalogReads{0};
@@ -742,7 +759,18 @@ size_t audioSampleBatch(const int16_t *data, size_t frames) {
     return frames;
 }
 
-void inputPoll(void) {}
+void inputPoll(void) {
+    // Mouse deltas are relative-since-last-poll by convention, so the
+    // accumulator is swapped out here, once per frame, rather than
+    // consumed on read: a core reads X and Y as separate calls and both
+    // must describe the same frame. Clamped to int16 the way the API is.
+    for (size_t p = 0; p < kMaxPorts; p++) {
+        int32_t dx = gMouseAccumX[p].exchange(0, std::memory_order_relaxed);
+        int32_t dy = gMouseAccumY[p].exchange(0, std::memory_order_relaxed);
+        gMouseLatchedX[p] = (int16_t)std::clamp(dx, -32767, 32767);
+        gMouseLatchedY[p] = (int16_t)std::clamp(dy, -32767, 32767);
+    }
+}
 
 int16_t inputState(unsigned port, unsigned device, unsigned index, unsigned id) {
     if (port >= kMaxPorts) {
@@ -797,6 +825,26 @@ int16_t inputState(unsigned port, unsigned device, unsigned index, unsigned id) 
             gAnalogLastRead.store(value, std::memory_order_relaxed);
         }
         return (int16_t)(std::clamp(value, -1.0f, 1.0f) * 0x7fff);
+    }
+    // Relative pointing, the dial/spinner/trackball channel. Latched at
+    // poll time above; zero whenever nothing is feeding it, which for
+    // every existing game and control is always.
+    if (device == RETRO_DEVICE_MOUSE) {
+        switch (id) {
+            case RETRO_DEVICE_ID_MOUSE_X: return gMouseLatchedX[port];
+            case RETRO_DEVICE_ID_MOUSE_Y: return gMouseLatchedY[port];
+            default: return 0;
+        }
+    }
+    // Absolute pointing, a touch on the picture itself.
+    if (device == RETRO_DEVICE_POINTER) {
+        switch (id) {
+            case RETRO_DEVICE_ID_POINTER_X: return gPointerX[port].load(std::memory_order_relaxed);
+            case RETRO_DEVICE_ID_POINTER_Y: return gPointerY[port].load(std::memory_order_relaxed);
+            case RETRO_DEVICE_ID_POINTER_PRESSED: return gPointerDown[port].load(std::memory_order_relaxed) ? 1 : 0;
+            case RETRO_DEVICE_ID_POINTER_COUNT: return gPointerDown[port].load(std::memory_order_relaxed) ? 1 : 0;
+            default: return 0;
+        }
     }
     return 0;
 }
@@ -1179,6 +1227,11 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
         gButtonMask[p].store(0, std::memory_order_relaxed);
         gAnalogLeftX[p].store(0, std::memory_order_relaxed);
         gAnalogLeftY[p].store(0, std::memory_order_relaxed);
+        gMouseAccumX[p].store(0, std::memory_order_relaxed);
+        gMouseAccumY[p].store(0, std::memory_order_relaxed);
+        gMouseLatchedX[p] = 0;
+        gMouseLatchedY[p] = 0;
+        gPointerDown[p].store(false, std::memory_order_relaxed);
         // Cleared per activation, or a platform that skips port 1 (a
         // handheld, say) after one that used it would inherit the
         // previous game's stale device type on a port it never asked for.
@@ -1193,6 +1246,19 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
 - (void)setCoreOptions:(NSDictionary<NSString *, NSString *> *)options {
     std::lock_guard<std::mutex> lock(gOptionsMutex);
     gOptions = [options copy];
+}
+
+- (void)addMouseDeltaX:(NSInteger)dx y:(NSInteger)dy port:(NSInteger)port {
+    if (port < 0 || (size_t)port >= kMaxPorts) { return; }
+    gMouseAccumX[port].fetch_add((int32_t)dx, std::memory_order_relaxed);
+    gMouseAccumY[port].fetch_add((int32_t)dy, std::memory_order_relaxed);
+}
+
+- (void)setPointerX:(float)x y:(float)y down:(BOOL)down port:(NSInteger)port {
+    if (port < 0 || (size_t)port >= kMaxPorts) { return; }
+    gPointerX[port].store((int16_t)(std::clamp(x, -1.0f, 1.0f) * 0x7fff), std::memory_order_relaxed);
+    gPointerY[port].store((int16_t)(std::clamp(y, -1.0f, 1.0f) * 0x7fff), std::memory_order_relaxed);
+    gPointerDown[port].store(down, std::memory_order_relaxed);
 }
 
 - (void)setControllerPortDevice:(unsigned)device port:(NSInteger)port {

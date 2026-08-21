@@ -216,6 +216,15 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 // -setButtonMask:port:.
 - (void)setAnalogStickX:(float)x y:(float)y port:(NSInteger)port;
 
+// Relative pointing (dial, spinner, trackball), accumulated between
+// frames and read by cores as RETRO_DEVICE_MOUSE deltas. Counts, not
+// points: the core applies each game's own sensitivity on top.
+- (void)addMouseDeltaX:(NSInteger)dx y:(NSInteger)dy port:(NSInteger)port;
+
+// Absolute pointing, -1..1 across the visible game picture, read by
+// cores as RETRO_DEVICE_POINTER. What a lightgun means on a touchscreen.
+- (void)setPointerX:(float)x y:(float)y down:(BOOL)down port:(NSInteger)port;
+
 // Display rotation the core requested, in 90-degree counter-clockwise
 // steps (0-3). Vertical arcade boards render sideways and rely on the
 // frontend applying this.
