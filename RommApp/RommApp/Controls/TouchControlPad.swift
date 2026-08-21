@@ -130,12 +130,29 @@ final class ControlPadView: UIView {
     /// thumbs stay free for the stick and the buttons.
     private let motion = CMMotionManager()
     private var tiltActive = false
+    /// Where "level" is, in screen space, captured from how the phone is
+    /// actually being held rather than assumed. Cleared on an
+    /// orientation change so the next sample recalibrates: the same
+    /// physical hold is a different gravity vector once the screen
+    /// rotates, which is what made landscape go funky.
+    private var tiltNeutral: (x: Double, y: Double)?
     /// Directions the tilt is currently asserting, kept apart from touch
     /// state so a thumb on the ring and a tilted phone never fight over
     /// the same set.
     private var tiltHeld: Set<Int> = []
     private var tiltDirectionIDs: [Int]? {
         items.first { $0.kind == .rotary }?.inputs
+    }
+
+    /// Device gravity rotated into the screen's own axes, so "tilt left"
+    /// means the same thing however the phone is held.
+    private func screenSpaceGravity(_ g: (x: Double, y: Double)) -> (x: Double, y: Double) {
+        switch window?.windowScene?.interfaceOrientation {
+        case .landscapeLeft:      return (x: -g.y, y: g.x)
+        case .landscapeRight:     return (x: g.y, y: -g.x)
+        case .portraitUpsideDown: return (x: -g.x, y: g.y)
+        default:                  return (x: g.x, y: -g.y)
+        }
     }
 
     private func reconcileTilt() {
@@ -183,6 +200,25 @@ final class ControlPadView: UIView {
         super.layoutSubviews()
         setNeedsDisplay()
         updateTiltTracking()
+        // A rotation lands here, and the hold that was level before is a
+        // different vector now, so level is measured again.
+        if bounds.size != lastLaidOutSize {
+            lastLaidOutSize = bounds.size
+            recalibrateTilt()
+        }
+    }
+
+    private var lastLaidOutSize: CGSize = .zero
+
+    /// Forgets where level was, so the next sample captures it fresh.
+    /// Also clears any direction the old calibration was asserting, or a
+    /// stale press would stick through the rotation.
+    func recalibrateTilt() {
+        tiltNeutral = nil
+        if !tiltHeld.isEmpty {
+            tiltHeld.removeAll()
+            reconcileTilt()
+        }
     }
 
     /// Runs only while a layout actually asks for tilt, so no other game
@@ -202,22 +238,29 @@ final class ControlPadView: UIView {
                 // digital presses with a dead zone that keeps a resting
                 // hand still and a hysteresis gap so a direction does not
                 // chatter at its own threshold.
-                let g = m.gravity
-                let on = 0.22, off = 0.15
+                let g = (x: m.gravity.x, y: m.gravity.y)
                 DispatchQueue.main.async {
                     guard let ids = self.tiltDirectionIDs, ids.count == 4 else { return }
+                    // Gravity arrives in the device's own axes, which
+                    // rotate away from the screen's the moment the phone
+                    // does. Rotating it into screen space first is what
+                    // makes one set of thresholds work in every
+                    // orientation.
+                    let screen = self.screenSpaceGravity(g)
+                    guard let neutral = self.tiltNeutral else {
+                        self.tiltNeutral = screen
+                        return
+                    }
+                    let dx = screen.x - neutral.x
+                    let dy = screen.y - neutral.y
+                    let on = 0.20, off = 0.13
                     func decide(_ v: Double, _ negID: Int, _ posID: Int) {
-                        let held = self.tiltHeld
                         if v < -on { self.tiltHeld.insert(negID); self.tiltHeld.remove(posID) }
                         else if v > on { self.tiltHeld.insert(posID); self.tiltHeld.remove(negID) }
                         else if abs(v) < off { self.tiltHeld.remove(negID); self.tiltHeld.remove(posID) }
-                        _ = held
                     }
-                    // Landscape: gravity x runs across the screen, y along
-                    // it, which is what the hands feel as left/right and
-                    // forward/back while holding the phone.
-                    decide(g.x, ids[2], ids[3])
-                    decide(-g.y - 0.5, ids[0], ids[1])
+                    decide(dx, ids[2], ids[3])   // left, right
+                    decide(dy, ids[0], ids[1])   // up, down
                     self.reconcileTilt()
                 }
             }
