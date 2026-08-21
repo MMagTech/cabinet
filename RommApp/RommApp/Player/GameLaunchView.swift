@@ -276,8 +276,13 @@ struct GameLaunchView: View {
                 NativePlayerView(rom: rom, core: core, initialState: nativeInitialState)
             }
         }
+        // One alert serves every way a launch can fail, so its title must
+        // not claim to know which way: it used to say "Couldn't load that
+        // state" while showing a retro_load_game failure, which pointed
+        // the first real MAME bug report at save states instead of the
+        // romset.
         .alert(
-            "Couldn't load that state",
+            "Couldn't start the game",
             isPresented: Binding(get: { playError != nil }, set: { if !$0 { playError = nil } })
         ) {
             Button("OK") { playError = nil }
