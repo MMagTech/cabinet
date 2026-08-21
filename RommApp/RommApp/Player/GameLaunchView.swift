@@ -1127,6 +1127,11 @@ struct GameLaunchView: View {
                         }
                         .pickerStyle(.menu)
                         .labelsHidden()
+                        // Sized to its own text: inside LabeledContent a
+                        // menu picker does not claim its natural width,
+                        // so a longer name wrapped to two lines beside a
+                        // row of empty space.
+                        .fixedSize()
                     } label: {
                         Text("Emulator")
                     }
@@ -1154,6 +1159,11 @@ struct GameLaunchView: View {
                         }
                         .pickerStyle(.menu)
                         .labelsHidden()
+                        // Sized to its own text: inside LabeledContent a
+                        // menu picker does not claim its natural width,
+                        // so a longer name wrapped to two lines beside a
+                        // row of empty space.
+                        .fixedSize()
                     } label: {
                         Text("Emulator")
                     }
