@@ -143,9 +143,11 @@ enum ArcadeLayout {
     /// word truncates to initials, which is how "Gas" and "Brake" first
     /// appeared on screen as G and B.
     private static func pedalSpecs(count: Int) -> [(label: String, input: Int)] {
-        count >= 2
-            ? [("Gas", RetroPad.r), ("Brake", RetroPad.l)]
-            : [("Gas", RetroPad.r)]
+        switch count {
+        case 0: return []            // no pedals on the panel, none drawn
+        case 1: return [("Gas", RetroPad.r)]
+        default: return [("Gas", RetroPad.r), ("Brake", RetroPad.l)]
+        }
     }
 
     /// A hand-tuned panel file, named for its shape, if one exists yet.
