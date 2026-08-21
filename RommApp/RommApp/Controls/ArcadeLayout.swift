@@ -43,6 +43,22 @@ enum ArcadeLayout {
     private static func panel(for profile: ArcadeProfile, analog: AnalogControls) -> ControlLayout? {
         let hasJoystick = profile.profile != "special"
         var analogKinds: [ControlLayout.Item.Kind] = []
+        // A rotary stick replaces the d-pad outright: it IS the stick.
+        if (analog.rotary ?? 0) > 0 {
+            let base = buildStandard(for: profile)
+            func swap(_ list: [ControlLayout.Item]) -> [ControlLayout.Item] {
+                list.map { item in
+                    guard item.kind == .dpad else { return item }
+                    return ControlLayout.Item(
+                        kind: .rotary, label: nil, input: nil, inputs: item.inputs,
+                        frame: item.frame, extended: item.extended,
+                        fourWay: false, sensitivity: 768)
+                }
+            }
+            return ControlLayout(
+                system: base.system, items: swap(base.items),
+                landscapeItems: base.landscapeItems.map(swap), headroom: base.headroom)
+        }
         if (analog.trackball ?? 0) > 0 { analogKinds.append(.trackball) }
         if (analog.dial ?? 0) > 0 || (analog.paddle ?? 0) > 0 { analogKinds.append(.spinner) }
         if (analog.axis ?? 0) > 0 && analogKinds.isEmpty { analogKinds.append(.wheel) }

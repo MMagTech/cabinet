@@ -115,6 +115,11 @@ final class ControlPadView: UIView {
     // Gun: one touch aims and fires, straight onto the picture.
     private var gunTouch: UITouch?
 
+    /// A rotary stick's twist touch, tracked separately from whatever
+    /// finger is pushing the stick, so a player can hold a direction and
+    /// twist at the same time, which is the whole point of the control.
+    private var rotaryTwistTouch: UITouch?
+
     /// Inputs currently held down, across all touches.
     private var pressed: Set<Int> = []
     /// What each live touch is contributing. A d-pad touch owns several.
@@ -175,6 +180,20 @@ final class ControlPadView: UIView {
                 spinnerLastAngle = nil
                 continue
             }
+            // A rotary stick: the collar twists, the middle pushes. Which
+            // one this touch owns depends on how far out it landed.
+            if let rot = item(of: .rotary, at: point) {
+                let frame = rot.frame.resolved(in: bounds.size)
+                let r = hypot(point.x - frame.midX, point.y - frame.midY)
+                    / (min(frame.width, frame.height) / 2)
+                if r > 0.62, rotaryTwistTouch == nil {
+                    rotaryTwistTouch = touch
+                    spinnerLastAngle = nil
+                    continue
+                }
+                touchInputs[touch] = inputs(at: point)
+                continue
+            }
             if wheelTouch == nil, item(of: .wheel, at: point) != nil {
                 wheelTouch = touch
                 wheelLastX = point.x
@@ -209,6 +228,10 @@ final class ControlPadView: UIView {
                 updateSpinner(item, at: touch.location(in: self))
                 continue
             }
+            if touch == rotaryTwistTouch, let rot = items.first(where: { $0.kind == .rotary }) {
+                updateSpinner(rot, at: touch.location(in: self))
+                continue
+            }
             if touch == wheelTouch, let item = items.first(where: { $0.kind == .wheel }) {
                 updateWheel(item, at: touch.location(in: self))
                 continue
@@ -241,6 +264,12 @@ final class ControlPadView: UIView {
             }
             if touch == spinnerTouch {
                 spinnerTouch = nil
+                spinnerLastAngle = nil
+                spinnerDetentAccum = 0
+                continue
+            }
+            if touch == rotaryTwistTouch {
+                rotaryTwistTouch = nil
                 spinnerLastAngle = nil
                 spinnerDetentAccum = 0
                 continue
@@ -448,7 +477,7 @@ final class ControlPadView: UIView {
             guard extended.contains(point) else { continue }
 
             switch item.kind {
-            case .dpad:
+            case .dpad, .rotary:
                 guard let ids = item.inputs, ids.count == 4 else { break }
                 let unit = CGPoint(
                     x: (point.x - extended.minX) / extended.width,
@@ -546,6 +575,11 @@ final class ControlPadView: UIView {
                 drawSpinner(in: frame)
             case .trackball:
                 drawTrackball(in: frame)
+            case .rotary:
+                let rotTint = theme.tint(system: system, input: item.inputs?.first)
+                drawDpad(in: frame.insetBy(dx: frame.width * 0.20, dy: frame.height * 0.20),
+                         inputs: item.inputs ?? [], label: nil, tint: rotTint)
+                drawSpinner(in: frame)
             case .wheel:
                 drawWheel(in: frame)
             case .pedal:

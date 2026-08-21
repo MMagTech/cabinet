@@ -57,6 +57,11 @@ struct ControlLayout: Decodable {
             /// A pedal: a pressure pad reported as an analog axis rather
             /// than a button, so a feathered throttle is possible.
             case pedal
+            /// A rotary joystick: one control the player both pushed and
+            /// twisted. The inner area is the stick, the collar around it
+            /// twists to aim, because the cabinet had one thing under the
+            /// hand and drawing two would be a different machine.
+            case rotary
             /// Point at the picture itself: absolute coordinates into the
             /// frontend's pointer channel, which is what a lightgun means
             /// on a touchscreen.

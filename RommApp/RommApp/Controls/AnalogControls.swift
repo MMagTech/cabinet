@@ -19,6 +19,9 @@ struct AnalogControls: Decodable {
     var stick: Int?
     var axis: Int?
     var pedals: Int?
+    /// A rotary joystick: the stick itself twists. Distinct from `dial`,
+    /// which is a separate knob beside a stick.
+    var rotary: Int?
 
     static func controls(forShortname raw: String) -> AnalogControls? {
         let name = raw.lowercased()

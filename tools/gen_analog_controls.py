@@ -52,6 +52,14 @@ def main(src):
             if ax and ay: mech['stick'] = 1
             elif ax or ay: mech['axis'] = 1
             if counts.get('PEDAL') or counts.get('PEDAL2'): mech['pedals'] = 1
+            # A rotary joystick is ONE control that twists, not a stick
+            # plus a separate dial: the player's hand held a single
+            # thing. The drivers say so in their own comments ("12-way
+            # rotary control"), which is the only signal that separates
+            # Heavy Barrel's twisting stick from 720 Degrees' genuinely
+            # separate spinner, since both declare a plain IPT_DIAL.
+            if mech.get('dial') and re.search(r'rotary', p1, re.I):
+                mech['rotary'] = mech.pop('dial')
             if mech:
                 port_controls[m.group(1)] = mech
                 # Some drivers declare ports through a token-pasting macro
