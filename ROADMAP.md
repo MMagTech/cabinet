@@ -65,14 +65,33 @@ Done and working, just not in a tagged release yet.
 Not committed, not scoped, real conversations that happened and are
 worth having in the open.
 
-- **A companion screen for iPhone over wired HDMI.** iPhones with
-  DisplayPort support (most current models, notably not iPhone Air,
-  16e, or 17e) can drive an external display with content different from
-  what is on the phone itself, the same trick Apple's own Photos app
-  uses. The idea: plug into any TV, gameplay renders there, the phone
-  becomes a real second screen, cover art and browsing while idle, a
-  "now playing" view during a game, closer to a console companion app
-  than a remote. Layout and interaction are entirely undecided.
+- **A companion screen for iPhone, over AirPlay or wired HDMI.** An
+  iPhone can drive an external display with content different from what
+  is on the phone itself, the same trick Apple's own Photos app uses.
+  The idea: gameplay renders on the TV at its proper aspect and fills
+  the screen, while the phone becomes a full-screen control panel with
+  room for real buttons rather than gutters beside the picture.
+
+  Wired needs DisplayPort, which most current iPhones have but the
+  iPhone Air, 16e and 17e do not. AirPlay has no such restriction and
+  works with any AirPlay 2 television, which many recent Samsung, LG
+  and Sony sets have built in, so it reaches people who own no Apple TV
+  at all.
+
+  The obvious objection was latency, and a first test says it is not
+  the problem it looked like: mirroring to an AirPlay 2 set over Wi-Fi
+  played Deathsmiles, a bullet hell game and the heaviest thing in the
+  test library, without it getting in the way. That was plain mirroring,
+  which is the pessimistic case, since a real external-display path
+  sends the television the game alone instead of a letterboxed copy of
+  the phone screen.
+
+  Deliberately scoped small if it happens: the gameplay view moves to
+  the TV and nothing else. No port of the ten-foot interface, no focus
+  navigation, since a touchscreen needs no focus engine. Native cores
+  only at first; a web player on an external display is its own
+  question. The fiddly part is disconnecting mid-game, which should
+  bring the picture back to the phone rather than strand the player.
 - **Seven more systems, starting with Atari 2600.** Every platform in
   this group plays today on iPhone through the web player and is
   invisible on Apple TV, because the TV lists a platform only when a
