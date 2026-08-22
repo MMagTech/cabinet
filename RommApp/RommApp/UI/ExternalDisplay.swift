@@ -80,14 +80,31 @@ private struct ExternalGameScreen: View {
                     .ignoresSafeArea()
                 if external.isPaused {
                     // The draw loop keeps presenting the last frame while
-                    // paused, so this dims that frame rather than covering
-                    // a black screen: the game is visibly still there,
-                    // waiting, the way a console pause looks.
-                    Color.black.opacity(0.55).ignoresSafeArea()
-                    Text("Paused")
-                        .font(.system(size: 72, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .shadow(radius: 12)
+                    // paused, so the game stays visibly there, waiting,
+                    // rather than being covered up.
+                    //
+                    // Built from the same vocabulary the Apple TV app uses
+                    // for its own overlays, glass on tvOS 26 and a
+                    // material below it, rather than plain white text over
+                    // the picture, which reads as a debug label from across
+                    // a room. Restrained on purpose: at ten feet the job
+                    // is to answer "did it crash" at a glance, not to
+                    // announce itself.
+                    Color.black.opacity(0.35).ignoresSafeArea()
+                    Label("Paused", systemImage: "pause.fill")
+                        .font(.system(size: 34, weight: .medium, design: .rounded))
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 44)
+                        .padding(.vertical, 26)
+                        .background {
+                            if #available(iOS 26.0, *) {
+                                Capsule()
+                                    .fill(.clear)
+                                    .glassEffect(.regular, in: Capsule())
+                            } else {
+                                Capsule().fill(.regularMaterial)
+                            }
+                        }
                 }
             } else {
                 VStack(spacing: 16) {

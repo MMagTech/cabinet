@@ -182,11 +182,7 @@ struct NativePlayerView: View {
     var body: some View {
         GeometryReader { geometry in
             let isLandscape = geometry.size.width > geometry.size.height
-            // With the picture on a television the phone is nothing but a
-            // control panel, so the pad shows even with a controller
-            // connected: a person holding a pad still needs the pause
-            // button, and there is no picture here for the pad to cover.
-            let showsControls = !controllers.isConnected || external.showsGameExternally
+            let showsControls = !controllers.isConnected
             // A gun cabinet aims at the picture, so its pad has to reach
             // the picture. In portrait the pad is normally a bottom strip
             // that cannot, which left gun games with no aim at all there.
@@ -194,7 +190,7 @@ struct NativePlayerView: View {
             let gunPanel = controlLayout.items.contains { $0.kind == .gun }
 
             ZStack {
-                if isLandscape || !showsControls || gunPanel || external.showsGameExternally {
+                if isLandscape || !showsControls || gunPanel {
                     // Full screen canvas, pad in the gutters (or hidden with a
                     // controller connected), matching PlayerView's .overlay case.
                     ZStack {
