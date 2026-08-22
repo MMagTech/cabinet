@@ -1,6 +1,6 @@
 {
  "system": "atari2600",
- "_ergonomics": "Atari 2600: one stick, one fire button. Select and Reset are the console's own front switches, not pad buttons; Reset is how most games start, so both stay reachable as pills. Paddles are a roadmap item, not drawn.",
+ "_ergonomics": "Atari 2600: one stick and the CX40's single unlabelled red dome, drawn label-free on purpose because the real button said nothing and every game means something different by it; the red tint in ControlTheme is its identity. Select and Reset are the console's own front switches, not pad buttons; Reset is how most games start, so both stay reachable as pills. Paddles are a roadmap item, not drawn.",
  "items": [
   {
    "kind": "dpad",
@@ -10,7 +10,6 @@
   },
   {
    "kind": "button",
-   "label": "Fire",
    "input": 0,
    "frame": {"x": 0.68, "y": 0.42, "w": 0.2, "h": 0.27},
    "extended": {"x": 0.62, "y": 0.34, "w": 0.32, "h": 0.42}
@@ -46,7 +45,6 @@
   },
   {
    "kind": "button",
-   "label": "Fire",
    "input": 0,
    "frame": {"x": 0.84, "y": 0.5, "w": 0.09, "h": 0.2},
    "extended": {"x": 0.8, "y": 0.42, "w": 0.15, "h": 0.32}

@@ -45,6 +45,15 @@ enum ControlTheme: String, CaseIterable {
     /// drawn at: saturated and mid bright, since a pale colour at 30 percent
     /// over bright game art is indistinguishable from white.
     func tint(system: String, input: Int?) -> UIColor? {
+        // Ahead of the theme guard on purpose. Monochrome strips
+        // decoration, never information: text labels render in both
+        // themes, and the 2600's one button carries no text at all
+        // because the real CX40's red dome said nothing. The red IS
+        // that button's label, so it survives monochrome the same way
+        // the "A" printed on a SNES button does. Every other tint in
+        // this file is decoration over a labelled control and stays
+        // behind the guard.
+        if system == "atari2600", input == RetroPad.b { return .neoRed }
         guard self == .system, let input else { return nil }
 
         if system.hasPrefix("arcade:") {
