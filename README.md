@@ -14,8 +14,8 @@ to open the link on, that's an Apple TestFlight requirement, not this app.
 See [Get it](#get-it) below, including the option for Apple-TV-only setups.
 
 **Latest GitHub Releases:**
-[iOS 0.2.0-alpha](https://github.com/MMagTech/cabinet/releases/tag/v0.2.0-alpha) ·
-[tvOS 0.1.0-alpha](https://github.com/MMagTech/cabinet/releases/tag/tvos-v0.1.0-alpha)
+[iOS 0.3.0-alpha](https://github.com/MMagTech/cabinet/releases/tag/ios-v0.3.0-alpha) ·
+[tvOS 0.2.0-alpha](https://github.com/MMagTech/cabinet/releases/tag/tvos-v0.2.0-alpha)
 
 | | | |
 |:---:|:---:|:---:|
@@ -38,9 +38,11 @@ cores for the classic consoles and handhelds. Keep a game on your phone and it
 plays with no signal and no server at all: on a plane, on the subway,
 anywhere. Native speed, native controls, the whole screen.
 
-**A companion app for Apple TV.** The TV app runs entirely on those same
-built-in cores, covering the platforms Cabinet supports natively. Your library
-on the big screen with a controller in your hand.
+**A real Apple TV app.** Not a phone app on a television: Home, Library and
+the pause menu are built for a remote and a ten foot viewing distance, your
+recent games show up on the top shelf, and it runs entirely on those same
+built-in cores. Your library on the big screen with a controller in your
+hand.
 
 **Your saves follow you.** Save states and battery saves sync back to your
 RomM server, so they are waiting wherever you play next. PlayStation games get
@@ -50,13 +52,29 @@ their own memory card.
 and play. Pair a second one for couch co-op. On iPhone there are also touch
 controls, a layout per console, tuned per orientation.
 
+**Arcade games get the controls they actually had.** Where a cabinet used a
+spinner, a trackball, a steering wheel and pedals, a light gun or a rotary
+joystick, Cabinet draws that instead of pretending everything was a joystick
+and two buttons. Which control a board gets comes from real arcade data
+rather than guesswork.
+
+**The small details of old hardware.** Vectrex games draw the translucent
+colored overlay that shipped in the box with them. The handful of Game Boy
+Advance cartridges with sensors soldered inside, WarioWare Twisted among
+them, read your phone's own motion.
+
 ## What you can play
 
-**Natively, on both iPhone and Apple TV:** Arcade, PlayStation, Saturn,
-Dreamcast, Nintendo 64, SNES, NES, Game Boy, Game Boy Color, Game Boy Advance,
-Genesis, Sega CD, 32X, Master System, Game Gear, TurboGrafx-16, TurboGrafx-CD,
-Neo Geo Pocket Color, Atari 7800. On iPhone these work offline once a game is
-kept on your phone.
+**Natively, on both iPhone and Apple TV**, through eighteen emulators built
+into the app: Arcade, PlayStation, Saturn, Dreamcast, Nintendo 64, 3DO, SNES,
+NES, Game Boy, Game Boy Color, Game Boy Advance, Genesis, Sega CD, 32X, Master
+System, Game Gear, TurboGrafx-16, TurboGrafx-CD, Neo Geo Pocket Color, Atari
+7800, Atari 2600 and Vectrex. On iPhone these work offline once a game is kept
+on your phone.
+
+Dreamcast is the one to set expectations on. It runs, and its many 2D shooters
+and fighters play well, but heavy 3D titles still struggle, because Apple does
+not allow the kind of just-in-time compilation that console needs.
 
 **Beyond that list, on iPhone:** whatever your RomM server plays through its
 web player, with a connection. On Apple TV, the native list is the list.

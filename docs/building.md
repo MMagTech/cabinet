@@ -30,7 +30,7 @@ those still need the iOS 26 SDK to compile. On Xcode 16 the build fails on
 
 ## The simulator builds, but cannot really run a game
 
-Both app targets link and run in the Simulator: the fourteen native cores are
+Both app targets link and run in the Simulator: the eighteen native cores are
 device-only static libraries, so they are excluded per SDK
 (`EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]` /
 `[sdk=appletvsimulator*]`) rather than linked unconditionally. That is
@@ -62,14 +62,14 @@ not part of either app, and it is not in the released build. You can ignore it.
 
 ## The emulator cores
 
-The fourteen native cores in `RommApp/RommApp/Native/*/lib*.a` are prebuilt and
+The eighteen native cores in `RommApp/RommApp/Native/*/lib*.a` are prebuilt and
 committed, so a normal build does not compile them.
 
 If you want to rebuild one yourself, `tools/build-core.sh <core> [ios|tvos]`
 does it, iOS by default. It clones the upstream libretro repository into
 `spikes/`, builds it for the platform given, and produces a single
 relocatable object whose only exported symbols are prefixed
-`<prefix>_retro_*`. That prefixing matters: without it, fourteen cores that
+`<prefix>_retro_*`. That prefixing matters: without it, eighteen cores that
 each export `retro_run` and bundle their own copy of zlib cannot link into
 one binary.
 
@@ -90,7 +90,7 @@ A core that works on iOS is assumed to belong on tvOS too, by default,
 built with the same script and a `tvos` argument instead of `ios`. That
 only actually succeeds if the core's own upstream project has a tvOS
 build target in the first place, which doubles as the real "does this
-even work here" check, not a blind assumption. All fourteen cores clear
+even work here" check, not a blind assumption. All eighteen cores clear
 that bar today.
 
 If a core genuinely cannot make the jump, or needs real tvOS-specific
