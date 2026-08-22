@@ -147,22 +147,23 @@ frame no longer flashes at the start of the next one.
 
 ## Known rough edges
 
-Three new cores landed the same day this was cut, and two of them got
-last-minute input fixes that have not been confirmed on hardware yet.
+Three new cores landed the same day this was cut, so they have had the least
+time in front of real hands.
 
-- **Vectrex**: buttons may not respond. The cause was found and fixed, a
-  pixel conversion running on the CPU that delayed touch input, but the fix
-  is unverified. If a game will not start, that is why.
-- **3DO**: same situation, a separate fix for the controller ports not being
-  opened. Gex was the game that exposed it.
-- **3DO frame rate** has been measured thoroughly on a Mac but not on device.
-  It looked comfortable, but treat it as unproven. Any game can be marked as
-  not working if it is not.
-- **3DO saves** are verified writing and uploading to RomM. Loading a save
-  back has not been confirmed end to end.
+Controls on Vectrex and 3DO were confirmed working before release, after
+both needed a fix late in the day. What has not been confirmed is how
+faithful the new systems feel, since nobody involved grew up with a Vectrex.
+If you did, your report on whether it plays like the real thing is the most
+useful thing you can send.
 
-Everything else in this release has been used on real hardware. These four
-are first in line for the next one.
+Two things remain genuinely unproven:
+
+- **3DO frame rate** has been measured thoroughly on a Mac but not on a
+  phone or an Apple TV. It looked comfortable, but treat it as unproven, and
+  mark any game that is not as not working.
+- **3DO saves** are verified writing and uploading to your server. Loading a
+  save back has not been confirmed end to end, so check that a save you make
+  is still there next time you play.
 
 ---
 
