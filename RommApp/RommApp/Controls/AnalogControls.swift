@@ -22,6 +22,15 @@ struct AnalogControls: Decodable {
     /// A rotary joystick: the stick itself twists. Distinct from `dial`,
     /// which is a separate knob beside a stick.
     var rotary: Int?
+    /// Whether the panel carried a joystick at all, stated rather than
+    /// inferred. Nil means "decide from the profile", which is what every
+    /// game did before this existed. Zero says the cabinet had none, and
+    /// one says it did even though the rule would have removed it, which
+    /// is the case a joystick-plus-spinner machine like Discs of Tron
+    /// needs. A trackball cabinet defaults to zero without an entry here:
+    /// the ball was the movement control and no machine in the library
+    /// carried both.
+    var joystick: Int?
 
     static func controls(forShortname raw: String) -> AnalogControls? {
         let name = raw.lowercased()

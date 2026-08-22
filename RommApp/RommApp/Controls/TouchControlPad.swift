@@ -319,7 +319,15 @@ final class ControlPadView: UIView {
                 wheelLastX = point.x
                 continue
             }
-            if gunTouch == nil, let gun = item(of: .gun, at: point) {
+            // A gun cabinet's surface is the whole picture, which means it
+            // sits under every other control on the panel. Claimed first,
+            // it took the first finger down wherever it landed, so Coin,
+            // Start, Menu and the grenade button only worked as a second
+            // finger while another was already held: on Op Wolf they read
+            // as dead. A touch that lands on a real control belongs to
+            // that control; only the bare picture is the gun.
+            if gunTouch == nil, let gun = item(of: .gun, at: point),
+               !touchesAControl(at: point) {
                 gunTouch = touch
                 updateGun(gun, at: point, down: true)
                 continue
@@ -425,6 +433,16 @@ final class ControlPadView: UIView {
             touchInputs[touch] = nil
         }
         reconcile()
+    }
+
+    /// Whether this point is on a drawn control rather than on the bare
+    /// picture behind them. The gun's surface spans everything, so it has
+    /// to ask before claiming a touch.
+    private func touchesAControl(at point: CGPoint) -> Bool {
+        items.contains { item in
+            guard item.kind != .gun else { return false }
+            return item.extended.resolved(in: bounds.size).contains(point)
+        }
     }
 
     /// The stick item whose extended frame contains this point, if any.

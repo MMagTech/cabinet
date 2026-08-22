@@ -29,7 +29,7 @@
   "sercharu": {"rotary": 1},
   "forgottn": {"rotary": 1},
   "lostwrld": {"rotary": 1},
-  "xybots": {"rotary": 1},
+  "_xybots": "Xybots twisted its stick to turn, but this core does not read a dial for it: the rotation is two of its three buttons. Drawing a twist ring here wrote to a port nothing reads. Removed 2026-08-21 after the lab asked the core directly. The cabinet is not in question; what the binary reads is.",
   "caliber": {"rotary": 1},
 
   "_dial": "A knob or spinner the panel carried in its own right.",

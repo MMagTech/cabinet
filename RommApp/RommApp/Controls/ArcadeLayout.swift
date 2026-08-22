@@ -41,7 +41,18 @@ enum ArcadeLayout {
     /// has tuned it, which is the same relationship every arcade layout
     /// has always had to its generator.
     private static func panel(for profile: ArcadeProfile, analog: AnalogControls) -> ControlLayout? {
-        let hasJoystick = profile.profile != "special"
+        // Did this cabinet have a joystick? The profile is a weak
+        // answer: it says "special" only when a modern MAME listxml
+        // happened to classify the machine that way, which is how
+        // Centipede ended up with a d-pad beside its trackball. Nobody
+        // chose that. A trackball takes the movement role outright, so a
+        // trackball cabinet has no stick unless the curated file says
+        // otherwise, and any panel can state the answer directly.
+        let hasJoystick: Bool = {
+            if let stated = analog.joystick { return stated != 0 }
+            if (analog.trackball ?? 0) > 0 { return false }
+            return profile.profile != "special"
+        }()
         var analogKinds: [ControlLayout.Item.Kind] = []
         // A rotary joystick was one control: the player pushed it and
         // twisted it with the same hand, at the same time. A thumb on
@@ -51,7 +62,10 @@ enum ArcadeLayout {
         // The stick keeps its slot; the twist becomes a ring the right
         // thumb reaches, above the buttons.
         if (analog.rotary ?? 0) > 0 {
-            let base = buildStandard(for: profile)
+            // Same lane discipline as any other analog panel: the ring is
+            // a thumb control, so it narrows and the buttons stack in the
+            // lane that frees up rather than running under it.
+            let base = buildStandard(for: profile, narrowStick: true)
             // The stick's slot becomes the aim ring, and the four
             // direction ids ride along on it for the tilt to assert.
             // Marcus's split, and the better one: aiming is the precise
@@ -60,9 +74,16 @@ enum ArcadeLayout {
             func mark(_ list: [ControlLayout.Item]) -> [ControlLayout.Item] {
                 list.map { item in
                     guard item.kind == .dpad else { return item }
+                    // The slot, but not the d-pad's reach: inherited, the
+                    // ring's hit frame ran under the first action button
+                    // and, because analog kinds claim a touch first, that
+                    // button stopped firing entirely.
+                    let f = item.frame
                     return ControlLayout.Item(
                         kind: .rotary, label: nil, input: nil, inputs: item.inputs,
-                        frame: item.frame, extended: item.extended,
+                        frame: f,
+                        extended: ControlLayout.Rect(
+                            x: f.x - 0.02, y: f.y - 0.02, w: f.w + 0.04, h: f.h + 0.04),
                         fourWay: false, sensitivity: 384)
                 }
             }
@@ -72,7 +93,21 @@ enum ArcadeLayout {
         }
         if (analog.trackball ?? 0) > 0 { analogKinds.append(.trackball) }
         if (analog.dial ?? 0) > 0 || (analog.paddle ?? 0) > 0 { analogKinds.append(.spinner) }
-        if (analog.axis ?? 0) > 0 && analogKinds.isEmpty { analogKinds.append(.wheel) }
+        // An analog stick cabinet gets NO extra control here, and that is
+        // a deletion made on evidence rather than taste. These games read
+        // RETRO_DEVICE_ANALOG on the left stick (mame2003-plus's
+        // osd_analogjoy_read); the wheel this used to add writes relative
+        // deltas into the MOUSE channel, which is a different path in the
+        // same core (osd_xy_device_read) and one an ad_stick game never
+        // calls. So the wheel was drawn, took touches from the buttons
+        // beside it, and did nothing, on 229 games. The core also
+        // describes plain Up/Down/Left/Right for every one of them, so
+        // the d-pad already carries the control.
+        //
+        // A real analog stick would be better than a d-pad here, and the
+        // native path already answers ANALOG_LEFT for every core but
+        // FBNeo. That is an input change, so it needs the device pass on
+        // a Bluetooth pad the project rules require, and it is not this.
         let gun = (analog.lightgun ?? 0) > 0
         let pedalCount = analog.pedals ?? 0
         let pedals = pedalCount > 0
@@ -84,7 +119,9 @@ enum ArcadeLayout {
             return tuned
         }
 
-        let base = buildStandard(for: profile)
+        let besideStick = hasJoystick && !analogKinds.isEmpty
+        let base = buildStandard(
+            for: profile, clearOfPedals: pedalCount > 0, narrowStick: besideStick)
         var items = base.items
         var wide = base.landscapeItems ?? base.items
 
@@ -99,6 +136,46 @@ enum ArcadeLayout {
                 extended: ControlLayout.Rect(x: 0, y: 0, w: 1, h: 1),
                 fourWay: nil, sensitivity: nil)
             wide = [surface] + wide.filter { $0.kind != .dpad && $0.kind != .stick }
+            // Portrait used to keep a d-pad and get no gun at all, which
+            // left the one control the cabinet had missing on half the
+            // orientations: you could not aim, only nudge a crosshair
+            // with a stick MAME provides for players who own no gun. The
+            // player takes the whole screen here too, so the surface
+            // reaches the picture, and the buttons drop to a band along
+            // the bottom where a thumb can hold them while the other
+            // hand aims. Normalised against the full screen, not the
+            // strip, which is why these coordinates are not the ones
+            // above.
+            let count = max(0, min(profile.buttons, 6))
+            var portrait: [ControlLayout.Item] = [surface]
+            for index in 0..<count {
+                let across = min(count, 3)
+                let row = index / 3, column = index % 3
+                let w = 0.20, gap = (1.0 - Double(across) * w) / Double(across + 1)
+                portrait.append(ControlLayout.Item(
+                    kind: .button, label: "\(index + 1)",
+                    input: [RetroPad.b, RetroPad.a, RetroPad.y, RetroPad.x, RetroPad.l, RetroPad.r][index],
+                    inputs: nil,
+                    frame: ControlLayout.Rect(
+                        x: gap + Double(column) * (w + gap),
+                        y: 0.86 - Double(row) * 0.11, w: w, h: 0.075),
+                    extended: ControlLayout.Rect(
+                        x: gap - 0.02 + Double(column) * (w + gap),
+                        y: 0.845 - Double(row) * 0.11, w: w + 0.04, h: 0.105),
+                    fourWay: nil, sensitivity: nil))
+            }
+            portrait += items.filter { $0.kind == .pill || $0.label == "Coin" }.map { item in
+                // Coin, Start and Menu ride the very bottom, clear of the
+                // picture and of the button band above them.
+                let f = item.frame
+                let y = 0.955
+                return ControlLayout.Item(
+                    kind: item.kind, label: item.label, input: item.input, inputs: item.inputs,
+                    frame: ControlLayout.Rect(x: f.x, y: y, w: f.w * 0.9, h: 0.038),
+                    extended: ControlLayout.Rect(x: f.x - 0.02, y: y - 0.014, w: f.w * 0.9 + 0.04, h: 0.066),
+                    fourWay: nil, sensitivity: nil)
+            }
+            items = portrait
         }
 
         for (index, kind) in analogKinds.enumerated() {
@@ -109,22 +186,56 @@ enum ArcadeLayout {
                 func swap(_ list: [ControlLayout.Item]) -> [ControlLayout.Item] {
                     list.map { item in
                         guard item.kind == .dpad else { return item }
+                        // The slot, but not the reach. A d-pad's extended
+                        // frame is deliberately enormous so a thumb sliding
+                        // off a diagonal still steers; an analog control
+                        // inheriting that swallows the first action button,
+                        // and because analog kinds claim a touch before
+                        // buttons are even considered, the button then does
+                        // nothing at all. Measured at 823 square points on
+                        // the plain dial panel before this.
+                        // On a pedal cabinet the panel has to hold a
+                        // wheel, a button arc and a pedal column in one
+                        // strip. The wheel gives up the width: it is a
+                        // thumb turning a dial, not a trackball being
+                        // palmed, so it does not need half the screen and
+                        // taking it left no lane for button one.
+                        let f = ControlLayout.Rect(
+                            x: item.frame.x, y: item.frame.y,
+                            w: item.frame.w * 0.72, h: item.frame.h)
+                        let pad = 0.02
                         return ControlLayout.Item(
                             kind: kind, label: nil, input: nil, inputs: nil,
-                            frame: item.frame, extended: item.extended,
+                            frame: f,
+                            extended: ControlLayout.Rect(
+                                x: f.x - pad, y: f.y - pad,
+                                w: f.w + pad * 2, h: f.h + pad * 2),
                             fourWay: nil, sensitivity: sens)
                     }
                 }
                 items = swap(items); wide = swap(wide)
             } else {
-                // Beside the stick, upper right, clear of the buttons.
-                let y = 0.06 + Double(index) * 0.34
-                let item = ControlLayout.Item(
+                // Beside the stick. "Upper right" used to mean on top of
+                // the Menu pill: the pills live in the top band and the
+                // control was drawn straight through them, taking 6435
+                // square points of touches that were meant for Menu and
+                // Start. Since an analog kind claims a touch before the
+                // pills are even considered, Menu was not merely covered,
+                // it was unreachable. It sits below the pill band now, in
+                // its own lane, and takes the outer edge in landscape
+                // where the picture leaves a gutter.
+                let y = 0.60 - Double(index) * 0.32
+                let tall = ControlLayout.Item(
                     kind: kind, label: nil, input: nil, inputs: nil,
-                    frame: ControlLayout.Rect(x: 0.62, y: y, w: 0.28, h: 0.28),
-                    extended: ControlLayout.Rect(x: 0.58, y: y - 0.04, w: 0.36, h: 0.36),
+                    frame: ControlLayout.Rect(x: 0.38, y: y, w: 0.24, h: 0.28),
+                    extended: ControlLayout.Rect(x: 0.36, y: y - 0.02, w: 0.28, h: 0.32),
                     fourWay: nil, sensitivity: sens)
-                items.append(item); wide.append(item)
+                let flat = ControlLayout.Item(
+                    kind: kind, label: nil, input: nil, inputs: nil,
+                    frame: ControlLayout.Rect(x: 0.30 + Double(index) * 0.16, y: 0.60, w: 0.13, h: 0.30),
+                    extended: ControlLayout.Rect(x: 0.28 + Double(index) * 0.16, y: 0.57, w: 0.17, h: 0.36),
+                    fourWay: nil, sensitivity: sens)
+                items.append(tall); wide.append(flat)
             }
         }
 
@@ -193,14 +304,21 @@ enum ArcadeLayout {
             headroom: base.headroom)
     }
 
-    private static func buildStandard(for profile: ArcadeProfile) -> ControlLayout {
+    private static func buildStandard(for profile: ArcadeProfile, clearOfPedals: Bool = false, narrowStick: Bool = false) -> ControlLayout {
         // A tuned file wins over the generated arrangement. The generator
         // below is what produced these files in the first place
         // (tools/arcade-layouts), so this changes nothing until one is
         // edited; it exists so arcade layouts can be tuned in the
         // LayoutEditor like every other system instead of being the one
         // corner of the app where layouts are code.
-        if let tuned = tunedLayout(for: profile) {
+        // A tuned file wins, except on a panel it was never drawn for.
+        // Every arcade-stickN.json was authored for a cabinet with no
+        // pedals, so on a pedal cabinet its button arc runs straight
+        // through the pedal column: that is how button 3 ended up on Super
+        // Off Road's accelerator. Fall through to the generator, which
+        // knows to keep clear. A tuned pedal panel can claim this back by
+        // being authored under its own name.
+        if !clearOfPedals, !narrowStick, let tuned = tunedLayout(for: profile) {
             return tuned
         }
         var items: [ControlLayout.Item] = []
@@ -225,16 +343,26 @@ enum ArcadeLayout {
             items.append(secondStick(landscape: false))
             items.append(contentsOf: dualStickButtons(count: profile.buttons))
         } else {
+            // A cabinet that carried a stick AND a dial has to fit three
+            // things across one strip, so the stick gives up width. It
+            // keeps its height and its bottom-corner pivot, which is what
+            // the thumb actually rests on.
             items.append(ControlLayout.Item(
                 kind: .dpad,
                 label: nil,
                 input: nil,
                 inputs: [4, 5, 6, 7],
-                frame: ControlLayout.Rect(x: 0.07, y: 0.38, w: 0.40, h: 0.52),
-                extended: ControlLayout.Rect(x: 0.02, y: 0.30, w: 0.50, h: 0.68),
+                frame: narrowStick
+                    ? ControlLayout.Rect(x: 0.04, y: 0.38, w: 0.30, h: 0.52)
+                    : ControlLayout.Rect(x: 0.07, y: 0.38, w: 0.40, h: 0.52),
+                extended: narrowStick
+                    ? ControlLayout.Rect(x: 0.01, y: 0.32, w: 0.34, h: 0.62)
+                    : ControlLayout.Rect(x: 0.02, y: 0.30, w: 0.50, h: 0.68),
                 fourWay: profile.isFourWay
             ))
-            items.append(contentsOf: actionButtons(count: max(0, min(profile.buttons, 6))))
+            items.append(contentsOf: actionButtons(
+                count: max(0, min(profile.buttons, 6)),
+                clearOfPedals: clearOfPedals, rightLane: narrowStick))
         }
 
         // Coin and Start are pressed a few times a session, so they take the
@@ -282,7 +410,7 @@ enum ArcadeLayout {
         return ControlLayout(
             system: "arcade:\(profile.profile):\(max(0, min(profile.buttons, 6)))",
             items: items,
-            landscapeItems: landscapeItems(for: profile),
+            landscapeItems: landscapeItems(for: profile, clearOfPedals: clearOfPedals),
             headroom: nil
         )
     }
@@ -328,7 +456,7 @@ enum ArcadeLayout {
 
     /// The landscape arrangement: canvas centred, controls flanking it in
     /// the gutters. Frames are normalised against the full screen.
-    private static func landscapeItems(for profile: ArcadeProfile) -> [ControlLayout.Item] {
+    private static func landscapeItems(for profile: ArcadeProfile, clearOfPedals: Bool = false) -> [ControlLayout.Item] {
         var items: [ControlLayout.Item] = []
 
         if profile.isDualStick {
@@ -402,9 +530,17 @@ enum ArcadeLayout {
         if count <= 4 {
             // The right thumb's sweep, rotated for landscape: rising from
             // low inside toward the upper corner.
-            let positions: [(Double, Double)] = [
-                (0.78, 0.64), (0.85, 0.46), (0.90, 0.26), (0.90, 0.68),
-            ]
+            // A driving cabinet's buttons belong beside the wheel, not out
+            // in the middle. Super Off Road put its boost on the panel by
+            // the wheel, and the ergonomics say the same thing louder: the
+            // pedal lives on the right edge and is held down continuously,
+            // so a button anywhere right of centre can only be reached by
+            // the thumb that is holding the gas. Put them by the wheel and
+            // the steering hand takes them while the throttle hand never
+            // moves. Marcus found this playing it.
+            let positions: [(Double, Double)] = clearOfPedals
+                ? [(0.22, 0.66), (0.22, 0.42), (0.30, 0.66), (0.30, 0.42)]
+                : [(0.78, 0.64), (0.85, 0.46), (0.90, 0.26), (0.90, 0.68)]
             for index in 0..<count {
                 let (x, y) = positions[index]
                 items.append(button(
@@ -412,15 +548,19 @@ enum ArcadeLayout {
                 ))
             }
         } else {
-            let columns: [Double] = [0.77, 0.845, 0.92]
+            let columns: [Double] = clearOfPedals ? [0.22, 0.30, 0.38] : [0.77, 0.845, 0.92]
+            // Three columns where there is room, two where a pedal or an
+            // analog control has taken a lane. The row count follows.
+            let perRow = columns.count
+            let rowY: [Double] = perRow == 3 ? [0.36, 0.62] : [0.22, 0.48, 0.74]
             for index in 0..<count {
-                let row = index / 3
-                let column = index % 3
+                let row = index / perRow
+                let column = index % perRow
                 items.append(button(
                     id: doubleRowIds[index],
                     label: "\(index + 1)",
                     x: columns[column],
-                    y: row == 0 ? 0.40 : 0.62
+                    y: rowY[min(row, rowY.count - 1)]
                 ))
             }
         }
@@ -463,7 +603,12 @@ enum ArcadeLayout {
     /// between buttons is a rotation of the thumb, never a new grip. Two
     /// rows of three keep cabinet muscle memory for six button games,
     /// dropped low enough that the top row is a stretch, not a reach.
-    private static func actionButtons(count: Int) -> [ControlLayout.Item] {
+    /// The right-hand column a pedal occupies, hit frame included. Buttons
+    /// generated past this collide with it, and a pedal is a wide target a
+    /// thumb rests on, so the collision is not theoretical.
+    private static let pedalColumn = 0.815
+
+    private static func actionButtons(count: Int, clearOfPedals: Bool = false, rightLane: Bool = false) -> [ControlLayout.Item] {
         guard count > 0 else { return [] }
 
         let singleRowIds = [0, 8, 1, 9]                 // B A Y X
@@ -486,9 +631,22 @@ enum ArcadeLayout {
         if count <= 4 {
             // The sweep: button one sits at the thumb's rest, later buttons
             // follow the arc up and outward. A fourth tucks below the arc.
-            let positions: [(Double, Double)] = [
-                (0.54, 0.58), (0.70, 0.44), (0.82, 0.28), (0.80, 0.62),
-            ]
+            //
+            // A cabinet with pedals gives that outward room away: the pedal
+            // column is a wide target on the right edge and the arc used to
+            // be drawn straight through it, putting button 3 on the Gas.
+            // The arc tightens instead of overlapping, which costs some
+            // spread and costs nothing that works.
+            let positions: [(Double, Double)]
+            if rightLane {
+                // The analog control owns the middle lane, so the arc
+                // stacks in the right one rather than sweeping across it.
+                positions = [(0.70, 0.62), (0.84, 0.44), (0.70, 0.26), (0.84, 0.80)]
+            } else if clearOfPedals {
+                positions = [(0.42, 0.62), (0.56, 0.44), (0.50, 0.24), (0.42, 0.84)]
+            } else {
+                positions = [(0.54, 0.58), (0.70, 0.44), (0.82, 0.28), (0.80, 0.62)]
+            }
             for index in 0..<count {
                 let (x, y) = positions[index]
                 items.append(button(
@@ -496,16 +654,23 @@ enum ArcadeLayout {
                 ))
             }
         } else {
-            // Two rows of three, low in the strip.
-            let columns: [Double] = [0.50, 0.66, 0.82]
+            // Two rows of three, low in the strip, pulled left of the
+            // pedal column when the cabinet has one.
+            // Three columns where there is room, two where a pedal or an
+            // analog control has taken a lane. Columns sit 0.16 apart so
+            // two 0.15-wide buttons never draw through each other, and the
+            // row count follows from how many columns are left.
+            let columns: [Double] = rightLane ? [0.68, 0.84]
+                : (clearOfPedals ? [0.42, 0.58] : [0.50, 0.66, 0.82])
+            let rowY: [Double] = columns.count == 3 ? [0.36, 0.62] : [0.20, 0.46, 0.72]
             for index in 0..<count {
-                let row = index / 3
-                let column = index % 3
+                let row = index / columns.count
+                let column = index % columns.count
                 items.append(button(
                     id: doubleRowIds[index],
                     label: "\(index + 1)",
                     x: columns[column],
-                    y: row == 0 ? 0.36 : 0.62
+                    y: rowY[min(row, rowY.count - 1)]
                 ))
             }
         }

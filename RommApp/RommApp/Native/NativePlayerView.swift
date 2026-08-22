@@ -177,15 +177,20 @@ struct NativePlayerView: View {
         GeometryReader { geometry in
             let isLandscape = geometry.size.width > geometry.size.height
             let showsControls = !controllers.isConnected
+            // A gun cabinet aims at the picture, so its pad has to reach
+            // the picture. In portrait the pad is normally a bottom strip
+            // that cannot, which left gun games with no aim at all there.
+            // They take the full-screen presentation in both orientations.
+            let gunPanel = controlLayout.items.contains { $0.kind == .gun }
 
             ZStack {
-                if isLandscape || !showsControls {
+                if isLandscape || !showsControls || gunPanel {
                     // Full screen canvas, pad in the gutters (or hidden with a
                     // controller connected), matching PlayerView's .overlay case.
                     ZStack {
                         MetalGameView(renderer: renderer)
                         if showsControls {
-                            TouchControlPad(items: layoutItems(landscape: true), send: handleInput, sendStick: handleStick, sendRelative: handleRelative, sendPointer: handlePointer, sendOffscreen: handleOffscreen, pictureAspect: renderer.displayAspect, system: controlLayout.system, opacity: controlOpacity)
+                            TouchControlPad(items: layoutItems(landscape: isLandscape), send: handleInput, sendStick: handleStick, sendRelative: handleRelative, sendPointer: handlePointer, sendOffscreen: handleOffscreen, pictureAspect: renderer.displayAspect, system: controlLayout.system, opacity: controlOpacity)
                         }
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)

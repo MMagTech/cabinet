@@ -504,8 +504,10 @@ struct PlayerView: View {
     /// instead of a negotiation between frameworks.
     private func padConfiguration(isLandscape: Bool) -> PlayerWebView.PadConfiguration {
         guard showsTouchControls, let layout = controlLayout else { return .hidden }
-        if isLandscape {
-            return .overlay(items: layout.items(landscape: true), opacity: controlOpacity)
+        // A gun panel overlays in both orientations: its surface is the
+        // picture, and a bottom strip cannot reach that.
+        if isLandscape || layout.items.contains(where: { $0.kind == .gun }) {
+            return .overlay(items: layout.items(landscape: isLandscape), opacity: controlOpacity)
         }
         return .bottomStrip(
             items: layout.items(landscape: false),
