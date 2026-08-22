@@ -517,7 +517,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Stella2014",
 					"$(PROJECT_DIR)/RommApp/Native/Opera",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				OTHER_LDFLAGS = "-lz";
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet;
 				PRODUCT_NAME = "Cabinet TV";
@@ -646,7 +646,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Stella2014",
 					"$(PROJECT_DIR)/RommApp/Native/Opera",
 				);
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 0.3.0;
 				OTHER_LDFLAGS = (
 					"-lfbneo_libretro_ios",
 					"-lbeetle_saturn_ios",
@@ -734,7 +734,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Stella2014",
 					"$(PROJECT_DIR)/RommApp/Native/Opera",
 				);
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 0.3.0;
 				OTHER_LDFLAGS = (
 					"-lfbneo_libretro_ios",
 					"-lbeetle_saturn_ios",
@@ -833,7 +833,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev.tv.topshelf;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -860,7 +860,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet.topshelf;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -919,7 +919,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Stella2014",
 					"$(PROJECT_DIR)/RommApp/Native/Opera",
 				);
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 0.2.0;
 				OTHER_LDFLAGS = "-lz";
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev.tv;
 				PRODUCT_NAME = "Cabinet TV";
