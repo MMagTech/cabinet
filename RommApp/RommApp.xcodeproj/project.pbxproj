@@ -59,6 +59,7 @@
 				Native/MAME2003Plus/libmame2003_plus_ios.a,
 				Native/Mupen64Plus/libmupen64plus_ios.a,
 				Native/NativePlayerView.swift,
+				Native/Opera/libopera_ios.a,
 				Native/PCSXReARMed/libpcsx_rearmed_ios.a,
 				Native/PicoDrive/libpicodrive_ios.a,
 				Native/ProSystem/libprosystem_ios.a,
@@ -514,6 +515,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/MAME2003Plus",
 					"$(PROJECT_DIR)/RommApp/Native/Vecx",
 					"$(PROJECT_DIR)/RommApp/Native/Stella2014",
+					"$(PROJECT_DIR)/RommApp/Native/Opera",
 				);
 				MARKETING_VERSION = 0.1.0;
 				OTHER_LDFLAGS = "-lz";
@@ -642,6 +644,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/MAME2003Plus",
 					"$(PROJECT_DIR)/RommApp/Native/Vecx",
 					"$(PROJECT_DIR)/RommApp/Native/Stella2014",
+					"$(PROJECT_DIR)/RommApp/Native/Opera",
 				);
 				MARKETING_VERSION = 0.1;
 				OTHER_LDFLAGS = (
@@ -729,6 +732,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/MAME2003Plus",
 					"$(PROJECT_DIR)/RommApp/Native/Vecx",
 					"$(PROJECT_DIR)/RommApp/Native/Stella2014",
+					"$(PROJECT_DIR)/RommApp/Native/Opera",
 				);
 				MARKETING_VERSION = 0.1;
 				OTHER_LDFLAGS = (
@@ -913,6 +917,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/MAME2003Plus",
 					"$(PROJECT_DIR)/RommApp/Native/Vecx",
 					"$(PROJECT_DIR)/RommApp/Native/Stella2014",
+					"$(PROJECT_DIR)/RommApp/Native/Opera",
 				);
 				MARKETING_VERSION = 0.1;
 				OTHER_LDFLAGS = "-lz";

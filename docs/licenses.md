@@ -52,6 +52,7 @@ from the commits below.
 | ProSystem | Atari 7800 | GPL v2 | [libretro/prosystem-libretro](https://github.com/libretro/prosystem-libretro) | `363b6dfbd3e2` |
 | vecx | Vectrex | GPL v3 | [libretro/libretro-vecx](https://github.com/libretro/libretro-vecx) | `8f671cc9d737` |
 | Stella 2014 | Atari 2600 | GPL v2 | [libretro/stella2014-libretro](https://github.com/libretro/stella2014-libretro) | `4a7da82595d2` |
+| Opera | 3DO | Modified LGPL, non-commercial (FreeDO terms) | [libretro/opera-libretro](https://github.com/libretro/opera-libretro) | `a501a278d057` |
 
 The GPL v2 cores are statically linked, which makes the distributed app a
 combined work under those terms. The corresponding source is the upstream commit

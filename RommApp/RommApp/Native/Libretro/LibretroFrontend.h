@@ -58,6 +58,11 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
     // The 2014 snapshot of Stella, libretro's light interpreter build of
     // it, the same weight-class choice ProSystem was for the 7800.
     LibretroCoreIDStella2014 NS_SWIFT_NAME(stella2014) = 16,
+    // Interpreter-only ARM60 (the core has no dynarec at all), software
+    // rendered, so it needs neither the JIT exception nor a GL context.
+    // The heaviest interpreter here after the CD consoles; its device
+    // runs are a go/no-go the way PS1's were, not a formality.
+    LibretroCoreIDOpera NS_SWIFT_NAME(opera) = 17,
 };
 
 @interface LibretroFrame : NSObject

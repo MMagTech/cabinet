@@ -182,6 +182,16 @@ final class MemoryCardStore {
             // identical format at a bigger size.
             guard card.count > 80 else { return false }
             return card.dropFirst(16).dropLast(64).contains { $0 != 0x00 && $0 != 0xFF }
+        case .threeDO:
+            // Opera formats a fresh NVRAM with a filesystem header, the
+            // "opera formatted" volume block plus root directory entries,
+            // all of it inside the first 176 bytes; everything after is
+            // zeros until a game actually writes a save (verified against
+            // an NVRAM produced by a headless bench session that never
+            // saved). Data past that header is what distinguishes a real
+            // save from a formatted-empty image.
+            guard card.count > 176 else { return false }
+            return card.dropFirst(176).contains { $0 != 0x00 && $0 != 0xFF }
         default:
             return card.contains { $0 != 0x00 && $0 != 0xFF }
         }

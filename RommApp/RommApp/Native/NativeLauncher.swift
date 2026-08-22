@@ -200,19 +200,25 @@ enum NativeLauncher {
         return dir
     }
 
-    /// Sega CD and Neo Geo Pocket: their cores read a save file by name
-    /// from the save directory at load (bram_load, flash_read), so the
-    /// restore is placing that file before boot, the same shape as the
-    /// VMU path above and with the same own-rows-only rule: a web-player
-    /// .srm for these platforms is the cartridge SAVE_RAM region, not
+    /// Sega CD, Neo Geo Pocket and 3DO: their cores read a save file by
+    /// name from the save directory at load (bram_load, flash_read,
+    /// opera_lr_nvram_load), so the restore is placing that file before
+    /// boot, the same shape as the VMU path above and with the same
+    /// own-rows-only rule: a web-player .srm for these platforms is not
     /// this file, so there is nothing foreign worth adopting.
     private static func restoreCoreFileSaveIfNeeded(
         rom: Rom, session: Session, platform: NativePlatform, loadURL: URL, saveDir: URL
     ) async {
-        let suffix: String
+        // nil suffix means the platform's file lives at a fixed nested
+        // path instead of `<stem>.<suffix>`: Opera writes its NVRAM to
+        // opera/shared/nvram.0.srm under the save directory (fixed
+        // because forcedOptions pins nvram_storage and nvram_version),
+        // so the restore target is that exact path.
+        let suffix: String?
         switch platform {
         case .segaCD: suffix = "brm"
         case .ngpc: suffix = "flash"
+        case .threeDO: suffix = nil
         default: return
         }
         let store = MemoryCardStore.shared
@@ -248,7 +254,15 @@ enum NativeLauncher {
             }
         }
 
-        await restore(region: .saveRAM, to: saveDir.appendingPathComponent("\(stem).\(suffix)"))
+        if let suffix {
+            await restore(region: .saveRAM, to: saveDir.appendingPathComponent("\(stem).\(suffix)"))
+        } else {
+            let operaDir = saveDir
+                .appendingPathComponent("opera", isDirectory: true)
+                .appendingPathComponent("shared", isDirectory: true)
+            try? FileManager.default.createDirectory(at: operaDir, withIntermediateDirectories: true)
+            await restore(region: .saveRAM, to: operaDir.appendingPathComponent("nvram.0.srm"))
+        }
 
         // Sega CD's second save location, the external RAM cartridge,
         // which games prefer over the internal RAM when present (Lunar,
@@ -445,6 +459,13 @@ enum NativeLauncher {
         .segaCD: (131_072, ["bios_CD_U.bin", "bios_CD_E.bin", "bios_CD_J.bin"]),
         // TurboGrafx-CD: Beetle PCE Fast defaults to System Card 3, 256KB.
         .tgCD: (262_144, ["syscard3.pce"]),
+        // 3DO: every retail BIOS Opera knows is exactly 1MB. One name is
+        // enough here because Opera does not scan by region the way the
+        // CD cores above do: it loads exactly the file the opera_bios
+        // option names, and forcedOptions always answers panafz10.bin,
+        // so whatever 1MB firmware RomM has gets staged under the one
+        // name the core will be told to load.
+        .threeDO: (1_048_576, ["panafz10.bin"]),
     ]
 
     /// Copies whichever downloaded firmware file matches a platform's BIOS

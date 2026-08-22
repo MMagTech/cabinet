@@ -112,6 +112,13 @@ struct LicensesView: View {
             file: "stella2014"
         ),
         Entry(
+            id: "opera",
+            name: "Opera",
+            role: "Native 3DO core",
+            summary: "Modified LGPL with FreeDO's non-commercial terms. Cabinet is free and is not sold, which satisfies those terms.",
+            file: "opera"
+        ),
+        Entry(
             id: "picodrive",
             name: "PicoDrive",
             role: "Native Sega 32X core",

@@ -21,6 +21,7 @@ enum NativeCore {
     case mame2003Plus
     case vecx
     case stella2014
+    case opera
 
     /// The frontend's identifier for the statically linked core.
     var coreID: LibretroCoreID {
@@ -42,6 +43,7 @@ enum NativeCore {
         case .mame2003Plus: return .mame2003Plus
         case .vecx: return .vecx
         case .stella2014: return .stella2014
+        case .opera: return .opera
         }
     }
 
@@ -71,6 +73,7 @@ enum NativeCore {
         case .mame2003Plus: return "mame2003plus-native"
         case .vecx: return "vecx-native"
         case .stella2014: return "stella2014-native"
+        case .opera: return "opera-native"
         }
     }
 
@@ -95,6 +98,7 @@ enum NativeCore {
         case .mame2003Plus: return "mame2003Plus"
         case .vecx: return "vecx"
         case .stella2014: return "stella2014"
+        case .opera: return "opera"
         }
     }
 
@@ -121,6 +125,7 @@ enum NativeCore {
         case .mupen64Plus: return "Mupen64Plus"
         case .vecx: return "vecx"
         case .stella2014: return "Stella"
+        case .opera: return "Opera"
         }
     }
 
@@ -177,6 +182,7 @@ enum NativePlatform: String, CaseIterable {
     case n64
     case vectrex
     case atari2600
+    case threeDO
 
     /// Every core that can run this platform, default first. Arcade is
     /// the only platform with a real set; everywhere else this is the
@@ -208,6 +214,7 @@ enum NativePlatform: String, CaseIterable {
         case .n64: return .mupen64Plus
         case .vectrex: return .vecx
         case .atari2600: return .stella2014
+        case .threeDO: return .opera
         }
     }
 
@@ -238,7 +245,13 @@ enum NativePlatform: String, CaseIterable {
         // only RETRO_MEMORY_SYSTEM_RAM.
         // atari2600: same as atari7800, no retail cartridge could save;
         // the core exposes only the RIOT's 128 bytes of system RAM.
-        case .arcade, .atari7800, .atari2600, .dreamcast, .segaCD, .ngpc, .vectrex:
+        // threeDO: the console's NVRAM is a real battery save, but Opera
+        // answers RETRO_MEMORY_SAVE_RAM with NULL and writes a file at
+        // retro_unload_game instead (opera/shared/nvram.0.srm under the
+        // forced options), so it syncs through the segaCD/ngpc file
+        // path, not this one.
+        case .arcade, .atari7800, .atari2600, .dreamcast, .segaCD, .ngpc, .vectrex,
+             .threeDO:
             return false
         default:
             return true
@@ -258,6 +271,14 @@ enum NativePlatform: String, CaseIterable {
     var supportsSecondPlayer: Bool {
         switch self {
         case .gb, .gbc, .gba, .gameGear, .ngpc: return false
+        // Not a handheld, but off for a different, documented reason:
+        // Opera's own opera_active_devices option defaults to 1 because
+        // of a known bug where more than one emulated controller makes
+        // some games ignore gamepad input entirely, and this app forces
+        // that default. Offering a second controller that the core is
+        // configured not to read would look broken; revisit only with
+        // the bug re-tested on real games.
+        case .threeDO: return false
         default: return true
         }
     }
@@ -288,6 +309,7 @@ enum NativePlatform: String, CaseIterable {
         case .n64: return "Nintendo 64"
         case .vectrex: return "Vectrex"
         case .atari2600: return "Atari 2600"
+        case .threeDO: return "3DO"
         }
     }
 
@@ -375,6 +397,8 @@ enum NativePlatform: String, CaseIterable {
             return .vectrex
         case "atari2600", "atari-2600-plus":
             return .atari2600
+        case "3do":
+            return .threeDO
         default:
             return nil
         }

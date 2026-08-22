@@ -21,6 +21,7 @@
 #import "ProSystemCore.h"
 #import "VecxCore.h"
 #import "Stella2014Core.h"
+#import "OperaCore.h"
 #import "PicoDriveCore.h"
 #import "PCSXReARMedCore.h"
 #import "N64Core.h"
@@ -1164,6 +1165,8 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
             return VecxCoreAPI();
         case LibretroCoreIDStella2014:
             return Stella2014CoreAPI();
+        case LibretroCoreIDOpera:
+            return OperaCoreAPI();
         default:
             // This used to fall through to the PlayStation core, so a
             // core id with no case did not fail to load: it silently ran

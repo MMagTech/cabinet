@@ -87,6 +87,15 @@ stella2014)
     # the frontend still answers its full table deliberately.
     PREFIX=a26; REPO=https://github.com/libretro/stella2014-libretro.git
     MAKEDIR=.; MAKEFILE=Makefile; OUT=Stella2014; LIB=libstella2014_ios.a ;;
+opera)
+    # 3DO. Interpreter-only ARM60 (the core has no dynarec at all), pure
+    # software rendering, so it sits on the right side of the JIT
+    # boundary, but it is the heaviest interpreter here after the CD
+    # consoles: treat any new platform build as a go/no-go measured on
+    # hardware, the way PS1 and Dreamcast were, not a batch build.
+    # Requires a BIOS (panafz10 family) via RomM, like Saturn.
+    PREFIX=opr; REPO=https://github.com/libretro/opera-libretro.git
+    MAKEDIR=.; MAKEFILE=Makefile; OUT=Opera; LIB=libopera_ios.a ;;
 pcsx_rearmed)
     # platform=ios-arm64 (or tvos-arm64) forces DYNAREC=0 in this core's
     # own Makefile, a pure interpreter build, the same no-JIT exception

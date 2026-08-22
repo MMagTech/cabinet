@@ -285,6 +285,30 @@ final class MemoryCardSync {
     /// never saved uploads nothing.
     func captureAfterShutdown() {
         captureVMUSave()
+        // 3DO first, in its own block rather than the suffix scan below:
+        // Opera writes to a fixed nested path (opera/shared/nvram.0.srm,
+        // pinned by the options NativeCoreOptionsStore forces), not a
+        // flat suffix-named file the directory listing would find. Same
+        // capture rules as the scan: skip when unchanged, and the junk
+        // guard keeps a formatted-but-never-saved NVRAM from uploading.
+        if platform == .threeDO {
+            let file = NativeLauncher.coreSaveDirectory(romId: rom.id)
+                .appendingPathComponent("opera", isDirectory: true)
+                .appendingPathComponent("shared", isDirectory: true)
+                .appendingPathComponent("nvram.0.srm")
+            guard let data = try? Data(contentsOf: file) else { return }
+            let previous = MemoryCardStore.shared.localCard(romId: rom.id, region: .saveRAM)
+            guard data != previous else { return }
+            guard cardHasSaves(data) || previous != nil else { return }
+            MemoryCardStore.shared.storeSnapshot(romId: rom.id, data: data, region: .saveRAM)
+            DiagnosticsLog.record(
+                context: "In-game save",
+                message: "Captured \(file.lastPathComponent), \(data.count) bytes, after core shutdown.",
+                romVersion: session.serverVersion
+            )
+            Task { await self.uploadMemoryCard(data) }
+            return
+        }
         let suffix: String
         switch platform {
         case .segaCD: suffix = ".brm"

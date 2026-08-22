@@ -219,6 +219,38 @@ enum NativeCoreOptions {
         ),
     ]
 
+    /// Opera's two real levers, from its own option table. The 3DO ran
+    /// many of its games below 20fps on the actual hardware, which is why
+    /// the overclock option exists and why it is worth exposing: it is a
+    /// playability lever, not an accuracy tweak. Both default to stock;
+    /// this platform's frame budget is the tightest of the app's
+    /// interpreters and spending it is a per-person choice.
+    static let threeDO: [NativeCoreOption] = [
+        NativeCoreOption(
+            key: "opera_cpu_overclock",
+            label: "CPU speed",
+            detail: "Runs the 3DO's CPU faster than the real 12.5MHz. Many games ran below 20fps on the actual console; a higher clock genuinely raises their frame rate, at a real cost in emulation load.",
+            choices: [
+                .init(value: "1.0x (12.50Mhz)", label: "Stock"),
+                .init(value: "1.1x (13.75Mhz)", label: "1.1x"),
+                .init(value: "1.2x (15.00Mhz)", label: "1.2x"),
+                .init(value: "1.5x (18.75Mhz)", label: "1.5x"),
+                .init(value: "2.0x (25.00Mhz)", label: "2x"),
+            ],
+            defaultValue: "1.0x (12.50Mhz)"
+        ),
+        NativeCoreOption(
+            key: "opera_high_resolution",
+            label: "HiRes 3D rendering",
+            detail: "Renders 3D models at double resolution. No effect on 2D games, and a significant emulation cost.",
+            choices: [
+                .init(value: "disabled", label: "Off"),
+                .init(value: "enabled", label: "On"),
+            ],
+            defaultValue: "disabled"
+        ),
+    ]
+
     static let genesisPad = NativeCoreOption(
         key: "pad-type",
         label: "Controller",
@@ -332,6 +364,7 @@ enum NativeCoreOptions {
         case .tg16, .tgCD: return pce
         case .dreamcast: return dreamcast
         case .atari2600: return atari2600
+        case .threeDO: return threeDO
         default: return []
         }
     }
@@ -479,6 +512,39 @@ enum NativeCoreOptionsStore {
     /// requirements this frontend imposes on a core.
     private static func forcedOptions(for platform: NativePlatform) -> [String: String] {
         switch platform {
+        case .threeDO:
+            // opera_bios is the defaults trap at its purest: the option's
+            // declared default is NULL, its value must be a BIOS filename,
+            // and unanswered it leaves opts->bios NULL, which is "no BIOS
+            // ROM found" and no boot at all. NativeLauncher stages any
+            // 1MB firmware RomM has for the platform under exactly this
+            // name, so the two halves of the contract live in this app
+            // and the answer is always a file that exists.
+            //
+            // nvram_storage is a declared-default-versus-code-fallback
+            // mismatch (the table says "per game", the unanswered
+            // fallback is shared); forced to shared deliberately. Each
+            // game already has its own save directory here, so shared
+            // is per-game anyway, and it buys a fixed filename
+            // (opera/shared/nvram.0.srm) the save sync can rely on the
+            // way Sega CD's 4Mbit_cart.brm already is.
+            //
+            // active_devices stays at Opera's own default of 1: its
+            // option text documents a bug where more than one emulated
+            // controller makes some games ignore input entirely.
+            // supportsSecondPlayer is false for the platform to match.
+            //
+            // opera_font is deliberately NOT answered: its value must
+            // also be a filename, the Kanji ROM matters only to some
+            // Japanese games, and RomM has no such file to stage, so
+            // silence (which clears rom2) is the correct answer rather
+            // than naming a file that does not exist.
+            return [
+                "opera_bios": "panafz10.bin",
+                "opera_nvram_storage": "shared",
+                "opera_nvram_version": "0",
+                "opera_active_devices": "1",
+            ]
         case .psx:
             // Without an answer for these keys PCSX ReARMed's
             // load_memcards() skips card setup entirely (memcard_type
@@ -767,6 +833,29 @@ enum NativeCoreOptionsStore {
                 "fceumm_overscan_h_left": "0",
                 "fceumm_overscan_h_right": "0",
                 "fceumm_sndvolume": "7",
+            ]
+        case .threeDO:
+            // The rest of Opera's table at its own declared defaults,
+            // read from libretro_core_options.c. Every getval here has a
+            // real in-code fallback, but two option-shaped landmines are
+            // handled in forcedOptions (bios, nvram_storage) and the two
+            // performance/quality levers are exposed Settings, so this
+            // list is everything else, answered deliberately. The
+            // overclock and hi-res keys are absent because they are the
+            // exposed options and this dictionary merges over stored
+            // choices.
+            return [
+                "opera_mem_capacity": "21",
+                "opera_random_seed": "random",
+                "opera_cd_speed": "unbounded",
+                "opera_region": "ntsc",
+                "opera_vdlp_pixel_format": "RGB565",
+                "opera_vdlp_bypass_clut": "disabled",
+                "opera_madam_matrix_engine": "hardware",
+                "opera_swi_hle": "disabled",
+                "opera_dsp_threaded": "disabled",
+                "opera_hide_lightgun_crosshairs": "disabled",
+                "opera_kprint": "disabled",
             ]
         case .vectrex:
             // vecx's software renderer sizes its point stamp,
