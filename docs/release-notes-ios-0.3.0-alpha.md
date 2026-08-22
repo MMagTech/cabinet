@@ -102,9 +102,20 @@ where B should be. Each platform now has its own controller personality
 instead of one arcade-shaped default, and your own remappings are kept as
 edits on top rather than replacing everything.
 
-Game Boy Advance cartridges with hardware inside them work: WarioWare
-Twisted's gyroscope and the tilt sensors in Yoshi's Universal Gravitation
-and Koro Koro Puzzle all read the phone's own motion.
+## The cartridges that had hardware inside them
+
+A handful of Game Boy Advance games shipped with real sensors soldered into
+the cartridge, and those games now work the way they were meant to, using the
+phone's own motion hardware.
+
+WarioWare Twisted is the one to try. The whole game is built around
+physically twisting the cartridge, and twisting the phone now does it. Yoshi's
+Universal Gravitation and Koro Koro Puzzle use their tilt sensors the same
+way. Boktai's solar sensor is there too, as a setting rather than a sensor,
+since pointing a phone at the sun is not something to ask of anybody.
+
+Nothing runs until a game actually asks for it, so the gyroscope stays off for
+every cartridge that never had one.
 
 ## Connection and library
 
