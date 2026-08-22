@@ -35,6 +35,12 @@ struct TouchControlPad: UIViewRepresentable {
     /// finger is down. The native player wires this to the frontend's
     /// pointer channel; the webview leaves it inert.
     var sendPointer: (_ x: Double, _ y: Double, _ down: Bool) -> Void = { _, _, _ in }
+    /// Off the picture: the cabinet's reload gesture.
+    var sendOffscreen: (_ offscreen: Bool) -> Void = { _ in }
+    /// The running game's picture shape. A 4:3 board on a widescreen
+    /// phone leaves real black bars, and touching those is genuinely
+    /// pointing off the screen, which is how a gun game reloads.
+    var pictureAspect: Double = 0
     /// The layout's system, for theme colours. The webview player sets
     /// this on its pad directly; this wrapper carries it for hosts that
     /// use the SwiftUI view, so both players draw the same controls.
@@ -52,7 +58,8 @@ struct TouchControlPad: UIViewRepresentable {
     func makeUIView(context: Context) -> ControlPadView {
         let view = ControlPadView(
             items: items, send: send, sendStick: sendStick,
-            sendRelative: sendRelative, sendPointer: sendPointer)
+            sendRelative: sendRelative, sendPointer: sendPointer,
+            sendOffscreen: sendOffscreen)
         view.backgroundColor = .clear
         view.isMultipleTouchEnabled = true
         return view
@@ -60,6 +67,7 @@ struct TouchControlPad: UIViewRepresentable {
 
     func updateUIView(_ view: ControlPadView, context: Context) {
         view.items = items
+        view.pictureAspect = pictureAspect
         view.system = system
         view.theme = ControlTheme.current
         view.alpha = opacity
@@ -83,6 +91,8 @@ final class ControlPadView: UIView {
     private let sendStick: (_ ids: [Int], _ x: Double, _ y: Double) -> Void
     private let sendRelative: (_ dx: Int, _ dy: Int) -> Void
     private let sendPointer: (_ x: Double, _ y: Double, _ down: Bool) -> Void
+    private let sendOffscreen: (_ offscreen: Bool) -> Void
+    var pictureAspect: Double = 0
     private let haptic = UIImpactFeedbackGenerator(style: .light)
     private let detent = UIImpactFeedbackGenerator(style: .light)
 
@@ -179,13 +189,15 @@ final class ControlPadView: UIView {
         items: [ControlLayout.Item], send: @escaping (Int, Bool) -> Void,
         sendStick: @escaping (_ ids: [Int], _ x: Double, _ y: Double) -> Void = { _, _, _ in },
         sendRelative: @escaping (_ dx: Int, _ dy: Int) -> Void = { _, _ in },
-        sendPointer: @escaping (_ x: Double, _ y: Double, _ down: Bool) -> Void = { _, _, _ in }
+        sendPointer: @escaping (_ x: Double, _ y: Double, _ down: Bool) -> Void = { _, _, _ in },
+        sendOffscreen: @escaping (_ offscreen: Bool) -> Void = { _ in }
     ) {
         self.items = items
         self.send = send
         self.sendStick = sendStick
         self.sendRelative = sendRelative
         self.sendPointer = sendPointer
+        self.sendOffscreen = sendOffscreen
         super.init(frame: .zero)
         contentMode = .redraw
     }
@@ -398,12 +410,10 @@ final class ControlPadView: UIView {
             }
             if touch == gunTouch {
                 gunTouch = nil
-                if let gun = items.first(where: { $0.kind == .gun }) {
-                    // Released: aim holds, trigger lifts.
-                    let frame = gun.frame.resolved(in: bounds.size)
-                    _ = frame
-                    sendPointer(0, 0, false)
-                }
+                // Released: the trigger lifts and the gun comes back on
+                // screen, so a reload does not latch.
+                sendPointer(0, 0, false)
+                sendOffscreen(false)
                 continue
             }
             if touch == trackballTouch {
@@ -491,11 +501,33 @@ final class ControlPadView: UIView {
 
     /// Aim is where the finger is, expressed against the gun item's own
     /// frame, which the layout places over the picture.
+    /// Where the game's picture actually sits inside the gun's surface,
+    /// aspect-fitted the way the renderer draws it. Everything outside
+    /// is the letterbox, which is off-screen in the cabinet's sense.
+    private func pictureRect(in surface: CGRect) -> CGRect {
+        guard pictureAspect > 0, surface.width > 0, surface.height > 0 else { return surface }
+        let surfaceAspect = surface.width / surface.height
+        if surfaceAspect > pictureAspect {
+            let w = surface.height * pictureAspect
+            return CGRect(x: surface.midX - w / 2, y: surface.minY, width: w, height: surface.height)
+        }
+        let h = surface.width / pictureAspect
+        return CGRect(x: surface.minX, y: surface.midY - h / 2, width: surface.width, height: h)
+    }
+
     private func updateGun(_ gun: ControlLayout.Item, at point: CGPoint, down: Bool) {
-        let frame = gun.frame.resolved(in: bounds.size)
-        guard frame.width > 0, frame.height > 0 else { return }
-        let x = Double((point.x - frame.midX) / (frame.width / 2))
-        let y = Double((point.y - frame.midY) / (frame.height / 2))
+        let picture = pictureRect(in: gun.frame.resolved(in: bounds.size))
+        guard picture.width > 0, picture.height > 0 else { return }
+        // Beside the picture is past the edge of the cabinet's screen,
+        // which is the reload gesture rather than a missed shot.
+        let offscreen = !picture.contains(point)
+        sendOffscreen(offscreen)
+        guard !offscreen else {
+            sendPointer(0, 0, down)
+            return
+        }
+        let x = Double((point.x - picture.midX) / (picture.width / 2))
+        let y = Double((point.y - picture.midY) / (picture.height / 2))
         sendPointer(max(-1, min(1, x)), max(-1, min(1, y)), down)
     }
 

@@ -341,7 +341,9 @@ enum NativeLauncher {
             // this core gets its full options pass.
             // Gun cabinets want the pointer (a touch IS an absolute aim);
             // dials, paddles and trackballs want relative mouse deltas.
-            coreOptions["mame2003-plus_xy_device"] = gunCabinet ? "pointer" : "mouse"
+            // lightgun, not pointer: only the lightgun path implements
+            // the off-screen reload these cabinets are played with.
+            coreOptions["mame2003-plus_xy_device"] = gunCabinet ? "lightgun" : "mouse"
             // Same class, second victim, found by ear: unanswered, the
             // core's sample rate global stays zero and it produces no
             // audio at all. Verified in the bench: bare run emitted 0

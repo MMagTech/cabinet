@@ -181,6 +181,7 @@ int16_t gMouseLatchedY[kMaxPorts];
 std::atomic<int16_t> gPointerX[kMaxPorts];
 std::atomic<int16_t> gPointerY[kMaxPorts];
 std::atomic<bool> gPointerDown[kMaxPorts];
+std::atomic<bool> gGunOffscreen[kMaxPorts];
 // TEST BUILD, with cabinetInputTrace below: samples-per-frame and last
 // value of the core's own analog-X reads on port 0.
 std::atomic<uint32_t> gAnalogReads{0};
@@ -836,6 +837,21 @@ int16_t inputState(unsigned port, unsigned device, unsigned index, unsigned id) 
             default: return 0;
         }
     }
+    // A lightgun is the same absolute aim with a cabinet's own extra
+    // question: is the player pointing off the screen? That gesture is
+    // how these games reload, and the core only honours it on this
+    // device, not on the pointer.
+    if (device == RETRO_DEVICE_LIGHTGUN) {
+        switch (id) {
+            case RETRO_DEVICE_ID_LIGHTGUN_SCREEN_X: return gPointerX[port].load(std::memory_order_relaxed);
+            case RETRO_DEVICE_ID_LIGHTGUN_SCREEN_Y: return gPointerY[port].load(std::memory_order_relaxed);
+            case RETRO_DEVICE_ID_LIGHTGUN_TRIGGER:  return gPointerDown[port].load(std::memory_order_relaxed) ? 1 : 0;
+            case RETRO_DEVICE_ID_LIGHTGUN_IS_OFFSCREEN:
+            case RETRO_DEVICE_ID_LIGHTGUN_RELOAD:
+                return gGunOffscreen[port].load(std::memory_order_relaxed) ? 1 : 0;
+            default: return 0;
+        }
+    }
     // Absolute pointing, a touch on the picture itself.
     if (device == RETRO_DEVICE_POINTER) {
         switch (id) {
@@ -1232,6 +1248,7 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
         gMouseLatchedX[p] = 0;
         gMouseLatchedY[p] = 0;
         gPointerDown[p].store(false, std::memory_order_relaxed);
+        gGunOffscreen[p].store(false, std::memory_order_relaxed);
         // Cleared per activation, or a platform that skips port 1 (a
         // handheld, say) after one that used it would inherit the
         // previous game's stale device type on a port it never asked for.
@@ -1259,6 +1276,11 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     gPointerX[port].store((int16_t)(std::clamp(x, -1.0f, 1.0f) * 0x7fff), std::memory_order_relaxed);
     gPointerY[port].store((int16_t)(std::clamp(y, -1.0f, 1.0f) * 0x7fff), std::memory_order_relaxed);
     gPointerDown[port].store(down, std::memory_order_relaxed);
+}
+
+- (void)setLightgunOffscreen:(BOOL)offscreen port:(NSInteger)port {
+    if (port < 0 || (size_t)port >= kMaxPorts) { return; }
+    gGunOffscreen[port].store(offscreen, std::memory_order_relaxed);
 }
 
 - (void)setControllerPortDevice:(unsigned)device port:(NSInteger)port {

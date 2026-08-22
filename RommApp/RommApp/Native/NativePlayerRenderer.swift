@@ -53,6 +53,7 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     private var texture: MTLTexture?
     private var textureWidth: Int = 0
     private var textureHeight: Int = 0
+
     private let audio = NativePlayerAudio()
 
     /// The active shader, set by the pause menu's Shader row. The next
