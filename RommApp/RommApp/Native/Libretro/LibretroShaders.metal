@@ -46,6 +46,26 @@ fragment float4 shader_rgb565_unpack_fragment(VertexOut in [[stage_in]],
     return float4(r, g, b, 1.0);
 }
 
+// The RGB1555 twin of the pass above, for the cores that pick libretro's
+// 0RGB1555 format instead. vecx is the first in this app to emit it, at
+// 1320x1640 and 50fps thanks to its 4x vector resolution, which is
+// exactly the scale where the old per-pixel CPU loop saturated the main
+// thread (measured on the 565 path's history: 30fps and 50ms stalls
+// before its decode moved here). Bit layout: bit 15 unused, 14-10 red,
+// 9-5 green, 4-0 blue.
+fragment float4 shader_rgb1555_unpack_fragment(VertexOut in [[stage_in]],
+                                                texture2d<uint> tex [[texture(0)]],
+                                                sampler samp [[sampler(0)]]) {
+    uint2 size = uint2(tex.get_width(), tex.get_height());
+    uint2 coord = uint2(in.texCoord * float2(size));
+    coord = min(coord, size - 1);
+    uint packed = tex.read(coord).r;
+    float r = float((packed >> 10) & 0x1F) / 31.0;
+    float g = float((packed >> 5) & 0x1F) / 31.0;
+    float b = float(packed & 0x1F) / 31.0;
+    return float4(r, g, b, 1.0);
+}
+
 // Every shader below this line takes the source texture's pixel size (in
 // texels) as a second fragment buffer, needed to step to neighbouring
 // texels for edge and scanline work. NativePlayerRenderer supplies it.

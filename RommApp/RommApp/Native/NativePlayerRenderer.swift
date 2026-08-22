@@ -49,6 +49,12 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     /// Raw packed-pixel source for that path, r16Uint so no CPU-side
     /// interpretation happens before it reaches the shader.
     private var rgb565SourceTexture: MTLTexture?
+    /// The RGB1555 twins of the pair above. Separate pipeline and
+    /// source texture rather than parameters threaded through the 565
+    /// path, so that path's code stays byte-identical for the cores
+    /// already running through it.
+    private var rgb1555UnpackPipeline: MTLRenderPipelineState?
+    private var rgb1555SourceTexture: MTLTexture?
     private var samplerState: MTLSamplerState!
     private var texture: MTLTexture?
     private var textureWidth: Int = 0
@@ -182,6 +188,12 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         unpackDescriptor.fragmentFunction = library?.makeFunction(name: "shader_rgb565_unpack_fragment")
         unpackDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
         rgb565UnpackPipeline = try? device.makeRenderPipelineState(descriptor: unpackDescriptor)
+
+        let unpack1555Descriptor = MTLRenderPipelineDescriptor()
+        unpack1555Descriptor.vertexFunction = vertexFn
+        unpack1555Descriptor.fragmentFunction = library?.makeFunction(name: "shader_rgb1555_unpack_fragment")
+        unpack1555Descriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
+        rgb1555UnpackPipeline = try? device.makeRenderPipelineState(descriptor: unpack1555Descriptor)
 
         let samplerDescriptor = MTLSamplerDescriptor()
         samplerDescriptor.minFilter = .nearest
@@ -621,33 +633,18 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
                     base: base, width: width, height: height, srcStride: Int(frame.bytesPerRow)
                 )
             case .RGB1555:
-                // Left on the CPU deliberately: nothing in this app has
-                // been observed to emit RGB1555, so there is no measured
-                // cost to move and no way to verify a GPU version renders
-                // it correctly.
-                if conversionBuffer.count != bytesPerRow * height {
-                    conversionBuffer = [UInt8](repeating: 0, count: bytesPerRow * height)
-                }
-                let srcStride = Int(frame.bytesPerRow)
-                conversionBuffer.withUnsafeMutableBytes { dst in
-                    for y in 0..<height {
-                        let srcRow = base.advanced(by: y * srcStride).assumingMemoryBound(to: UInt16.self)
-                        let dstRow = dst.baseAddress!.advanced(by: y * bytesPerRow).assumingMemoryBound(to: UInt8.self)
-                        for x in 0..<width {
-                            let p = srcRow[x]
-                            let r = UInt8((p >> 10) & 0x1F) << 3
-                            let g = UInt8((p >> 5) & 0x1F) << 3
-                            let b = UInt8(p & 0x1F) << 3
-                            dstRow[x * 4] = b
-                            dstRow[x * 4 + 1] = g
-                            dstRow[x * 4 + 2] = r
-                            dstRow[x * 4 + 3] = 255
-                        }
-                    }
-                }
-                texture?.replace(
-                    region: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0,
-                    withBytes: conversionBuffer, bytesPerRow: bytesPerRow
+                // The GPU path, same architecture as RGB565's above. This
+                // was a scalar CPU loop until vecx became the first core
+                // in the app to actually emit 1555, at 1320x1640 and 50fps
+                // thanks to its 4x vector resolution: 2.16 million pixels
+                // converted per frame on the main thread, which saturated
+                // it badly enough that the touch overlay's own button
+                // highlights lagged by whole seconds (found on device the
+                // day the core landed). The old loop's history predicted
+                // exactly this: the 565 comment below records 30fps and
+                // 50ms stalls before its decode moved to the shader.
+                unpackRGB1555(
+                    base: base, width: width, height: height, srcStride: Int(frame.bytesPerRow)
                 )
             @unknown default:
                 break
@@ -703,6 +700,53 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         encoder.setRenderPipelineState(rgb565UnpackPipeline)
         encoder.setVertexBytes(quad, length: MemoryLayout<Vertex>.stride * quad.count, index: 0)
         encoder.setFragmentTexture(rgb565SourceTexture, index: 0)
+        encoder.setFragmentSamplerState(samplerState, index: 0)
+        encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+        encoder.endEncoding()
+        commandBuffer.commit()
+    }
+
+    /// The RGB1555 twin of `unpackRGB565`, deliberately a separate copy
+    /// with its own pipeline and source texture rather than a parameter
+    /// on the shared one: the 565 path serves most of the cores in the
+    /// app and stays untouched. Same fallback contract: a missing
+    /// pipeline leaves `texture` at its last contents.
+    private func unpackRGB1555(base: UnsafeRawPointer, width: Int, height: Int, srcStride: Int) {
+        guard let rgb1555UnpackPipeline, let texture else { return }
+
+        if rgb1555SourceTexture == nil
+            || rgb1555SourceTexture?.width != width
+            || rgb1555SourceTexture?.height != height {
+            let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+                pixelFormat: .r16Uint, width: width, height: height, mipmapped: false
+            )
+            descriptor.usage = [.shaderRead]
+            rgb1555SourceTexture = device.makeTexture(descriptor: descriptor)
+        }
+        rgb1555SourceTexture?.replace(
+            region: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0,
+            withBytes: base, bytesPerRow: srcStride
+        )
+
+        guard let rgb1555SourceTexture,
+              let commandBuffer = commandQueue.makeCommandBuffer()
+        else { return }
+
+        let passDescriptor = MTLRenderPassDescriptor()
+        passDescriptor.colorAttachments[0].texture = texture
+        passDescriptor.colorAttachments[0].loadAction = .dontCare
+        passDescriptor.colorAttachments[0].storeAction = .store
+
+        guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: passDescriptor) else { return }
+        let quad: [Vertex] = [
+            Vertex(position: [-1, -1], texCoord: [0, 1]),
+            Vertex(position: [1, -1], texCoord: [1, 1]),
+            Vertex(position: [-1, 1], texCoord: [0, 0]),
+            Vertex(position: [1, 1], texCoord: [1, 0]),
+        ]
+        encoder.setRenderPipelineState(rgb1555UnpackPipeline)
+        encoder.setVertexBytes(quad, length: MemoryLayout<Vertex>.stride * quad.count, index: 0)
+        encoder.setFragmentTexture(rgb1555SourceTexture, index: 0)
         encoder.setFragmentSamplerState(samplerState, index: 0)
         encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         encoder.endEncoding()
