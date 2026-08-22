@@ -14,7 +14,9 @@ struct RommApp: App {
             // pairing, only a radio. Debug builds with no such launch
             // argument evaluate one nil check here and boot normally.
             #if DEBUG
-            if let aim = AimLab.launchRole, case .send = aim {
+            if ProcessInfo.processInfo.arguments.contains("-cabinetLink") {
+                ControllerPadView()
+            } else if let aim = AimLab.launchRole, case .send = aim {
                 AimSenderView()
             } else if let role = NetProbe.launchRole {
                 NetProbeView(role: role)

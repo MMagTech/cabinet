@@ -46,6 +46,19 @@ struct TVPlayerView: View {
     /// that logic, which had silently fallen behind iOS at PS1/N64-only
     /// while iOS grew every platform (issue #5).
     @State private var cardSync: MemoryCardSync?
+    #if DEBUG
+    /// First slice of the phone-as-accessory idea: while an arcade game
+    /// runs, a phone on the same network can drive it through the exact
+    /// calls the local controller path makes below. DEBUG only, and the
+    /// discovery is the lab's Bonjour scaffolding; the shipping design
+    /// binds nothing without a person enabling it and learns presence
+    /// from RomM, not the LAN. See ControllerLink.swift's header.
+    @State private var phoneLink: ControllerLinkReceiver?
+    @State private var phoneConnected = false
+    /// Paused from the phone's own menu, tracked so the idle rule below
+    /// can tell a live phone game from one sitting in a pause screen.
+    @State private var phonePaused = false
+    #endif
 
     private var canonicalSlug: String {
         rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
@@ -81,6 +94,13 @@ struct TVPlayerView: View {
         cardSync = engine
         return engine
     }
+
+    #if DEBUG
+    private func updatePhoneIdleRule() {
+        UIApplication.shared.isIdleTimerDisabled =
+            phoneConnected && !phonePaused && !menuVisible
+    }
+    #endif
 
     private func openMenu() {
         renderer.paused = true
@@ -267,8 +287,83 @@ struct TVPlayerView: View {
             // device afterwards. The recording itself lives in the shared
             // renderer, so without these the trace simply never starts.
             FrameTrace.shared.begin(core: "\(core)")
+            #if DEBUG
+            if platform == .arcade {
+                let link = ControllerLinkReceiver(
+                    shortname: rom.fsNameNoExt.lowercased(),
+                    onButton: { [weak renderer] id, down in
+                        renderer?.setButton(id, down: down, port: 0)
+                    },
+                    onStick: { [weak renderer] x, y in
+                        renderer?.setStick(x: x, y: y, port: 0)
+                    },
+                    onRelative: { dx, dy in
+                        LibretroFrontend.shared.addMouseDeltaX(dx, y: dy, port: 0)
+                    },
+                    onPointer: { x, y, down in
+                        LibretroFrontend.shared.setPointerX(Float(x), y: Float(y), down: down, port: 0)
+                    },
+                    onOffscreen: { off in
+                        LibretroFrontend.shared.setLightgunOffscreen(off, port: 0)
+                    },
+                    // The phone's own pause menu, deliberately smaller
+                    // than this screen's: pause, save, load, put away.
+                    // Save and load are the SAME functions this view's
+                    // menu runs, so the states land in the same slots
+                    // with the same upload path, and pause captures the
+                    // battery-save snapshot exactly like openMenu does.
+                    onPause: { paused in
+                        Task { @MainActor in
+                            renderer.paused = paused
+                            phonePaused = paused
+                            if paused { syncEngine().capturePauseSnapshot() }
+                        }
+                    },
+                    onSave: {
+                        Task { @MainActor in saveState() }
+                    },
+                    onLoad: {
+                        Task { @MainActor in loadLatestState() }
+                    },
+                    onPhone: { joined in
+                        Task { @MainActor in phoneConnected = joined }
+                    },
+                    // A dropped phone is a disconnected controller:
+                    // nobody is holding anything, so pause into the
+                    // menu, the same reaction the Bluetooth path has
+                    // always had. A goodbye never lands here.
+                    onDrop: {
+                        Task { @MainActor in
+                            phonePaused = false
+                            openMenu()
+                        }
+                    }
+                )
+                link.start()
+                phoneLink = link
+            }
+            #endif
         }
+        #if DEBUG
+        // The screensaver rule for a phone-driven game. A physical
+        // controller keeps tvOS awake through its own button presses;
+        // the phone's input is network packets the system cannot see,
+        // so the aerial rolled over a live game of Off Road. Awake only
+        // while a phone is connected AND the game is actually running:
+        // a pause screen is deliberately allowed to idle into the
+        // screensaver, because a frozen frame that sits for hours is
+        // how OLEDs get burned and Marcus would rather the aerial than
+        // the complaint.
+        .onChange(of: phoneConnected) { _, _ in updatePhoneIdleRule() }
+        .onChange(of: phonePaused) { _, _ in updatePhoneIdleRule() }
+        .onChange(of: menuVisible) { _, _ in updatePhoneIdleRule() }
+        #endif
         .onDisappear {
+            #if DEBUG
+            phoneLink?.stop()
+            phoneLink = nil
+            UIApplication.shared.isIdleTimerDisabled = false
+            #endif
             FrameTrace.shared.end()
             controllers.capturesMenuButton = false
             // Guarded: if another game's view already claimed the

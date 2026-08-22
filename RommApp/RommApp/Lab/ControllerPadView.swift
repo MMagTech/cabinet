@@ -1,0 +1,605 @@
+#if os(iOS)
+import CoreMotion
+import SwiftUI
+
+/// The phone as the steering wheel itself: gravity-referenced roll,
+/// turned into the same relative dial counts the touch spinner sends,
+/// so the television cannot tell a tilted phone from a spun thumb.
+///
+/// Relative on purpose. The aim lab's wheel mode feeds cores that read
+/// an absolute analog axis; MAME's driving cabinets here are dials, and
+/// a dial accumulates. Tracking the CHANGE in roll each tick means no
+/// calibration, no drift to matter, and turning the phone half a turn
+/// turns the cabinet's wheel about a full one.
+final class TiltSteering {
+    private let motion = CMMotionManager()
+    private var neutral: Double?
+    private var sent = 0.0
+    /// Counts per radian of roll away from neutral. 768 counts is one
+    /// dial turn, so a quarter turn of phone is about full lock, which
+    /// keeps both hands inside a comfortable arc.
+    private let gain = 244.0
+    var send: ((Int) -> Void)?
+
+    func start() {
+        guard motion.isDeviceMotionAvailable, !motion.isDeviceMotionActive else { return }
+        neutral = nil
+        sent = 0
+        motion.deviceMotionUpdateInterval = 1.0 / 60.0
+        motion.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: .main) { [weak self] dm, _ in
+            guard let self, let dm else { return }
+            // Roll from gravity alone, ABSOLUTE, measured from wherever
+            // the phone was held when steering began: that grip is
+            // straight ahead, the same calibrate-from-the-hands rule the
+            // rotary tilt uses. The first version accumulated relative
+            // deltas instead, which meant a long corner wound the phone
+            // further and further with no way back: Marcus ended up
+            // "in some awkward positions", exactly the wind-up a real
+            // wheel's limited travel exists to prevent. Absolute also
+            // self-centres: level the phone and the wheel is straight,
+            // and gravity never drifts.
+            let angle = atan2(dm.gravity.x, dm.gravity.y)
+            guard let neutral = self.neutral else { self.neutral = angle; return }
+            var away = angle - neutral
+            if away > .pi { away -= 2 * .pi }
+            if away < -.pi { away += 2 * .pi }
+            // Negated: the dial counts the opposite way from the
+            // gravity angle in this grip, found on the first live run.
+            let target = -away * self.gain
+            let delta = Int(target - self.sent)
+            if delta != 0 {
+                self.sent += Double(delta)
+                self.send?(delta)
+            }
+        }
+    }
+
+    func stop() {
+        motion.stopDeviceMotionUpdates()
+        neutral = nil
+    }
+}
+
+/// The phone as the lightgun itself: point it at the television, tap
+/// anywhere to fire.
+///
+/// This is the aim lab's air-mouse model, constants and all, arriving
+/// where it was always headed. Rate control rather than absolute
+/// pointing (the LG Magic Remote's model, the lab's conclusion after
+/// absolute Euler aiming jumped everywhere): the gyro's angular rate
+/// moves the crosshair, the edges clamp so drift re-anchors itself,
+/// and nothing ever needs calibrating. The horizontal sweep is the
+/// rotation projected onto GRAVITY, not the phone's own z axis, so a
+/// relaxed, uptilted grip does not slow the cursor: the lab found that
+/// leak by feel and the fix by projection.
+///
+/// The trigger is a touch anywhere, and the shot is scored where the
+/// aim was about 70ms BEFORE the tap, because the tap itself nudges
+/// the phone: the same rewind arcade guns and Wii shooters used, kept
+/// from the lab's gun mode even though the aiming model here is the
+/// mouse one.
+/// How much wrist crosses the screen, as a named choice rather than a
+/// constant that only exists in a source file. "Snap" is the default
+/// because Marcus's verdict on anything slower was immediate: shots
+/// come from anywhere on the screen, so the response ceiling is the
+/// reflex, not the cursor.
+enum AimSpeed: String, CaseIterable {
+    case relaxed, fast, snap
+
+    static let key = "com.mmagtech.RommApp.linkAimSpeed"
+
+    static var current: AimSpeed {
+        AimSpeed(rawValue: UserDefaults.standard.string(forKey: key) ?? "") ?? .snap
+    }
+
+    var degreesToEdge: Double {
+        switch self {
+        case .relaxed: return 12
+        case .fast: return 7
+        case .snap: return 4.5
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .relaxed: return "Relaxed"
+        case .fast: return "Fast"
+        case .snap: return "Snap"
+        }
+    }
+}
+
+final class GunAim {
+    private let motion = CMMotionManager()
+    private var smoothedRateX = 0.0, smoothedRateY = 0.0
+    private var cursorX = 0.0, cursorY = 0.0
+    /// How far past the clamp the wrist has pushed, in the same
+    /// normalised units as the cursor. Only outward pressure while
+    /// pinned at an edge accumulates here; the moment the aim comes
+    /// back inside, it drains. Crossing the threshold is what "off the
+    /// screen" means, so a hair of overshoot on an edge target never
+    /// reads as a reload, and a deliberate sweep past the bezel does.
+    private var overshoot = 0.0
+    private let offscreenThreshold = 0.35
+    private(set) var isOffscreen = false
+    /// Fired on the edge in and out, so the wire only carries changes.
+    var offscreenChanged: ((Bool) -> Void)?
+    /// Aim history for the trigger rewind, ~a quarter second of it.
+    private var history: [(t: Double, x: Double, y: Double)] = []
+    /// Degrees of wrist that span half the screen. The lab's 14 was
+    /// tuned for a cursor; a gun is snapped between targets, not
+    /// steered, and at 14 Marcus's verdict was "way too slow for being
+    /// a gun". 7 doubles the speed; the velocity-scaled gain below
+    /// already makes fast flicks faster still.
+    var degreesToEdge = AimSpeed.current.degreesToEdge
+    /// Continuous aim out, ~60Hz, down = false.
+    var aim: ((Double, Double) -> Void)?
+
+    func start() {
+        guard motion.isDeviceMotionAvailable, !motion.isDeviceMotionActive else { return }
+        cursorX = 0; cursorY = 0
+        smoothedRateX = 0; smoothedRateY = 0
+        history.removeAll()
+        motion.deviceMotionUpdateInterval = 1.0 / 60.0
+        motion.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: .main) { [weak self] m, _ in
+            guard let self, let m else { return }
+            let g = m.gravity
+            let sweep = m.rotationRate.x * g.x + m.rotationRate.y * g.y + m.rotationRate.z * g.z
+            let dt = 1.0 / 60.0
+            let alpha = 0.35
+            smoothedRateX += alpha * (sweep - smoothedRateX)
+            smoothedRateY += alpha * (-m.rotationRate.x - smoothedRateY)
+            let speed = (smoothedRateX * smoothedRateX + smoothedRateY * smoothedRateY).squareRoot()
+            let gain = (9.0 / max(degreesToEdge, 3)) * (1 + min(speed, 6) * 0.45)
+            let rawX = cursorX + smoothedRateX * gain * dt
+            cursorX = min(1, max(-1, rawX))
+            // 1.7x: the screen is half as tall as it is wide, and equal
+            // normalized gains made the same wrist arc cover far less
+            // picture vertically.
+            let rawY = cursorY + smoothedRateY * gain * 1.7 * dt
+            cursorY = min(1, max(-1, rawY))
+            // The reload gesture: the cabinet's own, shoot past the
+            // screen. Pressure past the clamp accumulates; aim inside
+            // drains it fast, so the state never lingers after the gun
+            // swings back onto the picture.
+            let outward = max(abs(rawX), abs(rawY)) - 1
+            overshoot = outward > 0 ? overshoot + outward : max(0, overshoot - 0.15)
+            let off = overshoot > offscreenThreshold
+            if off != isOffscreen {
+                isOffscreen = off
+                offscreenChanged?(off)
+            }
+            let now = Date.timeIntervalSinceReferenceDate as Double
+            history.append((now, cursorX, cursorY))
+            if history.count > 20 { history.removeFirst(history.count - 20) }
+            aim?(cursorX, cursorY)
+        }
+    }
+
+    func stop() { motion.stopDeviceMotionUpdates() }
+
+    /// Wherever the phone points right now becomes the centre of the
+    /// screen. Rate control has no absolute reference, so this is not a
+    /// calibration, it is a declaration, and it is instant. The lab
+    /// called recentring a first-class control; this is that control.
+    func recenter() {
+        cursorX = 0; cursorY = 0
+        smoothedRateX = 0; smoothedRateY = 0
+        overshoot = 0
+        if isOffscreen { isOffscreen = false; offscreenChanged?(false) }
+        history.removeAll()
+        aim?(0, 0)
+    }
+
+    /// Where the gun was pointed just before the finger landed.
+    func rewoundAim() -> (Double, Double) {
+        let target = Date.timeIntervalSinceReferenceDate - 0.07
+        let past = history.last { $0.t <= target } ?? history.first
+        guard let past else { return (cursorX, cursorY) }
+        return (past.x, past.y)
+    }
+}
+
+/// The phone as the cabinet's control panel, for a game running on the
+/// television.
+///
+/// Deliberately almost nothing: the television says which romset it is
+/// running, the same resolution chain the local player uses turns that
+/// into a panel, and the same TouchControlPad draws it. The only
+/// difference from playing locally is where the five verbs go, which is
+/// the entire point: the panel work and the accessory feature are one
+/// thing, and everything fixed on one is fixed on the other.
+///
+/// DEBUG scaffolding, reached by launch argument only, like the aim lab
+/// it borrows its transport from. The shipping entry is the Home offer.
+struct ControllerPadView: View {
+    @StateObject private var link = ControllerLinkSender()
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dismiss) private var dismiss
+    /// The Menu pill's question. Putting the phone down mid-game is the
+    /// touch equivalent of unplugging a controller, so it takes a
+    /// deliberate answer, never a stray tap or a swipe.
+    @State private var confirmingExit = false
+    /// Tilt steering on the driving cabinets: default off, wheel by
+    /// touch, exactly as Marcus specced it. Persisted because a person
+    /// who steers by tilt steers by tilt every session.
+    @AppStorage("com.mmagtech.RommApp.linkTiltSteering") private var tiltSteering = false
+    @State private var tilt = TiltSteering()
+    /// The gun is the phone by default: pointing at the television IS
+    /// the feature, per Marcus. The toggle drops back to touch aiming
+    /// for a couch angle the gyro cannot serve.
+    @AppStorage("com.mmagtech.RommApp.linkGyroGun") private var gyroGun = true
+    @State private var gunAim = GunAim()
+    @State private var triggerHeld = false
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            if let shortname = link.shortname {
+                pad(for: shortname)
+            } else {
+                VStack(spacing: 12) {
+                    ProgressView()
+                    Text(link.status)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .statusBarHidden()
+        .onAppear {
+            OrientationLock.lockToLandscape()
+            link.start()
+        }
+        // Let the rotation settle into a landscape, then pin that exact
+        // one so tilt steering cannot flip the interface mid-corner.
+        .task {
+            try? await Task.sleep(for: .seconds(1))
+            OrientationLock.pinCurrentLandscape()
+        }
+        .onDisappear {
+            OrientationLock.unlock()
+            tilt.stop()
+            gunAim.stop()
+            link.stop()
+        }
+        .onChange(of: tiltSteering) { _, on in
+            if on { tilt.send = { [weak link] dx in link?.relative(dx: dx, dy: 0) }; tilt.start() }
+            else { tilt.stop() }
+        }
+        // Backgrounding kills the UDP flow. Coming back must reconnect
+        // by itself: Marcus switched apps on the first live run and came
+        // back to a dead panel, which reads as the feature breaking, not
+        // as a network event.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { link.wake() }
+        }
+        .confirmationDialog(
+            "Paused", isPresented: $confirmingExit, titleVisibility: .visible
+        ) {
+            // Every road out of this menu resumes the game except the
+            // one that also resumes it: putting the panel away leaves
+            // the game running on the television, ready for the remote
+            // or for this phone to come back.
+            Button("Save State") {
+                link.saveState()
+                link.pause(false)
+            }
+            Button("Load Latest State") {
+                link.loadState()
+                link.pause(false)
+            }
+            Button("Put Away Controller", role: .destructive) {
+                link.pause(false)
+                dismiss()
+            }
+            Button("Resume", role: .cancel) {
+                link.pause(false)
+            }
+        }
+    }
+
+    /// A complete off-screen shot as one press: flag up, trigger pull,
+    /// trigger release, flag down, with enough frames between each for
+    /// the core to sample every state. The core reads the flag through
+    /// osd_xy_device_read on the same poll that reads the trigger, so
+    /// the ordering is what makes it a reload and not a stray shot.
+    private func fireOffscreenShot() {
+        let (x, y) = gunAim.rewoundAim()
+        link.offscreen(true)
+        link.pointer(x: x, y: y, down: true)
+        Task {
+            try? await Task.sleep(for: .milliseconds(100))
+            link.pointer(x: x, y: y, down: false)
+            try? await Task.sleep(for: .milliseconds(50))
+            link.offscreen(false)
+        }
+    }
+
+    /// Aim streams continuously with the trigger up, so the game's own
+    /// crosshair tracks the phone even between shots.
+    private func startGunAim() {
+        gunAim.degreesToEdge = AimSpeed.current.degreesToEdge
+        gunAim.aim = { [weak link] x, y in link?.pointer(x: x, y: y, down: false) }
+        gunAim.offscreenChanged = { [weak link] off in link?.offscreen(off) }
+        gunAim.start()
+    }
+
+    private func pad(for shortname: String) -> some View {
+        // The television is running MAME (the arcade receiver only
+        // starts there), so resolve against that core's own data, the
+        // same call NativePlayerView makes.
+        let profile = ArcadeProfileStore.shared.resolve(
+            shortname: shortname, using: .mame2003Plus)
+        let analog = AnalogControls.controls(forShortname: shortname)
+        // The companion arrangement, not the local player's: those
+        // layouts share their screen with the picture, and stretching
+        // one over a phone with no picture put a tiny trackball in a
+        // corner of a black expanse.
+        let layout = ArcadeLayout.companion(for: profile, analog: analog)
+        let isDriving = (analog?.pedals ?? 0) > 0
+        let isGun = (analog?.lightgun ?? 0) > 0
+        // Air mode is a pistol grip: the phone stands upright, so it
+        // gets its own portrait interface rather than the landscape
+        // panel read sideways. Everything below is the touch panel.
+        if isGun && gyroGun {
+            return AnyView(airGunView(layout: layout))
+        }
+        return AnyView(GeometryReader { _ in
+            TouchControlPad(
+                items: layout.items(landscape: true),
+                send: { id, down in
+                    // Menu pauses the game and opens the panel's own
+                    // menu: a deliberately smaller one than the
+                    // television's. Save, load, put away, resume.
+                    if id == RetroPad.overlay {
+                        if down {
+                            link.pause(true)
+                            confirmingExit = true
+                        }
+                        return
+                    }
+                    link.button(id, down: down)
+                },
+                sendStick: { _, x, y in link.stick(x: x, y: y) },
+                sendRelative: { dx, dy in link.relative(dx: dx, dy: dy) },
+                sendPointer: { x, y, down in
+                    // Gyro gun: the touch is only the trigger. Its
+                    // position on the phone means nothing; the aim is
+                    // where the phone points, rewound past the tap's
+                    // own nudge. Touch aiming is the fallback mode.
+                    if isGun && gyroGun {
+                        let (ax, ay) = gunAim.rewoundAim()
+                        link.pointer(x: ax, y: ay, down: down)
+                    } else {
+                        link.pointer(x: x, y: y, down: down)
+                    }
+                },
+                sendOffscreen: { off in link.offscreen(off) },
+                system: "arcade:\(shortname)",
+                opacity: 1.0
+            )
+        }
+        // The safe area stays respected on purpose: ignoring it put the
+        // wheel under the camera housing in landscape. The black ground
+        // behind the pad still bleeds edge to edge; only the controls
+        // keep clear of hardware.
+        .overlay(alignment: .top) {
+            // Only the driving cabinets get the choice; everything else
+            // has no wheel for the phone to be.
+            if isDriving || isGun {
+                HStack(spacing: 10) {
+                    Button {
+                        if isGun { gyroGun.toggle() } else { tiltSteering.toggle() }
+                    } label: {
+                        Label(
+                            isGun ? (gyroGun ? "Aiming with the phone" : "Aiming by touch")
+                                  : (tiltSteering ? "Tilt On" : "Tilt Off"),
+                            systemImage: (isGun ? gyroGun : tiltSteering)
+                                ? "iphone.gen3.radiowaves.left.and.right" : "iphone.gen3")
+                            .font(.footnote.weight(.semibold))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(.thinMaterial, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    // Point at the middle of the television, press this,
+                    // and the aim is true from that moment. The same
+                    // move enabling air mode makes implicitly; here it
+                    // is on demand, because a couch shifts.
+                    if isGun && gyroGun {
+                        Button {
+                            gunAim.recenter()
+                        } label: {
+                            Label("Recenter", systemImage: "scope")
+                                .font(.footnote.weight(.semibold))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(.thinMaterial, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        // The insurance next to the gesture: one press
+                        // is a complete off-screen shot. The gesture
+                        // (sweep past the bezel and fire) is the
+                        // cabinet's own and stays primary; this is for
+                        // certainty under fire, when an edge enemy and
+                        // a reload must not be one flick apart.
+                        Button {
+                            fireOffscreenShot()
+                        } label: {
+                            Label("Reload", systemImage: "arrow.trianglehead.2.counterclockwise")
+                                .font(.footnote.weight(.semibold))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(.thinMaterial, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.top, 6)
+            }
+        }
+        .onAppear {
+            if isDriving && tiltSteering {
+                tilt.send = { [weak link] dx in link?.relative(dx: dx, dy: 0) }
+                tilt.start()
+            }
+            if isGun && gyroGun { startGunAim() }
+        }
+        .onChange(of: gyroGun) { _, on in
+            if isGun && on { startGunAim() } else { gunAim.stop() }
+        })
+    }
+
+    /// The gun's own interface: portrait, upright, one honest trigger.
+    ///
+    /// Everything the landscape panel scattered is rethought for one
+    /// hand: the lower half of the screen is a single marked trigger
+    /// where the thumb already rests, the game's other buttons sit in a
+    /// row above it, and the service controls shrink to the top. The
+    /// first air-mode run reused the landscape panel and Marcus's
+    /// review was exact: everything sideways, and the trigger only ever
+    /// found by accident.
+    private func airGunView(layout: ControlLayout) -> some View {
+        let extras = layout.items(landscape: true).filter {
+            $0.kind == .button && $0.input != RetroPad.b
+        }
+        return VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                ForEach(["Coin": RetroPad.select, "Start": RetroPad.start].sorted(by: { $0.key < $1.key }), id: \.key) { name, id in
+                    Button {
+                        link.button(id, down: true)
+                        Task { try? await Task.sleep(for: .milliseconds(60)); link.button(id, down: false) }
+                    } label: {
+                        Text(name)
+                            .font(.footnote.weight(.semibold))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(.thinMaterial, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+                Button {
+                    link.pause(true)
+                    confirmingExit = true
+                } label: {
+                    Text("Menu")
+                        .font(.footnote.weight(.semibold))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(.thinMaterial, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.top, 10)
+
+            HStack(spacing: 8) {
+                Button { gyroGun = false } label: {
+                    Label("Touch aim", systemImage: "hand.point.up.left")
+                        .font(.footnote.weight(.semibold))
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .background(.thinMaterial, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                Button { gunAim.recenter() } label: {
+                    Label("Recenter", systemImage: "scope")
+                        .font(.footnote.weight(.semibold))
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .background(.thinMaterial, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                Button { fireOffscreenShot() } label: {
+                    Label("Reload", systemImage: "arrow.trianglehead.2.counterclockwise")
+                        .font(.footnote.weight(.semibold))
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .background(.thinMaterial, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.top, 8)
+
+            Spacer(minLength: 12)
+
+            // The game's other buttons: grenade and friends, one row,
+            // big enough to hit without looking down.
+            if !extras.isEmpty {
+                HStack(spacing: 18) {
+                    ForEach(Array(extras.enumerated()), id: \.offset) { _, item in
+                        if let id = item.input {
+                            Button {
+                                link.button(id, down: true)
+                                Task { try? await Task.sleep(for: .milliseconds(60)); link.button(id, down: false) }
+                            } label: {
+                                Text(item.label ?? "")
+                                    .font(.title2.weight(.bold))
+                                    .frame(width: 84, height: 84)
+                                    .background(.thinMaterial, in: Circle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .padding(.bottom, 14)
+            }
+
+            // The trigger. Half the screen, labelled, under the thumb.
+            // Press fires at the rewound aim; holding holds the trigger,
+            // which is what an automatic weapon in these games wants.
+            Rectangle()
+                .fill(.white.opacity(0.06))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24)
+                        .strokeBorder(.white.opacity(0.18), lineWidth: 1)
+                        .padding(8)
+                )
+                .overlay(
+                    Label("Fire", systemImage: "target")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                )
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { _ in
+                            guard !triggerHeld else { return }
+                            triggerHeld = true
+                            let (x, y) = gunAim.rewoundAim()
+                            link.pointer(x: x, y: y, down: true)
+                        }
+                        .onEnded { _ in
+                            triggerHeld = false
+                            let (x, y) = gunAim.rewoundAim()
+                            link.pointer(x: x, y: y, down: false)
+                        }
+                )
+                .frame(height: UIScreen.main.bounds.height * 0.42)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 12)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black)
+        // The gyro's lifecycle lives HERE now, not on the landscape
+        // branch: when this view took over air mode, the start call
+        // stayed behind on a branch that no longer renders, so the aim
+        // stream never began. No stream, no crosshair movement on the
+        // television, and every shot landed dead centre. Found by
+        // Marcus asking where the crosshair went.
+        .onAppear {
+            OrientationLock.lockToPortrait()
+            startGunAim()
+        }
+        .onDisappear {
+            OrientationLock.lockToLandscape()
+            gunAim.stop()
+            // Same pin as the panel's own appearance, for the trip back
+            // from air mode.
+            Task {
+                try? await Task.sleep(for: .seconds(1))
+                OrientationLock.pinCurrentLandscape()
+            }
+        }
+    }
+}
+
+#endif

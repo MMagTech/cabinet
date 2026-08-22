@@ -14,6 +14,9 @@ struct SettingsView: View {
     @AppStorage(ControlTheme.key) private var controlTheme = ControlTheme.system.rawValue
     @AppStorage(PlayerAutosave.key) private var autosaveEnabled = true
     @AppStorage(PlatformLabelSource.key) private var platformLabelSourceRaw = PlatformLabelSource.platformName.rawValue
+    #if DEBUG
+    @AppStorage(AimSpeed.key) private var aimSpeedRaw = AimSpeed.snap.rawValue
+    #endif
     @ObservedObject private var controllers = GameControllerManager.shared
 
     var body: some View {
@@ -99,6 +102,20 @@ struct SettingsView: View {
             } footer: {
                 Text("Web player only. Save states in the native player are manual.")
             }
+
+            #if DEBUG
+            Section {
+                Picker("Aim speed", selection: $aimSpeedRaw) {
+                    ForEach(AimSpeed.allCases, id: \.self) { speed in
+                        Text(speed.label).tag(speed.rawValue)
+                    }
+                }
+            } header: {
+                Text("Lightgun")
+            } footer: {
+                Text("How far a flick of the wrist moves the aim. Recenter lives on the controller itself.")
+            }
+            #endif
 
             Section {
                 Picker("Platform names", selection: $platformLabelSourceRaw) {

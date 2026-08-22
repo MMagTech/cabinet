@@ -26,6 +26,36 @@ enum OrientationLock {
         apply()
     }
 
+    /// Landscape regardless of how the phone is held right now: the
+    /// phone-as-controller panel is a cabinet control panel, and a
+    /// cabinet has one orientation. Accepting the offer in portrait
+    /// rotates the panel in rather than drawing a portrait one.
+    static func lockToLandscape() {
+        mask = .landscape
+        apply()
+    }
+
+    /// The pistol grip: the phone stands upright when it is the gun, so
+    /// air mode's interface is portrait and locks there.
+    static func lockToPortrait() {
+        mask = .portrait
+        apply()
+    }
+
+    /// One exact landscape orientation, not the family. The family lock
+    /// keeps the 180 flip, which is right for a phone lying in front of
+    /// someone, and wrong for one being rolled as a steering wheel:
+    /// tilt steering sweeps through exactly the angle iOS reads as
+    /// "turned around", the UI flipped mid-corner, and the Gas pedal
+    /// changed sides under Marcus's thumb. Called once the orientation
+    /// has settled, it pins whichever landscape the panel opened in.
+    static func pinCurrentLandscape() {
+        guard let orientation = activeScene?.interfaceOrientation,
+              orientation.isLandscape else { return }
+        mask = orientation == .landscapeLeft ? .landscapeLeft : .landscapeRight
+        apply()
+    }
+
     static func unlock() {
         mask = .all
         apply()
