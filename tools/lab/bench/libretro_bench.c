@@ -64,6 +64,8 @@ static int g_dump_at[8]; static int g_dump_count = 0;
 // let a run walk itself into an attract demo or past a start prompt.
 #define MAX_PRESSES 32
 static struct { int frame, id, hold; } g_press[MAX_PRESSES];
+static int g_mouse_dx = 0;
+static int g_mouse_from = 0;
 static int g_press_count = 0;
 static int g_warmup = 0;
 
@@ -119,6 +121,49 @@ static void dump_ppm(const char *path, const void *data, unsigned width, unsigne
     fclose(f);
 }
 
+// Panel mode: ask the core itself what this game reads, rather than
+// inferring it from a listxml generation that may not match the binary.
+// Off by default and answered nowhere else, so an ordinary bench run
+// still mirrors LibretroFrontend.mm case for case.
+// MAME 2003-Plus works out the whole panel for itself when it loads a
+// game: which analog mechanism the cabinet had, how many buttons, how
+// many players, how many directions the stick allowed. It keeps that in
+// the exported "options" struct as content_flags, and reading it is the
+// difference between asking the machine and guessing from a listxml.
+//
+// The offset is the three mame_file pointers that precede the array in
+// struct GameOptions (src/mame.h). Hardcoded rather than shared, because
+// the alternative is compiling the lab against core internals; the
+// sanity check below is what keeps a silent layout change from turning
+// into silent nonsense.
+#define CONTENT_FLAGS_OFFSET 24
+enum {
+    CF_VECTOR = 4, CF_DIAL = 5, CF_TRACKBALL = 6, CF_LIGHTGUN = 7,
+    CF_PADDLE = 8, CF_AD_STICK = 9, CF_HAS_PEDAL = 12, CF_HAS_PEDAL2 = 13,
+    CF_ALTERNATING = 14, CF_ROTATE_JOY_45 = 16, CF_PLAYER_COUNT = 17,
+    CF_CTRL_COUNT = 18, CF_DUAL_JOYSTICK = 19, CF_BUTTON_COUNT = 20,
+    CF_LIGHTGUN_COUNT = 21, CF_JOY_DIRECTIONS = 22, CF_COUNT = 25
+};
+
+static int g_panel = 0;
+
+struct desc_row { unsigned port, device, index, id; char text[128]; };
+#define MAX_DESCS 256
+static struct desc_row g_descs[MAX_DESCS];
+static int g_desc_count = 0;
+
+static const char *device_name(unsigned d) {
+    switch (d & RETRO_DEVICE_MASK) {
+    case RETRO_DEVICE_JOYPAD:   return "joypad";
+    case RETRO_DEVICE_MOUSE:    return "mouse";
+    case RETRO_DEVICE_KEYBOARD: return "keyboard";
+    case RETRO_DEVICE_LIGHTGUN: return "lightgun";
+    case RETRO_DEVICE_ANALOG:   return "analog";
+    case RETRO_DEVICE_POINTER:  return "pointer";
+    default:                    return "none";
+    }
+}
+
 static void log_cb(enum retro_log_level level, const char *fmt, ...) {
     (void)level; (void)fmt;
 }
@@ -165,6 +210,23 @@ static bool env_cb(unsigned cmd, void *data) {
     }
     case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE:
         *(bool *)data = false; return true;
+    case RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS: {
+        // The app does not answer this, so neither does a normal run.
+        if (!g_panel) return false;
+        const struct retro_input_descriptor *d =
+            (const struct retro_input_descriptor *)data;
+        if (!d) return false;
+        // The core republishes the whole set on every port assignment,
+        // so keep the latest rather than appending four copies of it.
+        g_desc_count = 0;
+        for (; d->description && g_desc_count < MAX_DESCS; d++) {
+            struct desc_row *row = &g_descs[g_desc_count++];
+            row->port = d->port; row->device = d->device;
+            row->index = d->index; row->id = d->id;
+            snprintf(row->text, sizeof(row->text), "%s", d->description);
+        }
+        return true;
+    }
     default:
         return false;
     }
@@ -211,6 +273,15 @@ static size_t audio_batch_cb(const int16_t *data, size_t frames) {
 static void input_poll_cb(void) {}
 static int16_t input_state_cb(unsigned port, unsigned device, unsigned index, unsigned id) {
     (void)index;
+    // A steady mouse drift, for asking whether a declared dial does
+    // anything. Several drivers declare analog ports their game never
+    // reads (the Taito F3 board declares dials once for forty games),
+    // and no amount of reading data files settles that. Turning the
+    // knob and watching the screen does.
+    if (g_mouse_dx && device == RETRO_DEVICE_MOUSE && g_frame_index >= g_mouse_from) {
+        if (id == RETRO_DEVICE_ID_MOUSE_X) return (int16_t)g_mouse_dx;
+        if (id == RETRO_DEVICE_ID_MOUSE_Y) return 0;
+    }
     if (port != 0 || device != RETRO_DEVICE_JOYPAD) return 0;
     for (int i = 0; i < g_press_count; i++) {
         if ((int)id == g_press[i].id &&
@@ -224,7 +295,7 @@ static int16_t input_state_cb(unsigned port, unsigned device, unsigned index, un
 
 int main(int argc, char **argv) {
     if (argc < 3) {
-        fprintf(stderr, "usage: %s <core.dylib> <rom> [-o key=value] [-f frames] [-s sysdir] [-d dumpdir] [-c out.csv]\n", argv[0]);
+        fprintf(stderr, "usage: %s <core.dylib> <rom> [-o key=value] [-f frames] [-s sysdir] [-d dumpdir] [-c out.csv] [-P] [-M dx,fromframe]\n", argv[0]);
         return 2;
     }
     const char *core_path = argv[1];
@@ -252,6 +323,10 @@ int main(int argc, char **argv) {
             snprintf(g_dump_dir, sizeof(g_dump_dir), "%s", argv[++i]);
         } else if (!strcmp(argv[i], "-c") && i + 1 < argc) {
             csv_path = argv[++i];
+        } else if (!strcmp(argv[i], "-M") && i + 1 < argc) {
+            sscanf(argv[++i], "%d,%d", &g_mouse_dx, &g_mouse_from);
+        } else if (!strcmp(argv[i], "-P")) {
+            g_panel = 1;
         } else if (!strcmp(argv[i], "-w") && i + 1 < argc) {
             g_warmup = atoi(argv[++i]);
         } else if (!strcmp(argv[i], "-i") && i + 1 < argc && g_press_count < MAX_PRESSES) {
@@ -298,6 +373,8 @@ int main(int argc, char **argv) {
     SYM(void_fn, retro_unload_game)
     SYM(void_fn, retro_run)
     SYM(av_fn, retro_get_system_av_info)
+    typedef void (*port_fn)(unsigned, unsigned);
+    port_fn retro_set_controller_port_device = (port_fn)dlsym(lib, "retro_set_controller_port_device");
     #undef SYM
 
     retro_set_environment(env_cb);
@@ -331,6 +408,22 @@ int main(int argc, char **argv) {
     if (!retro_load_game(&info)) {
         fprintf(stderr, "LOAD_FAILED\n");
         return 3;
+    }
+
+    // Assign a port device, exactly as NativeLauncher does after every
+    // load. This is not optional politeness: MAME 2003-Plus builds its
+    // whole OSD-code to MAME-input mapping in response, so a frontend
+    // that skips it gets a core that reads no input at all. The bench
+    // skipped it, which meant -i input scripting silently did nothing on
+    // this core: Arkanoid sat on its title screen reading CREDIT 0 while
+    // the harness pressed coin, and every run looked identical because
+    // every run was the same untouched attract loop. Panel mode assigns
+    // all four ports because the description covers every connected one.
+    if (retro_set_controller_port_device) {
+        unsigned ports = g_panel ? 4 : 2;
+        for (unsigned port = 0; port < ports; port++) {
+            retro_set_controller_port_device(port, RETRO_DEVICE_JOYPAD);
+        }
     }
 
     struct retro_system_av_info av = {0};
@@ -397,6 +490,44 @@ int main(int argc, char **argv) {
 
     double emulated_ms = measured_frames * 1000.0 / (g_fps > 0 ? g_fps : 60.0);
     double audio_expected = emulated_ms / 1000.0 * g_sample_rate;
+
+    // Panel mode reports what the core asked for and stops. One line per
+    // control the game actually reads, straight from the binary that will
+    // run it, which is the only source that cannot disagree with itself.
+    if (g_panel) {
+        const int *cf = NULL;
+        void *opts = dlsym(lib, "options");
+        if (opts) cf = (const int *)((const char *)opts + CONTENT_FLAGS_OFFSET);
+        // A wrong offset reads neighbouring memory and would look like
+        // data. Player and button counts have known bounds, so check them
+        // rather than trust the struct has not moved.
+        if (cf && (cf[CF_PLAYER_COUNT] < 0 || cf[CF_PLAYER_COUNT] > 8 ||
+                   cf[CF_BUTTON_COUNT] < 0 || cf[CF_BUTTON_COUNT] > 16)) {
+            fprintf(stderr, "content_flags look wrong, refusing to report them\n");
+            cf = NULL;
+        }
+        printf("PANEL\t%s\trotation=%u\twidth=%u\theight=%u\tdescs=%d\n",
+               rom_path, g_rotation, g_last_w, g_last_h, g_desc_count);
+        if (cf) {
+            printf("FLAGS\t%s\tplayers=%d\tctrls=%d\tbuttons=%d\tdirections=%d"
+                   "\tdial=%d\ttrackball=%d\tlightgun=%d\tguns=%d\tpaddle=%d\tadstick=%d"
+                   "\tpedal=%d\tpedal2=%d\tdualjoy=%d\talternating=%d\trotate45=%d\tvector=%d\n",
+                   rom_path, cf[CF_PLAYER_COUNT], cf[CF_CTRL_COUNT], cf[CF_BUTTON_COUNT],
+                   cf[CF_JOY_DIRECTIONS], cf[CF_DIAL], cf[CF_TRACKBALL], cf[CF_LIGHTGUN],
+                   cf[CF_LIGHTGUN_COUNT], cf[CF_PADDLE], cf[CF_AD_STICK], cf[CF_HAS_PEDAL],
+                   cf[CF_HAS_PEDAL2], cf[CF_DUAL_JOYSTICK], cf[CF_ALTERNATING],
+                   cf[CF_ROTATE_JOY_45], cf[CF_VECTOR]);
+        }
+        for (int i = 0; i < g_desc_count; i++) {
+            printf("DESC\t%s\t%u\t%s\t%u\t%u\t%s\n", rom_path,
+                   g_descs[i].port, device_name(g_descs[i].device),
+                   g_descs[i].index, g_descs[i].id, g_descs[i].text);
+        }
+        fflush(stdout);
+        retro_unload_game();
+        retro_deinit();
+        return 0;
+    }
 
     printf("{\n");
     printf("  \"core\": \"%s\",\n", core_path);
