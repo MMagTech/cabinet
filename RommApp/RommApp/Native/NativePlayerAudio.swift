@@ -50,6 +50,12 @@ final class NativePlayerAudio {
     /// and this project is MIT.
     private var isPrimed = false
 
+    /// Kept so the audio graph can be rebuilt, which it has to be
+    /// whenever the output hardware changes underneath it. See
+    /// `rebuildAfterConfigurationChange`.
+    private var sourceNode: AVAudioSourceNode?
+    private var renderFormat: AVAudioFormat?
+
     init() {
         ring = UnsafeMutablePointer<Int16>.allocate(capacity: capacity)
         ring.initialize(repeating: 0, count: capacity)
@@ -148,6 +154,39 @@ final class NativePlayerAudio {
 
         engine.attach(sourceNode)
         engine.connect(sourceNode, to: engine.mainMixerNode, format: format)
+        self.sourceNode = sourceNode
+        self.renderFormat = format
+        try? engine.start()
+
+        // AVAudioEngine tears its own graph down when the output hardware
+        // changes and does NOT restart itself: the connections go, the
+        // engine stops, and the game plays on in silence. Anything that
+        // moves the route triggers this, so without it audio was lost by
+        // starting AirPlay mid-game, and almost certainly by plugging in
+        // headphones or connecting AirPods mid-game too, which nobody had
+        // thought to try. Found 2026-08-22 when the picture moved to a
+        // television and the sound did not follow.
+        NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: .main
+        ) { [weak self] _ in
+            self?.rebuildAfterConfigurationChange()
+        }
+    }
+
+    /// Reconnects and restarts after the output hardware changed. The
+    /// core keeps producing into the ring throughout, so this only has to
+    /// put the graph back; nothing needs to be re-primed beyond the
+    /// callback's own starve handling, which already refills before
+    /// playing again.
+    private func rebuildAfterConfigurationChange() {
+        guard started, let sourceNode, let renderFormat else { return }
+        // The session can also have been deactivated by the route change,
+        // and reconnecting to a dead session silently produces nothing.
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+        try? AVAudioSession.sharedInstance().setActive(true)
+        engine.connect(sourceNode, to: engine.mainMixerNode, format: renderFormat)
         try? engine.start()
     }
 
