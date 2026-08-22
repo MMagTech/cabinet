@@ -147,6 +147,9 @@ struct NativePlayerView: View {
         renderer.paused = true
         menuStatus = nil
         menuVisible = true
+        // Say so on the television, which is still showing the frozen
+        // frame. Harmless with no television attached.
+        ExternalDisplay.shared.isPaused = true
         syncEngine().capturePauseSnapshot()
     }
 
@@ -173,6 +176,7 @@ struct NativePlayerView: View {
     private func closeMenu() {
         menuVisible = false
         renderer.paused = false
+        ExternalDisplay.shared.isPaused = false
     }
 
     var body: some View {
@@ -326,6 +330,7 @@ struct NativePlayerView: View {
             // that has already claimed it keeps it.
             if ExternalDisplay.shared.renderer === renderer {
                 ExternalDisplay.shared.renderer = nil
+                ExternalDisplay.shared.isPaused = false
             }
             // Guarded: if another game's view already claimed the
             // platform (lifecycle interleave), its claim stands.

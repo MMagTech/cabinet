@@ -37,6 +37,13 @@ final class ExternalDisplay: ObservableObject {
     /// takes over. See `NativePlayerView`.
     @Published var renderer: NativePlayerRenderer?
 
+    /// Whether the game is paused, so the television can say so. The
+    /// pause menu itself deliberately stays on the phone: a console puts
+    /// it on the screen because the controller has none, and this
+    /// controller has one you are already looking at. But a frozen frame
+    /// with no explanation reads as a crash to anyone else in the room.
+    @Published var isPaused = false
+
     /// Whether the picture should currently be on the television, which
     /// is both conditions at once and is the single thing the player
     /// branches on.
@@ -71,6 +78,17 @@ private struct ExternalGameScreen: View {
             if let renderer = external.renderer {
                 MetalGameView(renderer: renderer)
                     .ignoresSafeArea()
+                if external.isPaused {
+                    // The draw loop keeps presenting the last frame while
+                    // paused, so this dims that frame rather than covering
+                    // a black screen: the game is visibly still there,
+                    // waiting, the way a console pause looks.
+                    Color.black.opacity(0.55).ignoresSafeArea()
+                    Text("Paused")
+                        .font(.system(size: 72, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .shadow(radius: 12)
+                }
             } else {
                 VStack(spacing: 16) {
                     Image(systemName: "gamecontroller")
