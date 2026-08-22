@@ -125,7 +125,15 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         let config = UISceneConfiguration(
             name: nil, sessionRole: connectingSceneSession.role
         )
-        config.delegateClass = QuickActionSceneDelegate.self
+        // A television, over AirPlay or a cable, gets its own window
+        // showing the game and nothing else. Every other scene is the
+        // app itself and keeps the quick action delegate it always had.
+        // See ExternalDisplay.swift.
+        if connectingSceneSession.role == .windowExternalDisplayNonInteractive {
+            config.delegateClass = ExternalDisplaySceneDelegate.self
+        } else {
+            config.delegateClass = QuickActionSceneDelegate.self
+        }
         return config
     }
 }

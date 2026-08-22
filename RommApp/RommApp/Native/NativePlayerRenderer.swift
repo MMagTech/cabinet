@@ -29,6 +29,21 @@ struct MetalGameView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: MTKView, context: Context) {}
+
+    /// Stops this view driving the core the moment SwiftUI takes it out of
+    /// the hierarchy, rather than whenever it happens to be deallocated.
+    ///
+    /// Load-bearing for the external display: handing the picture to a
+    /// television removes the phone's view and creates one on the TV, and
+    /// for a moment both exist. An MTKView keeps its own display link
+    /// running until it is torn down, so without this the two would both
+    /// call `draw(in:)` and the core would advance twice per frame, at
+    /// double speed with doubled audio. Pausing and clearing the delegate
+    /// here makes the handover exact.
+    static func dismantleUIView(_ uiView: MTKView, coordinator: ()) {
+        uiView.isPaused = true
+        uiView.delegate = nil
+    }
 }
 
 private struct Vertex {

@@ -19,6 +19,8 @@ struct NativePlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var renderer = NativePlayerRenderer()
     @ObservedObject private var controllers = GameControllerManager.shared
+    /// Whether a television is showing the picture. See ExternalDisplay.swift.
+    @ObservedObject private var external = ExternalDisplay.shared
     @State private var previousControllerSend: ((Int, Int, Bool) -> Void)?
     @State private var previousControllerStick: ((Int, Float, Float) -> Void)?
     @State private var previousControllerMenu: (() -> Void)?
@@ -176,7 +178,11 @@ struct NativePlayerView: View {
     var body: some View {
         GeometryReader { geometry in
             let isLandscape = geometry.size.width > geometry.size.height
-            let showsControls = !controllers.isConnected
+            // With the picture on a television the phone is nothing but a
+            // control panel, so the pad shows even with a controller
+            // connected: a person holding a pad still needs the pause
+            // button, and there is no picture here for the pad to cover.
+            let showsControls = !controllers.isConnected || external.showsGameExternally
             // A gun cabinet aims at the picture, so its pad has to reach
             // the picture. In portrait the pad is normally a bottom strip
             // that cannot, which left gun games with no aim at all there.
@@ -184,11 +190,17 @@ struct NativePlayerView: View {
             let gunPanel = controlLayout.items.contains { $0.kind == .gun }
 
             ZStack {
-                if isLandscape || !showsControls || gunPanel {
+                if isLandscape || !showsControls || gunPanel || external.showsGameExternally {
                     // Full screen canvas, pad in the gutters (or hidden with a
                     // controller connected), matching PlayerView's .overlay case.
                     ZStack {
-                        MetalGameView(renderer: renderer)
+                        // Exactly one MTKView may hold this renderer at a
+                        // time. Two would run two draw loops and advance
+                        // the core twice a frame, so when the television
+                        // has the picture the phone draws none.
+                        if !external.showsGameExternally {
+                            MetalGameView(renderer: renderer)
+                        }
                         if showsControls {
                             TouchControlPad(items: layoutItems(landscape: isLandscape), send: handleInput, sendStick: handleStick, sendRelative: handleRelative, sendPointer: handlePointer, sendOffscreen: handleOffscreen, pictureAspect: renderer.displayAspect, system: controlLayout.system, opacity: controlOpacity)
                         }
@@ -213,8 +225,10 @@ struct NativePlayerView: View {
                     // already makes everywhere.
                     let padHeight = controlStripHeight * (1 + (controlLayout.headroom ?? 0))
                     ZStack(alignment: .top) {
-                        MetalGameView(renderer: renderer)
-                            .frame(height: max(geometry.size.height - controlStripHeight, 0))
+                        if !external.showsGameExternally {
+                            MetalGameView(renderer: renderer)
+                                .frame(height: max(geometry.size.height - controlStripHeight, 0))
+                        }
                         TouchControlPad(items: layoutItems(landscape: false), send: handleInput, sendStick: handleStick, sendRelative: handleRelative, sendPointer: handlePointer, sendOffscreen: handleOffscreen, pictureAspect: renderer.displayAspect, system: controlLayout.system, opacity: controlOpacity)
                             .frame(height: padHeight)
                             .frame(maxHeight: .infinity, alignment: .bottom)
@@ -251,6 +265,11 @@ struct NativePlayerView: View {
             GameControllerManager.shared.start()
             // N64 needs its own base bindings; see ControllerBindings.n64.
             GameControllerManager.shared.activePlatform = platform.rawValue
+            // Offer this game to a television if one is attached. Harmless
+            // when none is: the window that reads this does not exist, and
+            // showsGameExternally stays false, so the phone draws as it
+            // always has. See ExternalDisplay.swift.
+            ExternalDisplay.shared.renderer = renderer
             // Same as the webview player: a running game is being watched
             // even when nothing touches the screen, and with a physical
             // controller nothing ever does. Without this the screen dims
@@ -302,6 +321,12 @@ struct NativePlayerView: View {
         .onDisappear {
             FrameTrace.shared.end()
             UIApplication.shared.isIdleTimerDisabled = false
+            // Take the picture back off the television. Guarded the same
+            // way the platform claim below is, so a second game's view
+            // that has already claimed it keeps it.
+            if ExternalDisplay.shared.renderer === renderer {
+                ExternalDisplay.shared.renderer = nil
+            }
             // Guarded: if another game's view already claimed the
             // platform (lifecycle interleave), its claim stands.
             if GameControllerManager.shared.activePlatform == platform.rawValue {
