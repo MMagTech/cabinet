@@ -75,7 +75,17 @@ Dreamcast used to run at roughly 20fps with audio breaking up, and it was
 never the emulation speed. Cabinet was not applying any backpressure, so the
 core free-ran at up to five times real time and threw its audio away as
 static. That is fixed, along with two upstream bugs that made a second launch
-crash. Dreamcast now holds 60fps in normal play with clean sound.
+crash, and the emulated CPU is no longer underclocked eight times over by the
+core's own default.
+
+Treat Dreamcast as much improved rather than solved. Lighter games hold 60fps
+with clean sound, and the 2D shooters and fighters the console is full of
+should play well. Heavy 3D titles are still hard: Crazy Taxi measured 60fps
+in normal play and 30 in its busiest streets, up from 20, and Jet Grind Radio,
+Rush 2049, Re-Volt and Toy Commander are in the same class. The limit is the
+SH4 interpreter, which cannot use a just-in-time compiler on iOS, so this is
+a ceiling rather than a bug. There is a CPU speed setting if you want to trade
+stability for pace, and any game can be marked as not working.
 
 Nintendo 64 had been rendering at 640x480 against a documented default of
 320x240 because that setting was never answered. On Apple TV that took it

@@ -32,9 +32,18 @@ every one of them running natively on Apple TV.
 Dreamcast ran at roughly 20fps with breaking audio, and it was never the
 emulation speed. Cabinet applied no backpressure, so the core free-ran at up
 to five times real time and threw its own audio away as static. That is
-fixed, along with two upstream bugs that made a second launch crash.
-Dreamcast now holds 60fps in normal play with clean sound, dropping to 30 in
-the heaviest scenes.
+fixed, along with two upstream bugs that made a second launch crash, and the
+emulated CPU is no longer underclocked eight times over by the core's own
+default.
+
+Treat Dreamcast as much improved rather than solved, and expect less of it
+here than on the phone. Lighter games and the console's many 2D shooters and
+fighters should play well. Heavy 3D titles are still hard: Crazy Taxi measured
+60fps in normal play and 30 in its busiest streets, up from 20. This box is
+also fanless and throttles itself under sustained load, which is measured and
+real, so a long session can slow down where a short one did not. Its CPU speed
+default is set lower than the phone's for that reason, and any game can be
+marked as not working.
 
 Nintendo 64 had been rendering at 640x480 against a documented default of
 320x240, because that setting was never being answered. On Apple TV that took
