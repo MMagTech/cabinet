@@ -31,6 +31,25 @@ struct HomeView: View {
     #endif
     #if os(iOS)
     @State private var directLaunch: DirectLaunch?
+    #if DEBUG
+    /// The phone-as-controller offer. The scout watches for a television
+    /// on this network playing an arcade game and `tvPlaying` is the
+    /// romset it saw; the card renders only then, so a Home with no such
+    /// television is pixel-identical to one where this feature does not
+    /// exist. DEBUG scaffolding: the shipping offer learns presence from
+    /// RomM and appears only for a television paired to this account.
+    @StateObject private var linkScout = ControllerLinkScout()
+    /// Set at tap time and presented from a stable node. The first wiring
+    /// anchored the cover inside `if let playing`, and presenting it
+    /// fired Home's onDisappear, which stopped the scout, which cleared
+    /// `playing`, which removed the branch the cover was anchored to,
+    /// which dismissed the cover as it rose. The card then flickered
+    /// back as the scout restarted, the layout shifted, and the next tap
+    /// landed on the hero underneath: "clicking it just opens the game
+    /// launcher", exactly as reported.
+    @State private var controllerPadTarget: PadTarget?
+    private struct PadTarget: Identifiable { let id: String }
+    #endif
     #endif
     @State private var nativeDirectLaunch: NativeDirectLaunch?
     @State private var preparingResume = false
@@ -200,7 +219,17 @@ struct HomeView: View {
             // it fires on first appearance same as `.task` would, and again
             // every time navigation brings Home back into view, favoriting
             // included.
-            .onAppear { Task { await load() } }
+            .onAppear {
+                Task { await load() }
+                #if os(iOS) && DEBUG
+                linkScout.start()
+                #endif
+            }
+            #if os(iOS) && DEBUG
+            .fullScreenCover(item: $controllerPadTarget) { _ in
+                ControllerPadView()
+            }
+            #endif
             // Live, not just at the next natural reload: load() already
             // leaves recent/favorites untouched on a failed fetch (see
             // its own catch below), so re-running it the instant
@@ -274,6 +303,11 @@ struct HomeView: View {
 
     private func tallLayout(height: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 28) {
+            #if os(iOS) && DEBUG
+            if let playing = linkScout.playing {
+                controllerOffer(for: playing).padding(.horizontal, 20)
+            }
+            #endif
             if let hero = recent.first {
                 heroCard(for: hero, height: portraitHeroHeight(for: height), wide: false)
                     .padding(.horizontal, 20)
@@ -299,6 +333,45 @@ struct HomeView: View {
     /// gets its own top-to-bottom shape instead, full-width banner over
     /// full-width shelves, the same structure Home's own mockups settled
     /// on and the shape Apple's own TV app uses.
+    #if os(iOS) && DEBUG
+    /// The offer itself: named for what is true ("Centipede is on your
+    /// TV") with a single verb. Dismissal is deliberately absent from
+    /// this scaffold; the shipping card gets the per-television
+    /// dismissal the design settled.
+    private func controllerOffer(for shortname: String) -> some View {
+        // The library's own name for the game when it has one; the
+        // romset name is an honest fallback, not a mystery string.
+        let name = (recent + favorites).first {
+            $0.fsNameNoExt.lowercased() == shortname
+        }?.displayName ?? shortname
+
+        return Button {
+            controllerPadTarget = PadTarget(id: shortname)
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "appletv.fill")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(name) is on your TV")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text("Use this phone as the controls")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(14)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+    }
+    #endif
+
     private func wideLayout(height: CGFloat) -> some View {
         #if os(tvOS)
         // The chip is an overlay, not a sibling row that pushes
@@ -403,6 +476,18 @@ struct HomeView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    #if DEBUG
+                    // Landscape is the orientation a phone that was just
+                    // a controller is already in, so the offer that
+                    // matters most was the one missing here: it went
+                    // into the portrait column first and landscape
+                    // showed the hero as the top card instead, which
+                    // opened the launcher. Found by Marcus on the first
+                    // front-door run.
+                    if let playing = linkScout.playing {
+                        controllerOffer(for: playing).padding(.top, 20)
+                    }
+                    #endif
                     if recent.count > 1 {
                         rotationRow("Recent", Array(recent.dropFirst()), seeAll: .recentlyPlayed)
                     } else if loaded, recent.isEmpty {
@@ -567,6 +652,15 @@ struct HomeView: View {
             }
             .clipped()
             .clipShape(.rect(cornerRadius: 18))
+            // Hit area, not just pixels. `.clipped()` clips drawing and
+            // nothing else: the fill copy in the background overflows
+            // this frame hugely (tall art scaled to fill a wide card),
+            // and without an explicit shape the button's tappable area
+            // followed it, invisibly, far above and below the card. In
+            // portrait that swallowed taps on whatever sat next to the
+            // hero, discovered when the phone-as-controller offer card
+            // above it kept "opening the launcher" instead.
+            .contentShape(.rect(cornerRadius: 18))
             .shadow(radius: 10, y: 5)
         }
         .buttonStyle(.plain)
