@@ -16,6 +16,7 @@ import SwiftUI
 /// label is small and a large title earns its place. Here it is neither.
 struct TVLibraryView: View {
     @EnvironmentObject private var session: Session
+    @AppStorage(PlatformLabelSource.key) private var labelSourceRaw = PlatformLabelSource.platformName.rawValue
 
     @State private var platforms: [Platform] = []
     @State private var collections: [Collection] = []
@@ -369,9 +370,17 @@ struct TVLibraryView: View {
     /// itself properly on the launch screen.
     private var supported: [Platform] { platforms.filter { isSupported($0) && $0.romCount > 0 } }
 
+    /// The same choice LibraryView makes on iOS, honoring the same
+    /// Settings row: this predated the setting and hardcoded the
+    /// metadata-first order, which is why flipping the new tvOS row
+    /// visibly did nothing here.
     private func label(for platform: Platform) -> String {
         let metadata = platform.displayName.flatMap { $0.isEmpty ? nil : $0 }
-        return metadata ?? (platform.fsSlug.isEmpty ? platform.slug : platform.fsSlug)
+        let folder = platform.fsSlug.isEmpty ? nil : platform.fsSlug
+        switch PlatformLabelSource(rawValue: labelSourceRaw) ?? .platformName {
+        case .platformName: return metadata ?? folder ?? platform.slug
+        case .folderName: return folder ?? metadata ?? platform.slug
+        }
     }
 
     private func isSupported(_ platform: Platform) -> Bool {

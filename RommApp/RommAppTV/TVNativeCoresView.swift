@@ -29,9 +29,9 @@ struct TVNativeCoresView: View {
             // in the scroll content instead, same pattern every other
             // tvOS screen in this app already uses.
             VStack(alignment: .leading, spacing: 16) {
-                Text("Native cores")
+                Text("Cores")
                     .font(.largeTitle.weight(.bold))
-                Text("Options apply to every game on this platform, not just the one you're currently playing.")
+                Text("Options apply to every game on the platform.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .padding(.bottom, 8)

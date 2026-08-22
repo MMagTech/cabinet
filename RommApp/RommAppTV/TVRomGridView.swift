@@ -31,8 +31,15 @@ struct TVRomGridView: View {
     private var title: String {
         switch source {
         case .platform(let platform), .keptPlatform(let platform, _):
+            // The screen's own labelSource, computed a few lines up,
+            // was unused right here: the title hardcoded metadata-first
+            // while the rom captions below honored the setting.
             let metadata = platform.displayName.flatMap { $0.isEmpty ? nil : $0 }
-            return metadata ?? (platform.fsSlug.isEmpty ? platform.slug : platform.fsSlug)
+            let folder = platform.fsSlug.isEmpty ? nil : platform.fsSlug
+            switch labelSource {
+            case .platformName: return metadata ?? folder ?? platform.slug
+            case .folderName: return folder ?? metadata ?? platform.slug
+            }
         case .collection(let collection): return collection.name
         case .recentlyPlayed: return "Recent"
         }

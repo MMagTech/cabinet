@@ -26,6 +26,7 @@ struct TVSettingsView: View {
     /// Deliberately the iOS key, not a tvOS one: the core reads this exact
     /// name from Objective-C++, and it means the same thing on both.
     @AppStorage("com.mmagtech.RommApp.rumbleEnabled") private var rumbleEnabled = true
+    @AppStorage(PlatformLabelSource.key) private var labelSourceRaw = PlatformLabelSource.platformName.rawValue
 
     var body: some View {
         NavigationStack {
@@ -94,8 +95,13 @@ struct TVSettingsView: View {
                             TVNativeCoresView()
                         } label: {
                             actionRow(
-                                title: "Native cores",
-                                detail: "Speed and accuracy options for the cores that run natively",
+                                title: "Cores",
+                                // "run natively" contrasted with the
+                                // webview player, which exists on iOS
+                                // and not here: on this platform every
+                                // core is native, so the qualifier only
+                                // raised the question it answered.
+                                detail: "Speed and accuracy options for each emulator",
                                 chevron: true
                             )
                         }
@@ -118,8 +124,36 @@ struct TVSettingsView: View {
                             }
                         } label: {
                             actionRow(
-                                title: "Letterbox glow",
+                                title: "Glow",
                                 detail: "A soft light around the game picture. Currently \((BiasGlowLevel.level(fromStored: glowStored)).label.lowercased()).",
+                                chevron: false
+                            )
+                        }
+                        .buttonStyle(RowFocusStyle())
+                    }
+
+                    section("Library") {
+                        // The same choice iOS offers, in this screen's
+                        // own picker idiom (the Menu + row pattern the
+                        // Glow row established). One key, so a choice
+                        // made on either platform is only cosmetic per
+                        // device, never divergent data.
+                        Menu {
+                            ForEach(PlatformLabelSource.allCases, id: \.self) { source in
+                                Button {
+                                    labelSourceRaw = source.rawValue
+                                } label: {
+                                    if source.rawValue == labelSourceRaw {
+                                        Label(source.label, systemImage: "checkmark")
+                                    } else {
+                                        Text(source.label)
+                                    }
+                                }
+                            }
+                        } label: {
+                            actionRow(
+                                title: "Names",
+                                detail: "Sort by \((PlatformLabelSource(rawValue: labelSourceRaw) ?? .platformName).label.lowercased()).",
                                 chevron: false
                             )
                         }

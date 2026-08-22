@@ -30,7 +30,7 @@ struct ControllerRemapView: View {
                 hotkeyRow(label: "First button", value: hotkeyButtonA, slot: 0)
                 if let hotkeyButtonB {
                     hotkeyRow(label: "Second button", value: hotkeyButtonB, slot: 1)
-                    Button("Make single button", role: .destructive) {
+                    Button("Use one button") {
                         self.hotkeyButtonB = nil
                         MenuHotkey.save(buttonA: hotkeyButtonA, buttonB: nil)
                     }
@@ -51,8 +51,8 @@ struct ControllerRemapView: View {
                 Text("Menu hotkey · Either player")
             } footer: {
                 Text(hotkeyButtonB == nil
-                     ? "Press this button on either player's controller to open the menu."
-                     : "Hold both of these together, on either player's controller, to open the menu. Defaults to clicking both sticks, since that is not something any game here uses during real play.")
+                     ? "Press this button on either controller to open the menu."
+                     : "Hold both together, on either controller, to open the menu.")
             }
 
             if !controllers.isConnected {
@@ -69,7 +69,7 @@ struct ControllerRemapView: View {
                     }
                 } footer: {
                     if controllers.unsupportedController != nil {
-                        Text("iOS sees this controller but it does not present itself as a standard gamepad, so no app can read its buttons. Some controllers need a mode switch, often held at power on, to behave as one.")
+                        Text("This controller isn't presenting as a standard gamepad. Many have a mode switch, often held at power on.")
                     } else {
                         Text("Connect a controller to change its buttons. Settings are remembered per controller.")
                     }
@@ -86,11 +86,6 @@ struct ControllerRemapView: View {
                             controllers.applyBindings(preset.map)
                         } label: {
                             HStack(spacing: 10) {
-                                Image(systemName: controllers.matchesBindings(preset.map)
-                                      ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(controllers.matchesBindings(preset.map)
-                                                     ? AnyShapeStyle(.tint)
-                                                     : AnyShapeStyle(.tertiary))
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(preset.name)
                                         .foregroundStyle(.primary)
@@ -99,6 +94,11 @@ struct ControllerRemapView: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
+                                if controllers.matchesBindings(preset.map) {
+                                    Image(systemName: "checkmark")
+                                        .font(.body.weight(.semibold))
+                                        .foregroundStyle(.tint)
+                                }
                             }
                             .contentShape(.rect)
                         }
@@ -107,7 +107,7 @@ struct ControllerRemapView: View {
                 } header: {
                     Text("Six button fighters")
                 } footer: {
-                    Text("Punches across the top row, kicks across the bottom, matching the arcade panel. Editing any button below makes the arrangement custom.")
+                    Text("Punches on top, kicks below. Editing any button makes it custom.")
                 }
             }
 
@@ -145,7 +145,7 @@ struct ControllerRemapView: View {
                 // was invisible when a second controller could not exist at
                 // all. Player 2's bindings still resolve automatically from
                 // its own vendor name; there is no screen for editing them.
-                Text("Coin and Start matter most: without Coin an arcade game cannot start. This changes player 1's controller only; player 2's buttons are set automatically.")
+                Text("Without Coin an arcade game can't start. Player 1 only; player 2 is set automatically.")
             }
 
             if controllers.isConnected {
@@ -167,7 +167,7 @@ struct ControllerRemapView: View {
                 } header: {
                     Text("Buttons player 1's controller reports")
                 } footer: {
-                    Text("If a button you expect is missing here, this controller does not report it to iOS and no app can use it. Only player 1's controller is shown, since only player 1's buttons can be changed here.")
+                    Text("A button missing here is one this controller never reports, so no app can read it.")
                 }
 
                 Section {

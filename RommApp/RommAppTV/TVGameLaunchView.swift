@@ -98,10 +98,19 @@ struct TVGameLaunchView: View {
                     if let platform {
                         playButton(platform: platform)
                         statesSection
-                        if platform.cores.count > 1 {
-                            emulatorRow(platform: platform)
+                        // Side by side as equal capsules, not stacked
+                        // settings rows: RowFocusStyle is the full-width
+                        // row treatment, and two of them at their own
+                        // natural widths under a white pill read as
+                        // mismatched grey blobs (Marcus, from a photo of
+                        // the real screen). The capsule is this screen's
+                        // own secondary-action shape.
+                        HStack(spacing: 16) {
+                            if platform.cores.count > 1 {
+                                emulatorRow(platform: platform)
+                            }
+                            compatibilityRow
                         }
-                        compatibilityRow
                     } else {
                         // Every platform tvOS can't run lands here: no
                         // native core exists for it, and unlike iOS there
@@ -173,7 +182,7 @@ struct TVGameLaunchView: View {
                 .padding(.horizontal, 18)
                 .padding(.vertical, 10)
         }
-        .buttonStyle(RowFocusStyle())
+        .buttonStyle(TextFocusStyle())
     }
 
     @ViewBuilder
@@ -202,7 +211,7 @@ struct TVGameLaunchView: View {
                 .padding(.horizontal, 18)
                 .padding(.vertical, 10)
         }
-        .buttonStyle(RowFocusStyle())
+        .buttonStyle(TextFocusStyle())
     }
 
     @ViewBuilder
