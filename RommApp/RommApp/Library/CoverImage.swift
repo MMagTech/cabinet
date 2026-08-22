@@ -43,16 +43,26 @@ struct CoverImage: View {
                     // the whole cover stays visible, the cell keeps its
                     // shape, and the letterbox bars are the art's own
                     // colours instead of dead space. Same visual idea as
-                    // the launch screen's ambient backdrop, scaled and
-                    // blurred so the backdrop's edges never read as a
-                    // vignette. Box-shaped covers never take this
-                    // branch, so the library's common case renders
-                    // exactly as it always has.
-                    Image(uiImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .scaleEffect(1.3)
-                        .blur(radius: 12)
+                    // the launch screen's ambient backdrop.
+                    //
+                    // The backdrop lives in an .overlay on Color.clear,
+                    // never as a ZStack child, and that is load-bearing:
+                    // a fill-mode image REPORTS its enlarged size to
+                    // layout, not just draws it, so as a plain sibling
+                    // it grew the whole tile past its grid column and
+                    // pushed into the neighbouring tiles (seen on
+                    // device: The Coven's entire row bled together).
+                    // Overlay content contributes nothing to layout, so
+                    // the tile answers exactly the proposed cell and the
+                    // caller's clip catches the backdrop's overdraw.
+                    Color.clear
+                        .overlay(
+                            Image(uiImage: image)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .scaleEffect(1.3)
+                                .blur(radius: 12)
+                        )
                     Color.black.opacity(0.18)
                     Image(uiImage: image)
                         .resizable()
