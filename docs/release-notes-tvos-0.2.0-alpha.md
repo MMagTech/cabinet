@@ -100,6 +100,25 @@ emulators, including a shared Z80 between Neo Geo Pocket and Genesis, which
 was a real crash waiting to happen. Fixed and verified on hardware by running
 both of those systems back to back in a single session.
 
+## Known rough edges
+
+Three new cores landed the same day this was cut, and two of them got
+last-minute input fixes that have not been confirmed on hardware yet.
+
+- **Vectrex**: buttons may not respond. The cause was found and fixed, a
+  pixel conversion running on the CPU that delayed touch input, but the fix
+  is unverified. If a game will not start, that is why.
+- **3DO**: same situation, a separate fix for the controller ports not being
+  opened. Gex was the game that exposed it.
+- **3DO frame rate** has been measured thoroughly on a Mac but not on device.
+  It looked comfortable, but treat it as unproven. Any game can be marked as
+  not working if it is not.
+- **3DO saves** are verified writing and uploading to RomM. Loading a save
+  back has not been confirmed end to end.
+
+Everything else in this release has been used on real hardware. These four
+are first in line for the next one.
+
 ---
 
 This is an alpha. It is not signed, so you will need to build it yourself or
