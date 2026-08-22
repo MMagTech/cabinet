@@ -33,6 +33,205 @@ enum ArcadeLayout {
         return buildStandard(for: profile)
     }
 
+    /// The same cabinet, drawn for a phone that IS the panel.
+    ///
+    /// Every layout above shares its screen with the picture: portrait
+    /// items are normalised against a bottom strip, landscape items hug
+    /// the gutters beside a centred canvas. A phone driving a television
+    /// has no picture, and reusing those layouts stretched a 330 point
+    /// strip over a whole screen: a tiny trackball in a corner of a black
+    /// expanse, pill text taller than the pill. Marcus saw it on the
+    /// first live run and called it horrible, correctly.
+    ///
+    /// So the companion arrangement is its own geometry with one idea:
+    /// the mechanism is the point, so give it the space a cabinet gave
+    /// it. The analog control gets the left half at full height under
+    /// the resting thumb, buttons get the right at sizes a thumb cannot
+    /// miss, and the coin/start/menu row keeps the top. Ids and
+    /// sensitivities are identical to the local panels, so the wire and
+    /// the game cannot tell which layout produced a press.
+    static func companion(for profile: ArcadeProfile, analog: AnalogControls?) -> ControlLayout {
+        let analog = analog ?? AnalogControls()
+        var kinds: [ControlLayout.Item.Kind] = []
+        if (analog.rotary ?? 0) > 0 { kinds.append(.rotary) }
+        if (analog.trackball ?? 0) > 0 { kinds.append(.trackball) }
+        if (analog.dial ?? 0) > 0 || (analog.paddle ?? 0) > 0 { kinds.append(.spinner) }
+        let gun = (analog.lightgun ?? 0) > 0
+        let pedals = min(analog.pedals ?? 0, 2)
+        let hasStick: Bool = {
+            if let stated = analog.joystick { return stated != 0 }
+            if (analog.trackball ?? 0) > 0 { return false }
+            if kinds.contains(.rotary) { return false }
+            return profile.profile != "special"
+        }()
+        let buttons = max(0, min(profile.buttons, 6))
+
+        func rect(_ x: Double, _ y: Double, _ w: Double, _ h: Double, pad: Double = 0.02) -> (ControlLayout.Rect, ControlLayout.Rect) {
+            (ControlLayout.Rect(x: x, y: y, w: w, h: h),
+             ControlLayout.Rect(x: x - pad, y: y - pad, w: w + pad * 2, h: h + pad * 2))
+        }
+
+        // One builder for both orientations: the shapes are the same,
+        // only the axis that has room to spare differs.
+        func build(landscape: Bool) -> [ControlLayout.Item] {
+            var items: [ControlLayout.Item] = []
+
+            // The service row. Small on purpose: pressed a few times a
+            // session, and the game controls own everything below it.
+            let pillH = landscape ? 0.12 : 0.055
+            let pillY = landscape ? 0.04 : 0.045
+            for (label, input, x, w) in [
+                ("Coin", RetroPad.select, 0.03, 0.11),
+                ("Menu", RetroPad.overlay, 0.17, 0.13),
+                ("Start", RetroPad.start, landscape ? 0.84 : 0.72, 0.13),
+            ] {
+                let (f, e) = rect(x, pillY, w, pillH)
+                items.append(ControlLayout.Item(
+                    kind: .pill, label: label, input: input, inputs: nil,
+                    frame: f, extended: e, fourWay: nil))
+            }
+
+            // A gun panel is the exception to everything: the surface is
+            // the whole screen, buttons ride the bottom corners where
+            // thumbs already are while hands aim.
+            if gun {
+                items.append(ControlLayout.Item(
+                    kind: .gun, label: nil, input: nil, inputs: nil,
+                    frame: ControlLayout.Rect(x: 0, y: 0, w: 1, h: 1),
+                    extended: ControlLayout.Rect(x: 0, y: 0, w: 1, h: 1),
+                    fourWay: nil, sensitivity: nil))
+                let ids = [RetroPad.b, RetroPad.a, RetroPad.y]
+                for index in 0..<min(buttons, 3) {
+                    let w = landscape ? 0.10 : 0.20
+                    let h = landscape ? 0.20 : 0.10
+                    let x = index == 0 ? 0.03 : (1.0 - w - 0.03 - Double(index - 1) * (w + 0.02))
+                    let (f, e) = rect(x, 1.0 - h - 0.04, w, h)
+                    items.append(ControlLayout.Item(
+                        kind: .button, label: "\(index + 1)", input: ids[index], inputs: nil,
+                        frame: f, extended: e, fourWay: nil))
+                }
+                return items
+            }
+
+            // The left column: the movement control, at cabinet scale.
+            // Stick and analog both there when the machine had both,
+            // stacked; alone, whichever exists takes the full height.
+            // Landscape: mechanism left, buttons right, side by side.
+            // Portrait: mechanism top, buttons below, stacked. The first
+            // draft used the landscape split in both and the geometry
+            // check caught the mechanism drawn through button one in
+            // every portrait dial shape.
+            let top = landscape ? 0.22 : 0.155
+            let mechanism = kinds.first
+            // Pedals narrow the left column: they take the right edge
+            // and push the button block toward the middle, and the
+            // mechanism must not be under that block.
+            let leftW = landscape ? (pedals > 0 ? 0.32 : 0.42) : 0.60
+            if let mechanism, hasStick {
+                let (sf, se) = rect(0.04, top, landscape ? leftW * 0.55 : 0.44, landscape ? 0.44 : 0.20)
+                items.append(ControlLayout.Item(
+                    kind: .dpad, label: nil, input: nil, inputs: [4, 5, 6, 7],
+                    frame: sf, extended: se, fourWay: profile.isFourWay))
+                let (af, ae) = rect(0.04, top + (landscape ? 0.50 : 0.23), landscape ? leftW * 0.55 : 0.44, landscape ? 0.28 : 0.14)
+                items.append(ControlLayout.Item(
+                    kind: mechanism, label: nil, input: nil, inputs: nil,
+                    frame: af, extended: ae, fourWay: nil,
+                    sensitivity: mechanism == .spinner ? 768 : 300))
+            } else if let mechanism {
+                // The mechanism alone, as large as the screen allows. A
+                // rotary ring carries the direction ids for the tilt to
+                // assert, same as the local panel.
+                let h = landscape ? 0.68 : 0.34
+                let (f, e) = rect(0.05, top, landscape ? leftW : 0.90, h)
+                items.append(ControlLayout.Item(
+                    kind: mechanism, label: nil, input: nil,
+                    inputs: mechanism == .rotary ? [4, 5, 6, 7] : nil,
+                    frame: f, extended: e, fourWay: mechanism == .rotary ? false : nil,
+                    sensitivity: mechanism == .spinner ? 768 : (mechanism == .rotary ? 384 : 300)))
+            } else if hasStick || pedals > 0 {
+                // Plain stick, or a wheel-with-pedals cabinet whose wheel
+                // is the phone itself held like one.
+                let kind: ControlLayout.Item.Kind = (analog.axis ?? 0) > 0 || pedals > 0 && !hasStick ? .wheel : .dpad
+                let h = landscape ? 0.60 : 0.32
+                let (f, e) = rect(0.05, top + 0.02, landscape ? leftW * 0.85 : 0.54, h)
+                if kind == .dpad {
+                    items.append(ControlLayout.Item(
+                        kind: .dpad, label: nil, input: nil, inputs: [4, 5, 6, 7],
+                        frame: f, extended: e, fourWay: profile.isFourWay))
+                } else {
+                    items.append(ControlLayout.Item(
+                        kind: .wheel, label: nil, input: nil, inputs: nil,
+                        frame: f, extended: e, fourWay: nil, sensitivity: 500))
+                }
+            }
+
+            // Pedals: the right edge, tall, exactly where a resting
+            // right thumb sits, same R/L ids the core reads.
+            var buttonRight = landscape ? 0.96 : 0.94
+            if pedals > 0 {
+                // A pedal is held for whole races while the other hand
+                // tilts the phone, and tilting is exactly the motion
+                // that slides a resting thumb around the glass. So a
+                // pedal is the biggest single target on the panel, and
+                // its hit frame is padded further than anything else:
+                // Marcus's throttle finger slid off the first size mid
+                // corner. One pedal takes half the edge; two share it.
+                let w = landscape ? 0.14 : 0.18
+                let h = landscape ? (pedals == 1 ? 0.52 : 0.36) : 0.17
+                for (i, spec) in pedalSpecs(count: pedals).enumerated() {
+                    let y = (landscape ? (pedals == 1 ? 0.30 : 0.22) : 0.58) + Double(i) * (h + 0.06)
+                    let (f, e) = rect(1.0 - w - 0.02, y, w, h, pad: 0.035)
+                    items.append(ControlLayout.Item(
+                        kind: .pedal, label: spec.label, input: spec.input, inputs: nil,
+                        frame: f, extended: e, fourWay: nil))
+                }
+                buttonRight -= (w + 0.05)
+            }
+
+            // Buttons: the right block, big. One or two get huge single
+            // targets; more fall into the two-column grid every arcade
+            // player's hand already knows.
+            //
+            if buttons > 0 {
+                let ids = buttons <= 4 ? [RetroPad.b, RetroPad.a, RetroPad.y, RetroPad.x]
+                                       : [RetroPad.y, RetroPad.x, RetroPad.b, RetroPad.a, RetroPad.l, RetroPad.r]
+                let columns = buttons == 1 ? 1 : 2
+                let rows = (buttons + columns - 1) / columns
+                // Portrait buttons live below everything the left
+                // column drew; landscape beside it.
+                let areaTop = landscape ? 0.24 : 0.60
+                let areaH = landscape ? 0.68 : 0.36
+                let w = landscape ? (buttons == 1 ? 0.20 : 0.15) : (buttons == 1 ? 0.34 : 0.26)
+                let h = min((areaH - Double(rows - 1) * 0.04) / Double(rows), landscape ? 0.34 : 0.18)
+                for index in 0..<buttons {
+                    let row = index / columns
+                    let column = index % columns
+                    // On a driving cabinet the block anchors to the
+                    // WHEEL, not the far edge: the pedal owns that edge
+                    // under a holding thumb, and the first anchored-right
+                    // attempt left the boost stranded mid-screen, which
+                    // is what Marcus actually reported. The wheel ends at
+                    // 0.37; buttons start right where it does.
+                    let x = (pedals > 0 && landscape)
+                        ? 0.42 + Double(column) * (w + 0.06)
+                        : buttonRight - Double(columns - column) * (w + 0.03)
+                    let y = areaTop + Double(row) * (h + 0.04)
+                    let (f, e) = rect(x, y, w, h)
+                    items.append(ControlLayout.Item(
+                        kind: .button, label: "\(index + 1)", input: ids[index], inputs: nil,
+                        frame: f, extended: e, fourWay: nil))
+                }
+            }
+            return items
+        }
+
+        return ControlLayout(
+            system: "arcade:\(profile.profile):\(buttons)",
+            items: build(landscape: false),
+            landscapeItems: build(landscape: true),
+            headroom: nil)
+    }
+
     /// Assembles the cabinet's panel: the analog controls the driver
     /// declares, the joystick if the machine had one, and the buttons.
     ///

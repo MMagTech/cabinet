@@ -80,11 +80,19 @@ for shape in shapes {
         }
         let profile = ArcadeProfile(profile: shape.joystick ? "six_button" : "special",
                                     buttons: buttons, ways: "8", coins: 1, parent: nil, vertical: false)
-        let layout = ArcadeLayout.build(for: profile, analog: analog)
+        // Both geometries a shape can wear: beside the picture, and as
+        // the whole screen when the phone is the panel for a game on
+        // the television. The companion promises the same cleanliness.
+        let layouts = [("", ArcadeLayout.build(for: profile, analog: analog)),
+                       ("companion ", ArcadeLayout.companion(for: profile, analog: analog))]
+        for (prefix, layout) in layouts {
         for landscape in [false, true] {
-            let size = landscape ? CGSize(width: 844, height: 390) : CGSize(width: 390, height: 330)
+            // The companion owns the whole phone; the local pad's
+            // portrait items live in a 330 point strip.
+            let size = landscape ? CGSize(width: 844, height: 390)
+                : (prefix.isEmpty ? CGSize(width: 390, height: 330) : CGSize(width: 390, height: 844))
             let items = layout.items(landscape: landscape)
-            let at = "\(shape.name)/\(buttons)btn/\(landscape ? "landscape" : "portrait")"
+            let at = "\(prefix)\(shape.name)/\(buttons)btn/\(landscape ? "landscape" : "portrait")"
             for (i, item) in items.enumerated() {
                 for other in items[(i + 1)...] {
                     if item.kind == .dpad || other.kind == .dpad { continue }
@@ -103,6 +111,7 @@ for shape in shapes {
                     }
                 }
             }
+        }
         }
     }
 }
