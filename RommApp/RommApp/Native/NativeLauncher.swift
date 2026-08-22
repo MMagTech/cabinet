@@ -361,6 +361,15 @@ enum NativeLauncher {
             // prescribe for every new core.
             coreOptions["mame2003-plus_brightness"] = "1.0"
             coreOptions["mame2003-plus_gamma"] = "1.0"
+            // Fifth victim, found when Marcus asked whether the phone-
+            // as-lightgun should draw a crosshair: it already should
+            // have been. The core's own default is enabled, but the
+            // whole case is skipped when GET_VARIABLE goes unanswered,
+            // so the zero-initialised global won and drawgfx never drew
+            // one. With rate-control aiming the crosshair IS the aim,
+            // so without this the phone gun was aiming blind.
+            coreOptions["mame2003-plus_crosshair_enabled"] = "enabled"
+            coreOptions["mame2003-plus_crosshair_appearance"] = "simple"
         }
         LibretroFrontend.shared.setCoreOptions(coreOptions)
         let padDevice = NativeCoreOptionsStore.padDevice(for: platform)
