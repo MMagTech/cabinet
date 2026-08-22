@@ -78,6 +78,15 @@ vecx)
     PREFIX=vcx; REPO=https://github.com/libretro/libretro-vecx.git
     MAKEDIR=.; MAKEFILE=Makefile.libretro; OUT=Vecx; LIB=libvecx_ios.a
     MAKEARGS="HAS_GPU=0" ;;
+stella2014)
+    # The 2014 snapshot of Stella, not modern Stella: this vintage is
+    # the one libretro keeps as a light interpreter build, the same
+    # weight-class reasoning that picked ProSystem for the 7800. Its
+    # check_variables pre-seeds every global with the documented
+    # default before reading, so it has no zeroed-globals trap, but
+    # the frontend still answers its full table deliberately.
+    PREFIX=a26; REPO=https://github.com/libretro/stella2014-libretro.git
+    MAKEDIR=.; MAKEFILE=Makefile; OUT=Stella2014; LIB=libstella2014_ios.a ;;
 pcsx_rearmed)
     # platform=ios-arm64 (or tvos-arm64) forces DYNAREC=0 in this core's
     # own Makefile, a pure interpreter build, the same no-JIT exception

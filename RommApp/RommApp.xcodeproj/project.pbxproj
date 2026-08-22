@@ -63,6 +63,7 @@
 				Native/PicoDrive/libpicodrive_ios.a,
 				Native/ProSystem/libprosystem_ios.a,
 				Native/Saturn/libbeetle_saturn_ios.a,
+				Native/Stella2014/libstella2014_ios.a,
 				Native/Snes9x/libsnes9x_ios.a,
 				Native/Vecx/libvecx_ios.a,
 				Player/GameLaunchView.swift,
@@ -108,6 +109,7 @@
 				"Resources/ControlLayouts/arcade-twin5.json",
 				"Resources/ControlLayouts/arcade-twin6.json",
 				Resources/ControlLayouts/atari7800.json,
+				Resources/ControlLayouts/atari2600.json,
 				Resources/ControlLayouts/default.json,
 				Resources/ControlLayouts/dreamcast.json,
 				Resources/ControlLayouts/gamegear.json,
@@ -511,6 +513,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Mupen64Plus",
 					"$(PROJECT_DIR)/RommApp/Native/MAME2003Plus",
 					"$(PROJECT_DIR)/RommApp/Native/Vecx",
+					"$(PROJECT_DIR)/RommApp/Native/Stella2014",
 				);
 				MARKETING_VERSION = 0.1.0;
 				OTHER_LDFLAGS = "-lz";
@@ -638,6 +641,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Mupen64Plus",
 					"$(PROJECT_DIR)/RommApp/Native/MAME2003Plus",
 					"$(PROJECT_DIR)/RommApp/Native/Vecx",
+					"$(PROJECT_DIR)/RommApp/Native/Stella2014",
 				);
 				MARKETING_VERSION = 0.1;
 				OTHER_LDFLAGS = (
@@ -724,6 +728,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Mupen64Plus",
 					"$(PROJECT_DIR)/RommApp/Native/MAME2003Plus",
 					"$(PROJECT_DIR)/RommApp/Native/Vecx",
+					"$(PROJECT_DIR)/RommApp/Native/Stella2014",
 				);
 				MARKETING_VERSION = 0.1;
 				OTHER_LDFLAGS = (
@@ -907,6 +912,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Mupen64Plus",
 					"$(PROJECT_DIR)/RommApp/Native/MAME2003Plus",
 					"$(PROJECT_DIR)/RommApp/Native/Vecx",
+					"$(PROJECT_DIR)/RommApp/Native/Stella2014",
 				);
 				MARKETING_VERSION = 0.1;
 				OTHER_LDFLAGS = "-lz";

@@ -180,6 +180,8 @@ struct ControlLayout: Decodable {
             name = "ngpc"
         case "atari7800":
             name = "atari7800"
+        case "atari2600", "atari-2600-plus":
+            name = "atari2600"
         case "dc":
             name = "dreamcast"
         case "vectrex":

@@ -20,6 +20,7 @@ enum NativeCore {
     case mupen64Plus
     case mame2003Plus
     case vecx
+    case stella2014
 
     /// The frontend's identifier for the statically linked core.
     var coreID: LibretroCoreID {
@@ -40,6 +41,7 @@ enum NativeCore {
         case .mupen64Plus: return .mupen64Plus
         case .mame2003Plus: return .mame2003Plus
         case .vecx: return .vecx
+        case .stella2014: return .stella2014
         }
     }
 
@@ -68,6 +70,7 @@ enum NativeCore {
         case .mupen64Plus: return "mupen64plus-native"
         case .mame2003Plus: return "mame2003plus-native"
         case .vecx: return "vecx-native"
+        case .stella2014: return "stella2014-native"
         }
     }
 
@@ -91,6 +94,7 @@ enum NativeCore {
         case .mupen64Plus: return "mupen64Plus"
         case .mame2003Plus: return "mame2003Plus"
         case .vecx: return "vecx"
+        case .stella2014: return "stella2014"
         }
     }
 
@@ -116,6 +120,7 @@ enum NativeCore {
         case .flycast: return "Flycast"
         case .mupen64Plus: return "Mupen64Plus"
         case .vecx: return "vecx"
+        case .stella2014: return "Stella"
         }
     }
 
@@ -171,6 +176,7 @@ enum NativePlatform: String, CaseIterable {
     case dreamcast
     case n64
     case vectrex
+    case atari2600
 
     /// Every core that can run this platform, default first. Arcade is
     /// the only platform with a real set; everywhere else this is the
@@ -201,6 +207,7 @@ enum NativePlatform: String, CaseIterable {
         case .dreamcast: return .flycast
         case .n64: return .mupen64Plus
         case .vectrex: return .vecx
+        case .atari2600: return .stella2014
         }
     }
 
@@ -229,7 +236,9 @@ enum NativePlatform: String, CaseIterable {
         switch self {
         // vectrex: no Vectrex cartridge could save, and the core exposes
         // only RETRO_MEMORY_SYSTEM_RAM.
-        case .arcade, .atari7800, .dreamcast, .segaCD, .ngpc, .vectrex:
+        // atari2600: same as atari7800, no retail cartridge could save;
+        // the core exposes only the RIOT's 128 bytes of system RAM.
+        case .arcade, .atari7800, .atari2600, .dreamcast, .segaCD, .ngpc, .vectrex:
             return false
         default:
             return true
@@ -278,6 +287,7 @@ enum NativePlatform: String, CaseIterable {
         case .dreamcast: return "Dreamcast"
         case .n64: return "Nintendo 64"
         case .vectrex: return "Vectrex"
+        case .atari2600: return "Atari 2600"
         }
     }
 
@@ -363,6 +373,8 @@ enum NativePlatform: String, CaseIterable {
             return .n64
         case "vectrex":
             return .vectrex
+        case "atari2600", "atari-2600-plus":
+            return .atari2600
         default:
             return nil
         }

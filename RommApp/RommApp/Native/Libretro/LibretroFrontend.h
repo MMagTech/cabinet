@@ -55,6 +55,9 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
     // core itself, so this is the one console core with no firmware story
     // at all.
     LibretroCoreIDVecx NS_SWIFT_NAME(vecx) = 15,
+    // The 2014 snapshot of Stella, libretro's light interpreter build of
+    // it, the same weight-class choice ProSystem was for the 7800.
+    LibretroCoreIDStella2014 NS_SWIFT_NAME(stella2014) = 16,
 };
 
 @interface LibretroFrame : NSObject

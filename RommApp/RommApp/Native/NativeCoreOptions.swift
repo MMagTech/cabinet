@@ -199,6 +199,26 @@ enum NativeCoreOptions {
     /// Genesis pad type. Stored like a core option but applied through
     /// `retro_set_controller_port_device`, which is why the values here are
     /// the RetroPad device ids rather than strings the core parses.
+    /// Stella 2014's interframe blending. The 2600's 30Hz sprite flicker
+    /// is how many games drew more objects than the TIA had sprites, and
+    /// a phosphor TV smeared it into translucency; on an LCD it is just
+    /// flicker. Same reasoning as mGBA's blending option above.
+    static let atari2600: [NativeCoreOption] = [
+        NativeCoreOption(
+            key: "stella2014_mix_frames",
+            label: "Flicker blending",
+            detail: "Blends alternating frames the way a phosphor TV did. Helps games that flicker sprites, like Ms. Pac-Man.",
+            choices: [
+                .init(value: "disabled", label: "Off"),
+                .init(value: "mix", label: "Average"),
+                .init(value: "ghost_65", label: "Light ghosting"),
+                .init(value: "ghost_75", label: "Medium ghosting"),
+                .init(value: "ghost_85", label: "Heavy ghosting"),
+            ],
+            defaultValue: "disabled"
+        ),
+    ]
+
     static let genesisPad = NativeCoreOption(
         key: "pad-type",
         label: "Controller",
@@ -311,6 +331,7 @@ enum NativeCoreOptions {
         case .segaCD: return segaCD
         case .tg16, .tgCD: return pce
         case .dreamcast: return dreamcast
+        case .atari2600: return atari2600
         default: return []
         }
     }
@@ -765,6 +786,32 @@ enum NativeCoreOptionsStore {
                 "vecx_scale_y": "1",
                 "vecx_shift_x": "0",
                 "vecx_shift_y": "0",
+            ]
+        case .atari2600:
+            // Checked clean, recorded so nobody re-checks: Stella 2014's
+            // check_variables pre-seeds every global with its documented
+            // default before reading the key, and the macOS bench hashes
+            // byte-identical between an unanswered run and one answering
+            // the full table (Pitfall, 600 frames). Sent anyway so every
+            // variable is answered deliberately. mix_frames is absent
+            // here because it is the platform's one exposed Setting, and
+            // this dictionary merges after (and over) stored choices.
+            //
+            // The paddle keys are answered at their defaults but no
+            // paddle control exists yet; v1 is pad-only. Paddle games
+            // (Kaboom!, Circus Atari) are a roadmap item, and the arcade
+            // spinner overlay is the obvious donor when it happens.
+            return [
+                "stella2014_color_depth": "16bit",
+                "stella2014_palette": "standard",
+                "stella2014_low_pass_filter": "disabled",
+                "stella2014_low_pass_range": "60",
+                "stella2014_paddle_digital_sensitivity": "50",
+                "stella2014_paddle_analog_sensitivity": "50",
+                "stella2014_paddle_analog_response": "linear",
+                "stella2014_paddle_analog_deadzone": "15",
+                "stella2014_stelladaptor_analog_sensitivity": "20",
+                "stella2014_stelladaptor_analog_center": "0",
             ]
         case .arcade:
             // FBNeo's two audio interpolation levels, both declared

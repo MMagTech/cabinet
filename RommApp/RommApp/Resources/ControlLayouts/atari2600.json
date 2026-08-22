@@ -1,0 +1,76 @@
+{
+ "system": "atari2600",
+ "_ergonomics": "Atari 2600: one stick, one fire button. Select and Reset are the console's own front switches, not pad buttons; Reset is how most games start, so both stay reachable as pills. Paddles are a roadmap item, not drawn.",
+ "items": [
+  {
+   "kind": "dpad",
+   "inputs": [4, 5, 6, 7],
+   "frame": {"x": 0.07, "y": 0.34, "w": 0.4, "h": 0.52},
+   "extended": {"x": 0.02, "y": 0.26, "w": 0.5, "h": 0.68}
+  },
+  {
+   "kind": "button",
+   "label": "Fire",
+   "input": 0,
+   "frame": {"x": 0.68, "y": 0.42, "w": 0.2, "h": 0.27},
+   "extended": {"x": 0.62, "y": 0.34, "w": 0.32, "h": 0.42}
+  },
+  {
+   "kind": "pill",
+   "label": "Select",
+   "input": 2,
+   "frame": {"x": 0.24, "y": -0.0, "w": 0.2, "h": 0.1},
+   "extended": {"x": 0.21, "y": -0.03, "w": 0.26, "h": 0.16}
+  },
+  {
+   "kind": "pill",
+   "label": "Reset",
+   "input": 3,
+   "frame": {"x": 0.56, "y": -0.0, "w": 0.2, "h": 0.1},
+   "extended": {"x": 0.53, "y": -0.03, "w": 0.26, "h": 0.16}
+  },
+  {
+   "kind": "pill",
+   "label": "Menu",
+   "input": -1,
+   "frame": {"x": 0.4, "y": 0.13, "w": 0.2, "h": 0.1},
+   "extended": {"x": 0.37, "y": 0.1, "w": 0.26, "h": 0.16}
+  }
+ ],
+ "landscapeItems": [
+  {
+   "kind": "dpad",
+   "inputs": [4, 5, 6, 7],
+   "frame": {"x": 0.03, "y": 0.42, "w": 0.19, "h": 0.42},
+   "extended": {"x": 0.0, "y": 0.32, "w": 0.24, "h": 0.58}
+  },
+  {
+   "kind": "button",
+   "label": "Fire",
+   "input": 0,
+   "frame": {"x": 0.84, "y": 0.5, "w": 0.09, "h": 0.2},
+   "extended": {"x": 0.8, "y": 0.42, "w": 0.15, "h": 0.32}
+  },
+  {
+   "kind": "pill",
+   "label": "Select",
+   "input": 2,
+   "frame": {"x": 0.75, "y": 0.06, "w": 0.1, "h": 0.09},
+   "extended": {"x": 0.72, "y": 0.03, "w": 0.15, "h": 0.15}
+  },
+  {
+   "kind": "pill",
+   "label": "Reset",
+   "input": 3,
+   "frame": {"x": 0.87, "y": 0.06, "w": 0.1, "h": 0.09},
+   "extended": {"x": 0.855, "y": 0.03, "w": 0.145, "h": 0.15}
+  },
+  {
+   "kind": "pill",
+   "label": "Menu",
+   "input": -1,
+   "frame": {"x": 0.03, "y": 0.06, "w": 0.1, "h": 0.09},
+   "extended": {"x": 0.0, "y": 0.03, "w": 0.16, "h": 0.15}
+  }
+ ]
+}

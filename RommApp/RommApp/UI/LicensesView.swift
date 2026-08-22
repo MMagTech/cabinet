@@ -105,6 +105,13 @@ struct LicensesView: View {
             file: "vecx"
         ),
         Entry(
+            id: "stella2014",
+            name: "Stella 2014",
+            role: "Native Atari 2600 core",
+            summary: "GPL version 2, the libretro snapshot of the Stella emulator.",
+            file: "stella2014"
+        ),
+        Entry(
             id: "picodrive",
             name: "PicoDrive",
             role: "Native Sega 32X core",
