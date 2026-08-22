@@ -42,10 +42,20 @@ final class ExternalDisplay: ObservableObject {
     /// branches on.
     var showsGameExternally: Bool { isConnected && renderer != nil }
 
-    fileprivate func sceneConnected() { isConnected = true }
+    /// The television's size in points, published so a wrong one is
+    /// visible in the app rather than something to squint at across a
+    /// room. A phone-shaped size here means the external window did not
+    /// take the screen's geometry.
+    @Published private(set) var screenSize: CGSize = .zero
+
+    fileprivate func sceneConnected(size: CGSize) {
+        screenSize = size
+        isConnected = true
+    }
 
     fileprivate func sceneDisconnected() {
         isConnected = false
+        screenSize = .zero
     }
 }
 
@@ -69,6 +79,9 @@ private struct ExternalGameScreen: View {
                     Text("Start a game on your iPhone")
                         .font(.title3)
                         .foregroundStyle(.secondary)
+                    Text("\(Int(external.screenSize.width)) x \(Int(external.screenSize.height))")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
                 }
             }
         }
@@ -89,10 +102,25 @@ final class ExternalDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
     ) {
         guard let windowScene = scene as? UIWindowScene else { return }
         let window = UIWindow(windowScene: windowScene)
-        window.rootViewController = UIHostingController(rootView: ExternalGameScreen())
+        // Sized from the scene's own coordinate space rather than left to
+        // adopt a default. A window that comes up phone-shaped on a
+        // television is the failure this guards against: the renderer
+        // aspect-fits the picture into whatever drawable size it is given,
+        // so a phone-shaped view produces a phone-shaped picture on a
+        // 16:9 panel no matter how large the panel is.
+        window.frame = windowScene.coordinateSpace.bounds
+        let host = UIHostingController(rootView: ExternalGameScreen())
+        // The television is not a phone: no notch, no home indicator, and
+        // any inset here would letterbox the picture a second time on top
+        // of the aspect fit the renderer already does.
+        host.view.frame = window.bounds
+        host.view.backgroundColor = .black
+        window.rootViewController = host
         window.isHidden = false
         self.window = window
-        MainActor.assumeIsolated { ExternalDisplay.shared.sceneConnected() }
+        MainActor.assumeIsolated {
+            ExternalDisplay.shared.sceneConnected(size: window.bounds.size)
+        }
     }
 
     func sceneDidDisconnect(_ scene: UIScene) {

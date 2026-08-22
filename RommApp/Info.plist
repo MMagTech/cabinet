@@ -8,6 +8,36 @@
 	     built product, which shipped a build whose Games folder never
 	     appeared in the Files app. Both keys together are what expose
 	     Documents (the kept games mirror) in Files. -->
+	<!-- Without this manifest iOS never offers the app an external
+	     display at all: AirPlay simply mirrors the phone, and the
+	     external scene delegate is never constructed. Declaring the
+	     non-interactive external display role is what makes a television
+	     a second screen this app can draw its own content on rather than
+	     a copy of the phone. See UI/ExternalDisplay.swift.
+
+	     Multiple scene support is a requirement of that, not a feature
+	     wanted for its own sake. On iPhone there is no way for a person
+	     to open a second app window, so this changes nothing about the
+	     app itself; only the system-created display scene appears. The
+	     application role is deliberately not configured here, so SwiftUI
+	     keeps creating the main window exactly as it always has. -->
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<true/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleExternalDisplayNonInteractive</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>Cabinet External Display</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).ExternalDisplaySceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>

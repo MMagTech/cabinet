@@ -130,10 +130,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         // app itself and keeps the quick action delegate it always had.
         // See ExternalDisplay.swift.
         if connectingSceneSession.role == .windowExternalDisplayNonInteractive {
-            config.delegateClass = ExternalDisplaySceneDelegate.self
-        } else {
-            config.delegateClass = QuickActionSceneDelegate.self
+            // Named to match the configuration in Info.plist's scene
+            // manifest. The manifest is what makes iOS offer the scene at
+            // all; this returns the matching configuration when it does.
+            let external = UISceneConfiguration(
+                name: "Cabinet External Display", sessionRole: connectingSceneSession.role
+            )
+            external.delegateClass = ExternalDisplaySceneDelegate.self
+            return external
         }
+        config.delegateClass = QuickActionSceneDelegate.self
         return config
     }
 }
