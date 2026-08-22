@@ -36,8 +36,16 @@ struct NativePlayerView: View {
     /// once the environment session exists.
     @State private var cardSync: MemoryCardSync?
 
+    /// The cabinet's controls, read against the generation of MAME data
+    /// that matches the core about to run them. On MAME 2003-Plus that
+    /// means the driver's own listxml fills what the modern map never
+    /// knew and trims buttons the driver cannot see; every other core,
+    /// FBNeo included, resolves through the modern map exactly as before.
     private var profile: ArcadeProfile {
-        ArcadeProfileStore.shared.resolve(romId: rom.id, shortname: rom.fsNameNoExt)
+        ArcadeProfileStore.shared.resolve(
+            romId: rom.id, shortname: rom.fsNameNoExt,
+            using: core == .mame2003Plus ? .mame2003Plus : .modern
+        )
     }
 
     private var canonicalSlug: String {

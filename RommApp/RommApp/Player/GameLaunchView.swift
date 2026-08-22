@@ -320,6 +320,7 @@ struct GameLaunchView: View {
         // deferred to Play: leaving the screen any other way, Close among
         // them, must not silently drop it.
         .onChange(of: selectedNativeCore) { _, _ in
+            if rom.isArcade { refreshArcadeBase() }
             guard let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug) else { return }
             NativeCoreChoice.remember(selectedNativeCore, rom: rom, platform: platform)
         }
@@ -332,6 +333,7 @@ struct GameLaunchView: View {
             LaunchChoices.remember(firmwareId: selectedFirmware?.id, platformId: rom.platformId)
         }
         .onChange(of: selectedBackend) { _, _ in
+            if rom.isArcade { refreshArcadeBase() }
             guard !loading else { return }
             LaunchChoices.remember(backend: selectedBackend, for: rom)
             // A state picked for one player cannot load in the other, so a
@@ -1027,6 +1029,26 @@ struct GameLaunchView: View {
         return "\(b), \(ways) way"
     }
 
+    /// The cabinet data this screen is describing, read against whatever
+    /// is about to run the game. MAME 2003-Plus answers from its own
+    /// driver generation, so a game the modern map never knew stops
+    /// being "the generic guess" here and the pickers open on what the
+    /// player is actually going to get; every other player and core
+    /// resolves through the modern map, unchanged. Re-read on a core or
+    /// player switch, because the same game genuinely has two answers.
+    private func refreshArcadeBase() {
+        let usesMAME = selectedBackend == .native && selectedNativeCore == .mame2003Plus
+        let base = ArcadeProfileStore.shared.resolve(
+            shortname: rom.fsNameNoExt, using: usesMAME ? .mame2003Plus : .modern
+        )
+        arcadeBase = base
+        // A stored override is the player's own answer and outranks both
+        // books, so a switch never overwrites it.
+        let choice = ArcadeOverride.stored(for: rom.id)
+        arcadeButtons = choice?.buttons ?? base.buttons
+        arcadeWays = choice?.ways ?? base.ways
+    }
+
     private func storeArcadeChoice() {
         guard let base = arcadeBase else { return }
         if arcadeButtons == base.buttons, arcadeWays == base.ways {
@@ -1697,13 +1719,7 @@ struct GameLaunchView: View {
         // player that will only stall.
         selectedBackend = networkMonitor.isOffline ? .native : LaunchChoices.defaultBackend(rom: rom, canonicalSlug: canonicalSlug)
 
-        if rom.isArcade {
-            let base = ArcadeProfileStore.shared.resolve(shortname: rom.fsNameNoExt)
-            arcadeBase = base
-            let choice = ArcadeOverride.stored(for: rom.id)
-            arcadeButtons = choice?.buttons ?? base.buttons
-            arcadeWays = choice?.ways ?? base.ways
-        }
+        if rom.isArcade { refreshArcadeBase() }
 
         refreshResumeOffer()
 

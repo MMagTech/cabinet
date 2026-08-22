@@ -123,6 +123,14 @@ listxml output. The generated `profiles.json` is committed in
 `RommApp/RommApp/Resources/ArcadeProfiles` so you do not need to run it. See the
 docstring if you want to regenerate it.
 
+`tools/gen_mame2003_profiles.py` builds the second map beside it,
+`mame2003-profiles.json`, from the MAME 2003-Plus reference set's own
+listxml rather than a modern one. The native player reads it only while
+that core is running, to answer for games the modern map has never heard
+of and to drop buttons the 0.78 driver cannot read. It is committed too.
+The two files layer rather than compete, and which one wins on what is
+documented on `ArcadeDataSet` in `Controls/ArcadeProfiles.swift`.
+
 ## Design notes
 
 [scope-v0.1.md](scope-v0.1.md) has the full design and the reasoning behind the
