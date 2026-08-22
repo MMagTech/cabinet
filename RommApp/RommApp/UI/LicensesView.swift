@@ -35,6 +35,13 @@ struct LicensesView: View {
             file: "fbneo"
         ),
         Entry(
+            id: "mame2003-plus",
+            name: "MAME 2003-Plus",
+            role: "Native arcade core",
+            summary: "The classic MAME non-commercial license, as of MAME 0.78. Cabinet is free and is not sold, which satisfies those terms.",
+            file: "mame2003-plus"
+        ),
+        Entry(
             id: "beetle-saturn",
             name: "Beetle Saturn",
             role: "Native Saturn core",

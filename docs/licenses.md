@@ -37,6 +37,7 @@ from the commits below.
 | Core | Systems | Licence | Upstream | Commit |
 |---|---|---|---|---|
 | FinalBurn Neo | Arcade | Free for non-commercial use, plus MAME's terms | [libretro/FBNeo](https://github.com/libretro/FBNeo) | `2444fbe3ddab` |
+| MAME 2003-Plus | Arcade | MAME 0.78 non-commercial license | [libretro/mame2003-plus-libretro](https://github.com/libretro/mame2003-plus-libretro) | `93159c0ce9f8` |
 | Beetle Saturn | Saturn | GPL v2 | [libretro/beetle-saturn-libretro](https://github.com/libretro/beetle-saturn-libretro) | `84461434f249` |
 | PCSX ReARMed | PlayStation | GPL v2 | [libretro/pcsx_rearmed](https://github.com/libretro/pcsx_rearmed) | `da2cb8ecd17f` |
 | Flycast | Dreamcast | GPL v2 | [flyinghead/flycast](https://github.com/flyinghead/flycast) | `a172e0001351` |
