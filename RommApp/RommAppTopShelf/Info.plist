@@ -2,6 +2,18 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- App Store validation rejects a tvOS extension with a 64-bit
+	     slice that does not declare arm64 here (error 90502). The host
+	     app gets this from GENERATE_INFOPLIST_FILE, but this extension
+	     supplies its own Info.plist and so has to say it itself. Found
+	     on the first TestFlight upload that ever included the top
+	     shelf; the archive builds and installs on hardware perfectly
+	     well without it, so nothing but App Store submission catches
+	     this. -->
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+	</array>
 	<key>NSExtension</key>
 	<dict>
 		<!-- Taken from Xcode 26's own "TV Top Shelf Extension"
