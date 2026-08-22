@@ -1,95 +1,104 @@
 # Cabinet for tvOS 0.2.0-alpha
 
-The first Apple TV release that is a real app rather than a port in progress.
-The previous tvOS build predates almost everything below.
+Four new systems, in-game saves that follow you between the television and
+your phone, and the speed work that Apple TV needed most. Dreamcast went from
+roughly 20fps to a locked 60, and Nintendo 64 from 50fps decaying to 27 up to
+a steady 49.7.
 
-## An Apple TV app, not a phone app on a television
+## Four new systems
 
-Home is a resume banner and shelves, built for a remote and a ten-foot
-viewing distance, with the Apple TV app itself as the reference. Focused
-cover art lifts and its caption rides down with it. One ambient backdrop
-drawn from whatever cover you are looking at colors the whole shell.
+**3DO** runs natively through Opera, with its BIOS coming from RomM the same
+way Saturn's does, and its NVRAM saves syncing back to your server.
 
-There is a real pause menu with save states, shaders, screen glow and
-per-game settings, a full Library with platforms and collections, in-app
-RomM account switching, and a game launch screen built for focus navigation
-rather than touch.
+**Atari 2600** runs on Stella, with the console's own Select and Reset
+switches, because on a 2600 those are how you start a game and choose which
+variation to play.
 
-Recently played games appear on the Apple TV's top shelf, so Cabinet's own
-row on the home screen shows what you were playing.
+**Vectrex** brings the vector display and its overlays with it. Every Vectrex
+cartridge shipped with a translucent colored sheet that slotted in front of
+the screen, and Cabinet draws them over the picture the way the real plastic
+sat over the real tube. It knows which sheet belongs to your game from the
+file's contents, so it works whatever your ROM is named.
 
-Downloaded games live in a purgeable cache, so replaying something you played
-recently skips the download entirely while still letting tvOS reclaim the
-space when it genuinely needs it.
+**MAME 2003-Plus** joins FinalBurn Neo as a second arcade core, covering the
+early-80s Atari and Midway boards FBNeo does not. Games that run on both let
+you pick, and Cabinet remembers your choice.
 
-## Eighteen cores, all running natively
+That brings Cabinet to eighteen emulator cores covering twenty-two systems,
+every one of them running natively on Apple TV.
 
-Every core Cabinet has on iOS runs on Apple TV: eighteen emulators covering
-twenty-two systems, including this release's four new ones, 3DO, Atari 2600,
-Vectrex and MAME 2003-Plus.
+## Speed, where this hardware needed it most
 
-Vectrex brings its screen overlays with it, the translucent colored sheets
-every cartridge shipped with, drawn over the vector picture the way the real
-plastic sat over the real tube.
+Dreamcast ran at roughly 20fps with breaking audio, and it was never the
+emulation speed. Cabinet applied no backpressure, so the core free-ran at up
+to five times real time and threw its own audio away as static. That is
+fixed, along with two upstream bugs that made a second launch crash.
+Dreamcast now holds 60fps in normal play with clean sound, dropping to 30 in
+the heaviest scenes.
 
-## Speed work that mattered most here
-
-Apple TV was hit hardest by two problems that are now solved.
-
-Dreamcast ran at roughly 20fps with breaking audio, which turned out not to
-be emulation speed at all but a missing frontend brake, letting the core run
-five times too fast and discard its own sound. It holds 60fps now.
-
-Nintendo 64 was rendering at four times the pixels it should have been,
-because a default resolution setting was never answered. That took Apple TV
-from 50fps decaying to 27 up to a sustained 49.7.
-
-Underneath both, the pixel decode that runs on every frame moved from the CPU
-to the GPU, which alone took the general case from 30fps with 50ms stalls to
-a clean 60.
+Nintendo 64 had been rendering at 640x480 against a documented default of
+320x240, because that setting was never being answered. On Apple TV that took
+it from 50fps decaying to 27 up to a sustained 49.7. A crash when launching a
+second N64 game after quitting the first is also fixed.
 
 ## Colors, sound and input lag
 
-The same pass that fixed iOS applies here, and it was substantial. NES games
-had been drawing in a third-party palette rather than the NES one. Arcade
-boards ran their FM synthesis with no interpolation and in 16-bit color.
-Game Boy Color had no color correction, Neo Geo Pocket booted in Japanese,
-Saturn carried an extra frame of input lag, TurboGrafx drew black rows.
+Emulator cores declare default settings, and Cabinet had not been answering
+for them. Every NES game had been drawing in a third-party color palette
+instead of the NES one, with black showing as dark gray and grass as olive.
+Arcade boards ran their FM synthesis with no interpolation at all, on
+hardware whose entire sound is FM, and in 16-bit color while Settings said 32.
+Game Boy Color had no color correction. Neo Geo Pocket booted in Japanese.
+Saturn carried an extra frame of input lag. TurboGrafx drew three black rows
+and a slightly wrong aspect ratio.
 
-All corrected, plus deliberate upgrades: four times resolution on SNES Mode 7,
-double resolution and 32-bit output on PlayStation, the accurate Nuked FM chip
-on Genesis, and highest quality NES audio. Each was measured on real Apple TV
-hardware before shipping, including checking that the fanless box does not
-throttle under them.
+All corrected, plus some deliberate upgrades measured on real Apple TV
+hardware before shipping: SNES Mode 7 at four times resolution in the 89
+games that use it, PlayStation at double resolution with 32-bit output, the
+accurate Nuked FM chip on Genesis, and NES audio at its highest quality.
+Each was checked to confirm this fanless box does not throttle under them.
 
-## Controllers and saves
+## In-game saves, on the television
 
-Rumble works on Apple TV, which it never did before. Twin-stick arcade games
-read a Bluetooth pad correctly, and Nintendo 64 uses the button layout other
-emulators use on an Xbox-shaped controller.
+Every platform's in-game saves now work here, not just on the phone.
+Cartridge batteries, PlayStation memory cards, Sega CD backup RAM, Neo Geo
+Pocket flash, the Dreamcast VMU and 3DO NVRAM all save and upload to RomM.
+Start a game on Apple TV and continue it on your phone, or the reverse.
 
-The pause menu's B button no longer quits your game by accident, which was
-the most annoying bug in the previous build.
+A bug where each device quietly replayed its own cached copy of a save, which
+made it look like your devices each had their own memory cards, is fixed.
 
-In-game saves work for every cartridge platform and Saturn, including
-PlayStation memory cards, Sega CD backup RAM, the Dreamcast VMU and 3DO
-NVRAM, all syncing through RomM so you can start on Apple TV and continue on
-your phone.
+## Arcade games get their real controls
 
-## Curating what plays well
+Where a cabinet had a spinner, trackball, wheel and pedals, light gun or
+rotary joystick, Cabinet now knows it, drawn from real arcade data rather
+than guessed. On Apple TV that shapes how a connected controller maps to the
+board, and it is the groundwork for using your phone as the panel.
 
-Not everything runs perfectly on this hardware, so any game can be marked as
-not working, from the launch screen or from a long press in the grid. Marked
-games dim and carry a badge. The mark is per device on purpose, so your Apple
-TV and your phone can disagree about a heavy Dreamcast game, which matches
-the real difference in headroom between them.
+## Around the app
+
+Recently played games now appear on the Apple TV's top shelf, so Cabinet's
+row on the home screen shows what you were playing.
+
+Any game can be marked as not working, from the launch screen or the grid,
+and marked games dim and carry a badge. The mark is per device on purpose, so
+your Apple TV and your phone can disagree about a heavy Dreamcast game, which
+matches the real difference in headroom between them.
+
+Focused cover art now slides its caption down with the lift instead of
+burying it. A letterbox glow fills the bars beside the picture. Rumble works
+on a connected controller, which it never did here before. The pause menu's B
+button no longer quits your game by accident. Each Apple TV profile gets its
+own second server address. Text throughout got a pass to say less and say it
+the same way it is said on the phone.
 
 ## Under the hood
 
-All fourteen of the tvOS core archives that existed before this release were
-rebuilt after a build script bug was found that had left them sharing memory
-between unrelated emulators. That was a real crash waiting to happen, and it
-is fixed and verified on hardware.
+All fourteen tvOS core archives that existed before this release were
+rebuilt. A build script bug had left them sharing memory between unrelated
+emulators, including a shared Z80 between Neo Geo Pocket and Genesis, which
+was a real crash waiting to happen. Fixed and verified on hardware by running
+both of those systems back to back in a single session.
 
 ---
 
