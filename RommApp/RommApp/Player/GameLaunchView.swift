@@ -454,6 +454,7 @@ struct GameLaunchView: View {
     private var showsPlayerPicker: Bool {
         NativeCore.core(for: rom, canonicalSlug: canonicalSlug) != nil
             && canonicalSlug != "saturn" && canonicalSlug != "dc"
+            && canonicalSlug != "vectrex"
     }
 
     /// One visible action, no exceptions: a game with the keep toggle

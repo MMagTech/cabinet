@@ -182,6 +182,8 @@ struct ControlLayout: Decodable {
             name = "atari7800"
         case "dc":
             name = "dreamcast"
+        case "vectrex":
+            name = "vectrex"
         default:
             name = "default"
         }

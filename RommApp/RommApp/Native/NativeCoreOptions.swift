@@ -747,6 +747,25 @@ enum NativeCoreOptionsStore {
                 "fceumm_overscan_h_right": "0",
                 "fceumm_sndvolume": "7",
             ]
+        case .vectrex:
+            // vecx's software renderer sizes its point stamp,
+            // `point_size`, only inside the branch that answers
+            // `vecx_res_multi`; unanswered, the static stays 0 and every
+            // vector endpoint is drawn degenerately. Verified with
+            // tools/lab/lab bench on Mine Storm before this core ever
+            // reached a device: the unanswered run and the answered run
+            // hash differently, and the unanswered frame's boot text is
+            // smeared into unreadable blobs. The four scale/shift keys
+            // have real in-code fallbacks matching their declared
+            // defaults, sent anyway so every variable in the core's table
+            // is answered deliberately rather than by accident.
+            return [
+                "vecx_res_multi": "1",
+                "vecx_scale_x": "1",
+                "vecx_scale_y": "1",
+                "vecx_shift_x": "0",
+                "vecx_shift_y": "0",
+            ]
         case .arcade:
             // FBNeo's two audio interpolation levels, both declared
             // "4-point 3rd order" in its own option table and neither ever
@@ -862,6 +881,15 @@ enum NativeCoreOptionsStore {
     static func qualityUpgrades(for platform: NativePlatform) -> [String: String] {
         if benchWantsStockOptions { return [:] }
         switch platform {
+        case .vectrex:
+            // Vector lines rasterised at 4x, 1320x1640 instead of 330x410,
+            // which is what makes them look like lines instead of stair
+            // steps on a phone screen. Free where it can be measured
+            // headless: the macOS bench holds 0.26ms per frame at both
+            // multipliers, because the vector count is what costs and it
+            // does not change. The device pays only the larger texture
+            // upload, the same class of cost PS1's 2x already ships.
+            return ["vecx_res_multi": "4"]
         case .nes:
             // FCEUmm's "Low" runs the APU at the output rate; 1 and 2 run
             // it at the CPU clock and decimate afterwards, which is the

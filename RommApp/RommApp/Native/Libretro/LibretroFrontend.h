@@ -50,6 +50,11 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
     // Pure software rendering, no JIT, interpreter-era MAME (0.78+).
     // docs/mame-core-comparison-2026-08-21.md records why this version.
     LibretroCoreIDMAME2003Plus NS_SWIFT_NAME(mame2003Plus) = 14,
+    // Software vector renderer (HAS_GPU=0 at build time; the core's GLES2
+    // hardware path is never compiled in). Vectrex BIOS ships inside the
+    // core itself, so this is the one console core with no firmware story
+    // at all.
+    LibretroCoreIDVecx NS_SWIFT_NAME(vecx) = 15,
 };
 
 @interface LibretroFrame : NSObject

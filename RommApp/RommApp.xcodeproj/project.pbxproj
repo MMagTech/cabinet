@@ -64,6 +64,7 @@
 				Native/ProSystem/libprosystem_ios.a,
 				Native/Saturn/libbeetle_saturn_ios.a,
 				Native/Snes9x/libsnes9x_ios.a,
+				Native/Vecx/libvecx_ios.a,
 				Player/GameLaunchView.swift,
 				Player/PlayerView.swift,
 				Player/RomExporter.swift,
@@ -128,6 +129,7 @@
 				Resources/ControlLayouts/sms.json,
 				Resources/ControlLayouts/snes.json,
 				Resources/ControlLayouts/threedo.json,
+				Resources/ControlLayouts/vectrex.json,
 				Resources/ControlLayouts/wonderswan.json,
 			);
 			target = BB00000000000000000010 /* LayoutEditor */;
@@ -508,6 +510,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Flycast",
 					"$(PROJECT_DIR)/RommApp/Native/Mupen64Plus",
 					"$(PROJECT_DIR)/RommApp/Native/MAME2003Plus",
+					"$(PROJECT_DIR)/RommApp/Native/Vecx",
 				);
 				MARKETING_VERSION = 0.1.0;
 				OTHER_LDFLAGS = "-lz";
@@ -634,6 +637,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Flycast",
 					"$(PROJECT_DIR)/RommApp/Native/Mupen64Plus",
 					"$(PROJECT_DIR)/RommApp/Native/MAME2003Plus",
+					"$(PROJECT_DIR)/RommApp/Native/Vecx",
 				);
 				MARKETING_VERSION = 0.1;
 				OTHER_LDFLAGS = (
@@ -719,6 +723,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Flycast",
 					"$(PROJECT_DIR)/RommApp/Native/Mupen64Plus",
 					"$(PROJECT_DIR)/RommApp/Native/MAME2003Plus",
+					"$(PROJECT_DIR)/RommApp/Native/Vecx",
 				);
 				MARKETING_VERSION = 0.1;
 				OTHER_LDFLAGS = (
@@ -901,6 +906,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Flycast",
 					"$(PROJECT_DIR)/RommApp/Native/Mupen64Plus",
 					"$(PROJECT_DIR)/RommApp/Native/MAME2003Plus",
+					"$(PROJECT_DIR)/RommApp/Native/Vecx",
 				);
 				MARKETING_VERSION = 0.1;
 				OTHER_LDFLAGS = "-lz";

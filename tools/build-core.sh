@@ -68,6 +68,16 @@ mame2003_plus)
     # from a newer MAME's listxml as data rather than from this core.
     PREFIX=m2003p; REPO=https://github.com/libretro/mame2003-plus-libretro.git
     MAKEDIR=.; MAKEFILE=Makefile; OUT=MAME2003Plus; LIB=libmame2003_plus_ios.a ;;
+vecx)
+    # Software vector renderer, forced: the Makefile defaults HAS_GPU=1
+    # everywhere but macOS, which would build the GLES2 hardware path
+    # this frontend cannot drive (it only hosts the GLES3 contexts
+    # Flycast and Mupen64Plus bring). HAS_GPU=0 is also what the macOS
+    # lab build produces, so the bench measures the code that ships.
+    # The Vectrex BIOS is compiled in (bios/system.h); no firmware.
+    PREFIX=vcx; REPO=https://github.com/libretro/libretro-vecx.git
+    MAKEDIR=.; MAKEFILE=Makefile.libretro; OUT=Vecx; LIB=libvecx_ios.a
+    MAKEARGS="HAS_GPU=0" ;;
 pcsx_rearmed)
     # platform=ios-arm64 (or tvos-arm64) forces DYNAREC=0 in this core's
     # own Makefile, a pure interpreter build, the same no-JIT exception
@@ -180,7 +190,10 @@ else
     printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cxx" > "$WRAP/c++"
     printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cxx" > "$WRAP/clang++"
     chmod +x "$WRAP"/*
-    PATH="$WRAP:$PATH" make -C "$SRC/$MAKEDIR" -f "$MAKEFILE" platform=$MAKE_PLATFORM -j"$JOBS"
+    # MAKEARGS: extra per-core make variables from the case table above.
+    # Unset for every core that predates it, so those builds are invoked
+    # byte-identically to before it existed.
+    PATH="$WRAP:$PATH" make -C "$SRC/$MAKEDIR" -f "$MAKEFILE" platform=$MAKE_PLATFORM $MAKEARGS -j"$JOBS"
 fi
 
 DYLIB=$(find "$SRC" -name '*_ios.dylib' | head -1)

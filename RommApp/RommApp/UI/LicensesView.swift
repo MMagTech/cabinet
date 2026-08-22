@@ -98,6 +98,13 @@ struct LicensesView: View {
             file: "prosystem"
         ),
         Entry(
+            id: "vecx",
+            name: "vecx",
+            role: "Native Vectrex core",
+            summary: "GPL version 3. Bundles the Vectrex BIOS, which its rights holder has long permitted for non-commercial emulation use.",
+            file: "vecx"
+        ),
+        Entry(
             id: "picodrive",
             name: "PicoDrive",
             role: "Native Sega 32X core",

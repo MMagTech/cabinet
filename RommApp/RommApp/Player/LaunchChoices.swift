@@ -104,8 +104,11 @@ struct LaunchChoices {
         // Dreamcast forces native for a different reason, RomM has no
         // webview core for it at all (`libretro_slug` is null on the
         // platform), not merely a broken one, so there is nothing to
-        // pick between.
-        if canonicalSlug == "saturn" || canonicalSlug == "dc" { return .native }
+        // pick between. Vectrex is the same case: RomM's stable cores
+        // map has no vectrex entry, so the native core is the only
+        // player that exists for it.
+        if canonicalSlug == "saturn" || canonicalSlug == "dc"
+            || canonicalSlug == "vectrex" { return .native }
         guard NativeCore.core(for: rom, canonicalSlug: canonicalSlug) != nil else { return .webview }
         if let stored = UserDefaults.standard.string(forKey: "romm.backend.rom.\(rom.id)"),
            let backend = PlayerBackend(rawValue: stored) {

@@ -1,0 +1,90 @@
+{
+ "system": "vectrex",
+ "_ergonomics": "Vectrex: the console's own pad is an analog self-centering stick and a row of four numbered buttons, 1 to 4 left to right. The arc keeps that order under one sweeping thumb. No Start or Select existed on the machine; the menu pill is the app's own pause.",
+ "items": [
+  {
+   "kind": "stick",
+   "inputs": [16, 17, 18, 19],
+   "frame": {"x": 0.08, "y": 0.34, "w": 0.34, "h": 0.5},
+   "extended": {"x": 0.02, "y": 0.24, "w": 0.46, "h": 0.68}
+  },
+  {
+   "kind": "button",
+   "label": "1",
+   "input": 8,
+   "frame": {"x": 0.5, "y": 0.66, "w": 0.13, "h": 0.17},
+   "extended": {"x": 0.47, "y": 0.62, "w": 0.19, "h": 0.25}
+  },
+  {
+   "kind": "button",
+   "label": "2",
+   "input": 0,
+   "frame": {"x": 0.62, "y": 0.55, "w": 0.13, "h": 0.17},
+   "extended": {"x": 0.59, "y": 0.51, "w": 0.19, "h": 0.25}
+  },
+  {
+   "kind": "button",
+   "label": "3",
+   "input": 9,
+   "frame": {"x": 0.74, "y": 0.44, "w": 0.13, "h": 0.17},
+   "extended": {"x": 0.71, "y": 0.4, "w": 0.19, "h": 0.25}
+  },
+  {
+   "kind": "button",
+   "label": "4",
+   "input": 1,
+   "frame": {"x": 0.86, "y": 0.33, "w": 0.13, "h": 0.17},
+   "extended": {"x": 0.83, "y": 0.29, "w": 0.19, "h": 0.25}
+  },
+  {
+   "kind": "pill",
+   "label": "Menu",
+   "input": -1,
+   "frame": {"x": 0.4, "y": 0.03, "w": 0.2, "h": 0.1},
+   "extended": {"x": 0.37, "y": 0.0, "w": 0.26, "h": 0.16}
+  }
+ ],
+ "landscapeItems": [
+  {
+   "kind": "stick",
+   "inputs": [16, 17, 18, 19],
+   "frame": {"x": 0.035, "y": 0.44, "w": 0.16, "h": 0.36},
+   "extended": {"x": 0.0, "y": 0.34, "w": 0.22, "h": 0.54}
+  },
+  {
+   "kind": "button",
+   "label": "1",
+   "input": 8,
+   "frame": {"x": 0.79, "y": 0.62, "w": 0.075, "h": 0.17},
+   "extended": {"x": 0.765, "y": 0.56, "w": 0.115, "h": 0.26}
+  },
+  {
+   "kind": "button",
+   "label": "2",
+   "input": 0,
+   "frame": {"x": 0.885, "y": 0.62, "w": 0.075, "h": 0.17},
+   "extended": {"x": 0.86, "y": 0.56, "w": 0.115, "h": 0.26}
+  },
+  {
+   "kind": "button",
+   "label": "3",
+   "input": 9,
+   "frame": {"x": 0.79, "y": 0.42, "w": 0.075, "h": 0.17},
+   "extended": {"x": 0.765, "y": 0.36, "w": 0.115, "h": 0.26}
+  },
+  {
+   "kind": "button",
+   "label": "4",
+   "input": 1,
+   "frame": {"x": 0.885, "y": 0.42, "w": 0.075, "h": 0.17},
+   "extended": {"x": 0.86, "y": 0.36, "w": 0.115, "h": 0.26}
+  },
+  {
+   "kind": "pill",
+   "label": "Menu",
+   "input": -1,
+   "frame": {"x": 0.03, "y": 0.06, "w": 0.1, "h": 0.09},
+   "extended": {"x": 0.0, "y": 0.03, "w": 0.16, "h": 0.15}
+  }
+ ]
+}
