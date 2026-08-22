@@ -24,12 +24,44 @@ struct CoverImage: View {
     @State private var image: UIImage?
     @State private var failed = false
 
+    /// Whether this cover's shape is meaningfully different from the 3:4
+    /// box every fill-mode surface in the app sizes its cells to. Most
+    /// cover art is box-shaped and fills cleanly; the exceptions, 3DO's
+    /// long boxes the loudest among them, get cropped into nonsense by a
+    /// straight fill, often losing the title text that lives at the top
+    /// of the tall art.
+    private func oddAspect(_ image: UIImage) -> Bool {
+        guard image.size.height > 0 else { return false }
+        return abs(image.size.width / image.size.height - 0.75) > 0.06
+    }
+
     var body: some View {
         ZStack {
             if let image {
-                Image(uiImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: contentMode)
+                if contentMode == .fill && oddAspect(image) {
+                    // Fit on a blurred echo of itself rather than crop:
+                    // the whole cover stays visible, the cell keeps its
+                    // shape, and the letterbox bars are the art's own
+                    // colours instead of dead space. Same visual idea as
+                    // the launch screen's ambient backdrop, scaled and
+                    // blurred so the backdrop's edges never read as a
+                    // vignette. Box-shaped covers never take this
+                    // branch, so the library's common case renders
+                    // exactly as it always has.
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .scaleEffect(1.3)
+                        .blur(radius: 12)
+                    Color.black.opacity(0.18)
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                } else {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: contentMode)
+                }
             } else if !showsPlaceholder {
                 Color.clear
             } else {
