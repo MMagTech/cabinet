@@ -71,6 +71,18 @@ named above, unmodified, built with `tools/build-core.sh` from this repository.
 | Tremor | CD audio decoding | BSD |
 | inih | Config parsing, built into mGBA | BSD |
 
+## Bundled artwork
+
+The Vectrex screen overlay images in `Resources/VectrexOverlays` are vector
+recreations of the translucent sheets that shipped with every Vectrex
+cartridge, taken from
+[libretro/overlay-borders](https://github.com/libretro/overlay-borders)
+(MIT-licensed repository; credits THK and Gigapig of the Hyperspin
+community). The underlying overlay designs are 1982 to 1984 GCE artwork;
+they are reproduced here the same way the wider emulation community has
+distributed them for years, non-commercially and for preservation. Anyone
+with a claim to the originals is welcome to open an issue.
+
 ## Not bundled
 
 RomM's own web player runs the emulators it ships, including MAME 2003, FB Alpha

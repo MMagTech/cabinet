@@ -57,6 +57,12 @@ struct Rom: Codable, Identifiable, Hashable {
     let pathCoverLarge: String?
     let fsSizeBytes: Int64
     let hasMultipleFiles: Bool
+    /// RomM's content hash for the rom, the filename-proof identity the
+    /// Vectrex overlay matching keys on. Optional twice over: older
+    /// RomM versions may omit it, and kept-game manifests written
+    /// before it existed decode cleanly to nil, so nothing persisted
+    /// needs migrating.
+    let md5Hash: String?
 
     var displayName: String {
         if let name, !name.isEmpty { return name }
@@ -76,6 +82,7 @@ struct Rom: Codable, Identifiable, Hashable {
         case pathCoverLarge = "path_cover_large"
         case fsSizeBytes = "fs_size_bytes"
         case hasMultipleFiles = "has_multiple_files"
+        case md5Hash = "md5_hash"
     }
 
     /// RomM's ARCADE_SYSTEMS: platforms whose games run on MAME or FBNeo

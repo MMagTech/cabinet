@@ -288,6 +288,12 @@ struct NativePlayerView: View {
             // still in flight; syncMemoryCardIn releases it.
             renderer.awaitingSaveRAM = hasMemoryCard
             renderer.shader = NativeShader.current(for: platform)
+            // The game's own translucent screen sheet, Vectrex only;
+            // nil (no sheet, toggle off, or any other platform) draws
+            // nothing and costs nothing. See VectrexOverlays.swift.
+            if platform == .vectrex {
+                renderer.overlayImage = VectrexOverlays.image(md5: rom.md5Hash, name: rom.fsNameNoExt)
+            }
             NativeSessionMarker.recordGameRunning(romId: rom.id)
             // Temporary, for issue #6. One file per play session, so there
             // is never a question which run the numbers came from.

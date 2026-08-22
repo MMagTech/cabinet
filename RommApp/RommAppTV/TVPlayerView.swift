@@ -281,6 +281,12 @@ struct TVPlayerView: View {
             renderer.pendingState = initialState
             renderer.awaitingSaveRAM = hasMemoryCard
             renderer.shader = NativeShader.current(for: platform)
+            // The game's own translucent screen sheet, Vectrex only,
+            // same line the iOS player runs: the store and renderer
+            // layer are shared, only this assignment is per platform.
+            if platform == .vectrex {
+                renderer.overlayImage = VectrexOverlays.image(md5: rom.md5Hash, name: rom.fsNameNoExt)
+            }
             NativeSessionMarker.recordGameRunning(romId: rom.id)
             // Temporary, for issue #6, the same two calls the iOS player
             // makes: one trace file per play session, pulled off the

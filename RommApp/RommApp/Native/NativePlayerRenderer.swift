@@ -56,6 +56,32 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
 
     private let audio = NativePlayerAudio()
 
+    /// The game's screen overlay sheet, composited over the picture the
+    /// way the real translucent plastic sat over the real tube. Vectrex
+    /// only: the player views set it at launch from VectrexOverlays and
+    /// nothing else ever does, so for the other seventeen cores the cost
+    /// of this feature is one nil check per frame. The GPU resources are
+    /// built lazily on the first frame that needs them rather than in
+    /// attach, so launches without a sheet build nothing.
+    ///
+    /// Drawn with the game quad's own vertices, which is only correct
+    /// because vecx neither rotates nor flips: its frames are software
+    /// rendered (never upside down) and rotation 0, so the quad's
+    /// texture coordinates are the identity mapping the sheet needs. A
+    /// future platform wanting an overlay under rotation would need its
+    /// own vertex set here.
+    var overlayImage: CGImage? {
+        didSet { overlayTexture = nil }
+    }
+    private var overlayTexture: MTLTexture?
+    private var overlayPipeline: MTLRenderPipelineState?
+    private var overlaySampler: MTLSamplerState?
+    /// Stashed at attach for the lazy overlay pipeline build; nil until
+    /// then, unused by anything else.
+    private var shaderLibrary: MTLLibrary?
+    private var libretroVertexFunction: MTLFunction?
+    private var attachedColorPixelFormat: MTLPixelFormat = .bgra8Unorm
+
     /// The active shader, set by the pause menu's Shader row. The next
     /// `draw(in:)` picks it up immediately, which is what re-renders the
     /// frozen frame live behind the still-open menu. Published so the
@@ -134,6 +160,9 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
 
         let library = try? device.makeDefaultLibrary(bundle: .main)
         let vertexFn = library?.makeFunction(name: "libretro_vertex")
+        shaderLibrary = library
+        libretroVertexFunction = vertexFn
+        attachedColorPixelFormat = view.colorPixelFormat
 
         for candidate in NativeShader.allCases {
             guard let fragmentFn = library?.makeFunction(name: candidate.fragmentFunctionName) else { continue }
@@ -439,10 +468,77 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         var texelSize = SIMD2<Float>(1.0 / Float(max(textureWidth, 1)), 1.0 / Float(max(textureHeight, 1)))
         encoder.setFragmentBytes(&texelSize, length: MemoryLayout<SIMD2<Float>>.stride, index: 1)
         encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+
+        // The Vectrex overlay sheet, alpha-composited over the picture.
+        // The art is authored for exactly this: its play area is a 20%
+        // alpha tint the vector lines shine through, its frame and
+        // legend opaque. Premultiplied source-over, because that is how
+        // the CGContext upload encodes it. See `overlayImage`.
+        if overlayImage != nil {
+            if overlayTexture == nil { buildOverlayResources() }
+            if let overlayTexture, let overlayPipeline, let overlaySampler {
+                encoder.setRenderPipelineState(overlayPipeline)
+                encoder.setVertexBytes(vertices, length: MemoryLayout<Vertex>.stride * vertices.count, index: 0)
+                encoder.setFragmentTexture(overlayTexture, index: 0)
+                encoder.setFragmentSamplerState(overlaySampler, index: 0)
+                encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+            }
+        }
+
         encoder.endEncoding()
 
         commandBuffer.present(drawable)
         commandBuffer.commit()
+    }
+
+    /// Builds the overlay's texture, blending pipeline and linear
+    /// sampler, once, on the first frame that draws a sheet. Linear, not
+    /// the game's nearest sampler: the sheet is smooth 1080p art being
+    /// scaled, not pixel art to preserve.
+    private func buildOverlayResources() {
+        guard let device, let overlayImage else { return }
+        let width = overlayImage.width
+        let height = overlayImage.height
+        guard width > 0, height > 0,
+              let context = CGContext(
+                  data: nil, width: width, height: height,
+                  bitsPerComponent: 8, bytesPerRow: width * 4,
+                  space: CGColorSpaceCreateDeviceRGB(),
+                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              )
+        else { return }
+        context.draw(overlayImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        guard let bytes = context.data else { return }
+
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .rgba8Unorm, width: width, height: height, mipmapped: false
+        )
+        guard let texture = device.makeTexture(descriptor: descriptor) else { return }
+        texture.replace(
+            region: MTLRegionMake2D(0, 0, width, height),
+            mipmapLevel: 0, withBytes: bytes, bytesPerRow: width * 4
+        )
+        overlayTexture = texture
+
+        if overlayPipeline == nil {
+            let pipelineDescriptor = MTLRenderPipelineDescriptor()
+            pipelineDescriptor.vertexFunction = libretroVertexFunction
+            pipelineDescriptor.fragmentFunction = shaderLibrary?.makeFunction(name: "libretro_fragment")
+            let attachment = pipelineDescriptor.colorAttachments[0]!
+            attachment.pixelFormat = attachedColorPixelFormat
+            attachment.isBlendingEnabled = true
+            attachment.sourceRGBBlendFactor = .one
+            attachment.sourceAlphaBlendFactor = .one
+            attachment.destinationRGBBlendFactor = .oneMinusSourceAlpha
+            attachment.destinationAlphaBlendFactor = .oneMinusSourceAlpha
+            overlayPipeline = try? device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+        }
+        if overlaySampler == nil {
+            let samplerDescriptor = MTLSamplerDescriptor()
+            samplerDescriptor.minFilter = .linear
+            samplerDescriptor.magFilter = .linear
+            overlaySampler = device.makeSamplerState(descriptor: samplerDescriptor)
+        }
     }
 
     /// Scratch buffer for `.RGB1555`/`.RGB565` frames, reused across calls

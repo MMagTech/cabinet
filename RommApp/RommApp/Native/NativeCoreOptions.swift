@@ -219,6 +219,24 @@ enum NativeCoreOptions {
         ),
     ]
 
+    /// Not a core option at all: the screen overlay toggle, this app's
+    /// own setting wearing the option plumbing so it gets storage and a
+    /// Settings row for free. The "cabinet_" prefix marks it; it rides
+    /// along in the options dictionary and vecx simply never asks for
+    /// it. See VectrexOverlays.swift for what it controls.
+    static let vectrex: [NativeCoreOption] = [
+        NativeCoreOption(
+            key: VectrexOverlays.optionKey,
+            label: "Screen overlays",
+            detail: "Draws each game's original translucent overlay over the picture, the colored sheet every Vectrex cartridge shipped with. Games whose sheet is not reproduced show the bare screen.",
+            choices: [
+                .init(value: "enabled", label: "On"),
+                .init(value: "disabled", label: "Off"),
+            ],
+            defaultValue: "enabled"
+        ),
+    ]
+
     /// Opera's two real levers, from its own option table. The 3DO ran
     /// many of its games below 20fps on the actual hardware, which is why
     /// the overclock option exists and why it is worth exposing: it is a
@@ -365,6 +383,7 @@ enum NativeCoreOptions {
         case .dreamcast: return dreamcast
         case .atari2600: return atari2600
         case .threeDO: return threeDO
+        case .vectrex: return vectrex
         default: return []
         }
     }
@@ -1180,7 +1199,13 @@ enum NativeCoreOptionsStore {
         // Present = 1 the same way, so passing it explicitly rather than
         // leaving the port unconfigured is the fix, confirmed against
         // retro_set_controller_port_device in the core's own source.
-        if platform == .dreamcast || platform == .n64 { return 1 }
+        // Opera is the third victim: its PBUS_DEVICES array is a zeroed
+        // global, zero is RETRO_DEVICE_NONE, and lr_input_update skips
+        // any port whose device is NONE, so without this call the core
+        // polls no input at all (found on device: Gex launched fine and
+        // ignored every control). RetroArch masks it by always
+        // negotiating the device for every port.
+        if platform == .dreamcast || platform == .n64 || platform == .threeDO { return 1 }
         let option = NativeCoreOptions.genesisPad
         guard NativeCoreOptions.options(for: platform).contains(where: { $0.key == option.key })
         else { return 0 }

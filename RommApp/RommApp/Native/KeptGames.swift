@@ -838,7 +838,8 @@ final class KeptGameStore: ObservableObject {
             fsNameNoExt: (legacy.fsName as NSString).deletingPathExtension,
             platformId: 0, platformSlug: slugGuess, platformFsSlug: slugGuess,
             platformDisplayName: nil, summary: nil, pathCoverSmall: nil, pathCoverLarge: nil,
-            fsSizeBytes: legacy.totalBytes, hasMultipleFiles: false
+            fsSizeBytes: legacy.totalBytes, hasMultipleFiles: false,
+            md5Hash: nil
         )
     }
 
