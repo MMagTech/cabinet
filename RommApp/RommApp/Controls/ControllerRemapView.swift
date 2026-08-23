@@ -279,22 +279,62 @@ struct ControllerRemapView: View {
         capturingHotkeySlot = nil
     }
 
-    private func hotkeyCapturePrompt() -> some View {
+    /// The shell both capture prompts wear. Sized for the device it is
+    /// on rather than once for a phone: a card tuned to arm's length
+    /// floats as a small dark box on a television, which is what this
+    /// looked like on real hardware. tvOS gets the room's type sizes
+    /// and the app's own glass; iOS keeps exactly what it had.
+    @ViewBuilder
+    private func capturePromptShell(
+        title: String, detail: String, @ViewBuilder actions: () -> some View
+    ) -> some View {
         ZStack {
             Color.black.opacity(0.6).ignoresSafeArea()
-            VStack(spacing: 14) {
-                Text("Press a button")
-                    .font(.title3.bold())
-                Text("for the menu hotkey")
+            #if os(tvOS)
+            VStack(spacing: 24) {
+                Text(title)
+                    .font(.largeTitle.bold())
+                Text(detail)
+                    .font(.title3)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                ProgressView()
+                    .padding(.vertical, 8)
+                HStack(spacing: 20) { actions() }
+            }
+            .padding(56)
+            .frame(minWidth: 700)
+            .background {
+                if #available(tvOS 26.0, *) {
+                    RoundedRectangle(cornerRadius: 32)
+                        .fill(.clear)
+                        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 32))
+                } else {
+                    RoundedRectangle(cornerRadius: 32).fill(.regularMaterial)
+                }
+            }
+            #else
+            VStack(spacing: 14) {
+                Text(title)
+                    .font(.title3.bold())
+                Text(detail)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
                 ProgressView()
                     .padding(.vertical, 4)
-                Button("Cancel") { endHotkeyCapture() }
-                    .buttonStyle(.bordered)
+                HStack(spacing: 12) { actions() }
             }
             .padding(28)
             .background(.regularMaterial, in: .rect(cornerRadius: 18))
             .padding(40)
+            #endif
+        }
+    }
+
+    private func hotkeyCapturePrompt() -> some View {
+        capturePromptShell(title: "Press a button", detail: "for the menu hotkey") {
+            Button("Cancel") { endHotkeyCapture() }
+                .buttonStyle(.bordered)
         }
     }
 
@@ -328,28 +368,17 @@ struct ControllerRemapView: View {
     }
 
     private func capturePrompt(for id: Int) -> some View {
-        ZStack {
-            Color.black.opacity(0.6).ignoresSafeArea()
-            VStack(spacing: 14) {
-                Text("Press a button")
-                    .font(.title3.bold())
-                Text("on player 1's controller, for \(RetroPad.label(for: id))")
-                    .foregroundStyle(.secondary)
-                ProgressView()
-                    .padding(.vertical, 4)
-                HStack(spacing: 12) {
-                    Button("Cancel") { endCapture() }
-                        .buttonStyle(.bordered)
-                    Button("Leave unset", role: .destructive) {
-                        controllers.clearBinding(for: id)
-                        endCapture()
-                    }
-                    .buttonStyle(.bordered)
-                }
+        capturePromptShell(
+            title: "Press a button",
+            detail: "on player 1's controller, for \(RetroPad.label(for: id))"
+        ) {
+            Button("Cancel") { endCapture() }
+                .buttonStyle(.bordered)
+            Button("Leave unset", role: .destructive) {
+                controllers.clearBinding(for: id)
+                endCapture()
             }
-            .padding(28)
-            .background(.regularMaterial, in: .rect(cornerRadius: 18))
-            .padding(40)
+            .buttonStyle(.bordered)
         }
     }
 
