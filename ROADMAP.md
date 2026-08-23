@@ -10,56 +10,6 @@ If something here interests you, or you want to pick one up, open an
 issue or a discussion first so the approach can be talked through before
 any code gets written.
 
-## Built, waiting on a release
-
-Done and working, just not in a tagged release yet.
-
-- **Preferring the local network over the public internet.** Set an
-  optional second address for your server, and Cabinet uses whichever of
-  the two is on your local network whenever it can actually reach it,
-  falling back on its own when it cannot. It works whichever box you
-  typed which address into, so setting Cabinet up at home first and
-  adding a public hostname later works as well as the other way round.
-  Downloads stop being bottlenecked by your home connection's upload
-  speed, and, if your home internet is metered, stop spending your
-  allowance twice on bytes that never needed to leave the house. iPhone
-  only for now, an Apple TV is set up with whichever address you pair it
-  against.
-
-- **In-game saves, on every platform that has them, on both iPhone and
-  Apple TV.** Saving inside a game used to work while you played and
-  vanish when the game closed, on everything except PlayStation, Nintendo
-  64 and Dreamcast. Now Game Boy Advance, SNES, NES, Game Boy, Game Boy
-  Color, Genesis, Master System, Game Gear, 32X, TurboGrafx CD, Saturn,
-  Sega CD and Neo Geo Pocket all keep their saves, back them up to RomM,
-  and put them back the next time you play, including on a different
-  device: save on the phone, carry on from the couch. Sega CD's external
-  RAM cartridge is kept as well, since games prefer it when it is there,
-  and the Game Boy's clock travels alongside its save for the games that
-  depend on it. Sega CD, Neo Geo Pocket and arcade only commit their
-  saves when you quit properly, which is how those emulator cores work
-  rather than a choice, so a session ended by iOS killing the app in the
-  background can still lose what you did since launch.
-
-- **Your recent games on the Apple TV's top shelf.** When Cabinet sits in
-  the top row of the Apple TV home screen, the large area above it now
-  shows the games you played recently, with their own cover art.
-  Selecting one opens it, where your save states are; pressing Play on
-  the remote drops you straight into the game. Only games this Apple TV
-  can actually run appear there, and it shows nothing at all until you
-  have paired and played something, rather than putting a row of dead
-  ends on your home screen.
-
-- **Cartridge motion sensors on iPhone.** A few Game Boy Advance games
-  shipped with hardware inside the cartridge. WarioWare: Twisted! has a
-  gyroscope and is played by physically turning the thing in your hands,
-  and until now Cabinet had no answer when the game asked which way you
-  had turned it, so it stopped being playable at the first prompt. The
-  phone's own motion now stands in for that cartridge, which is rather
-  better hardware for it than the original ever had. Yoshi's Universal
-  Gravitation and Koro Koro Puzzle's tilt sensors work the same way.
-  iPhone only: the Siri Remote has had no motion sensors since 2021.
-
 ## Being explored
 
 Not committed, not scoped, real conversations that happened and are
@@ -119,34 +69,33 @@ worth having in the open.
   only at first; a web player on an external display is its own
   question. The fiddly part is disconnecting mid-game, which should
   bring the picture back to the phone rather than strand the player.
-- **Seven more systems, starting with Atari 2600.** Every platform in
-  this group plays today on iPhone through the web player and is
-  invisible on Apple TV, because the TV lists a platform only when a
-  natively compiled core can run it. Each one is a core to add and a
-  control layout to draw, in rough order of what the library actually
-  holds and how well the emulation is understood:
+- **More systems, running natively.** Cabinet compiles nineteen
+  emulators into the app, and each new one is a core to build plus a
+  control layout to draw. Four of the seven originally listed here are
+  done: Atari 2600, Vectrex, 3DO and Virtual Boy.
+
+  What is left, and the honest state of each:
 
   | System | Core | Notes |
   |---|---|---|
-  | Atari 2600 | Stella | 50 games already in the library, the obvious first |
-  | ColecoVision | Gearcoleco | needs its own BIOS |
-  | Intellivision | FreeIntv | its disc controller and keypad are the hard part |
-  | Vectrex | vecx | vector display, overlays, its own look |
-  | 3DO | Opera | a control layout already exists, from earlier scoping |
-  | Magnavox Odyssey<sup>2</sup> | O2EM | keyboard-adjacent controls |
-  | Philips CD-i | SAME_CDI | experimental upstream, lowest priority |
+  | ColecoVision | Gearcoleco | Ready to go, but needs its BIOS on your server first |
+  | Intellivision | FreeIntv | Its disc controller and keypad are the hard part |
+  | Magnavox Odyssey<sup>2</sup> | O2EM | Keyboard-adjacent controls |
+  | Philips CD-i | SAME_CDI | Experimental upstream, lowest priority |
 
-  Atari 2600 is the honest starting point: the games are already here,
-  Stella is mature, and the machine is one stick and one button, so the
-  layout work is small. It is also the cleanest test of whether adding a
-  system is now routine, since nothing about it is unusual except being
-  the first of these.
+  Two more were looked at properly and are worth recording. **Nintendo
+  DS** is a real candidate: its cores build for Apple platforms with no
+  just-in-time compilation at all, and Mario Kart DS measured 4.1ms a
+  frame mid-race against a 16.7ms budget, so speed is not the obstacle.
+  The interface is: two screens and a stylus. **Atari Jaguar** was
+  declined rather than deferred. The core is in much better shape than
+  its reputation, but the console only ever had 63 licensed games, which
+  is a small return for a controller with a twelve-key keypad to solve.
 
-  The two that are genuinely different are Intellivision and Odyssey<sup>2</sup>:
-  both consoles put a numeric keypad in the player's hand, which no
-  layout in this app draws yet, and no amount of core work substitutes
-  for deciding what that should feel like on a touchscreen and on a TV
-  remote. CD-i is last on purpose, its core calls itself experimental.
+  Beyond those, the runway is genuinely short. Almost everything left in
+  a normal library, PlayStation 2, GameCube, Wii, 3DS, Switch, PSP,
+  Vita, needs runtime code generation that Apple does not permit, or
+  hardware beyond what an interpreter can carry.
 
 - **A native touch control restyle.** The current on-screen controls are
   functional but read a little flat next to the rest of the app. A
@@ -188,12 +137,17 @@ Real, acknowledged holes, not yet started.
   state, not automatically on quit or backgrounding, unlike the web
   player.
 - **Dreamcast runs below full speed in heavy scenes**, cut scenes worst
-  of all, on Apple TV especially. The Dreamcast core has to interpret
-  every instruction rather than translating it, because apps on Apple's
-  platforms cannot generate code at runtime, and video-heavy scenes are
-  the hardest case for that. The usual emulator settings that would buy
-  speed back are already at their fastest values here, so the ceiling is
-  mostly real rather than a matter of tuning.
+  of all, on Apple TV especially. This is much better than it was, and
+  the cause is understood rather than mysterious: see
+  [issue #6](https://github.com/MMagTech/cabinet/issues/6) for the full
+  root cause. Normal play now holds 60fps with clean audio, which it
+  could not do at all before, and the console's many 2D shooters and
+  fighters play well. Heavy 3D titles still drop in their busiest
+  moments. The remaining limit is that the Dreamcast's CPU has to be
+  interpreted rather than translated, because apps on Apple's platforms
+  cannot generate code at runtime, and the settings that would buy speed
+  back are already at their fastest usable values.
+
 - **PC Engine's 2-button vs. 6-button controller mode** isn't wired up
   to its touch layout yet, even though the core supports it.
 - **PS1 and Saturn multi-disc games aren't supported**, and whether they
