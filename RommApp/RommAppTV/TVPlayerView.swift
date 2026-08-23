@@ -334,7 +334,15 @@ struct TVPlayerView: View {
             // device afterwards. The recording itself lives in the shared
             // renderer, so without these the trace simply never starts.
             FrameTrace.shared.begin(core: "\(core)")
-            if platform == .arcade, allowPhoneController {
+            // phoneLink == nil matters: onAppear can run again for
+            // the same screen (an app switcher visit is enough), and
+            // building a second receiver over the first dropped the
+            // old one without stopping it. Its listener lived on as a
+            // deaf zombie holding the Bonjour name, the replacement
+            // got renamed into something phones refuse to parse, and
+            // every join died until the app was force quit. Found by
+            // probing the advertised port directly from the Mac.
+            if platform == .arcade, allowPhoneController, phoneLink == nil {
                 let link = ControllerLinkReceiver(
                     shortname: rom.fsNameNoExt.lowercased(),
                     // The seat comes from the same slot rule the pads

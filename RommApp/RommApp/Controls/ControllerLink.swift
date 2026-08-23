@@ -327,6 +327,17 @@ final class ControllerLinkReceiver {
         self.onDrop = onDrop
     }
 
+    /// Everything holds this receiver weakly (the connection handler,
+    /// the liveness timer), so dropping it without stop() deallocates
+    /// it while its listener would otherwise keep running: a deaf
+    /// zombie that still owns the Bonjour name and answers nobody.
+    /// Tearing down here makes that whole class of bug impossible.
+    deinit {
+        liveness?.cancel()
+        listener?.cancel()
+        connections.forEach { $0.cancel() }
+    }
+
     func start() {
         guard listener == nil else { return }
         guard let l = try? NWListener(using: ControllerLink.parameters()) else { return }
