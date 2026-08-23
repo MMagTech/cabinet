@@ -407,7 +407,11 @@ struct ControllerPadView: View {
                 .foregroundStyle(.green)
             Text("Paired to your TV")
                 .font(.title2.bold())
-            Text("Start a game on the TV and the controls will appear.")
+            // The durable rule, not this screen's mechanics: pairing
+            // was the one-time part, and Home is the everyday door.
+            // Deliberately no "arcade": the panel is headed for every
+            // core by release, per Marcus.
+            Text("Whenever a game is playing on your TV, Home will offer the controls.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
