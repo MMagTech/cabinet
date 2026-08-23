@@ -20,6 +20,12 @@ design and the reasoning behind it, and most decisions in it are already settled
 - Work on `dev`. Both platforms live there, iOS and tvOS. `main` is the release
   branch and carries the full history. The old separate `tvos` branch is
   retired, merged into `main` on 2026-08-12. Do not recreate it.
+- `main` normally only moves when a release is cut. The one exception is a
+  commit that touches no app code at all, README, ROADMAP, `docs/`, since
+  `main` is what a visitor to the repo actually lands on and those files
+  reflect the project regardless of what has or hasn't shipped yet. A
+  docs-only commit can go straight to both branches. Anything that touches
+  code, even a one-line fix, waits for a real release cut.
 - Releases are per platform, tagged independently on `main`: `ios-v0.x.x-alpha`
   and `tvos-v0.x.x-alpha`, titled "Cabinet for iOS 0.x.x-alpha" and
   "Cabinet for tvOS 0.x.x-alpha". The two platforms do not have to release
