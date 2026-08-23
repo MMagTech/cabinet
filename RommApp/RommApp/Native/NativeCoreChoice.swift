@@ -15,8 +15,28 @@ import Foundation
 /// instead, so the person is told, not overridden.
 enum NativeCoreChoice {
     private static func romKey(_ romId: Int) -> String { "native.core.rom.\(romId)" }
-    private static func platformKey(_ platform: NativePlatform) -> String {
-        "native.core.nativePlatform.\(platform)"
+
+    /// The habit key, scoped to the rom's own folder on the server rather
+    /// than to the platform.
+    ///
+    /// Arcade is why. It is one `NativePlatform` covering boards that have
+    /// nothing in common, so a habit spanning all of it is actively
+    /// harmful: picking MAME 2003-Plus for one game made it the default
+    /// for every arcade game with no choice of its own, including the
+    /// FinalBurn Neo ones that MAME 0.78 cannot run. One deliberate pick
+    /// silently rerouted a whole library onto a core that would refuse it.
+    ///
+    /// A folder is a much better unit, because it is how people actually
+    /// separate romsets: an "FBNEO" folder and a "MAME2003" folder each
+    /// keep their own habit and cannot contaminate each other. Someone who
+    /// keeps everything in one folder gets exactly the previous behaviour,
+    /// no worse, just no better.
+    ///
+    /// Falls back to the platform when a rom carries no folder, so this
+    /// can never produce a key that collides across platforms.
+    private static func habitKey(_ rom: Rom, _ platform: NativePlatform) -> String {
+        let folder = rom.platformFsSlug.isEmpty ? "\(platform)" : rom.platformFsSlug
+        return "native.core.folder.\(folder)"
     }
 
     /// The core a launch should use. For single-core platforms this is
@@ -29,21 +49,22 @@ enum NativeCoreChoice {
            let core = cores.first(where: { $0.storageKey == stored }) {
             return core
         }
-        if let stored = UserDefaults.standard.string(forKey: platformKey(platform)),
+        if let stored = UserDefaults.standard.string(forKey: habitKey(rom, platform)),
            let core = cores.first(where: { $0.storageKey == stored }) {
             return core
         }
         return platform.core
     }
 
-    /// Remembered the way the webview remembers: for this game, and as
-    /// the platform's new habit. Nil clears the per-game choice.
+    /// Remembered for this game, and as the habit for the folder it came
+    /// from. Nil clears the per-game choice. See `habitKey` for why the
+    /// habit is folder-scoped rather than platform-scoped.
     static func remember(_ core: NativeCore?, rom: Rom, platform: NativePlatform) {
         guard platform.cores.count > 1 else { return }
         let defaults = UserDefaults.standard
         if let core {
             defaults.set(core.storageKey, forKey: romKey(rom.id))
-            defaults.set(core.storageKey, forKey: platformKey(platform))
+            defaults.set(core.storageKey, forKey: habitKey(rom, platform))
         } else {
             defaults.removeObject(forKey: romKey(rom.id))
         }

@@ -398,7 +398,26 @@ enum NativeLauncher {
         if let failure = LibretroFrontend.shared.loadGame(
             loadURL.path, systemDirectory: workDir.path, saveDirectory: saveDir.path
         ) {
-            throw NSError(domain: "NativeLauncher", code: 1, userInfo: [NSLocalizedDescriptionKey: failure])
+            // Deliberately does NOT claim the core is wrong, because
+            // nothing here knows that: a refusal is equally what a missing
+            // BIOS, an incomplete romset, or a set built for a different
+            // version of the same emulator looks like. It says only what
+            // is known, which core refused, and offers the other as a
+            // possibility rather than a diagnosis.
+            //
+            // Names the Emulator row because that picker is already on
+            // this same screen on both platforms, so there is nowhere to
+            // send anyone.
+            var message = failure
+            if platform.cores.count > 1 {
+                let others = platform.cores
+                    .filter { $0 != core }
+                    .map(\.displayName)
+                    .joined(separator: " or ")
+                message = "\(core.displayName) wouldn't start this game. "
+                    + "\(others) might, from the Emulator row."
+            }
+            throw NSError(domain: "NativeLauncher", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
         }
         return core
         #endif
