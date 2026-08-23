@@ -592,37 +592,6 @@ final class ControllerLinkReceiver {
 
 #if os(iOS)
 
-/// Watches for a television playing an arcade game, for the Home offer.
-///
-/// Browse only, never a connection: the offer has to know what is
-/// playing before the person decides anything, and deciding is theirs.
-@MainActor
-final class ControllerLinkScout: ObservableObject {
-    /// The romset a television on this network is running, or nil.
-    @Published private(set) var playing: String?
-
-    private var browser: NWBrowser?
-    private let queue = DispatchQueue(label: "cabinet.link.scout")
-
-    func start() {
-        guard browser == nil else { return }
-        let browser = NWBrowser(for: .bonjour(type: ControllerLink.bonjourType, domain: nil),
-                                using: ControllerLink.parameters())
-        browser.browseResultsChangedHandler = { [weak self] results, _ in
-            let name = results.compactMap { ControllerLink.shortname(fromService: $0.endpoint) }.first
-            Task { @MainActor in self?.playing = name }
-        }
-        self.browser = browser
-        browser.start(queue: queue)
-    }
-
-    func stop() {
-        browser?.cancel()
-        browser = nil
-        playing = nil
-    }
-}
-
 /// Finds the television, joins or pairs as the television requires,
 /// then speaks the panel's verbs to it.
 @MainActor

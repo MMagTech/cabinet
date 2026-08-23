@@ -210,8 +210,10 @@ final class GunAim {
 /// the entire point: the panel work and the accessory feature are one
 /// thing, and everything fixed on one is fixed on the other.
 ///
-/// DEBUG scaffolding, reached by launch argument only, like the aim lab
-/// it borrows its transport from. The shipping entry is the Home offer.
+/// Reached from Home's TV Controller row, which is also the moment the
+/// phone first touches the network: browsing starts when this screen
+/// appears and not before, the settled design's rule. The lab's
+/// -cabinetLink launch argument opens it directly too.
 struct ControllerPadView: View {
     @StateObject private var link = ControllerLinkSender()
     @Environment(\.scenePhase) private var scenePhase
@@ -257,6 +259,24 @@ struct ControllerPadView: View {
                 default:
                     waitingView(link.status)
                 }
+            }
+        }
+        .overlay(alignment: .topLeading) {
+            // A way out that exists before a connection does. The live
+            // panel keeps the Menu pill as its only door, so putting
+            // the phone down mid-game stays a deliberate act; this is
+            // for the person who tapped the row with no television
+            // playing.
+            if link.shortname == nil {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title)
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(20)
             }
         }
         .statusBarHidden()

@@ -32,23 +32,12 @@ struct HomeView: View {
     #if os(iOS)
     @State private var directLaunch: DirectLaunch?
     #if DEBUG
-    /// The phone-as-controller offer. The scout watches for a television
-    /// on this network playing an arcade game and `tvPlaying` is the
-    /// romset it saw; the card renders only then, so a Home with no such
-    /// television is pixel-identical to one where this feature does not
-    /// exist. DEBUG scaffolding: the shipping offer learns presence from
-    /// RomM and appears only for a television paired to this account.
-    @StateObject private var linkScout = ControllerLinkScout()
-    /// Set at tap time and presented from a stable node. The first wiring
-    /// anchored the cover inside `if let playing`, and presenting it
-    /// fired Home's onDisappear, which stopped the scout, which cleared
-    /// `playing`, which removed the branch the cover was anchored to,
-    /// which dismissed the cover as it rose. The card then flickered
-    /// back as the scout restarted, the layout shifted, and the next tap
-    /// landed on the hero underneath: "clicking it just opens the game
-    /// launcher", exactly as reported.
-    @State private var controllerPadTarget: PadTarget?
-    private struct PadTarget: Identifiable { let id: String }
+    /// The phone-as-controller entry. Deliberately not knowledge
+    /// driven: the settled design has the phone browse the network
+    /// only after someone taps to connect, so Home cannot know what is
+    /// on the television and does not pretend to. The row is quiet and
+    /// constant; the panel screen behind it does the finding.
+    @State private var showingControllerPad = false
     #endif
     #endif
     @State private var nativeDirectLaunch: NativeDirectLaunch?
@@ -221,12 +210,9 @@ struct HomeView: View {
             // included.
             .onAppear {
                 Task { await load() }
-                #if os(iOS) && DEBUG
-                linkScout.start()
-                #endif
             }
             #if os(iOS) && DEBUG
-            .fullScreenCover(item: $controllerPadTarget) { _ in
+            .fullScreenCover(isPresented: $showingControllerPad) {
                 ControllerPadView()
             }
             #endif
@@ -304,9 +290,7 @@ struct HomeView: View {
     private func tallLayout(height: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 28) {
             #if os(iOS) && DEBUG
-            if let playing = linkScout.playing {
-                controllerOffer(for: playing).padding(.horizontal, 20)
-            }
+            controllerRow.padding(.horizontal, 20)
             #endif
             if let hero = recent.first {
                 heroCard(for: hero, height: portraitHeroHeight(for: height), wide: false)
@@ -334,29 +318,24 @@ struct HomeView: View {
     /// full-width shelves, the same structure Home's own mockups settled
     /// on and the shape Apple's own TV app uses.
     #if os(iOS) && DEBUG
-    /// The offer itself: named for what is true ("Centipede is on your
-    /// TV") with a single verb. Dismissal is deliberately absent from
-    /// this scaffold; the shipping card gets the per-television
-    /// dismissal the design settled.
-    private func controllerOffer(for shortname: String) -> some View {
-        // The library's own name for the game when it has one; the
-        // romset name is an honest fallback, not a mystery string.
-        let name = (recent + favorites).first {
-            $0.fsNameNoExt.lowercased() == shortname
-        }?.displayName ?? shortname
-
-        return Button {
-            controllerPadTarget = PadTarget(id: shortname)
+    /// The quiet, constant front door. It promises nothing about what
+    /// is playing, because the phone has not looked and will not until
+    /// this is tapped: that is the settled design's rule, and it is
+    /// also why nobody who ignores this row ever sees the
+    /// local-network permission prompt.
+    private var controllerRow: some View {
+        Button {
+            showingControllerPad = true
         } label: {
             HStack(spacing: 14) {
                 Image(systemName: "appletv.fill")
                     .font(.title2)
                     .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(name) is on your TV")
+                    Text("TV Controller")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
-                    Text("Use this phone as the controls")
+                    Text("Drive a game on your Apple TV")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -477,16 +456,13 @@ struct HomeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     #if DEBUG
-                    // Landscape is the orientation a phone that was just
-                    // a controller is already in, so the offer that
-                    // matters most was the one missing here: it went
-                    // into the portrait column first and landscape
-                    // showed the hero as the top card instead, which
-                    // opened the launcher. Found by Marcus on the first
+                    // Landscape is the orientation a phone that is
+                    // about to be a controller is already in, so the
+                    // row leads this column the same way it leads the
+                    // portrait one. Its first placement missed
+                    // landscape entirely; found by Marcus on the first
                     // front-door run.
-                    if let playing = linkScout.playing {
-                        controllerOffer(for: playing).padding(.top, 20)
-                    }
+                    controllerRow.padding(.top, 20)
                     #endif
                     if recent.count > 1 {
                         rotationRow("Recent", Array(recent.dropFirst()), seeAll: .recentlyPlayed)
