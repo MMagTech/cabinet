@@ -26,6 +26,10 @@ struct TVSettingsView: View {
     /// Deliberately the iOS key, not a tvOS one: the core reads this exact
     /// name from Objective-C++, and it means the same thing on both.
     @AppStorage("com.mmagtech.RommApp.rumbleEnabled") private var rumbleEnabled = true
+    /// Off by default, and the whole feature hangs from it: while this is
+    /// off the television never binds a socket, so to the network the
+    /// feature does not exist. See docs/scope-phone-controller-pairing.md.
+    @AppStorage(ControllerPairing.allowKey) private var allowPhoneController = false
     @AppStorage(PlatformLabelSource.key) private var labelSourceRaw = PlatformLabelSource.platformName.rawValue
 
     var body: some View {
@@ -88,6 +92,18 @@ struct TVSettingsView: View {
                             actionRow(title: "Buttons", detail: "Map any button to any input", chevron: true)
                         }
                         .buttonStyle(RowFocusStyle())
+                        // The phone-as-controller master switch. While
+                        // this is off the television never opens a
+                        // socket, so the feature is invisible to the
+                        // network, not merely refusing connections.
+                        Toggle(isOn: $allowPhoneController) {
+                            actionRow(
+                                title: "Allow a phone as a controller",
+                                detail: "A phone with Cabinet can join a running game",
+                                chevron: false
+                            )
+                        }
+                        .toggleStyle(.switch)
                     }
 
                     section("Emulation") {

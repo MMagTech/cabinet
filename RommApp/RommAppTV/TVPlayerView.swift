@@ -58,6 +58,11 @@ struct TVPlayerView: View {
     /// Paused from the phone's own menu, tracked so the idle rule below
     /// can tell a live phone game from one sitting in a pause screen.
     @State private var phonePaused = false
+    /// The Settings switch. Read at launch: while it is off, no listener
+    /// is created and no socket exists, which is the design's step one.
+    /// Flipping it mid-game takes effect at the next launch, and the
+    /// switch cannot be reached mid-game anyway.
+    @AppStorage(ControllerPairing.allowKey) private var allowPhoneController = false
     #endif
 
     private var canonicalSlug: String {
@@ -294,7 +299,7 @@ struct TVPlayerView: View {
             // renderer, so without these the trace simply never starts.
             FrameTrace.shared.begin(core: "\(core)")
             #if DEBUG
-            if platform == .arcade {
+            if platform == .arcade, allowPhoneController {
                 let link = ControllerLinkReceiver(
                     shortname: rom.fsNameNoExt.lowercased(),
                     onButton: { [weak renderer] id, down in

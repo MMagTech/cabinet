@@ -93,8 +93,8 @@ coarse veto is turning the setting off.
 `GameControllerManager.slotIndex(for:)` already implements for pads. The
 first source to claim a slot keeps it, so a pad connecting after a phone
 has joined does not silently demote the person already playing. Two
-slots, `kMaxPorts`; a third source is simply not a player, exactly as a
-third gamepad behaves today.
+slots, `GameControllerManager.maxPlayers`; a third source is simply not
+a player, exactly as a third gamepad behaves today.
 
 **A phone needs a stable identity across reconnects.** Pads get this free
 because the same physical controller returns as the same object. A phone
