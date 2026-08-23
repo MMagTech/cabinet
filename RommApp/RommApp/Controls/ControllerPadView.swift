@@ -417,13 +417,19 @@ struct ControllerPadView: View {
     /// Which player this phone is, worn where the mode pills live and
     /// in their style. A pad has no opinion about this because a human
     /// plugged it in; a phone says it out loud.
+    /// Nothing until this phone has earned a seat. An unseated phone
+    /// wearing "P1" would be a lie the moment a second person picks
+    /// one up, and the badge appears on the first button anyway.
+    @ViewBuilder
     private var playerBadge: some View {
-        Text("P\(link.playerIndex + 1)")
-            .font(.footnote.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(.thinMaterial, in: Capsule())
+        if let player = link.playerIndex {
+            Text("P\(player + 1)")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.thinMaterial, in: Capsule())
+        }
     }
 
     /// The phases where the hint about the television's requirements

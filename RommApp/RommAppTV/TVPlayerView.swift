@@ -118,28 +118,36 @@ struct TVPlayerView: View {
     /// Glass on tvOS 26 with the flat material fallback, the same
     /// pattern as the pause menu and every other card in the app.
     private func pairingOverlay(code: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        // Sized down from 64pt digits in 36pt of padding, which read
+        // as a demand rather than an offer over somebody's game. The
+        // code still has to cross a room, so it stays monospaced and
+        // large relative to its own card; the card just stops being
+        // the size of a dialog. The caption goes too: whoever asked
+        // to pair is holding the phone that asked, and telling them
+        // to enter it on the phone is the app narrating itself.
+        VStack(alignment: .leading, spacing: 2) {
             Text("Phone controller")
-                .font(.callout.weight(.semibold))
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             Text(ControllerPairing.displayCode(code))
-                .font(.system(size: 64, weight: .bold, design: .monospaced))
-            Text("Enter this code on the phone")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 38, weight: .semibold, design: .monospaced))
         }
-        .padding(36)
+        .padding(.horizontal, 22)
+        .padding(.vertical, 16)
         .background {
             if #available(tvOS 26.0, *) {
-                RoundedRectangle(cornerRadius: 32)
+                RoundedRectangle(cornerRadius: 20)
                     .fill(.clear)
-                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 32))
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20))
             } else {
-                RoundedRectangle(cornerRadius: 32).fill(.regularMaterial)
+                RoundedRectangle(cornerRadius: 20).fill(.regularMaterial)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-        .padding(60)
+        // Inside the title-safe area, out of the corner, and further
+        // from the picture than the old card was: a smaller card can
+        // afford to sit closer to the edge.
+        .padding(70)
         .transition(.opacity)
     }
 

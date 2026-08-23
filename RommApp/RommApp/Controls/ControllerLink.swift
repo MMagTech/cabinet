@@ -32,6 +32,10 @@ import Network
 enum ControllerLink {
     static let bonjourType = "_cabinet-probe._udp"
     static let serviceName = "CabinetLink"
+    /// The port byte a hello carries before any seat is claimed. 255
+    /// rather than 0, because 0 is player one and a phone that has
+    /// not played is not player one.
+    static let unseatedPort = 255
 
     /// One player action. Fixed width, no lengths and no allocation, so
     /// the only thing an unexpected packet can do is decode to nonsense
@@ -72,6 +76,27 @@ enum ControllerLink {
             /// standing offer. Phones that predate this kind drop it
             /// unread, which is the packet format's own rule.
             case videoOffer = 17
+            /// Television to phone: which player you just became.
+            /// Sent when a seat is claimed, not at join, because a
+            /// phone is nobody until somebody plays on it. Payload is
+            /// an 8-byte tag over the port byte, under the session
+            /// key, so a seat cannot be forged any more than input
+            /// can. Phones that predate this kind drop it unread.
+            case seat = 18
+
+            /// True for the kinds a person generates by playing, which
+            /// is what earns a seat. Deliberately excludes the
+            /// heartbeat (arriving is not playing) and the menu verbs
+            /// (pausing or putting the controller away needs no seat,
+            /// and never did).
+            var isPlayerInput: Bool {
+                switch self {
+                case .button, .stick, .relative, .pointer, .offscreen:
+                    return true
+                default:
+                    return false
+                }
+            }
             // The front door. A phone announces who it is with a fresh
             // nonce; a known phone gets hello back carrying the
             // television's nonce and proof, the two nonces plus the
@@ -264,8 +289,12 @@ final class ControllerLinkReceiver {
         /// is a new session and re-derives everything.
         var phoneNonce: Data?
         var sessionKey: SymmetricKey?
-        /// The seat this phone holds, from the slot rule at join.
-        var port = 0
+        /// The seat this phone holds, or nil while it holds none.
+        /// Seats are claimed by the first input a person actually
+        /// sends, never at join: a phone left open on a table beats
+        /// any human reaching for a controller, so joining could not
+        /// be allowed to mean playing. See the claim in handle().
+        var port: Int?
         /// The datagram flow this peer lives on, kept so an offer made
         /// after the join (the video server starts when the game side
         /// is ready, not when the phone arrives) can still reach them.
@@ -452,6 +481,16 @@ final class ControllerLinkReceiver {
         }
     }
 
+    /// Tell a phone which player it just became. Tagged under the
+    /// session key, the same standard the hello and the video offer
+    /// meet, so a seat cannot be forged.
+    private func sendSeat(_ port: Int, to peer: Peer, on connection: NWConnection) {
+        guard let key = peer.sessionKey else { return }
+        let body = Data([UInt8(clamping: port)])
+        let tag = ControllerPairing.tag(key: key, context: "t2p-seat", bytes: body)
+        reply(.seat, payload: tag + body, on: connection)
+    }
+
     private func sendVideoOffer(port: UInt16, token: Data, to peer: Peer) {
         guard let key = peer.sessionKey, let connection = peer.connection else { return }
         var body = Data()
@@ -532,20 +571,22 @@ final class ControllerLinkReceiver {
                 reply(.hello, payload: cached, on: connection)
                 return
             }
-            // A seat, from the same rule the pads use, sticky by
-            // paired identity. A full house is answered honestly, the
-            // way a third gamepad is simply not a player.
-            guard let port = assignPort(phoneID) else {
-                fail(.full, on: connection)
-                return
-            }
+            // No seat here. Joining is arriving, not playing, and a
+            // phone that merely reconnected while sitting on a table
+            // would otherwise take player one from whoever is
+            // actually reaching for a controller. The seat is claimed
+            // by the first input below, and a full house is answered
+            // then, when somebody actually tried to play.
+            let port = ControllerLink.unseatedPort
             // A fresh nonce is a fresh session: new keys, new replay
             // window, and joined goes back to unproven until the first
             // tagged packet lands.
             let tvNonce = ControllerPairing.randomBytes(16)
             let nameBytes = Data(shortname.utf8.prefix(32))
-            // Which player this phone is, under the proof, so not even
-            // the cosmetic byte can be forged.
+            // Which player this phone is, under the proof, so not
+            // even the cosmetic byte can be forged. At join this is
+            // always the unseated marker; the real seat arrives in
+            // its own tagged packet the moment one is claimed.
             let portByte = Data([UInt8(clamping: port)])
             let helloKey = ControllerPairing.helloKey(secret: secret, phoneNonce: phoneNonce)
             let helloTag = ControllerPairing.tag(
@@ -556,7 +597,7 @@ final class ControllerLinkReceiver {
                 phoneNonce: phoneNonce,
                 sessionKey: ControllerPairing.sessionKey(
                     secret: secret, phoneNonce: phoneNonce, tvNonce: tvNonce),
-                port: port,
+                port: nil,
                 connection: connection,
                 helloPayload: helloPayload,
                 lastHeard: Date()
@@ -689,22 +730,43 @@ final class ControllerLinkReceiver {
         let stale = p.seq < last
         if p.seq > last { peers[key]?.lastSeq = p.seq }
 
-        let port = peer.port
+        // The seat, claimed by playing rather than by arriving. Only
+        // the kinds a person generates count: a heartbeat is not
+        // playing, and neither is opening the app. The claim happens
+        // before the input is dispatched, in this same frame, so the
+        // button that earns the seat still reaches the game.
+        var port = peers[key]?.port
+        if port == nil, p.kind.isPlayerInput {
+            guard let phoneID = peer.phoneID else { return }
+            guard let claimed = assignPort(phoneID) else {
+                // Every seat is taken, and now is when it matters:
+                // somebody pressed something and nothing happened.
+                fail(.full, on: connection)
+                return
+            }
+            peers[key]?.port = claimed
+            port = claimed
+            sendSeat(claimed, to: peers[key]!, on: connection)
+        }
+
         switch p.kind {
         case .hello:
             // The heartbeat: nothing but the liveness it just bought.
             break
         case .button:
+            guard let port else { return }
             onButton(port, Int(p.a), p.flag)
         case .stick:
-            guard !stale else { return }
+            guard !stale, let port else { return }
             onStick(port, Double(p.a) / 10000, Double(p.b) / 10000)
         case .relative:
+            guard let port else { return }
             onRelative(port, Int(p.a), Int(p.b))
         case .pointer:
-            guard !stale else { return }
+            guard !stale, let port else { return }
             onPointer(port, Double(p.a) / 10000, Double(p.b) / 10000, p.flag)
         case .offscreen:
+            guard let port else { return }
             onOffscreen(port, p.flag)
         case .pause:
             onPause(p.flag)
@@ -805,10 +867,14 @@ final class ControllerLinkSender: ObservableObject {
     /// answered. The panel is built from this, which is why the phone
     /// draws the right cabinet without being told anything else.
     @Published private(set) var shortname: String?
-    /// Which player this phone is, zero based, from the hello. The
-    /// panel wears it as a badge: two people staring at identical
-    /// panels not knowing who is who is a bad first thirty seconds.
-    @Published private(set) var playerIndex = 0
+    /// Which player this phone is, zero based, or nil while it is
+    /// nobody. A phone earns a seat by playing, not by joining, so
+    /// this stays nil from the handshake until the first button, and
+    /// the panel simply wears no badge until then. Two people
+    /// staring at identical panels not knowing who is who is a bad
+    /// first thirty seconds; two people both told they are player one
+    /// would be worse.
+    @Published private(set) var playerIndex: Int?
     /// Where the television says the bottom screen's stream lives, nil
     /// until a proven offer arrives and back to nil when one is
     /// revoked. The DS panel watches this and dials in.
@@ -984,6 +1050,7 @@ final class ControllerLinkSender: ObservableObject {
         pendingProof = nil
         sessionKey = nil
         videoOffer = nil
+        playerIndex = nil
     }
 
     /// The foreground edge. If the link died while the app was away,
@@ -996,6 +1063,7 @@ final class ControllerLinkSender: ObservableObject {
         pendingProof = nil
         sessionKey = nil
         videoOffer = nil
+        playerIndex = nil
         start()
     }
 
@@ -1029,6 +1097,7 @@ final class ControllerLinkSender: ObservableObject {
         phoneNonce = ControllerPairing.randomBytes(16)
         sessionKey = nil
         videoOffer = nil
+        playerIndex = nil
         badHelloCount = 0
         currentEndpoint = endpoint
         let c = NWConnection(to: endpoint, using: ControllerLink.parameters())
@@ -1059,6 +1128,7 @@ final class ControllerLinkSender: ObservableObject {
                     self.pendingProof = nil
                     self.sessionKey = nil
                     self.videoOffer = nil
+                    self.playerIndex = nil
                     // A failure with nobody having called stop() means
                     // the flow died under us, suspension being the
                     // common cause. Go back to looking; the sequence
@@ -1138,7 +1208,8 @@ final class ControllerLinkSender: ObservableObject {
                 shortname = name
                 status = name
             }
-            playerIndex = Int(port[port.startIndex])
+            let announced = Int(port[port.startIndex])
+            playerIndex = announced == ControllerLink.unseatedPort ? nil : announced
             sessionKey = ControllerPairing.sessionKey(
                 secret: secret, phoneNonce: phoneNonce, tvNonce: tvNonce)
             requester = nil
@@ -1149,6 +1220,19 @@ final class ControllerLinkSender: ObservableObject {
             // the television, so it goes now rather than at the next
             // heartbeat.
             send(.init(kind: .hello))
+
+        case .seat:
+            // The seat this phone just earned by playing. Believed
+            // only under the session key's proof, the same standard
+            // the hello set.
+            guard let key = sessionKey,
+                  payload.count >= ControllerPairing.tagLength + 1 else { return }
+            let tag = Data(payload.prefix(ControllerPairing.tagLength))
+            let body = Data(payload.dropFirst(ControllerPairing.tagLength))
+            guard ControllerPairing.validTag(tag, key: key, context: "t2p-seat", bytes: body)
+            else { return }
+            let seat = Int(body[body.startIndex])
+            playerIndex = seat == ControllerLink.unseatedPort ? nil : seat
 
         case .videoOffer:
             // Believed only under the session key's own proof, the same
