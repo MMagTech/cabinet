@@ -160,9 +160,15 @@ struct ControllerRemapView: View {
                     }
                 }
             }
-            .frame(maxWidth: 1100, alignment: .leading)
+            // Wider than the 1100 the settings hub uses, and smaller
+            // type inside it. That screen is five short rows where a
+            // narrow column reads as deliberate; this one carries the
+            // whole bindable pad with an explanation beside each row,
+            // and at the hub's measurements it starved the text while
+            // leaving most of a 1920pt canvas empty.
+            .frame(maxWidth: 1500, alignment: .leading)
             .frame(maxWidth: .infinity)
-            .padding(.horizontal, 80)
+            .padding(.horizontal, 60)
             .padding(.vertical, 50)
         }
     }
@@ -183,14 +189,14 @@ struct ControllerRemapView: View {
     /// footnote a phone gets.
     private func tvFootnote(_ text: String) -> some View {
         Text(text)
-            .font(.callout)
+            .font(.footnote)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
     }
 
     private func tvInfoRow(_ title: String, tint: Color) -> some View {
         Text(title)
-            .font(.title3)
+            .font(.body)
             .foregroundStyle(tint)
             .padding(.horizontal, 32)
             .padding(.vertical, 22)
@@ -229,10 +235,10 @@ struct ControllerRemapView: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.title3)
+                    .font(.body)
                 if let detail {
                     Text(detail)
-                        .font(.callout)
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -243,8 +249,8 @@ struct ControllerRemapView: View {
                     .foregroundStyle(.tint)
             }
         }
-        .padding(.horizontal, 32)
-        .padding(.vertical, 22)
+        .padding(.horizontal, 28)
+        .padding(.vertical, 18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background { tvRowBackground() }
     }
@@ -566,12 +572,12 @@ struct ControllerRemapView: View {
             .overlay(alignment: .trailing) {
                 if let bound = controllers.boundButton(for: input.id) {
                     Text(GameControllerManager.friendlyName(bound))
-                        .font(.callout)
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
                         .padding(.trailing, 32)
                 } else {
                     Text("Not set")
-                        .font(.callout.weight(.semibold))
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(.orange)
                         .padding(.trailing, 32)
                 }
