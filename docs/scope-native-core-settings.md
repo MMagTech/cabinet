@@ -64,6 +64,10 @@ thing as an options screen. Whoever next touches this doc should read
 `NativeCoreOptions.swift` fresh rather than trust either the original
 count above or this correction, it will drift again.
 
+It already has: `options(for:)` also covers Dreamcast, Atari 2600, 3DO,
+Vectrex and Virtual Boy on top of the list above, as of the core additions
+this same day. Read the source; this list is not being kept current.
+
 Correction, 2026-08-06, checked against real source rather than assumed:
 FBNeo is not option-free. It calls `RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2`
 with over 30 keys (`retro_common.cpp`), `fbneo-cpu-speed-adjust` and the
@@ -72,6 +76,12 @@ frameskip pair among them, genuinely relevant ones, alongside sixteen
 are not. FBNeo's screen needs the same hand-picked-subset treatment the
 shader list already gets, not a raw dump of everything the core reports;
 which keys make that cut is still an open decision, not yet made.
+
+Correction, checked against `NativeCoreOptions.swift` while auditing this
+doc: that decision got made. `fbneo` is a curated five: `fbneo-cpu-speed-adjust`,
+`fbneo-frameskip-type`, `fbneo-fixed-frameskip`, `fbneo-frameskip-manual-threshold`,
+and `fbneo-allow-depth-32`. None of the sixteen debug-dip/debug-layer entries
+made the cut. Same drift warning as the correction above applies here too.
 
 Deeper gap the same check surfaced: `LibretroFrontend`'s environment
 callback answers `RETRO_ENVIRONMENT_GET_VARIABLE` (a core asking "what is

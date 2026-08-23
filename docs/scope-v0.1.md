@@ -80,6 +80,7 @@ token pasting, no cookie scraping.
 - `assets.read`
 - `assets.write`
 - `collections.read`
+- `collections.write`
 
 All confirmed against RomM 5.1.0, its source, and its developer docs. The
 original five were not enough for the player. me.read: the frontend asks
@@ -91,6 +92,11 @@ be granted or the webview player gets ejected after loading. The rule of
 thumb, straight from RomM's docs: 401 means bad credential, 403 means valid
 credential missing a scope. Note the spec lives at `/openapi.json`, not
 `/api/openapi.json`, which 404s.
+
+`collections.write` was added later still, 2026-08-03, for favoriting a
+game. Every pairing made before that date predates it and re-pairs the
+first time it hits a write to `/api/collections`, which `RommError.forbidden`
+already has a message for.
 
 ---
 

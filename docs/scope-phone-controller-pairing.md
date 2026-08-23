@@ -70,7 +70,8 @@ being invited.
 
 **Also verified dead, do not re-propose:** sharing a secret through
 iCloud so the two devices never have to meet. tvOS does not participate
-in iCloud Keychain at all. See [[roadmap-icloud-pairing-continuity]],
+in iCloud Keychain at all. See
+[scope-icloud-pairing-continuity.md](scope-icloud-pairing-continuity.md),
 where this was built, tested on a real Apple TV, and abandoned.
 
 ### Decisions taken while walking through real scenarios

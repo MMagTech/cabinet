@@ -80,9 +80,12 @@ tools/build-core.sh gambatte tvos
 Every core's upstream repository and the exact commit its library was built from
 is listed in [licenses.md](licenses.md).
 
-FinalBurn Neo and Beetle Saturn have their own scripts, `tools/build-beetle-saturn.sh`
-and `tools/build-fbneo.sh`, both also platform-aware, because they were built
-before the generic script existed.
+FinalBurn Neo, Beetle Saturn, Flycast and N64 have their own scripts,
+`tools/build-fbneo.sh`, `tools/build-beetle-saturn.sh`,
+`tools/build-flycast.sh` and `tools/build-n64.sh`, all also platform-aware.
+FBNeo and Beetle Saturn predate the generic script. Flycast and N64 build
+with CMake rather than a libretro Makefile, so they never fit the generic
+script's table to begin with.
 
 ### Cores and tvOS
 

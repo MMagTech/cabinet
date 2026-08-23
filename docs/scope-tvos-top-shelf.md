@@ -1,6 +1,6 @@
 # tvOS top shelf
 
-Status: built 2026-08-16, not yet seen on real hardware. tvOS only;
+Status: built and confirmed on a real Apple TV 4K, 2026-08-16. tvOS only;
 nothing here changes iOS.
 
 Where it lives: `RommAppTopShelf/` is the extension target,
