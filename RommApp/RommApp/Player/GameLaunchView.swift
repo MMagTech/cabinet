@@ -955,6 +955,7 @@ struct GameLaunchView: View {
                 if showsPlayerPicker, !networkMonitor.isOffline { playerCard }
                 if showsKeepCard { keepCard }
                 if arcadeBase != nil { arcadeControlsCard }
+                resetSettingsCard
                 if !states.isEmpty || !saves.isEmpty { resumeCard }
             }
         }
@@ -978,6 +979,7 @@ struct GameLaunchView: View {
                 if showsPlayerPicker, !networkMonitor.isOffline { playerCard }
                 if showsKeepCard { keepCard }
                 if arcadeBase != nil { arcadeControlsCard }
+                resetSettingsCard
                 if !states.isEmpty || !saves.isEmpty { resumeCard }
             }
         }
