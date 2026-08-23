@@ -113,8 +113,7 @@ struct TVGameLaunchView: View {
                             if platform.cores.count > 1 {
                                 emulatorRow(platform: platform)
                             }
-                            compatibilityRow
-                            resetSettingsRow
+                            troubleRow
                         }
                     } else {
                         // Every platform tvOS can't run lands here: no
@@ -192,56 +191,37 @@ struct TVGameLaunchView: View {
         .buttonStyle(TextFocusStyle())
     }
 
-    /// The way out of a game whose emulator settings have gone bad.
-    /// MAME writes DIP switches and input assignments per game when a
-    /// game exits and reapplies them at every launch, so one bad value
-    /// used to mean a permanently unplayable game with no recourse
-    /// inside the app. Cabinet keeps MAME's own menu shut now, but
-    /// devices poisoned before that fix still need this, and so would
-    /// any future core with the same habit.
+    /// Both remedies for "this game is not behaving", behind one
+    /// capsule, because neither deserves equal billing with Play or
+    /// with the emulator choice: one is a repair, the other is a
+    /// report, and both are rare. Grouping them also puts them where
+    /// somebody in trouble would actually look, rather than making
+    /// them read three similar labels to find the right one.
     ///
-    /// Only shown when there is something to remove, which also makes
-    /// it self-verifying: press it and the row goes, because the
-    /// config it was offering to delete is gone.
+    /// The marked state stays on the capsule's own face rather than
+    /// hiding inside the menu: a game someone has flagged should say
+    /// so without being opened.
     @ViewBuilder
-    private var resetSettingsRow: some View {
-        if hasCoreSettings {
-            Button {
-                guard let core = runningCore else { return }
-                NativeLauncher.resetCoreSettings(romId: rom.id, core: core)
-                hasCoreSettings = false
-            } label: {
-                Label("Reset emulator settings", systemImage: "arrow.counterclockwise")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 10)
-            }
-            .buttonStyle(TextFocusStyle())
-        }
-    }
-
-    @ViewBuilder
-    private var compatibilityRow: some View {
+    private var troubleRow: some View {
         let marked = compatibility.isMarked(rom.id)
-        Button {
-            compatibility.setMarked(!marked, romId: rom.id)
+        Menu {
+            if hasCoreSettings, let core = runningCore {
+                Button {
+                    NativeLauncher.resetCoreSettings(romId: rom.id, core: core)
+                    hasCoreSettings = false
+                } label: {
+                    Label("Reset emulator settings", systemImage: "arrow.counterclockwise")
+                }
+            }
+            Button {
+                compatibility.setMarked(!marked, romId: rom.id)
+            } label: {
+                Label(marked ? "Mark as compatible" : "Mark as incompatible",
+                      systemImage: marked ? "checkmark.circle" : "exclamationmark.triangle")
+            }
         } label: {
-            // Compatible and incompatible, the same pair the long press
-            // menu has always used, now said the same way on both
-            // launchers. One action should not have three vocabularies in
-            // one app. Both labels name what pressing does rather than
-            // describing the state.
-            //
-            // One short line. The explanation this used to carry said
-            // things the screen already answers: Play is right there, so
-            // "it still plays" is visible rather than worth stating, and
-            // you are looking at an Apple TV, so saying the mark is local
-            // to it earns nothing. The launch screen's whole job is the
-            // cover and the game, and a paragraph of hedging next to Play
-            // takes more attention than the action deserves.
-            Label(marked ? "Mark as compatible" : "Mark as incompatible",
-                  systemImage: marked ? "checkmark.circle" : "exclamationmark.triangle")
+            Label(marked ? "Marked incompatible" : "Not working?",
+                  systemImage: marked ? "exclamationmark.triangle" : "wrench.and.screwdriver")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 18)
