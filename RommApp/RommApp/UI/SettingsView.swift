@@ -14,9 +14,7 @@ struct SettingsView: View {
     @AppStorage(ControlTheme.key) private var controlTheme = ControlTheme.system.rawValue
     @AppStorage(PlayerAutosave.key) private var autosaveEnabled = true
     @AppStorage(PlatformLabelSource.key) private var platformLabelSourceRaw = PlatformLabelSource.platformName.rawValue
-    #if DEBUG
     @AppStorage(AimSpeed.key) private var aimSpeedRaw = AimSpeed.snap.rawValue
-    #endif
     @ObservedObject private var controllers = GameControllerManager.shared
     /// The TV Controller front door. Settings is where the feature is
     /// discovered; Home only grows its shortcut row once a pairing
@@ -100,14 +98,16 @@ struct SettingsView: View {
             }
 
             Section {
-                Toggle("Autosave while playing", isOn: $autosaveEnabled)
-            } header: {
-                Text("Saving")
+                Button {
+                    showingControllerPad = true
+                } label: {
+                    Label("TV Controller", systemImage: "appletv")
+                        .foregroundStyle(.primary)
+                }
             } footer: {
-                Text("Web player only. Save states in the native player are manual.")
+                Text("Use this phone as the controls for a game running on your Apple TV. Once paired, this also lives on Home.")
             }
 
-            #if DEBUG
             Section {
                 Picker("Aim speed", selection: $aimSpeedRaw) {
                     ForEach(AimSpeed.allCases, id: \.self) { speed in
@@ -119,7 +119,14 @@ struct SettingsView: View {
             } footer: {
                 Text("How far a flick of the wrist moves the aim. Recenter lives on the controller itself.")
             }
-            #endif
+
+            Section {
+                Toggle("Autosave while playing", isOn: $autosaveEnabled)
+            } header: {
+                Text("Saving")
+            } footer: {
+                Text("Web player only. Save states in the native player are manual.")
+            }
 
             Section {
                 Picker("Platform names", selection: $platformLabelSourceRaw) {
@@ -176,17 +183,6 @@ struct SettingsView: View {
                 }
             } footer: {
                 Text("Speed and accuracy options for the cores that run natively instead of in the webview.")
-            }
-
-            Section {
-                Button {
-                    showingControllerPad = true
-                } label: {
-                    Label("TV Controller", systemImage: "appletv")
-                        .foregroundStyle(.primary)
-                }
-            } footer: {
-                Text("Use this phone as the controls for a game running on your Apple TV. Once paired, this also lives on Home.")
             }
 
             Section {
