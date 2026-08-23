@@ -321,6 +321,9 @@ final class MemoryCardSync {
         switch platform {
         case .segaCD: suffix = ".brm"
         case .ngpc: suffix = ".flash"
+        // The .sav melonDS wrote; see the matching restore case in
+        // NativeLauncher.restoreCoreFileSaveIfNeeded.
+        case .nds: suffix = ".sav"
         default: return
         }
         let dir = NativeLauncher.coreSaveDirectory(romId: rom.id)

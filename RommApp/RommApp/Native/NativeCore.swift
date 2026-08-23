@@ -266,10 +266,11 @@ enum NativePlatform: String, CaseIterable {
         // path, not this one.
         // nds: melonDS answers RETRO_MEMORY_SAVE_RAM with NULL and
         // manages the cartridge save itself, writing <save dir>/
-        // <game>.sav through its own NDSCart_SRAMManager, flushed by
-        // retro_unload_game. The segaCD/ngpc file path is the fit; its
-        // NativeLauncher wiring is still to come, so until then a DS
-        // game's progress stays on the device that made it.
+        // <game>.sav through its own NDSCart_SRAMManager, debounce
+        // flushed during play and force flushed at unload (Cabinet's
+        // own patch, see build-core.sh). Synced through the
+        // segaCD/ngpc file path: restored by NativeLauncher before
+        // boot, captured by MemoryCardSync after the quit-time unload.
         case .arcade, .atari7800, .atari2600, .dreamcast, .segaCD, .ngpc, .vectrex,
              .threeDO, .virtualBoy, .nds:
             return false

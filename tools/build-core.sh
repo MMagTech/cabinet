@@ -162,6 +162,21 @@ find "$SRC" -name zutil.h -print0 | while IFS= read -r -d '' ZUTIL_H; do
     sed -i '' 's/#if defined(MACOS) || defined(TARGET_OS_MAC)$/#if (defined(MACOS) || defined(TARGET_OS_MAC)) \&\& !defined(__APPLE__)/' "$ZUTIL_H"
 done
 
+# melonDS's libretro build has no background flush thread (__LIBRETRO__
+# compiles it out) and instead debounce-flushes the .sav at the end of
+# every retro_run, two seconds after the game's last SRAM write. Its
+# retro_unload_game is NDS::DeInit() alone, so an in-game save made
+# less than two seconds before quitting is silently dropped, and
+# save-then-immediately-quit is exactly how people leave a game. This
+# inserts the missing final flush; FlushSecondaryBuffer() writes only
+# when un-flushed data is pending, so it is a no-op otherwise.
+if [ "$NAME" = melonds ]; then
+    perl -0pi -e 's/void retro_unload_game\(void\)\n\{\n   NDS::DeInit\(\);/void retro_unload_game(void)\n{\n   NDSCart_SRAMManager::FlushSecondaryBuffer();\n   NDS::DeInit();/' \
+        "$SRC/src/libretro/libretro.cpp"
+    grep -q 'FlushSecondaryBuffer();' "$SRC/src/libretro/libretro.cpp" || {
+        echo "melonds unload-flush patch did not apply" >&2; exit 1; }
+fi
+
 if [ "$MAKEFILE" = cmake ]; then
     # mGBA dropped Makefile.libretro; its CMake build has a libretro
     # target instead. Unlike the Makefile-based cores, mGBA's own

@@ -240,6 +240,33 @@ tvOS got the whole feature on 2026-08-16 by extracting the save engine
 both players now share (`MemoryCardSync`), rather than by updating the
 stale copy `TVPlayerView` had been carrying.
 
+Nintendo DS joined the file-writing class on 2026-08-23, the day the
+core itself landed. melonDS answers the standard save memory call with
+nothing and writes `<content basename>.sav` itself. Its libretro build
+has no background flush thread; instead it debounce-flushes at the end
+of every emulated frame, two seconds after the game's last write, which
+makes it the one file-writing core whose saves mostly survive even an
+unclean death. The sharp edge was the other direction: stock
+`retro_unload_game` never flushed, so a save made less than two seconds
+before quitting was dropped, and save-then-quit is exactly how people
+leave a game. Cabinet's core build patches the missing final flush in
+(`tools/build-core.sh`); the flush call is a no-op when nothing is
+pending. Restore and capture are the same suffix cases Sega CD and Neo
+Geo Pocket use.
+
+Verified on hardware 2026-08-23: Mario Kart DS wrote its real save
+(`MKDSSV10` header) into the persistent per-game directory on the Apple
+TV, capture uploaded it to RomM as `Mario Kart DS (Cabinet).srm` under
+`melonds-native`, and the server's stored bytes are md5-identical to
+the device file. Still owed: watching a second device pull that save
+down fresh (the iPhone was locked when this was tested; the pull is the
+same store and placement machinery verified cross-device on Game Boy
+Advance), and a save made by real play rather than the game's own
+boot-time initialisation. Save states were proven separately: a
+serialize, run, restore, run round trip produces identical video and
+audio streams, so the pause menu's states stand on a working
+foundation.
+
 ## The stale cache, worth knowing before testing sync
 
 Cross-device sync appeared to work per platform and then failed on the

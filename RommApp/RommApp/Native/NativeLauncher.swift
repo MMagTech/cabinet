@@ -314,6 +314,12 @@ enum NativeLauncher {
         switch platform {
         case .segaCD: suffix = "brm"
         case .ngpc: suffix = "flash"
+        // melonDS writes <content basename>.sav through its own
+        // NDSCart_SRAMManager, debounce-flushed during play and force
+        // flushed at unload (the latter is Cabinet's patch in
+        // build-core.sh; stock unload never flushed, losing any save
+        // made in the two seconds before quitting).
+        case .nds: suffix = "sav"
         case .threeDO: suffix = nil
         case .arcade:
             await restoreArcadeNVRAM(
