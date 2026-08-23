@@ -42,6 +42,17 @@ drive this television before", and one mechanism answers all three.
 **On the television**, a setting: "Allow a phone as a controller", off by
 default. Nothing binds a socket until that is on AND a game is running.
 
+*Amended 2026-08-23, on the first device run:* the settings screen
+itself also listens while it is open with the switch on, so the first
+pairing can happen right where the switch was just turned on, with no
+game running. A person flipping the switch and picking up their phone
+expects pairing to happen there, and requiring a running game first
+was a hidden prerequisite nothing explained. The bound is unchanged in
+spirit: the socket exists only while a person is deliberately present,
+on that screen or in a game, and closes the moment they leave either.
+A phone paired this way sits at "start a game on the TV" until one is
+running.
+
 **First time a given phone connects**, the television shows a short code
 on screen. You type it on the phone. Both sides store a shared secret
 for each other. That is the last time anyone does this for that pair of

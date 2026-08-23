@@ -182,6 +182,12 @@ enum ControllerPairing {
         return String(format: "%06u", UInt32.random(in: 0..<1_000_000, using: &rng))
     }
 
+    /// "417209" reads better as "417 209", everywhere a code is shown.
+    static func displayCode(_ code: String) -> String {
+        guard code.count == 6 else { return code }
+        return "\(code.prefix(3)) \(code.suffix(3))"
+    }
+
     static func randomBytes(_ count: Int) -> Data {
         var data = Data(count: count)
         let result = data.withUnsafeMutableBytes {

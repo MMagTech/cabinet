@@ -263,6 +263,11 @@ struct ControllerPadView: View {
                     waitingView("Checking the code")
                 case .ended(let message):
                     endedView(message)
+                case .connected:
+                    // Paired through the television's settings screen,
+                    // where nothing is playing yet. The panel takes
+                    // over on its own when a game starts.
+                    pairedIdleView
                 default:
                     waitingView(link.status)
                 }
@@ -296,8 +301,8 @@ struct ControllerPadView: View {
         // Once the panel exists, force landscape, let the rotation
         // settle, then pin that exact one so tilt steering cannot flip
         // the interface mid-corner.
-        .onChange(of: link.connected) { _, connected in
-            guard connected else { return }
+        .onChange(of: link.connected && link.shortname != nil) { _, panelLive in
+            guard panelLive else { return }
             OrientationLock.lockToLandscape()
             Task {
                 try? await Task.sleep(for: .seconds(1))
@@ -378,7 +383,7 @@ struct ControllerPadView: View {
             // sitting in it silently reads as broken. After a few
             // seconds, name what the television actually requires.
             if searchHintReady, stillLooking {
-                Text("The TV can be found while a game is running and \u{201C}Allow a phone as a controller\u{201D} is on in its settings.")
+                Text("On the TV, turn on \u{201C}Allow a phone as a controller\u{201D} in Settings, then pair from that screen or start a game.")
                     .font(.footnote)
                     .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)
@@ -391,6 +396,22 @@ struct ControllerPadView: View {
             try? await Task.sleep(for: .seconds(6))
             withAnimation { searchHintReady = true }
         }
+    }
+
+    private var pairedIdleView: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.largeTitle)
+                .foregroundStyle(.green)
+            Text("Paired to your TV")
+                .font(.title2.bold())
+            Text("Start a game on the TV and the controls will appear.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: 460)
+        .padding(24)
     }
 
     private func endedView(_ message: String) -> some View {

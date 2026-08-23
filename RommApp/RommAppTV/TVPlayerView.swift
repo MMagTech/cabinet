@@ -119,7 +119,7 @@ struct TVPlayerView: View {
             Text("Phone controller")
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(.secondary)
-            Text(spacedPairingCode(code))
+            Text(ControllerPairing.displayCode(code))
                 .font(.system(size: 64, weight: .bold, design: .monospaced))
             Text("Enter this code on the phone")
                 .font(.callout)
@@ -138,12 +138,6 @@ struct TVPlayerView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
         .padding(60)
         .transition(.opacity)
-    }
-
-    /// "417209" reads better as "417 209".
-    private func spacedPairingCode(_ code: String) -> String {
-        guard code.count == 6 else { return code }
-        return "\(code.prefix(3)) \(code.suffix(3))"
     }
 
     private func openMenu() {
@@ -416,6 +410,11 @@ struct TVPlayerView: View {
                 )
                 link.start()
                 phoneLink = link
+                // The settings screen may still be alive underneath
+                // this cover with its own pairing listener up (a top
+                // shelf launch does exactly that); one advertisement
+                // at a time.
+                NotificationCenter.default.post(name: .cabinetGameLinkStarted, object: nil)
             }
         }
         // The screensaver rule for a phone-driven game. A physical
@@ -431,6 +430,9 @@ struct TVPlayerView: View {
         .onChange(of: phonePaused) { _, _ in updatePhoneIdleRule() }
         .onChange(of: menuVisible) { _, _ in updatePhoneIdleRule() }
         .onDisappear {
+            if phoneLink != nil {
+                NotificationCenter.default.post(name: .cabinetGameLinkEnded, object: nil)
+            }
             phoneLink?.stop()
             phoneLink = nil
             GameControllerManager.shared.releaseAllPhoneSlots()

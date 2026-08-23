@@ -1,6 +1,14 @@
 #if os(tvOS)
 import SwiftUI
 
+/// The pairing listener and the player's game receiver must never
+/// advertise at once; the player posts these so this screen can yield
+/// even when a fullScreenCover launch leaves it alive underneath.
+extension Notification.Name {
+    static let cabinetGameLinkStarted = Notification.Name("com.mmagtech.RommAppTV.gameLinkStarted")
+    static let cabinetGameLinkEnded = Notification.Name("com.mmagtech.RommAppTV.gameLinkEnded")
+}
+
 /// tvOS's settings screen, the scoped-down sibling of iOS's
 /// `SettingsView`. That one is a long `Form` because it also owns Storage
 /// (kept games), the EmulatorJS cache bridge, native core options and the
@@ -15,6 +23,7 @@ import SwiftUI
 /// effect something sensibly sized to land on.
 struct TVSettingsView: View {
     @EnvironmentObject private var session: Session
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var controllers = GameControllerManager.shared
     @State private var confirmingSignOut = false
     @State private var showingAccountSwitcher = false
@@ -30,6 +39,16 @@ struct TVSettingsView: View {
     /// off the television never binds a socket, so to the network the
     /// feature does not exist. See docs/scope-phone-controller-pairing.md.
     @AppStorage(ControllerPairing.allowKey) private var allowPhoneController = false
+    /// The lobby: while this screen is visible with the switch on, the
+    /// television listens so a phone can pair with no game running.
+    /// Marcus's call on the first device run: a person turning the
+    /// switch on and picking up their phone expects pairing to happen
+    /// right here, not to first know that a game must be started. The
+    /// socket stays bounded by presence, this screen or a running
+    /// game, nothing else.
+    @State private var pairingLink: ControllerLinkReceiver?
+    @State private var phonePairingCode: String?
+    @State private var phoneLinkConnected = false
     @AppStorage(PlatformLabelSource.key) private var labelSourceRaw = PlatformLabelSource.platformName.rawValue
 
     var body: some View {
@@ -99,11 +118,29 @@ struct TVSettingsView: View {
                         Toggle(isOn: $allowPhoneController) {
                             actionRow(
                                 title: "Allow a phone as a controller",
-                                detail: "A phone with Cabinet can join a running game",
+                                detail: "Pair a phone from this screen or during a game",
                                 chevron: false
                             )
                         }
                         .toggleStyle(.switch)
+                        if allowPhoneController {
+                            if let phonePairingCode {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Enter this code on the phone")
+                                        .font(.callout)
+                                        .foregroundStyle(.secondary)
+                                    Text(ControllerPairing.displayCode(phonePairingCode))
+                                        .font(.system(size: 54, weight: .bold, design: .monospaced))
+                                }
+                                .padding(.vertical, 8)
+                                .transition(.opacity)
+                            } else {
+                                infoRow(
+                                    label: phoneLinkConnected ? "Phone connected" : "Ready to pair",
+                                    value: ""
+                                )
+                            }
+                        }
                     }
 
                     section("Emulation") {
@@ -203,6 +240,24 @@ struct TVSettingsView: View {
                     TVProfileStore.enrichIfNeeded(profile)
                 }
             }
+            // The lobby's whole lifecycle: alive while this screen is
+            // in front with the switch on and the app active, gone the
+            // moment any of that stops being true, and yielding to a
+            // game's own receiver when one starts over this screen.
+            .onAppear { startPairingLobby() }
+            .onDisappear { stopPairingLobby() }
+            .onChange(of: allowPhoneController) { _, on in
+                if on { startPairingLobby() } else { stopPairingLobby() }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { startPairingLobby() } else { stopPairingLobby() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .cabinetGameLinkStarted)) { _ in
+                stopPairingLobby()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .cabinetGameLinkEnded)) { _ in
+                startPairingLobby()
+            }
             .alert("Sign out?", isPresented: $confirmingSignOut) {
                 Button("Sign out", role: .destructive) {
                     // Before forgetting the server, not after: the top
@@ -255,6 +310,53 @@ struct TVSettingsView: View {
         }
     }
     private func rowBackground() -> some View { Self.rowGlassBackground() }
+
+    /// The settings screen listening as a pairing lobby: the same
+    /// receiver the player uses, with no game name (the lobby
+    /// advertisement) and every game verb a no-op. A phone can pair
+    /// and even join here; its panel side shows "start a game" until
+    /// one is running.
+    private func startPairingLobby() {
+        guard allowPhoneController, pairingLink == nil, scenePhase == .active else { return }
+        let link = ControllerLinkReceiver(
+            shortname: "",
+            assignPort: { phoneID in
+                DispatchQueue.main.sync {
+                    MainActor.assumeIsolated {
+                        GameControllerManager.shared.claimPhoneSlot(for: phoneID)
+                    }
+                }
+            },
+            releasePort: { phoneID in
+                Task { @MainActor in
+                    GameControllerManager.shared.releasePhoneSlot(for: phoneID)
+                }
+            },
+            onButton: { _, _, _ in }, onStick: { _, _, _ in }, onRelative: { _, _, _ in },
+            onPointer: { _, _, _, _ in }, onOffscreen: { _, _ in },
+            onPause: { _ in }, onSave: {}, onLoad: {},
+            onPhone: { joined in
+                Task { @MainActor in phoneLinkConnected = joined }
+            },
+            onPairingCode: { code in
+                Task { @MainActor in
+                    withAnimation(.easeInOut(duration: 0.25)) { phonePairingCode = code }
+                }
+            },
+            onDrop: {}
+        )
+        link.start()
+        pairingLink = link
+    }
+
+    private func stopPairingLobby() {
+        guard pairingLink != nil else { return }
+        pairingLink?.stop()
+        pairingLink = nil
+        phonePairingCode = nil
+        phoneLinkConnected = false
+        GameControllerManager.shared.releaseAllPhoneSlots()
+    }
 
     private func infoRow(label: String, value: String) -> some View {
         HStack {

@@ -14,8 +14,9 @@ import Network
 ///
 /// The rendezvous is the settled design of
 /// docs/scope-phone-controller-pairing.md. The television binds nothing
-/// unless its "Allow a phone as a controller" setting is on and a game
-/// is running. The first time a given phone connects, the television
+/// unless its "Allow a phone as a controller" setting is on, and then
+/// only while a game is running or its settings screen is open as a
+/// pairing lobby. The first time a given phone connects, the television
 /// shows a short code, the person types it on the phone, and both sides
 /// store a shared secret through ControllerPairing; that is the last
 /// time anyone does anything. A phone the television has never met gets
@@ -325,11 +326,15 @@ final class ControllerLinkReceiver {
         guard listener == nil else { return }
         guard let l = try? NWListener(using: ControllerLink.parameters()) else { return }
         // The game rides in the service name, so a phone can know what
-        // is playing, and show the person a truthful offer, without ever
-        // connecting. The hello packet stays as confirmation once a
-        // phone has joined; this is for before one does.
-        l.service = NWListener.Service(name: "\(ControllerLink.serviceName)-\(shortname)",
-                                       type: ControllerLink.bonjourType)
+        // is playing without ever connecting. An empty shortname is the
+        // lobby: the television's settings screen listening so a phone
+        // can pair with no game running; its hello names no game and
+        // the phone waits for one. The hello packet stays as
+        // confirmation once a phone has joined.
+        let serviceName = shortname.isEmpty
+            ? ControllerLink.serviceName
+            : "\(ControllerLink.serviceName)-\(shortname)"
+        l.service = NWListener.Service(name: serviceName, type: ControllerLink.bonjourType)
         l.newConnectionHandler = { [weak self] connection in
             self?.accept(connection)
         }
@@ -702,11 +707,16 @@ final class ControllerLinkSender: ObservableObject {
         let browser = NWBrowser(for: .bonjour(type: ControllerLink.bonjourType, domain: nil),
                                 using: ControllerLink.parameters())
         browser.browseResultsChangedHandler = { [weak self] results, _ in
-            guard let self, let first = results.first else { return }
-            let named = ControllerLink.shortname(fromService: first.endpoint)
+            guard let self else { return }
+            // A game beats the lobby when both are advertised, which
+            // can briefly happen as one hands off to the other.
+            let best = results.first { ControllerLink.shortname(fromService: $0.endpoint) != nil }
+                ?? results.first
+            guard let best else { return }
+            let named = ControllerLink.shortname(fromService: best.endpoint)
             Task { @MainActor in
                 if let named { self.shortname = named }
-                self.connect(to: first.endpoint)
+                self.connect(to: best.endpoint)
             }
         }
         self.browser = browser
