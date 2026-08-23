@@ -20,17 +20,237 @@ struct ControllerRemapView: View {
     @State private var hotkeyButtonB = MenuHotkey.buttonB
 
     var body: some View {
-        List {
-            // tvOS gets its title as content rather than chrome:
-            // .navigationTitle paints over the list there instead of
-            // reserving space above it, which had "Buttons" sitting on
-            // top of the first rows. Same pattern every other tvOS
-            // screen in this app already uses.
-            #if os(tvOS)
-            Text("Buttons")
-                .font(.largeTitle.weight(.bold))
-                .listRowBackground(Color.clear)
+        platformBody
+            // iOS only, deliberately: on tvOS .navigationTitle paints
+            // over content instead of reserving space above it, so the
+            // title is a plain view inside the scroll content there.
+            #if os(iOS)
+            .navigationTitle("Buttons")
+            .navigationBarTitleDisplayMode(.inline)
             #endif
+            .task { controllers.start() }
+            .onDisappear { controllers.captureHandler = nil }
+            .overlay {
+                if let capturing {
+                    capturePrompt(for: capturing)
+                } else if capturingHotkeySlot != nil {
+                    hotkeyCapturePrompt()
+                }
+            }
+            .confirmationDialog(
+                "Reset button assignments?",
+                isPresented: $confirmingReset,
+                titleVisibility: .visible
+            ) {
+                Button("Reset", role: .destructive) { controllers.resetBindings() }
+            }
+    }
+
+    #if os(tvOS)
+    /// The television's own shape, matching TVSettingsView rather than
+    /// the phone's.
+    ///
+    /// A plain List on tvOS gives every row the full width of a 1920pt
+    /// canvas with a focus plate to match, so a screen of short rows
+    /// reads as a stack of enormous grey bands. The rest of this app's
+    /// tvOS screens were built out of bounded glass cards for exactly
+    /// that reason and this one, shared with iOS, had never had the
+    /// pass. Same content and the same order; only the frame differs.
+    private var platformBody: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 40) {
+                Text("Buttons")
+                    .font(.largeTitle.weight(.bold))
+
+                tvSection("Menu hotkey · Either player") {
+                    hotkeyRow(label: "First button", value: hotkeyButtonA, slot: 0)
+                    if let hotkeyButtonB {
+                        hotkeyRow(label: "Second button", value: hotkeyButtonB, slot: 1)
+                        tvButton("Use one button") {
+                            self.hotkeyButtonB = nil
+                            MenuHotkey.save(buttonA: hotkeyButtonA, buttonB: nil)
+                        }
+                    } else {
+                        tvButton("Add a second button", enabled: controllers.isConnected) {
+                            beginHotkeyCapture(slot: 1)
+                        }
+                    }
+                    if !MenuHotkey.isDefault {
+                        tvButton("Reset to L3 + R3") {
+                            MenuHotkey.reset()
+                            hotkeyButtonA = MenuHotkey.buttonA
+                            hotkeyButtonB = MenuHotkey.buttonB
+                        }
+                    }
+                    tvFootnote(hotkeyButtonB == nil
+                               ? "Press this button on either controller to open the menu."
+                               : "Hold both together, on either controller, to open the menu.")
+                }
+
+                if !controllers.isConnected {
+                    tvSection("Controller") {
+                        if let unsupported = controllers.unsupportedController {
+                            tvInfoRow("\(unsupported) is paired but not usable", tint: .orange)
+                            tvFootnote("This controller isn't presenting as a standard gamepad. Many have a mode switch, often held at power on.")
+                        } else {
+                            tvInfoRow("No controller connected", tint: .secondary)
+                            tvFootnote("Connect a controller to change its buttons. Settings are remembered per controller.")
+                        }
+                    }
+                }
+
+                if controllers.isConnected {
+                    tvSection("Six button fighters") {
+                        ForEach(ControllerBindings.presets, id: \.name) { preset in
+                            Button {
+                                controllers.applyBindings(preset.map)
+                            } label: {
+                                tvRowLabel(
+                                    title: preset.name,
+                                    detail: preset.detail,
+                                    trailing: controllers.matchesBindings(preset.map) ? "checkmark" : nil
+                                )
+                            }
+                            .buttonStyle(RowFocusStyle())
+                        }
+                        tvFootnote("Punches on top, kicks below. Editing any button makes it custom.")
+                    }
+
+                    tvSection("Face buttons") {
+                        Toggle(isOn: Binding(
+                            get: { controllers.faceButtonsSwapped },
+                            set: { _ in controllers.swapFaceButtons() }
+                        )) {
+                            tvRowLabel(
+                                title: "Swap A and B",
+                                detail: controllers.faceButtonsSwapped
+                                    ? "Matching the letters on the pad."
+                                    : "Matching where the buttons sit, not their letters.",
+                                trailing: nil
+                            )
+                        }
+                        .toggleStyle(.switch)
+                    }
+
+                    tvSection("Game inputs · Player 1") {
+                        tvFootnote("Select an input, then press the controller button you want for it. Pressing a button on its own does nothing here.")
+                        ForEach(RetroPad.bindable, id: \.id) { input in
+                            row(for: input)
+                        }
+                        tvFootnote("Without Coin an arcade game can't start. Player 1 only; player 2 is set automatically.")
+                    }
+
+                    tvSection("Buttons player 1's controller reports") {
+                        ForEach(controllers.availableButtons, id: \.self) { name in
+                            tvRowLabel(
+                                title: GameControllerManager.friendlyName(name),
+                                detail: controllers.bindings(for: name)
+                                    .map { "\u{2192} \(RetroPad.label(for: $0))" } ?? "not assigned",
+                                trailing: nil
+                            )
+                                        }
+                        tvFootnote("A button missing here is one this controller never reports, so no app can read it.")
+                    }
+
+                    tvSection("") {
+                        Button("Reset to defaults", role: .destructive) {
+                            confirmingReset = true
+                        }
+                        .buttonStyle(RowFocusStyle())
+                    }
+                }
+            }
+            .frame(maxWidth: 1100, alignment: .leading)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 80)
+            .padding(.vertical, 50)
+        }
+    }
+
+    @ViewBuilder
+    private func tvSection(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if !title.isEmpty {
+                Text(title)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            content()
+        }
+    }
+
+    /// Explanatory text at a size the room can read, rather than the
+    /// footnote a phone gets.
+    private func tvFootnote(_ text: String) -> some View {
+        Text(text)
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func tvInfoRow(_ title: String, tint: Color) -> some View {
+        Text(title)
+            .font(.title3)
+            .foregroundStyle(tint)
+            .padding(.horizontal, 32)
+            .padding(.vertical, 22)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background { tvRowBackground() }
+    }
+
+    private func tvButton(
+        _ title: String, enabled: Bool = true, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            tvRowLabel(title: title, detail: nil, trailing: nil)
+        }
+        .buttonStyle(RowFocusStyle())
+        .disabled(!enabled)
+    }
+
+    /// Real Liquid Glass on tvOS 26 with the flat material below it,
+    /// the same treatment TVSettingsView gives its rows. Duplicated
+    /// rather than shared because that one is private to its own file
+    /// and this is four lines.
+    @ViewBuilder
+    private func tvRowBackground() -> some View {
+        if #available(tvOS 26.0, *) {
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.clear)
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+        } else {
+            RoundedRectangle(cornerRadius: 16).fill(.ultraThinMaterial)
+        }
+    }
+
+    /// The shared row face: title, optional second line, optional
+    /// trailing glyph, at the sizes a television needs.
+    private func tvRowLabel(title: String, detail: String?, trailing: String?) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.title3)
+                if let detail {
+                    Text(detail)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 24)
+            if let trailing {
+                Image(systemName: trailing)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.tint)
+            }
+        }
+        .padding(.horizontal, 32)
+        .padding(.vertical, 22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background { tvRowBackground() }
+    }
+    #else
+    private var platformBody: some View {
+        List {
             // Leads the screen, not buried under the six-button and
             // per-input sections: unlike everything below it, this applies
             // to both players and is a standing preference rather than
@@ -220,30 +440,24 @@ struct ControllerRemapView: View {
                 }
             }
         }
-        // iOS only, deliberately: see the title row at the top of the
-        // list for what tvOS does instead and why.
-        #if os(iOS)
-        .navigationTitle("Buttons")
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .task { controllers.start() }
-        .onDisappear { controllers.captureHandler = nil }
-        .overlay {
-            if let capturing {
-                capturePrompt(for: capturing)
-            } else if capturingHotkeySlot != nil {
-                hotkeyCapturePrompt()
-            }
-        }
-        .confirmationDialog(
-            "Reset button assignments?",
-            isPresented: $confirmingReset,
-            titleVisibility: .visible
-        ) {
-            Button("Reset", role: .destructive) { controllers.resetBindings() }
-        }
     }
+    #endif
 
+    #if os(tvOS)
+    private func hotkeyRow(label: String, value: String, slot: Int) -> some View {
+        Button {
+            beginHotkeyCapture(slot: slot)
+        } label: {
+            tvRowLabel(
+                title: label,
+                detail: GameControllerManager.friendlyName(value),
+                trailing: nil
+            )
+        }
+        .buttonStyle(RowFocusStyle())
+        .disabled(!controllers.isConnected)
+    }
+    #else
     private func hotkeyRow(label: String, value: String, slot: Int) -> some View {
         Button {
             beginHotkeyCapture(slot: slot)
@@ -259,6 +473,7 @@ struct ControllerRemapView: View {
         }
         .disabled(!controllers.isConnected)
     }
+    #endif
 
     private func beginHotkeyCapture(slot: Int) {
         capturingHotkeySlot = slot
@@ -338,6 +553,34 @@ struct ControllerRemapView: View {
         }
     }
 
+    #if os(tvOS)
+    private func row(for input: (id: Int, label: String, detail: String)) -> some View {
+        Button {
+            beginCapture(for: input.id)
+        } label: {
+            tvRowLabel(
+                title: input.label,
+                detail: input.detail,
+                trailing: nil
+            )
+            .overlay(alignment: .trailing) {
+                if let bound = controllers.boundButton(for: input.id) {
+                    Text(GameControllerManager.friendlyName(bound))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .padding(.trailing, 32)
+                } else {
+                    Text("Not set")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(.orange)
+                        .padding(.trailing, 32)
+                }
+            }
+        }
+        .buttonStyle(RowFocusStyle())
+        .disabled(!controllers.isConnected)
+    }
+    #else
     private func row(for input: (id: Int, label: String, detail: String)) -> some View {
         Button {
             beginCapture(for: input.id)
@@ -366,6 +609,7 @@ struct ControllerRemapView: View {
         }
         .disabled(!controllers.isConnected)
     }
+    #endif
 
     private func capturePrompt(for id: Int) -> some View {
         capturePromptShell(
