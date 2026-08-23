@@ -384,6 +384,19 @@ enum NativeLauncher {
             // so without this the phone gun was aiming blind.
             coreOptions["mame2003-plus_crosshair_enabled"] = "enabled"
             coreOptions["mame2003-plus_crosshair_appearance"] = "simple"
+            // Sixth and seventh victims of the same class, found when
+            // Bowl-O-Rama sat on MAME's copyright box taking no input.
+            // The core's own defaults skip both nag screens; unanswered,
+            // the zeroed globals show them, and then the game is behind
+            // a modal that only MAME's own UI_SELECT dismisses, which
+            // no cabinet panel here is guaranteed to offer. Skipping
+            // them is also what every RetroArch user already gets.
+            // Blast radius stated: MAME 2003-Plus only, every arcade
+            // game on it, both platforms. What changes is that two
+            // informational screens stop appearing; no input, timing or
+            // render path is touched.
+            coreOptions["mame2003-plus_skip_disclaimer"] = "enabled"
+            coreOptions["mame2003-plus_skip_warnings"] = "enabled"
         }
         LibretroFrontend.shared.setCoreOptions(coreOptions)
         let padDevice = NativeCoreOptionsStore.padDevice(for: platform)
