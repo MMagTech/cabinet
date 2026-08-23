@@ -69,10 +69,12 @@ worth having in the open.
   only at first; a web player on an external display is its own
   question. The fiddly part is disconnecting mid-game, which should
   bring the picture back to the phone rather than strand the player.
-- **More systems, running natively.** Cabinet compiles nineteen
+- **More systems, running natively.** Cabinet compiles eighteen
   emulators into the app, and each new one is a core to build plus a
-  control layout to draw. Four of the seven originally listed here are
-  done: Atari 2600, Vectrex, 3DO and Virtual Boy.
+  control layout to draw. Three of the seven originally listed here are
+  done: Atari 2600, Vectrex and 3DO. Virtual Boy is built and running on
+  a device, not yet shipped, waiting on one control verification before
+  it lands.
 
   What is left, and the honest state of each:
 
@@ -83,14 +85,11 @@ worth having in the open.
   | Magnavox Odyssey<sup>2</sup> | O2EM | Keyboard-adjacent controls |
   | Philips CD-i | SAME_CDI | Experimental upstream, lowest priority |
 
-  Two more were looked at properly and are worth recording. **Nintendo
+  One more was looked at properly and is worth recording. **Nintendo
   DS** is a real candidate: its cores build for Apple platforms with no
   just-in-time compilation at all, and Mario Kart DS measured 4.1ms a
   frame mid-race against a 16.7ms budget, so speed is not the obstacle.
-  The interface is: two screens and a stylus. **Atari Jaguar** was
-  declined rather than deferred. The core is in much better shape than
-  its reputation, but the console only ever had 63 licensed games, which
-  is a small return for a controller with a twelve-key keypad to solve.
+  The interface is: two screens and a stylus.
 
   Beyond those, the runway is genuinely short. Almost everything left in
   a normal library, PlayStation 2, GameCube, Wii, 3DS, Switch, PSP,
@@ -106,50 +105,18 @@ worth having in the open.
   The idea is a proper full-screen moment for genuinely large
   downloads, small ones would keep today's quick inline behavior. Not
   settled whether to build it at all, let alone how.
-- **Skipping setup on a new device: tried, and not happening.** The idea
-  was that a brand-new Apple TV signed into the same Apple ID could pick
-  up the pairing your iPhone already has, via iCloud Keychain, so you
-  never type a server address with a remote. It was designed, built and
-  taken to real hardware, where it did nothing: Apple TV does not
-  participate in iCloud Keychain at all, so the seed can never arrive
-  there. The iPhone-to-iPhone half did work, and was dropped anyway,
-  because it meant quietly copying a token for your private server into
-  iCloud in exchange for skipping one text field.
+- **PS1 and Saturn multi-disc support.** Genuinely undecided rather than
+  merely unbuilt, it would need real `.m3u`-style disc swapping, not just
+  a missing feature flag, and nobody has weighed whether that's worth
+  carrying.
+- **Settings syncing across your devices via iCloud.** No confirmed real
+  need yet, just an idea that comes up alongside the pairing work above.
 
-  Two alternatives were checked and rejected too. Approving the pairing
-  inside Cabinet on your phone, the way Discord signs you in on a TV,
-  needs a RomM permission scope that would also let Cabinet modify your
-  account and mint API tokens. A direct phone-to-TV handoff over your
-  own network is the only remaining route that removes typing the
-  address, and it only works when both are at home. The reasoning is
-  written up in
-  [docs/scope-icloud-pairing-continuity.md](docs/scope-icloud-pairing-continuity.md)
-  so it doesn't get proposed again from scratch.
+A few ideas got explored just as seriously and reached a real answer
+instead of an open question. Those live in
+[docs/settled.md](docs/settled.md) rather than here: a native macOS build,
+uploading a ROM from Cabinet, Atari Jaguar as a native core, and skipping
+setup on a new device via iCloud.
 
-## Known gaps
-
-Real, acknowledged holes, not yet started.
-
-- **Two platforms have no dedicated touch control layout**: Amiga CD32
-  and Philips CD-i. They fall back to a generic layout today, and both
-  play only through the web player on iPhone.
-- **No native autosave.** Native play only resumes from an explicit save
-  state, not automatically on quit or backgrounding, unlike the web
-  player.
-- **Dreamcast runs below full speed in heavy scenes**, cut scenes worst
-  of all, on Apple TV especially. This is much better than it was, and
-  the cause is understood rather than mysterious: see
-  [issue #6](https://github.com/MMagTech/cabinet/issues/6) for the full
-  root cause. Normal play now holds 60fps with clean audio, which it
-  could not do at all before, and the console's many 2D shooters and
-  fighters play well. Heavy 3D titles still drop in their busiest
-  moments. The remaining limit is that the Dreamcast's CPU has to be
-  interpreted rather than translated, because apps on Apple's platforms
-  cannot generate code at runtime, and the settings that would buy speed
-  back are already at their fastest usable values.
-
-- **PS1 and Saturn multi-disc games aren't supported**, and whether they
-  should be is genuinely undecided, it would need real `.m3u`-style disc
-  swapping support, not just a missing feature flag.
-
-- **iCloud sync for settings.** No confirmed real need yet.
+What Cabinet doesn't do today, rather than what it might do next, is in the
+[README](README.md#what-doesnt-work-yet) instead of here.

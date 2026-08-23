@@ -70,14 +70,24 @@ into the app: Arcade, PlayStation, Saturn, Dreamcast, Nintendo 64, 3DO, SNES,
 NES, Game Boy, Game Boy Color, Game Boy Advance, Genesis, Sega CD, 32X, Master
 System, Game Gear, TurboGrafx-16, TurboGrafx-CD, Neo Geo Pocket Color, Atari
 7800, Atari 2600 and Vectrex. On iPhone these work offline once a game is kept
-on your phone.
-
-Dreamcast is the one to set expectations on. It runs, and its many 2D shooters
-and fighters play well, but heavy 3D titles still struggle, because Apple does
-not allow the kind of just-in-time compilation that console needs.
+on your phone. Dreamcast is the one to set expectations on, see
+[what doesn't work yet](#what-doesnt-work-yet) below.
 
 **Beyond that list, on iPhone:** whatever your RomM server plays through its
 web player, with a connection. On Apple TV, the native list is the list.
+
+## What doesn't work yet
+
+- Amiga CD32 and Philips CD-i have no dedicated touch control layout yet,
+  and both currently only play through the web player on iPhone.
+- Native play only resumes from an explicit save state, not automatically
+  on quit or backgrounding, unlike the web player.
+- PlayStation and Saturn multi-disc games aren't supported.
+- Dreamcast holds 60fps with clean audio in normal play, but heavy 3D
+  titles still drop frames in their busiest moments, because Apple's
+  platforms don't allow the kind of just-in-time compilation that console's
+  CPU needs. See [issue #6](https://github.com/MMagTech/cabinet/issues/6)
+  for the full story.
 
 ## What you need
 
