@@ -72,6 +72,16 @@ RomM-presence requirement existed to stop a phone browsing where it
 should not. Pairing makes browsing harmless, so the requirement
 disappears rather than needing to be solved.
 
+*Amended 2026-08-23, on the first device run:* once a phone HAS paired,
+Home browses quietly while it is visible, and the offer card appears
+only when a television is actually running a game, named, the way the
+lab's card was. Both of the rule's reasons hold: a never-paired phone
+still never browses, so nobody who ignores the feature sees the
+permission prompt, and a paired phone browsing anywhere is exactly
+what pairing made harmless. The static always-there row this replaced
+sat on Home saying nothing true; the tap-first rule now applies to the
+first pairing, not to every glance at Home afterwards.
+
 It also matches a model Cabinet's users already understand, because it is
 how Cabinet pairs to RomM: a code appears, you approve it once, it never
 asks again.

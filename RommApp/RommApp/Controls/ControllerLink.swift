@@ -636,6 +636,43 @@ final class ControllerLinkReceiver {
 
 #if os(iOS)
 
+/// Watches for a television playing an arcade game, for Home's offer.
+///
+/// Browse only, never a connection, and only on a phone that has
+/// paired before: the never-paired majority must never browse, which
+/// is the local-network prompt promise, while a paired phone browsing
+/// is exactly what pairing made harmless. The design doc's
+/// browse-after-a-tap rule was amended for this on 2026-08-23; the
+/// offer got to be truthful again in exchange.
+@MainActor
+final class ControllerLinkScout: ObservableObject {
+    /// The romset a television on this network is running, or nil.
+    /// Lobby advertisements (no game) never set this.
+    @Published private(set) var playing: String?
+
+    private var browser: NWBrowser?
+    private let queue = DispatchQueue(label: "cabinet.link.scout")
+
+    func start() {
+        guard ControllerPairing.hasAnyPairing else { return }
+        guard browser == nil else { return }
+        let browser = NWBrowser(for: .bonjour(type: ControllerLink.bonjourType, domain: nil),
+                                using: ControllerLink.parameters())
+        browser.browseResultsChangedHandler = { [weak self] results, _ in
+            let name = results.compactMap { ControllerLink.shortname(fromService: $0.endpoint) }.first
+            Task { @MainActor in self?.playing = name }
+        }
+        self.browser = browser
+        browser.start(queue: queue)
+    }
+
+    func stop() {
+        browser?.cancel()
+        browser = nil
+        playing = nil
+    }
+}
+
 /// Finds the television, joins or pairs as the television requires,
 /// then speaks the panel's verbs to it.
 @MainActor
