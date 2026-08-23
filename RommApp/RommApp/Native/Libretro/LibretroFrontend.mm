@@ -800,12 +800,26 @@ int16_t inputState(unsigned port, unsigned device, unsigned index, unsigned id) 
     // libretro's own convention and confirmed against the touch pad's
     // identical stick, which already relies on it.
     if (device == RETRO_DEVICE_ANALOG && index == RETRO_DEVICE_INDEX_ANALOG_RIGHT) {
+        // melonDS reads this axis as a CURSOR SPEED, not a direction,
+        // and that changes what full deflection means. Its joystick
+        // touch mode moves the stylus by (value / 2048) pixels every
+        // frame, so the 0x7fff every other core wants here is 16
+        // pixels a frame: 960 a second across a screen 256 wide, at
+        // one fixed speed, because this stick is digitized and has no
+        // gentle. Reported on the Apple TV as the cursor jumping too
+        // far. Three pixels a frame crosses the touch screen in about
+        // a second and a half, which a thumb can actually aim.
+        //
+        // Scoped to this core alone: every other core reads this axis
+        // as a direction, where anything short of full deflection is
+        // simply a weaker push, and their lines here are unchanged.
+        const int16_t full = gCoreID == LibretroCoreIDMelonDS ? 3 * 2048 : 0x7fff;
         if (id == RETRO_DEVICE_ID_ANALOG_X) {
-            if ((mask >> 20) & 1) return 0x7fff;
-            if ((mask >> 21) & 1) return -0x7fff;
+            if ((mask >> 20) & 1) return full;
+            if ((mask >> 21) & 1) return -full;
         } else if (id == RETRO_DEVICE_ID_ANALOG_Y) {
-            if ((mask >> 22) & 1) return 0x7fff;
-            if ((mask >> 23) & 1) return -0x7fff;
+            if ((mask >> 22) & 1) return full;
+            if ((mask >> 23) & 1) return -full;
         }
     }
     // Dreamcast's real analog stick, a true continuous value from
