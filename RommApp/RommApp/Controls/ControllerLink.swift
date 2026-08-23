@@ -296,6 +296,16 @@ final class ControllerLinkReceiver {
     private let tvID = ControllerPairing.deviceID
     /// The one pairing attempt allowed at a time, if any.
     private var acceptor: ControllerPairing.Acceptor?
+    /// Which connection asked for the code on screen. A pairing slot
+    /// belongs to the phone that opened it, and there is only one, so
+    /// when that phone goes quiet the slot has to come back rather
+    /// than sit out its full timeout: for those seconds a code stood
+    /// on the television belonging to nobody, while every OTHER phone
+    /// asking to pair was told another phone was pairing. Found on
+    /// hardware 2026-08-23, a second phone refused for a minute and a
+    /// half and then working on its own, which is what a slot ageing
+    /// out looks like from the couch.
+    private var acceptorKey: ObjectIdentifier?
     /// A code that sat unanswered this long is taken down. Long enough
     /// to fetch the phone from another room, short enough that a
     /// wandering overlay does not haunt the game.
@@ -386,6 +396,13 @@ final class ControllerLinkReceiver {
         let dead = peers.filter { $0.value.lastHeard < cutoff }
         if !dead.isEmpty {
             let joinedDied = dead.contains { $0.value.joined }
+            if let acceptorKey, dead.keys.contains(acceptorKey) {
+                // Whoever was mid-pairing is gone. Take the code down
+                // with them and free the slot for the next phone.
+                acceptor = nil
+                self.acceptorKey = nil
+                onPairingCode(nil)
+            }
             for key in dead.keys { peers[key] = nil }
             connections.removeAll { c in
                 guard dead.keys.contains(ObjectIdentifier(c)) else { return false }
@@ -405,6 +422,7 @@ final class ControllerLinkReceiver {
         }
         if let acceptor, Date().timeIntervalSince(acceptor.startedAt) > pairingTimeout {
             self.acceptor = nil
+            self.acceptorKey = nil
             onPairingCode(nil)
         }
     }
@@ -453,6 +471,7 @@ final class ControllerLinkReceiver {
         connections.removeAll()
         peers.removeAll()
         acceptor = nil
+        acceptorKey = nil
         onPairingCode(nil)
         onPhone(false)
     }
@@ -569,6 +588,7 @@ final class ControllerLinkReceiver {
                     // Same phone, new key: its app restarted mid-pair.
                     // Start over with a fresh code below.
                     self.acceptor = nil
+                    self.acceptorKey = nil
                 } else {
                     // A second phone while one is mid-pair. One code on
                     // screen at a time; the second asks again later.
@@ -579,6 +599,7 @@ final class ControllerLinkReceiver {
             guard let fresh = ControllerPairing.Acceptor(phoneID: phoneID, phonePub: phonePub, tvID: tvID)
             else { return }
             acceptor = fresh
+            acceptorKey = key
             onPairingCode(fresh.code)
             reply(.pairChallenge, payload: fresh.challengePayload, on: connection)
             return
@@ -605,6 +626,7 @@ final class ControllerLinkReceiver {
                     try ControllerPairing.savePairing(secret: secret, forPeer: phoneID)
                     lastAck = (phoneID, ack, Date())
                     self.acceptor = nil
+                    self.acceptorKey = nil
                     onPairingCode(nil)
                     // Paired, not yet joined: the phone follows up
                     // with a join and earns presence with its first
@@ -612,6 +634,7 @@ final class ControllerLinkReceiver {
                     reply(.pairSuccess, payload: ack, on: connection)
                 } catch {
                     self.acceptor = nil
+                    self.acceptorKey = nil
                     onPairingCode(nil)
                     fail(.storage, on: connection)
                 }
@@ -619,6 +642,7 @@ final class ControllerLinkReceiver {
                 fail(.wrongCode, b: Int16(triesLeft), on: connection)
             case .cancelled:
                 self.acceptor = nil
+                self.acceptorKey = nil
                 onPairingCode(nil)
                 pairingLockedUntil = Date().addingTimeInterval(30)
                 fail(.cancelled, b: 30, on: connection)
