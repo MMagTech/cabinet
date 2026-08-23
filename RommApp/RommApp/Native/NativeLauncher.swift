@@ -378,88 +378,15 @@ enum NativeLauncher {
         LibretroFrontend.shared.activateCore(core.coreID)
         var coreOptions = NativeCoreOptionsStore.dictionary(for: platform)
         if core == .mame2003Plus {
-            // The core-option-defaults class, biting the new core on day
-            // one: an unanswered GET_VARIABLE for xy_device leaves it at
-            // RETRO_DEVICE_NONE, and at NONE the core's own read function
-            // returns zero deltas unconditionally, so every dial,
-            // trackball and paddle is dead however hard the spinner
-            // spins. Answered here, next to the core it describes, until
-            // this core gets its full options pass.
-            // Gun cabinets want the pointer (a touch IS an absolute aim);
-            // dials, paddles and trackballs want relative mouse deltas.
-            // lightgun, not pointer: only the lightgun path implements
-            // the off-screen reload these cabinets are played with.
-            coreOptions["mame2003-plus_xy_device"] = gunCabinet ? "lightgun" : "mouse"
-            // Same class, second victim, found by ear: unanswered, the
-            // core's sample rate global stays zero and it produces no
-            // audio at all. Verified in the bench: bare run emitted 0
-            // audio frames over ten seconds, answered it emitted exactly
-            // rate x seconds.
-            coreOptions["mame2003-plus_sample_rate"] = "48000"
-            // Third and fourth victims, found as "a whole background
-            // layer is missing": zeroed brightness and gamma crush the
-            // palette-driven background layers to black while sprites
-            // survive, which reads exactly like a renderer dropping a
-            // layer. Cameltry's maze walls were there all along,
-            // invisible, and the ball bouncing off nothing was the tell.
-            // This core is now four-for-four on the defaults class and
-            // plainly owes the full options pass the project notes
-            // prescribe for every new core.
-            coreOptions["mame2003-plus_brightness"] = "1.0"
-            coreOptions["mame2003-plus_gamma"] = "1.0"
-            // Fifth victim, found when Marcus asked whether the phone-
-            // as-lightgun should draw a crosshair: it already should
-            // have been. The core's own default is enabled, but the
-            // whole case is skipped when GET_VARIABLE goes unanswered,
-            // so the zero-initialised global won and drawgfx never drew
-            // one. With rate-control aiming the crosshair IS the aim,
-            // so without this the phone gun was aiming blind.
-            coreOptions["mame2003-plus_crosshair_enabled"] = "enabled"
-            coreOptions["mame2003-plus_crosshair_appearance"] = "simple"
-            // Sixth and seventh victims of the same class, found when
-            // Bowl-O-Rama sat on MAME's copyright box taking no input.
-            // The core's own defaults skip both nag screens; unanswered,
-            // the zeroed globals show them, and then the game is behind
-            // a modal that only MAME's own UI_SELECT dismisses, which
-            // no cabinet panel here is guaranteed to offer. Skipping
-            // them is also what every RetroArch user already gets.
-            // Blast radius stated: MAME 2003-Plus only, every arcade
-            // game on it, both platforms. What changes is that two
-            // informational screens stop appearing; no input, timing or
-            // render path is touched.
-            coreOptions["mame2003-plus_skip_disclaimer"] = "enabled"
-            coreOptions["mame2003-plus_skip_warnings"] = "enabled"
-            // MAME's own menu, closed deliberately. It is the only way
-            // a DIP switch or an input rebind gets changed, and MAME
-            // writes whatever it holds into cfg/ra_<game>.cfg when the
-            // game exits, which is then reapplied at every later
-            // launch. Bowl-O-Rama spent a day unplayable that way: a
-            // stray combo during phone-controller testing reached that
-            // menu, the exit saved it, and every launch afterwards
-            // booted a game whose inputs did nothing. Nothing in
-            // Cabinet routes a person to that menu on purpose, so it
-            // can only ever be reached by accident, and the accident
-            // is permanent.
-            //
-            // The trade: MAME's per-game DIP switches (difficulty,
-            // lives, free play) stop being reachable. Cabinet has
-            // never surfaced them, so nothing on screen changes; what
-            // goes away is a hidden door that silently corrupts a
-            // game's saved settings.
-            coreOptions["mame2003-plus_display_setup"] = "disabled"
-            coreOptions["mame2003-plus_mame_remapping"] = "disabled"
-            // Eighth of the same class. Plenty of arcade boards keep
-            // their configuration, and sometimes calibration, in
-            // battery-backed RAM that an operator set once on the real
-            // cabinet. Emulated blank, those games boot to a factory
-            // settings screen, a CMOS error, or simply wrong, and the
-            // core carries known-good images for exactly that. It logs
-            // "NVRAM bootstrap available, but disabled via core option"
-            // when it cannot use one, which is what Cabinet has been
-            // asking for since day one by never answering. Seeds only
-            // where the game has no NVRAM of its own yet, so a machine
-            // with history keeps it.
-            coreOptions["mame2003-plus_nvram_bootstraps"] = "enabled"
+            // Every option this core exposes, answered in one place.
+            // An unanswered libretro variable does not leave the core
+            // at its own default, it leaves a zeroed C global, which
+            // is silence for a sample rate and off for every toggle
+            // whose useful state is on. Eight bugs were found that way
+            // one at a time before this table existed; see
+            // MAME2003PlusOptions for the values and for the five
+            // places Cabinet deliberately differs.
+            coreOptions.merge(MAME2003PlusOptions.all(gunCabinet: gunCabinet)) { _, mine in mine }
         }
         LibretroFrontend.shared.setCoreOptions(coreOptions)
         let padDevice = NativeCoreOptionsStore.padDevice(for: platform)
