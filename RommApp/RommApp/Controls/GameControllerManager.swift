@@ -97,6 +97,42 @@ final class GameControllerManager: ObservableObject {
     private var started = false
     private var slots: [Slot?] = Array(repeating: nil, count: GameControllerManager.maxPlayers)
 
+    /// Seats held by phone controllers, phoneID to slot index. Phones
+    /// and pads share the same two seats under the same rule, first
+    /// come and sticky: a pad connecting after a phone has joined must
+    /// not silently demote the person already playing, and the other
+    /// way round. Keyed by the phone's paired identity rather than a
+    /// connection, so a phone that drops off Wi-Fi for two seconds
+    /// comes back to the same port instead of swapping players
+    /// mid-game. Empty whenever the phone-as-controller feature is not
+    /// in use, which keeps every pad-only session on the exact
+    /// behavior it always had.
+    private var phoneClaims: [Data: Int] = [:]
+
+    /// The seat this phone already holds, or the lowest one free of
+    /// both pads and phone claims; nil when the house is full, which
+    /// makes a third source simply not a player, exactly as a third
+    /// gamepad behaves today.
+    func claimPhoneSlot(for phoneID: Data) -> Int? {
+        if let existing = phoneClaims[phoneID] { return existing }
+        guard let free = slots.indices.first(where: { index in
+            slots[index] == nil && !phoneClaims.values.contains(index)
+        }) else { return nil }
+        phoneClaims[phoneID] = free
+        return free
+    }
+
+    /// A deliberate leave gives the seat back. A mere drop does not;
+    /// that is the stickiness above.
+    func releasePhoneSlot(for phoneID: Data) {
+        phoneClaims[phoneID] = nil
+    }
+
+    /// The game ended; nobody is a phone player now.
+    func releaseAllPhoneSlots() {
+        phoneClaims.removeAll()
+    }
+
     /// A controller is attached and driving the game. True when any slot is
     /// filled, so existing single-player callers keep their meaning.
     @Published private(set) var isConnected = false
@@ -246,7 +282,10 @@ final class GameControllerManager: ObservableObject {
         if let existing = slots.firstIndex(where: { $0?.controller === controller }) {
             return existing
         }
-        return slots.firstIndex(where: { $0 == nil })
+        // Free means free of phones too. With no phone joined the
+        // claims table is empty and this is the same lowest-free rule
+        // it has always been.
+        return slots.indices.first { slots[$0] == nil && !phoneClaims.values.contains($0) }
     }
 
     private func attach(_ controller: GCController) {

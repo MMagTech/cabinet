@@ -86,6 +86,9 @@ enum ControllerLink {
             case busy = 3
             case expired = 4
             case storage = 5
+            /// Paired, welcome, and out of seats: both player slots
+            /// are taken, exactly as a third gamepad finds them.
+            case full = 6
         }
 
         var seq: UInt32 = 0
@@ -202,11 +205,21 @@ final class ControllerLinkReceiver {
     /// What is running, sent to a phone the moment it joins so it can
     /// draw the right cabinet.
     private let shortname: String
-    private let onButton: (Int, Bool) -> Void
-    private let onStick: (Double, Double) -> Void
-    private let onRelative: (Int, Int) -> Void
-    private let onPointer: (Double, Double, Bool) -> Void
-    private let onOffscreen: (Bool) -> Void
+    /// Which seat a joining phone gets, by paired identity, or nil for
+    /// a full house. Handed in as a closure for the same reason as the
+    /// verbs below: the slot rule lives with the pads, and this file
+    /// never learns what a controller manager is. Called on the
+    /// receive queue; the owner decides how to reach its own world.
+    private let assignPort: (Data) -> Int?
+    /// A deliberate goodbye gives the seat back. Drops do not; the
+    /// seat outliving a Wi-Fi blip is what keeps two players from
+    /// swapping ports mid-game.
+    private let releasePort: (Data) -> Void
+    private let onButton: (Int, Int, Bool) -> Void
+    private let onStick: (Int, Double, Double) -> Void
+    private let onRelative: (Int, Int, Int) -> Void
+    private let onPointer: (Int, Double, Double, Bool) -> Void
+    private let onOffscreen: (Int, Bool) -> Void
     private let onPause: (Bool) -> Void
     private let onSave: () -> Void
     private let onLoad: () -> Void
@@ -237,6 +250,8 @@ final class ControllerLinkReceiver {
         /// is a new session and re-derives everything.
         var phoneNonce: Data?
         var sessionKey: SymmetricKey?
+        /// The seat this phone holds, from the slot rule at join.
+        var port = 0
         /// The exact hello sent for this session, kept so retries
         /// converge on one answer.
         var helloPayload: Data?
@@ -277,11 +292,13 @@ final class ControllerLinkReceiver {
     private var lastAck: (phoneID: Data, ack: Data, at: Date)?
 
     init(shortname: String,
-         onButton: @escaping (Int, Bool) -> Void,
-         onStick: @escaping (Double, Double) -> Void,
-         onRelative: @escaping (Int, Int) -> Void,
-         onPointer: @escaping (Double, Double, Bool) -> Void,
-         onOffscreen: @escaping (Bool) -> Void,
+         assignPort: @escaping (Data) -> Int?,
+         releasePort: @escaping (Data) -> Void,
+         onButton: @escaping (Int, Int, Bool) -> Void,
+         onStick: @escaping (Int, Double, Double) -> Void,
+         onRelative: @escaping (Int, Int, Int) -> Void,
+         onPointer: @escaping (Int, Double, Double, Bool) -> Void,
+         onOffscreen: @escaping (Int, Bool) -> Void,
          onPause: @escaping (Bool) -> Void,
          onSave: @escaping () -> Void,
          onLoad: @escaping () -> Void,
@@ -289,6 +306,8 @@ final class ControllerLinkReceiver {
          onPairingCode: @escaping (String?) -> Void,
          onDrop: @escaping () -> Void) {
         self.shortname = shortname
+        self.assignPort = assignPort
+        self.releasePort = releasePort
         self.onButton = onButton
         self.onStick = onStick
         self.onRelative = onRelative
@@ -333,16 +352,21 @@ final class ControllerLinkReceiver {
         let cutoff = Date().addingTimeInterval(-dropAfter)
         let dead = peers.filter { $0.value.lastHeard < cutoff }
         if !dead.isEmpty {
-            let hadJoined = peers.values.contains { $0.joined }
+            let joinedDied = dead.contains { $0.value.joined }
             for key in dead.keys { peers[key] = nil }
             connections.removeAll { c in
                 guard dead.keys.contains(ObjectIdentifier(c)) else { return false }
                 c.cancel()
                 return true
             }
-            let hasJoined = peers.values.contains { $0.joined }
-            if hadJoined, !hasJoined {
-                onPhone(false)
+            if joinedDied {
+                // ANY player's drop pauses, the reaction a pad
+                // disconnect has always had: their person is standing
+                // there holding nothing, whoever else is still in. The
+                // presence flag stays truthful for whoever remains,
+                // and the dropped phone's seat stays claimed, so
+                // coming back means coming back as the same player.
+                onPhone(peers.values.contains { $0.joined })
                 onDrop()
             }
         }
@@ -421,24 +445,31 @@ final class ControllerLinkReceiver {
                 reply(.hello, payload: cached, on: connection)
                 return
             }
+            // A seat, from the same rule the pads use, sticky by
+            // paired identity. A full house is answered honestly, the
+            // way a third gamepad is simply not a player.
+            guard let port = assignPort(phoneID) else {
+                fail(.full, on: connection)
+                return
+            }
             // A fresh nonce is a fresh session: new keys, new replay
             // window, and joined goes back to unproven until the first
             // tagged packet lands.
             let tvNonce = ControllerPairing.randomBytes(16)
             let nameBytes = Data(shortname.utf8.prefix(32))
-            // Which player this phone is. Fixed at port 0 until the
-            // slot rule joins in; under the proof either way, so not
-            // even the cosmetic byte can be forged.
-            let port = Data([0])
+            // Which player this phone is, under the proof, so not even
+            // the cosmetic byte can be forged.
+            let portByte = Data([UInt8(clamping: port)])
             let helloKey = ControllerPairing.helloKey(secret: secret, phoneNonce: phoneNonce)
             let helloTag = ControllerPairing.tag(
-                key: helloKey, context: "t2p-hello", bytes: tvID + tvNonce + port + nameBytes)
-            let helloPayload = tvID + tvNonce + helloTag + port + nameBytes
+                key: helloKey, context: "t2p-hello", bytes: tvID + tvNonce + portByte + nameBytes)
+            let helloPayload = tvID + tvNonce + helloTag + portByte + nameBytes
             peers[key] = Peer(
                 phoneID: phoneID,
                 phoneNonce: phoneNonce,
                 sessionKey: ControllerPairing.sessionKey(
                     secret: secret, phoneNonce: phoneNonce, tvNonce: tvNonce),
+                port: port,
                 helloPayload: helloPayload,
                 lastHeard: Date()
             )
@@ -559,22 +590,23 @@ final class ControllerLinkReceiver {
         let stale = p.seq < last
         if p.seq > last { peers[key]?.lastSeq = p.seq }
 
+        let port = peer.port
         switch p.kind {
         case .hello:
             // The heartbeat: nothing but the liveness it just bought.
             break
         case .button:
-            onButton(Int(p.a), p.flag)
+            onButton(port, Int(p.a), p.flag)
         case .stick:
             guard !stale else { return }
-            onStick(Double(p.a) / 10000, Double(p.b) / 10000)
+            onStick(port, Double(p.a) / 10000, Double(p.b) / 10000)
         case .relative:
-            onRelative(Int(p.a), Int(p.b))
+            onRelative(port, Int(p.a), Int(p.b))
         case .pointer:
             guard !stale else { return }
-            onPointer(Double(p.a) / 10000, Double(p.b) / 10000, p.flag)
+            onPointer(port, Double(p.a) / 10000, Double(p.b) / 10000, p.flag)
         case .offscreen:
-            onOffscreen(p.flag)
+            onOffscreen(port, p.flag)
         case .pause:
             onPause(p.flag)
         case .saveState:
@@ -582,7 +614,9 @@ final class ControllerLinkReceiver {
         case .loadState:
             onLoad()
         case .goodbye:
-            // Deliberate. Forget the phone without pausing anything.
+            // Deliberate. Forget the phone, give the seat back, pause
+            // nothing.
+            if let phoneID = peer.phoneID { releasePort(phoneID) }
             connection.cancel()
             peers[key] = nil
             connections.removeAll { $0 === connection }
@@ -935,6 +969,8 @@ final class ControllerLinkSender: ObservableObject {
                 end("The code expired. Try again for a fresh one.")
             case .storage:
                 end("The television could not store the pairing.")
+            case .full:
+                end("Both player seats are taken.")
             case nil:
                 end("Pairing failed.")
             }

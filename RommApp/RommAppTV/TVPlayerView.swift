@@ -343,20 +343,38 @@ struct TVPlayerView: View {
             if platform == .arcade, allowPhoneController {
                 let link = ControllerLinkReceiver(
                     shortname: rom.fsNameNoExt.lowercased(),
-                    onButton: { [weak renderer] id, down in
-                        renderer?.setButton(id, down: down, port: 0)
+                    // The seat comes from the same slot rule the pads
+                    // use. The receiver asks on its own queue and needs
+                    // the answer before it can finish the handshake, so
+                    // this hops to the main actor synchronously; joins
+                    // are rare and the manager's work is a dictionary
+                    // lookup, so the hop costs nothing that matters.
+                    assignPort: { phoneID in
+                        DispatchQueue.main.sync {
+                            MainActor.assumeIsolated {
+                                GameControllerManager.shared.claimPhoneSlot(for: phoneID)
+                            }
+                        }
                     },
-                    onStick: { [weak renderer] x, y in
-                        renderer?.setStick(x: x, y: y, port: 0)
+                    releasePort: { phoneID in
+                        Task { @MainActor in
+                            GameControllerManager.shared.releasePhoneSlot(for: phoneID)
+                        }
                     },
-                    onRelative: { dx, dy in
-                        LibretroFrontend.shared.addMouseDeltaX(dx, y: dy, port: 0)
+                    onButton: { [weak renderer] port, id, down in
+                        renderer?.setButton(id, down: down, port: port)
                     },
-                    onPointer: { x, y, down in
-                        LibretroFrontend.shared.setPointerX(Float(x), y: Float(y), down: down, port: 0)
+                    onStick: { [weak renderer] port, x, y in
+                        renderer?.setStick(x: x, y: y, port: port)
                     },
-                    onOffscreen: { off in
-                        LibretroFrontend.shared.setLightgunOffscreen(off, port: 0)
+                    onRelative: { port, dx, dy in
+                        LibretroFrontend.shared.addMouseDeltaX(dx, y: dy, port: port)
+                    },
+                    onPointer: { port, x, y, down in
+                        LibretroFrontend.shared.setPointerX(Float(x), y: Float(y), down: down, port: port)
+                    },
+                    onOffscreen: { port, off in
+                        LibretroFrontend.shared.setLightgunOffscreen(off, port: port)
                     },
                     // The phone's own pause menu, deliberately smaller
                     // than this screen's: pause, save, load, put away.
@@ -415,6 +433,7 @@ struct TVPlayerView: View {
         .onDisappear {
             phoneLink?.stop()
             phoneLink = nil
+            GameControllerManager.shared.releaseAllPhoneSlots()
             UIApplication.shared.isIdleTimerDisabled = false
             FrameTrace.shared.end()
             controllers.capturesMenuButton = false
