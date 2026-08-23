@@ -743,6 +743,16 @@ final class ControllerLinkSender: ObservableObject {
     private var ticker: DispatchSourceTimer?
     /// The pairing attempt in progress, if the television demanded one.
     private var requester: ControllerPairing.Requester?
+    /// Where the current connection points, and the endpoint most
+    /// recently given up on. Game relaunches on the television leave
+    /// stale Bonjour advertisements behind for a while; without this,
+    /// a retry could glue itself to the same dead one it just left.
+    private var currentEndpoint: NWEndpoint?
+    private var avoidEndpoint: (key: String, until: Date)?
+    /// Hellos that failed their proof, counted so a television whose
+    /// stored secret no longer matches ours surfaces as re-pairing
+    /// instead of as silence.
+    private var badHelloCount = 0
     /// The last proof sent, kept for retries until the television
     /// answers one way or the other.
     private var pendingProof: Data?
@@ -758,14 +768,23 @@ final class ControllerLinkSender: ObservableObject {
                                 using: ControllerLink.parameters())
         browser.browseResultsChangedHandler = { [weak self] results, _ in
             guard let self else { return }
-            // A game beats the lobby when both are advertised, which
-            // can briefly happen as one hands off to the other.
-            let best = results.first { ControllerLink.shortname(fromService: $0.endpoint) != nil }
-                ?? results.first
-            guard let best else { return }
-            let named = ControllerLink.shortname(fromService: best.endpoint)
             Task { @MainActor in
-                if let named { self.shortname = named }
+                // Skip the endpoint that just went dead under us, if
+                // any; fall back to it only when nothing else exists.
+                var candidates = Array(results)
+                if let avoid = self.avoidEndpoint, avoid.until > Date() {
+                    let living = candidates.filter { String(describing: $0.endpoint) != avoid.key }
+                    if !living.isEmpty { candidates = living }
+                }
+                // A game beats the lobby when both are advertised,
+                // which can briefly happen as one hands off to the
+                // other.
+                let best = candidates.first { ControllerLink.shortname(fromService: $0.endpoint) != nil }
+                    ?? candidates.first
+                guard let best else { return }
+                if let named = ControllerLink.shortname(fromService: best.endpoint) {
+                    self.shortname = named
+                }
                 self.connect(to: best.endpoint)
             }
         }
@@ -804,6 +823,20 @@ final class ControllerLinkSender: ObservableObject {
             pendingProof = nil
             phase = .joining
             send(.init(kind: .join), payload: ControllerPairing.deviceID + phoneNonce)
+            return
+        }
+        // A join the television never answers means the connection is
+        // glued to a stale advertisement (game relaunches leave them
+        // behind for a while). Hang up, remember the corpse so the
+        // next browse skips it, and let the failure path re-search.
+        // Only while no pairing is mid-flight; pairing has its own
+        // clocks.
+        if case .joining = phase, requester == nil,
+           Date().timeIntervalSince(phaseChangedAt) > 10 {
+            if let currentEndpoint {
+                avoidEndpoint = (String(describing: currentEndpoint), Date().addingTimeInterval(60))
+            }
+            connection?.cancel()
             return
         }
         switch phase {
@@ -890,6 +923,8 @@ final class ControllerLinkSender: ObservableObject {
         guard connection == nil else { return }
         phoneNonce = ControllerPairing.randomBytes(16)
         sessionKey = nil
+        badHelloCount = 0
+        currentEndpoint = endpoint
         let c = NWConnection(to: endpoint, using: ControllerLink.parameters())
         connection = c
         c.stateUpdateHandler = { [weak self] state in
@@ -977,7 +1012,21 @@ final class ControllerLinkSender: ObservableObject {
             let helloKey = ControllerPairing.helloKey(secret: secret, phoneNonce: phoneNonce)
             guard ControllerPairing.validTag(
                 tag, key: helloKey, context: "t2p-hello", bytes: tvID + tvNonce + port + nameBytes)
-            else { return }
+            else {
+                // A television that keeps answering wrongly holds a
+                // secret that no longer matches ours. Re-pair rather
+                // than sit in silence; the fresh secret overwrites
+                // cleanly on both sides.
+                badHelloCount += 1
+                if badHelloCount >= 3, requester == nil {
+                    status = "re-pairing with this television"
+                    let fresh = ControllerPairing.Requester(phoneID: ControllerPairing.deviceID)
+                    requester = fresh
+                    send(.init(kind: .pairRequest), payload: fresh.requestPayload)
+                }
+                return
+            }
+            badHelloCount = 0
             if let name = ControllerLink.validShortname(String(decoding: nameBytes, as: UTF8.self)) {
                 shortname = name
                 status = name
