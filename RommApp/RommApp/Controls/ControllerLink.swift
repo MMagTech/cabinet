@@ -90,6 +90,11 @@ enum ControllerLink {
             /// Paired, welcome, and out of seats: both player slots
             /// are taken, exactly as a third gamepad finds them.
             case full = 6
+            /// Three wrong codes put the television in a short
+            /// guessing lockout. Distinct from busy so the phone can
+            /// say what is actually happening instead of blaming a
+            /// phone that does not exist.
+            case cooldown = 7
         }
 
         var seq: UInt32 = 0
@@ -487,7 +492,7 @@ final class ControllerLinkReceiver {
             let phoneID = Data(payload.prefix(8))
             let phonePub = Data(payload.suffix(32))
             if let until = pairingLockedUntil, until > Date() {
-                fail(.busy, on: connection)
+                fail(.cooldown, on: connection)
                 return
             }
             if let acceptor {
@@ -1009,9 +1014,11 @@ final class ControllerLinkSender: ObservableObject {
                 pendingProof = nil
                 phase = .codeEntry(triesLeft: max(1, Int(packet.b)))
             case .cancelled:
-                end("Three wrong codes. The television took the code down; try again for a fresh one.")
+                end("Three wrong codes. The television took the code down; wait half a minute, then try again for a fresh one.")
             case .busy:
                 end("The television is pairing another phone. Try again in a moment.")
+            case .cooldown:
+                end("The television is waiting out three wrong codes. Try again in half a minute.")
             case .expired:
                 end("The code expired. Try again for a fresh one.")
             case .storage:
