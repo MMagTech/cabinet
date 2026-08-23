@@ -153,8 +153,17 @@ struct ControllerRemapView: View {
                     }
 
                     tvSection("") {
-                        Button("Reset to defaults", role: .destructive) {
+                        // A card like every other row, not a bare
+                        // button: RowFocusStyle wraps whatever it is
+                        // given, and given a plain string that was a
+                        // small pill floating under a column of cards.
+                        Button {
                             confirmingReset = true
+                        } label: {
+                            tvRowLabel(
+                                title: "Reset to defaults", detail: nil,
+                                trailing: nil, destructive: true
+                            )
                         }
                         .buttonStyle(RowFocusStyle())
                     }
@@ -231,11 +240,14 @@ struct ControllerRemapView: View {
 
     /// The shared row face: title, optional second line, optional
     /// trailing glyph, at the sizes a television needs.
-    private func tvRowLabel(title: String, detail: String?, trailing: String?) -> some View {
+    private func tvRowLabel(
+        title: String, detail: String?, trailing: String?, destructive: Bool = false
+    ) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.body)
+                    .foregroundStyle(destructive ? Color.red : Color.primary)
                 if let detail {
                     Text(detail)
                         .font(.footnote)
