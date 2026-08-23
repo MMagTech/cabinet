@@ -21,6 +21,16 @@ struct ControllerRemapView: View {
 
     var body: some View {
         List {
+            // tvOS gets its title as content rather than chrome:
+            // .navigationTitle paints over the list there instead of
+            // reserving space above it, which had "Buttons" sitting on
+            // top of the first rows. Same pattern every other tvOS
+            // screen in this app already uses.
+            #if os(tvOS)
+            Text("Buttons")
+                .font(.largeTitle.weight(.bold))
+                .listRowBackground(Color.clear)
+            #endif
             // Leads the screen, not buried under the six-button and
             // per-input sections: unlike everything below it, this applies
             // to both players and is a standing preference rather than
@@ -102,7 +112,16 @@ struct ControllerRemapView: View {
                             }
                             .contentShape(.rect)
                         }
+                        #if os(tvOS)
+                        // .plain paints a system focus effect over the
+                        // row's own background and reserves no headroom
+                        // for its focus growth, so a focused row grows
+                        // into its neighbour. This app's own style
+                        // instead, per the tvOS conventions.
+                        .buttonStyle(RowFocusStyle())
+                        #else
                         .buttonStyle(.plain)
+                        #endif
                     }
                 } header: {
                     Text("Six button fighters")
@@ -201,10 +220,10 @@ struct ControllerRemapView: View {
                 }
             }
         }
-        .navigationTitle("Buttons")
-        // navigationBarTitleDisplayMode is iOS-only; tvOS has no
-        // navigation bar to size in the first place.
+        // iOS only, deliberately: see the title row at the top of the
+        // list for what tvOS does instead and why.
         #if os(iOS)
+        .navigationTitle("Buttons")
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task { controllers.start() }
