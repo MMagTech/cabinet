@@ -105,7 +105,7 @@ struct SettingsView: View {
                         .foregroundStyle(.primary)
                 }
             } footer: {
-                Text("Use this phone as the controls for a game running on your Apple TV. Once paired, this also lives on Home.")
+                Text("Use this phone as the controls for a game on your Apple TV. First turn on \u{201C}Allow a phone as a controller\u{201D} in Cabinet\u{2019}s settings on the TV.")
             }
 
             Section {
