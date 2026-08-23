@@ -405,17 +405,20 @@ enum NativeLauncher {
             // is known, which core refused, and offers the other as a
             // possibility rather than a diagnosis.
             //
-            // Names the Emulator row because that picker is already on
-            // this same screen on both platforms, so there is nowhere to
-            // send anyone.
+            // Says the new thing and nothing else. It does not repeat
+            // that the game failed to start, since the iOS alert is
+            // already titled that and the tvOS text sits under a game
+            // that plainly did not launch. It does not explain where the
+            // picker is either: anyone running this app has a self-hosted
+            // server and arcade romsets sorted into folders, and does not
+            // need a tour of a screen they are looking at.
             var message = failure
             if platform.cores.count > 1 {
                 let others = platform.cores
                     .filter { $0 != core }
                     .map(\.displayName)
                     .joined(separator: " or ")
-                message = "\(core.displayName) wouldn't start this game. "
-                    + "\(others) might, from the Emulator row."
+                message = "\(core.displayName) refused it. Try \(others)."
             }
             throw NSError(domain: "NativeLauncher", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
         }
