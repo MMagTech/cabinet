@@ -65,6 +65,33 @@ Done and working, just not in a tagged release yet.
 Not committed, not scoped, real conversations that happened and are
 worth having in the open.
 
+- **Your phone as the controller for a game on the television.** The
+  Apple TV runs the game, your phone becomes its control panel, and for
+  the arcade cabinets that means the real thing: a spinner you roll, a
+  trackball you flick, a wheel, pedals, a light gun. Two people with two
+  phones would be two players.
+
+  This one is built and works, verified across a full day on real
+  hardware, and ships to nobody because there is no authentication on the
+  wire yet. Anything on your network could drive your television
+  mid-game, which is fine in a house and not fine in a release. The
+  design for fixing it is written up in
+  [docs/scope-phone-controller-pairing.md](docs/scope-phone-controller-pairing.md):
+  pair a phone to a television once with a code shown on screen, the same
+  way Cabinet already pairs to RomM, and every later packet proves it.
+
+- **A controller that needs no account at all.** Cabinet shows you
+  nothing until it is paired to a RomM server, so a friend who comes over
+  with a phone cannot join a game on your television even though the
+  controller half needs nothing from RomM.
+
+  The idea is a mode where you install Cabinet, skip setup entirely, and
+  the app is a controller and nothing else. It is less app rather than
+  more: no library, no downloads, no saves. It would turn "my kid can
+  play" into "anyone in the room can play", and it is why the pairing
+  design above deliberately does not lean on RomM identity, since a guest
+  has none.
+
 - **A companion screen for iPhone, over AirPlay or wired HDMI.** An
   iPhone can drive an external display with content different from what
   is on the phone itself, the same trick Apple's own Photos app uses.
