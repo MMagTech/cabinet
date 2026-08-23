@@ -1,16 +1,25 @@
 # Shipping the phone as a controller: pairing, and controller-only mode
 
-Design settled 2026-08-22. Nothing here is built.
+Design settled 2026-08-22. Steps one through six below were built on
+2026-08-23: the setting, code pairing, proof on every packet, browse
+after a tap, the player badge, and two players. The crypto is
+Curve25519 key agreement authenticated by the typed code, HKDF-derived
+secrets in both Keychains, and an eight byte truncated HMAC on every
+packet behind a replay window; ControllerPairing.swift's header
+carries the details and the one honest limit. Controller-only mode is
+not built, and the two-player step still owes its real-hardware pass.
 
-The phone-as-controller feature already works: a phone drives an arcade
-game running on an Apple TV, with the game's real cabinet panel drawn on
-the phone, verified across a full day on real hardware. It ships to
-nobody because it is `#if DEBUG`, and it is behind that gate for one
-reason: **there is no authentication on the wire at all.** Anything on
-the network can send input to a television mid-game.
+The phone-as-controller feature already worked when this was written: a
+phone drives an arcade game running on an Apple TV, with the game's
+real cabinet panel drawn on the phone, verified across a full day on
+real hardware. It shipped to nobody because it was `#if DEBUG`, and it
+was behind that gate for one reason: **there was no authentication on
+the wire at all.** Anything on the network could send input to a
+television mid-game.
 
-This document is how that gets solved, and a second idea that fell out
-of solving it.
+This document is how that got solved, and a second idea that fell out
+of solving it. The gate is off now; the socket answers to the setting
+and the pairing below instead.
 
 ## Why this matters more than it looks
 
@@ -156,5 +165,9 @@ this door open rather than closing it, and that is worth preserving.
 ## Still open
 
 Whether a paired secret survives the app being reinstalled on either
-side, and what re-pairing feels like when it does not. Nothing here
-designs that yet.
+side is whatever each platform's Keychain does; nothing here promises
+it. What re-pairing feels like when it does not survive is now
+answered in behavior: a side that lost its secret is simply sent
+through pairing again, a fresh code on the television, automatically,
+and the new secret overwrites cleanly on both sides. Deliberately
+forgetting a pairing from either side's settings has no UI yet.
