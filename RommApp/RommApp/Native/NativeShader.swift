@@ -65,7 +65,7 @@ enum NativeShader: String, CaseIterable, Identifiable {
     /// ever displayed on one, they had their own small LCD screens. Found
     /// 2026-08-08 while adding LCD/Game Boy: no reason to keep offering a
     /// look that never applied to this hardware.
-    private static let handheldPlatforms: Set<NativePlatform> = [.gb, .gbc, .gba, .gameGear, .ngpc]
+    private static let handheldPlatforms: Set<NativePlatform> = [.gb, .gbc, .gba, .gameGear, .ngpc, .nds]
 
     /// The shaders worth offering for a platform. Handhelds swap the five
     /// CRT variants for whichever real-screen shader actually fits: Game
