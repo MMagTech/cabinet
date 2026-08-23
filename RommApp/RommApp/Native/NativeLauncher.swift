@@ -200,6 +200,38 @@ enum NativeLauncher {
         return dir
     }
 
+    /// Throws away the emulator's own per-game settings, leaving the
+    /// game's progress alone.
+    ///
+    /// MAME is the reason this exists. It keeps a per-game config file
+    /// holding DIP switches and input assignments, writes it when the
+    /// game exits, and reapplies it at every later launch, so one bad
+    /// value makes a game permanently unplayable with no way back from
+    /// inside the app. Cabinet now keeps MAME's own menu closed so
+    /// nothing can set one (see the options in `activate`), but a
+    /// device poisoned before that fix, or by anything similar in a
+    /// future core, needs a door out.
+    ///
+    /// Deliberately does NOT touch nvram: that is high scores,
+    /// bookkeeping and battery-backed progress, which is the player's
+    /// and is not what breaks. Settings are recreated from defaults on
+    /// the next launch.
+    static func resetCoreSettings(romId: Int, core: NativeCore) {
+        let cfg = coreSaveDirectory(romId: romId, core: core)
+            .appendingPathComponent("cfg", isDirectory: true)
+        try? FileManager.default.removeItem(at: cfg)
+    }
+
+    /// Whether there is anything for `resetCoreSettings` to remove, so
+    /// a launch screen can offer the action only when it would do
+    /// something.
+    static func hasCoreSettings(romId: Int, core: NativeCore) -> Bool {
+        let cfg = coreSaveDirectory(romId: romId, core: core)
+            .appendingPathComponent("cfg", isDirectory: true)
+        let contents = try? FileManager.default.contentsOfDirectory(atPath: cfg.path)
+        return !(contents ?? []).isEmpty
+    }
+
     /// Sega CD, Neo Geo Pocket and 3DO: their cores read a save file by
     /// name from the save directory at load (bram_load, flash_read,
     /// opera_lr_nvram_load), so the restore is placing that file before

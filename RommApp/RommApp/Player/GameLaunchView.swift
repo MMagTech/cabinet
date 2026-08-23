@@ -25,6 +25,9 @@ struct GameLaunchView: View {
 
     @State private var cores: [String] = []
     @State private var selectedCore: String?
+    /// Whether this game has an emulator config worth offering to
+    /// throw away; see resetSettingsCard.
+    @State private var hasCoreSettings = false
     /// The native emulator, on the platforms where more than one exists
     /// (arcade: FinalBurn Neo or MAME 2003-Plus). Same card, same picker
     /// shape, same memory behavior as the web player's emulator choice.
@@ -198,6 +201,7 @@ struct GameLaunchView: View {
                             downloadStatusCard
                             if interruptedAt != nil { continueCard }
                             compatibilityCard
+                            resetSettingsCard
                             if arcadeBase != nil { arcadeControlsCard }
                             if !states.isEmpty || !saves.isEmpty { resumeCard }
                         }
@@ -266,6 +270,7 @@ struct GameLaunchView: View {
             }
         }
         .task { await load() }
+        .onAppear { refreshCoreSettings() }
         .fullScreenCover(isPresented: $playing) {
             PlayerView(
                 rom: rom, launch: launchChoices, resumeFromAutosave: continueRun, stateToLoad: stateToLoad
@@ -1057,6 +1062,43 @@ struct GameLaunchView: View {
         } else {
             ArcadeOverride.save(buttons: arcadeButtons, ways: arcadeWays, for: rom.id)
         }
+    }
+
+    /// The way out of a game whose emulator settings have gone bad.
+    /// MAME writes DIP switches and input assignments per game when a
+    /// game exits and reapplies them at every launch, so one bad value
+    /// used to mean a permanently unplayable game with no recourse
+    /// inside the app. Cabinet keeps MAME's own menu shut now, but
+    /// devices poisoned before that fix still need this, and so would
+    /// any future core with the same habit.
+    ///
+    /// Only shown when there is something to remove, so it is silent on
+    /// almost every game, and pressing it makes the card go, because
+    /// the config it offered to delete is gone.
+    @ViewBuilder
+    private var resetSettingsCard: some View {
+        if hasCoreSettings, let core = NativeCore.core(for: rom, canonicalSlug: canonicalSlug) {
+            LaunchCard(title: "Emulator settings", systemImage: "arrow.counterclockwise") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("This game has its own saved emulator settings. Reset them if it stops responding to the controls; your saves and high scores are not touched.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Reset emulator settings", role: .destructive) {
+                        NativeLauncher.resetCoreSettings(romId: rom.id, core: core)
+                        hasCoreSettings = false
+                    }
+                    .font(.callout)
+                }
+            }
+        }
+    }
+
+    private func refreshCoreSettings() {
+        guard let core = NativeCore.core(for: rom, canonicalSlug: canonicalSlug) else {
+            hasCoreSettings = false
+            return
+        }
+        hasCoreSettings = NativeLauncher.hasCoreSettings(romId: rom.id, core: core)
     }
 
     /// Says what is known about this game running here, and never more

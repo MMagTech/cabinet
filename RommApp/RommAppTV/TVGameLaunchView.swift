@@ -35,6 +35,10 @@ struct TVGameLaunchView: View {
     /// Mirrors NativeCoreChoice so the emulator row's label updates the
     /// moment it is clicked; the store itself is the source of truth.
     @State private var chosenCore: NativeCore?
+    /// Whether this game has an emulator config worth offering to
+    /// throw away. Drives the reset row's presence, so pressing it
+    /// makes the row disappear, which is the confirmation.
+    @State private var hasCoreSettings = false
 
     private struct Launch: Identifiable {
         let id = UUID()
@@ -110,6 +114,7 @@ struct TVGameLaunchView: View {
                                 emulatorRow(platform: platform)
                             }
                             compatibilityRow
+                            resetSettingsRow
                         }
                     } else {
                         // Every platform tvOS can't run lands here: no
@@ -141,6 +146,8 @@ struct TVGameLaunchView: View {
             guard autoStart, platform != nil else { return }
             await play(stateData: nil)
         }
+        .onAppear { refreshCoreSettings() }
+        .onChange(of: chosenCore) { _, _ in refreshCoreSettings() }
         .fullScreenCover(item: $launch) { launch in
             TVPlayerView(rom: rom, core: launch.core, initialState: launch.initialState)
         }
@@ -183,6 +190,35 @@ struct TVGameLaunchView: View {
                 .padding(.vertical, 10)
         }
         .buttonStyle(TextFocusStyle())
+    }
+
+    /// The way out of a game whose emulator settings have gone bad.
+    /// MAME writes DIP switches and input assignments per game when a
+    /// game exits and reapplies them at every launch, so one bad value
+    /// used to mean a permanently unplayable game with no recourse
+    /// inside the app. Cabinet keeps MAME's own menu shut now, but
+    /// devices poisoned before that fix still need this, and so would
+    /// any future core with the same habit.
+    ///
+    /// Only shown when there is something to remove, which also makes
+    /// it self-verifying: press it and the row goes, because the
+    /// config it was offering to delete is gone.
+    @ViewBuilder
+    private var resetSettingsRow: some View {
+        if hasCoreSettings {
+            Button {
+                guard let core = runningCore else { return }
+                NativeLauncher.resetCoreSettings(romId: rom.id, core: core)
+                hasCoreSettings = false
+            } label: {
+                Label("Reset emulator settings", systemImage: "arrow.counterclockwise")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+            }
+            .buttonStyle(TextFocusStyle())
+        }
     }
 
     @ViewBuilder
@@ -317,6 +353,14 @@ struct TVGameLaunchView: View {
     private func loadStates() async {
         states = (try? await session.states(romId: rom.id)) ?? []
         loadingStates = false
+    }
+
+    /// Recomputed rather than cached across launches: the core can
+    /// change under the emulator row, and each core keeps its own
+    /// settings folder.
+    private func refreshCoreSettings() {
+        guard let core = runningCore else { return }
+        hasCoreSettings = NativeLauncher.hasCoreSettings(romId: rom.id, core: core)
     }
 
     private func play(state: GameState) async {
