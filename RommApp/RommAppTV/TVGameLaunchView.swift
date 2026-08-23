@@ -220,7 +220,7 @@ struct TVGameLaunchView: View {
                       systemImage: marked ? "checkmark.circle" : "exclamationmark.triangle")
             }
         } label: {
-            Label(marked ? "Marked incompatible" : "Not working?",
+            Label(marked ? "Marked incompatible" : "Troubleshoot",
                   systemImage: marked ? "exclamationmark.triangle" : "wrench.and.screwdriver")
                 .font(.callout)
                 .foregroundStyle(.secondary)
