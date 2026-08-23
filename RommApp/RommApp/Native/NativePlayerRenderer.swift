@@ -102,6 +102,16 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     /// untouched. Like `overlayImage`, this never combines with
     /// rotation or flipped frames: melonDS does neither.
     var dsDualScreen = false
+    /// The shareplay presentation: with a phone showing the bottom
+    /// screen, the television gives the whole picture to the top one.
+    /// Only read when dsDualScreen is already true, so it cannot touch
+    /// any other core's path even by accident.
+    var dsTopOnly = false
+    /// Hands each finished DS frame's bottom half to the video
+    /// encoder, bytes exactly as the core rendered them (BGRA rows).
+    /// Nil for everyone and everything except a DS game with a phone
+    /// connected; the check costs a nil test per frame.
+    var dsBottomFrameTap: ((Data, Int) -> Void)?
     private var overlayTexture: MTLTexture?
     private var overlayPipeline: MTLRenderPipelineState?
     private var overlaySampler: MTLSamplerState?
@@ -450,6 +460,15 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
                 if let frame = frontend.latestFrame() {
                     updateTexture(from: frame)
                     uploadMS = (CACurrentMediaTime() - uploadStart) * 1000
+                    // The DS bottom screen, on its way to the phone.
+                    // The slice is the frame's lower half by row range,
+                    // one copy, only while a tap is installed.
+                    if let tap = dsBottomFrameTap, dsDualScreen,
+                       frame.height == 384, frame.pixels.count >= Int(frame.bytesPerRow) * 384 {
+                        let rowBytes = Int(frame.bytesPerRow)
+                        let bottom = frame.pixels.subdata(in: rowBytes * 192 ..< rowBytes * 384)
+                        tap(bottom, rowBytes)
+                    }
                 }
             }
 
@@ -551,6 +570,44 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         viewSize: CGSize
     ) {
         guard viewSize.width > 0, viewSize.height > 0 else { return }
+
+        // Shareplay: the phone is showing the bottom screen, so the
+        // television spends everything on the top one, a single 4:3
+        // quad over the frame's upper half.
+        if dsTopOnly {
+            let topAspect = Double(DSScreenLayout.screenWidth / DSScreenLayout.screenHeight)
+            let viewAspect = Double(viewSize.width / viewSize.height)
+            if displayAspect != topAspect {
+                displayAspect = topAspect
+            }
+            var sx: Float = 1
+            var sy: Float = 1
+            if topAspect > viewAspect {
+                sy = Float(viewAspect / topAspect)
+            } else {
+                sx = Float(topAspect / viewAspect)
+            }
+            let quad: [Vertex] = [
+                Vertex(position: [-sx, -sy], texCoord: [0, 0.5]),
+                Vertex(position: [sx, -sy], texCoord: [1, 0.5]),
+                Vertex(position: [-sx, sy], texCoord: [0, 0]),
+                Vertex(position: [sx, sy], texCoord: [1, 0]),
+            ]
+            guard let commandBuffer = commandQueue.makeCommandBuffer(),
+                  let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: passDescriptor)
+            else { return }
+            encoder.setRenderPipelineState(pipelineState)
+            encoder.setFragmentTexture(texture, index: 0)
+            encoder.setFragmentSamplerState(samplerState, index: 0)
+            var texel = SIMD2<Float>(1.0 / Float(max(textureWidth, 1)), 1.0 / Float(max(textureHeight, 1)))
+            encoder.setFragmentBytes(&texel, length: MemoryLayout<SIMD2<Float>>.stride, index: 1)
+            encoder.setVertexBytes(quad, length: MemoryLayout<Vertex>.stride * quad.count, index: 0)
+            encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+            encoder.endEncoding()
+            commandBuffer.present(drawable)
+            commandBuffer.commit()
+            return
+        }
 
         let canvasAspect = Double(DSScreenLayout.canvasAspect)
         let viewAspect = Double(viewSize.width / viewSize.height)

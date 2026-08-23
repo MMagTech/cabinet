@@ -67,6 +67,9 @@ struct TVPlayerView: View {
     /// in the room wanting to join is not a reason to stop somebody
     /// else's run.
     @State private var pairingCode: String?
+    /// The bottom screen's encoder and socket, alive exactly while a
+    /// phone is joined to a DS game. See DSVideoLink.swift.
+    @State private var videoServer: DSVideoServer?
 
     private var canonicalSlug: String {
         rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
@@ -435,6 +438,26 @@ struct TVPlayerView: View {
                                 var opts = NativeCoreOptionsStore.dictionary(for: .nds)
                                 if joined { opts["melonds_touch_mode"] = "Touch" }
                                 LibretroFrontend.shared.updateCoreOptions(opts)
+                                // The shareplay split: a joined phone
+                                // gets the bottom screen as video, and
+                                // the television gives everything to
+                                // the top one. Leaving reverts both.
+                                if joined {
+                                    if videoServer == nil, let server = DSVideoServer() {
+                                        videoServer = server
+                                        renderer.dsBottomFrameTap = { [weak server] pixels, stride in
+                                            server?.submit(bottomHalf: pixels, bytesPerRow: stride)
+                                        }
+                                        phoneLink?.offerVideo(port: server.port, token: server.token)
+                                    }
+                                    renderer.dsTopOnly = true
+                                } else {
+                                    phoneLink?.revokeVideo()
+                                    renderer.dsTopOnly = false
+                                    renderer.dsBottomFrameTap = nil
+                                    videoServer?.stop()
+                                    videoServer = nil
+                                }
                             }
                         }
                     },
@@ -479,6 +502,9 @@ struct TVPlayerView: View {
             if phoneLink != nil {
                 NotificationCenter.default.post(name: .cabinetGameLinkEnded, object: nil)
             }
+            renderer.dsBottomFrameTap = nil
+            videoServer?.stop()
+            videoServer = nil
             phoneLink?.stop()
             phoneLink = nil
             GameControllerManager.shared.releaseAllPhoneSlots()

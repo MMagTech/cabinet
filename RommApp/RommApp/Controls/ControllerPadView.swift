@@ -1,5 +1,6 @@
 #if os(iOS)
 import CoreMotion
+import AVFoundation
 import SwiftUI
 
 /// The phone as the steering wheel itself: gravity-referenced roll,
@@ -216,6 +217,10 @@ final class GunAim {
 /// -cabinetLink launch argument opens it directly too.
 struct ControllerPadView: View {
     @StateObject private var link = ControllerLinkSender()
+    /// The DS bottom screen's decoder, inert until the television
+    /// offers a stream. Owned here so it survives panel re-renders and
+    /// dies with the screen.
+    @StateObject private var dsVideo = DSVideoClient()
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss
     /// The Menu pill's question. Putting the phone down mid-game is the
@@ -555,10 +560,25 @@ struct ControllerPadView: View {
                     opacity: 1.0
                 )
             }
-            DSPanelTouchSurface { x, y, down in
+            DSPanelTouchSurface(video: dsVideo) { x, y, down in
                 link.pointer(x: x, y: y, down: down)
             }
         }
+        .onChange(of: link.videoOffer) { _, offer in
+            if let offer, let host = link.remoteHost {
+                dsVideo.connect(host: host, port: offer.port, token: offer.token)
+            } else {
+                dsVideo.disconnect()
+            }
+        }
+        .onAppear {
+            // An offer that arrived before the panel did (the join
+            // races the navigation) still connects.
+            if let offer = link.videoOffer, let host = link.remoteHost {
+                dsVideo.connect(host: host, port: offer.port, token: offer.token)
+            }
+        }
+        .onDisappear { dsVideo.disconnect() }
     }
 
     private func pad(for shortname: String) -> some View {
@@ -859,6 +879,7 @@ struct ControllerPadView: View {
 /// against the bezel, and the plate is deliberately quiet: a hairline
 /// and a whisper of fill, since the eyes belong on the television.
 private struct DSPanelTouchSurface: View {
+    @ObservedObject var video: DSVideoClient
     let sendPointer: (_ x: Double, _ y: Double, _ down: Bool) -> Void
 
     var body: some View {
@@ -876,6 +897,14 @@ private struct DSPanelTouchSurface: View {
                     RoundedRectangle(cornerRadius: 12)
                         .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
                 )
+                .overlay {
+                    // The live bottom screen, the moment it exists;
+                    // until then the quiet plate is the promise of it.
+                    if video.receiving {
+                        DSVideoLayerView(layer: video.displayLayer)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                }
                 .contentShape(Rectangle())
                 .frame(width: rect.width, height: rect.height)
                 .position(x: rect.midX, y: rect.midY)
@@ -894,6 +923,35 @@ private struct DSPanelTouchSurface: View {
                 )
         }
         .coordinateSpace(name: "dsPanel")
+    }
+}
+/// Hosts the decoder's display layer in UIKit, where layers live. The
+/// layer fills the hosting view; SwiftUI decides the view's frame.
+private struct DSVideoLayerView: UIViewRepresentable {
+    let layer: AVSampleBufferDisplayLayer
+
+    final class HostView: UIView {
+        var hosted: AVSampleBufferDisplayLayer? {
+            didSet {
+                oldValue?.removeFromSuperlayer()
+                if let hosted { self.layer.addSublayer(hosted) }
+                setNeedsLayout()
+            }
+        }
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            hosted?.frame = bounds
+        }
+    }
+
+    func makeUIView(context: Context) -> HostView {
+        let view = HostView()
+        view.hosted = layer
+        return view
+    }
+
+    func updateUIView(_ uiView: HostView, context: Context) {
+        if uiView.hosted !== layer { uiView.hosted = layer }
     }
 }
 #endif

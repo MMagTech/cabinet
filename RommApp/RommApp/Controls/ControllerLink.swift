@@ -64,6 +64,14 @@ enum ControllerLink {
             // keeps the game running for the remote or a rejoin, a
             // drop pauses it, because nobody is holding anything.
             case goodbye = 9
+            /// Television to phone, after a join: where the bottom
+            /// screen's video stream lives. Payload is an 8-byte tag
+            /// over the rest (session key, context "t2p-video"), a
+            /// 2-byte big-endian TCP port, and a 16-byte connect
+            /// token. Port zero, tagged the same way, revokes a
+            /// standing offer. Phones that predate this kind drop it
+            /// unread, which is the packet format's own rule.
+            case videoOffer = 17
             // The front door. A phone announces who it is with a fresh
             // nonce; a known phone gets hello back carrying the
             // television's nonce and proof, the two nonces plus the
@@ -258,6 +266,10 @@ final class ControllerLinkReceiver {
         var sessionKey: SymmetricKey?
         /// The seat this phone holds, from the slot rule at join.
         var port = 0
+        /// The datagram flow this peer lives on, kept so an offer made
+        /// after the join (the video server starts when the game side
+        /// is ready, not when the phone arrives) can still reach them.
+        var connection: NWConnection?
         /// The exact hello sent for this session, kept so retries
         /// converge on one answer.
         var helloPayload: Data?
@@ -397,7 +409,42 @@ final class ControllerLinkReceiver {
         }
     }
 
+    /// The standing video offer, replayed to every phone that joins
+    /// while it stands. Port zero is the revocation.
+    private var videoOffer: (port: UInt16, token: Data)?
+
+    /// Tell joined phones where the bottom screen's stream lives. The
+    /// offer keeps standing, so a phone that joins later hears it too.
+    func offerVideo(port: UInt16, token: Data) {
+        videoOffer = (port, token)
+        for peer in peers.values where peer.joined {
+            sendVideoOffer(port: port, token: token, to: peer)
+        }
+    }
+
+    /// Withdraw the offer and tell whoever heard it. Phones also treat
+    /// the stream's own connection dying as the end, so this is
+    /// courtesy, not load-bearing.
+    func revokeVideo() {
+        guard videoOffer != nil else { return }
+        videoOffer = nil
+        let noToken = Data(count: 16)
+        for peer in peers.values where peer.joined {
+            sendVideoOffer(port: 0, token: noToken, to: peer)
+        }
+    }
+
+    private func sendVideoOffer(port: UInt16, token: Data, to peer: Peer) {
+        guard let key = peer.sessionKey, let connection = peer.connection else { return }
+        var body = Data()
+        body.append(UInt8(port >> 8)); body.append(UInt8(port & 0xff))
+        body.append(token.prefix(16))
+        let tag = ControllerPairing.tag(key: key, context: "t2p-video", bytes: body)
+        reply(.videoOffer, payload: tag + body, on: connection)
+    }
+
     func stop() {
+        videoOffer = nil
         liveness?.cancel()
         liveness = nil
         listener?.cancel()
@@ -491,6 +538,7 @@ final class ControllerLinkReceiver {
                 sessionKey: ControllerPairing.sessionKey(
                     secret: secret, phoneNonce: phoneNonce, tvNonce: tvNonce),
                 port: port,
+                connection: connection,
                 helloPayload: helloPayload,
                 lastHeard: Date()
             )
@@ -603,6 +651,9 @@ final class ControllerLinkReceiver {
         if !peer.joined {
             peers[key]?.joined = true
             onPhone(true)
+            if let offer = videoOffer, let fresh = peers[key] {
+                sendVideoOffer(port: offer.port, token: offer.token, to: fresh)
+            }
         }
 
         // Aim and stick positions are absolute, so a stale one snaps the
@@ -734,6 +785,23 @@ final class ControllerLinkSender: ObservableObject {
     /// panel wears it as a badge: two people staring at identical
     /// panels not knowing who is who is a bad first thirty seconds.
     @Published private(set) var playerIndex = 0
+    /// Where the television says the bottom screen's stream lives, nil
+    /// until a proven offer arrives and back to nil when one is
+    /// revoked. The DS panel watches this and dials in.
+    @Published private(set) var videoOffer: VideoOffer?
+
+    struct VideoOffer: Equatable {
+        let port: Int
+        let token: Data
+    }
+
+    /// The television's address, for dialing the stream: the video
+    /// connection goes to the same host the datagrams already reach.
+    var remoteHost: NWEndpoint.Host? {
+        guard case .hostPort(let host, _)? = connection?.currentPath?.remoteEndpoint
+        else { return nil }
+        return host
+    }
 
     private var browser: NWBrowser?
     private var connection: NWConnection?
@@ -891,6 +959,7 @@ final class ControllerLinkSender: ObservableObject {
         requester = nil
         pendingProof = nil
         sessionKey = nil
+        videoOffer = nil
     }
 
     /// The foreground edge. If the link died while the app was away,
@@ -902,6 +971,7 @@ final class ControllerLinkSender: ObservableObject {
         requester = nil
         pendingProof = nil
         sessionKey = nil
+        videoOffer = nil
         start()
     }
 
@@ -934,6 +1004,7 @@ final class ControllerLinkSender: ObservableObject {
         guard connection == nil else { return }
         phoneNonce = ControllerPairing.randomBytes(16)
         sessionKey = nil
+        videoOffer = nil
         badHelloCount = 0
         currentEndpoint = endpoint
         let c = NWConnection(to: endpoint, using: ControllerLink.parameters())
@@ -963,6 +1034,7 @@ final class ControllerLinkSender: ObservableObject {
                     self.requester = nil
                     self.pendingProof = nil
                     self.sessionKey = nil
+                    self.videoOffer = nil
                     // A failure with nobody having called stop() means
                     // the flow died under us, suspension being the
                     // common cause. Go back to looking; the sequence
@@ -1053,6 +1125,23 @@ final class ControllerLinkSender: ObservableObject {
             // the television, so it goes now rather than at the next
             // heartbeat.
             send(.init(kind: .hello))
+
+        case .videoOffer:
+            // Believed only under the session key's own proof, the same
+            // standard the hello set: an unproven offer could point the
+            // panel at a stranger's socket.
+            guard let key = sessionKey,
+                  payload.count >= ControllerPairing.tagLength + 2 + 16 else { return }
+            let tag = Data(payload.prefix(ControllerPairing.tagLength))
+            let body = Data(payload.dropFirst(ControllerPairing.tagLength))
+            guard ControllerPairing.validTag(tag, key: key, context: "t2p-video", bytes: body)
+            else { return }
+            let port = Int(body[body.startIndex]) << 8 | Int(body[body.index(after: body.startIndex)])
+            if port == 0 {
+                videoOffer = nil
+            } else {
+                videoOffer = VideoOffer(port: port, token: Data(body.dropFirst(2).prefix(16)))
+            }
 
         case .pairNeeded:
             guard case .joining = phase, requester == nil else { return }
