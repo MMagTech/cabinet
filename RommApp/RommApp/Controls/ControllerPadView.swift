@@ -332,6 +332,18 @@ struct ControllerPadView: View {
         }
     }
 
+    /// Which player this phone is, worn where the mode pills live and
+    /// in their style. A pad has no opinion about this because a human
+    /// plugged it in; a phone says it out loud.
+    private var playerBadge: some View {
+        Text("P\(link.playerIndex + 1)")
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(.thinMaterial, in: Capsule())
+    }
+
     private func waitingView(_ message: String) -> some View {
         VStack(spacing: 12) {
             ProgressView()
@@ -473,10 +485,11 @@ struct ControllerPadView: View {
         // behind the pad still bleeds edge to edge; only the controls
         // keep clear of hardware.
         .overlay(alignment: .top) {
-            // Only the driving cabinets get the choice; everything else
-            // has no wheel for the phone to be.
-            if isDriving || isGun {
-                HStack(spacing: 10) {
+            HStack(spacing: 10) {
+                playerBadge
+                // Only the driving cabinets get the mode choice;
+                // everything else has no wheel for the phone to be.
+                if isDriving || isGun {
                     Button {
                         if isGun { gyroGun.toggle() } else { tiltSteering.toggle() }
                     } label: {
@@ -524,8 +537,8 @@ struct ControllerPadView: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.top, 6)
             }
+            .padding(.top, 6)
         }
         .onAppear {
             if isDriving && tiltSteering {
@@ -554,6 +567,7 @@ struct ControllerPadView: View {
         }
         return VStack(spacing: 0) {
             HStack(spacing: 8) {
+                playerBadge
                 ForEach(["Coin": RetroPad.select, "Start": RetroPad.start].sorted(by: { $0.key < $1.key }), id: \.key) { name, id in
                     Button {
                         link.button(id, down: true)

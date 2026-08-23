@@ -41,8 +41,9 @@ enum ControllerLink {
     struct Packet {
         enum Kind: UInt8 {
             // From the television: tvID (8) + nonce (16) + proof (8) +
-            // the running romset's name. From a joined phone: empty, a
-            // tagged heartbeat saying still held.
+            // player port (1) + the running romset's name. From a
+            // joined phone: empty, a tagged heartbeat saying still
+            // held.
             case hello = 0
             case button = 1     // a: RetroPad id, flag: down
             case stick = 2      // a, b: axis x 10000
@@ -425,10 +426,14 @@ final class ControllerLinkReceiver {
             // tagged packet lands.
             let tvNonce = ControllerPairing.randomBytes(16)
             let nameBytes = Data(shortname.utf8.prefix(32))
+            // Which player this phone is. Fixed at port 0 until the
+            // slot rule joins in; under the proof either way, so not
+            // even the cosmetic byte can be forged.
+            let port = Data([0])
             let helloKey = ControllerPairing.helloKey(secret: secret, phoneNonce: phoneNonce)
             let helloTag = ControllerPairing.tag(
-                key: helloKey, context: "t2p-hello", bytes: tvID + tvNonce + nameBytes)
-            let helloPayload = tvID + tvNonce + helloTag + nameBytes
+                key: helloKey, context: "t2p-hello", bytes: tvID + tvNonce + port + nameBytes)
+            let helloPayload = tvID + tvNonce + helloTag + port + nameBytes
             peers[key] = Peer(
                 phoneID: phoneID,
                 phoneNonce: phoneNonce,
@@ -625,6 +630,10 @@ final class ControllerLinkSender: ObservableObject {
     /// answered. The panel is built from this, which is why the phone
     /// draws the right cabinet without being told anything else.
     @Published private(set) var shortname: String?
+    /// Which player this phone is, zero based, from the hello. The
+    /// panel wears it as a badge: two people staring at identical
+    /// panels not knowing who is who is a bad first thirty seconds.
+    @Published private(set) var playerIndex = 0
 
     private var browser: NWBrowser?
     private var connection: NWConnection?
@@ -847,11 +856,12 @@ final class ControllerLinkSender: ObservableObject {
             // secret and OUR nonce, so neither a stranger nor a
             // recording of last night can dress up as the television.
             guard sessionKey == nil else { return }
-            guard payload.count >= 8 + 16 + ControllerPairing.tagLength else { return }
+            guard payload.count >= 8 + 16 + ControllerPairing.tagLength + 1 else { return }
             let tvID = Data(payload.prefix(8))
             let tvNonce = Data(payload.dropFirst(8).prefix(16))
             let tag = Data(payload.dropFirst(24).prefix(ControllerPairing.tagLength))
-            let nameBytes = Data(payload.dropFirst(24 + ControllerPairing.tagLength))
+            let port = Data(payload.dropFirst(24 + ControllerPairing.tagLength).prefix(1))
+            let nameBytes = Data(payload.dropFirst(24 + ControllerPairing.tagLength + 1))
             guard let secret = ControllerPairing.secret(forPeer: tvID) else {
                 // The television remembers this phone; this phone does
                 // not remember the television, a reinstall usually.
@@ -865,12 +875,13 @@ final class ControllerLinkSender: ObservableObject {
             }
             let helloKey = ControllerPairing.helloKey(secret: secret, phoneNonce: phoneNonce)
             guard ControllerPairing.validTag(
-                tag, key: helloKey, context: "t2p-hello", bytes: tvID + tvNonce + nameBytes)
+                tag, key: helloKey, context: "t2p-hello", bytes: tvID + tvNonce + port + nameBytes)
             else { return }
             if let name = ControllerLink.validShortname(String(decoding: nameBytes, as: UTF8.self)) {
                 shortname = name
                 status = name
             }
+            playerIndex = Int(port[port.startIndex])
             sessionKey = ControllerPairing.sessionKey(
                 secret: secret, phoneNonce: phoneNonce, tvNonce: tvNonce)
             requester = nil
