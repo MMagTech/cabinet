@@ -852,11 +852,19 @@ struct HomeView: View {
             resuming = rom
             return
         }
-        guard !states.isEmpty else {
+        // Only states this core wrote. Feeding another emulator's
+        // state into retro_unserialize does not fail, it hangs forever
+        // at the frame the state captured: found when a state saved
+        // during one accidental FBNeo session froze bowlrama under
+        // MAME on both platforms, synced through the server. The pause
+        // menu and GameLaunchView already filter exactly this way;
+        // this path claimed to match them and missed the filter.
+        let compatible = states.filter { $0.emulator == core.emulatorTag }
+        guard !compatible.isEmpty else {
             nativeDirectLaunch = NativeDirectLaunch(rom: rom, core: core, initialState: nil)
             return
         }
-        let newest = states.max { ($0.updatedAt ?? "") < ($1.updatedAt ?? "") }!
+        let newest = compatible.max { ($0.updatedAt ?? "") < ($1.updatedAt ?? "") }!
 
         // The copy already on this phone first: reading it costs nothing,
         // and a network round trip only slows down a game already sitting

@@ -297,8 +297,21 @@ struct TVGameLaunchView: View {
         return date.formatted(date: .abbreviated, time: .shortened)
     }
 
+    /// The core a Play press will actually run, for filtering below.
+    private var runningCore: NativeCore? {
+        guard let platform else { return nil }
+        return chosenCore ?? NativeCoreChoice.resolved(for: rom, platform: platform)
+    }
+
     private var sortedStates: [GameState] {
-        states.sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
+        // Only states the running core wrote: another emulator's state
+        // hangs retro_unserialize forever rather than failing, so a
+        // foreign state in this list was a frozen TV one press away.
+        // Recomputed when the emulator row changes, so switching cores
+        // swaps the list to that core's own states.
+        states
+            .filter { $0.emulator == runningCore?.emulatorTag }
+            .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
     }
 
     private func loadStates() async {
