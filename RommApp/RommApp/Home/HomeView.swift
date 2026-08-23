@@ -34,9 +34,12 @@ struct HomeView: View {
     /// The phone-as-controller entry. Deliberately not knowledge
     /// driven: the settled design has the phone browse the network
     /// only after someone taps to connect, so Home cannot know what is
-    /// on the television and does not pretend to. The row is quiet and
-    /// constant; the panel screen behind it does the finding.
+    /// on the television and does not pretend to. The row exists only
+    /// once this phone has paired to a television at least once, so a
+    /// phone with no Apple TV in its life never sees the feature here;
+    /// the first pairing starts from Settings.
     @State private var showingControllerPad = false
+    @State private var hasTVPairing = false
     #endif
     @State private var nativeDirectLaunch: NativeDirectLaunch?
     @State private var preparingResume = false
@@ -208,10 +211,19 @@ struct HomeView: View {
             // included.
             .onAppear {
                 Task { await load() }
+                #if os(iOS)
+                hasTVPairing = ControllerPairing.hasAnyPairing
+                #endif
             }
             #if os(iOS)
             .fullScreenCover(isPresented: $showingControllerPad) {
                 ControllerPadView()
+            }
+            // The first pairing happens inside the cover (opened from
+            // here or from Settings), so re-check as it closes and the
+            // row can appear the moment it has become true.
+            .onChange(of: showingControllerPad) { _, showing in
+                if !showing { hasTVPairing = ControllerPairing.hasAnyPairing }
             }
             #endif
             // Live, not just at the next natural reload: load() already
@@ -288,7 +300,9 @@ struct HomeView: View {
     private func tallLayout(height: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 28) {
             #if os(iOS)
-            controllerRow.padding(.horizontal, 20)
+            if hasTVPairing {
+                controllerRow.padding(.horizontal, 20)
+            }
             #endif
             if let hero = recent.first {
                 heroCard(for: hero, height: portraitHeroHeight(for: height), wide: false)
@@ -316,11 +330,11 @@ struct HomeView: View {
     /// full-width shelves, the same structure Home's own mockups settled
     /// on and the shape Apple's own TV app uses.
     #if os(iOS)
-    /// The quiet, constant front door. It promises nothing about what
-    /// is playing, because the phone has not looked and will not until
-    /// this is tapped: that is the settled design's rule, and it is
-    /// also why nobody who ignores this row ever sees the
-    /// local-network permission prompt.
+    /// The shortcut for a phone that has paired before. It promises
+    /// nothing about what is playing, because the phone has not looked
+    /// and will not until this is tapped: that is the settled design's
+    /// rule, and it is also why nobody who ignores this row ever sees
+    /// the local-network permission prompt.
     private var controllerRow: some View {
         Button {
             showingControllerPad = true
@@ -459,7 +473,9 @@ struct HomeView: View {
                     // portrait one. Its first placement missed
                     // landscape entirely; found by Marcus on the first
                     // front-door run.
-                    controllerRow.padding(.top, 20)
+                    if hasTVPairing {
+                        controllerRow.padding(.top, 20)
+                    }
                     if recent.count > 1 {
                         rotationRow("Recent", Array(recent.dropFirst()), seeAll: .recentlyPlayed)
                     } else if loaded, recent.isEmpty {

@@ -18,6 +18,10 @@ struct SettingsView: View {
     @AppStorage(AimSpeed.key) private var aimSpeedRaw = AimSpeed.snap.rawValue
     #endif
     @ObservedObject private var controllers = GameControllerManager.shared
+    /// The TV Controller front door. Settings is where the feature is
+    /// discovered; Home only grows its shortcut row once a pairing
+    /// exists, so nobody without an Apple TV ever sees it there.
+    @State private var showingControllerPad = false
 
     var body: some View {
         List {
@@ -175,6 +179,17 @@ struct SettingsView: View {
             }
 
             Section {
+                Button {
+                    showingControllerPad = true
+                } label: {
+                    Label("TV Controller", systemImage: "appletv")
+                        .foregroundStyle(.primary)
+                }
+            } footer: {
+                Text("Use this phone as the controls for a game running on your Apple TV. Once paired, this also lives on Home.")
+            }
+
+            Section {
                 NavigationLink {
                     LicensesView()
                 } label: {
@@ -233,6 +248,9 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .task { controllers.start() }
+        .fullScreenCover(isPresented: $showingControllerPad) {
+            ControllerPadView()
+        }
         .confirmationDialog(
             "Unpair this device?",
             isPresented: $confirmingUnpair,

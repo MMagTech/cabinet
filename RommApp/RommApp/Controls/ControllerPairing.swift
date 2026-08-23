@@ -84,6 +84,19 @@ enum ControllerPairing {
         SecItemDelete(query(peer: peer) as CFDictionary)
     }
 
+    /// Whether this device has ever completed a pairing. Home shows
+    /// its TV Controller row only when this is true, so someone with
+    /// no Apple TV never sees the feature at all; the first pairing
+    /// starts from Settings instead.
+    static var hasAnyPairing: Bool {
+        let lookup: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        return SecItemCopyMatching(lookup as CFDictionary, nil) == errSecSuccess
+    }
+
     private static func query(peer: Data) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
