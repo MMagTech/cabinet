@@ -63,6 +63,11 @@ struct TVPlayerView: View {
     /// Flipping it mid-game takes effect at the next launch, and the
     /// switch cannot be reached mid-game anyway.
     @AppStorage(ControllerPairing.allowKey) private var allowPhoneController = false
+    /// The pairing code an unknown phone is being shown, or nil. An
+    /// overlay in a corner, deliberately not a pause: someone standing
+    /// in the room wanting to join is not a reason to stop somebody
+    /// else's run.
+    @State private var pairingCode: String?
     #endif
 
     private var canonicalSlug: String {
@@ -104,6 +109,34 @@ struct TVPlayerView: View {
     private func updatePhoneIdleRule() {
         UIApplication.shared.isIdleTimerDisabled =
             phoneConnected && !phonePaused && !menuVisible
+    }
+
+    /// The corner card an unknown phone earns: the code, big enough to
+    /// read from a couch, in the same monospaced style PairingView
+    /// gives the RomM device code, because to the person in the room it
+    /// is the same gesture. The game keeps running underneath.
+    private func pairingOverlay(code: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Phone controller")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(spacedPairingCode(code))
+                .font(.system(size: 64, weight: .bold, design: .monospaced))
+            Text("Enter this code on the phone")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+        .padding(36)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .padding(60)
+        .transition(.opacity)
+    }
+
+    /// "417209" reads better as "417 209".
+    private func spacedPairingCode(_ code: String) -> String {
+        guard code.count == 6 else { return code }
+        return "\(code.prefix(3)) \(code.suffix(3))"
     }
     #endif
 
@@ -221,6 +254,11 @@ struct TVPlayerView: View {
             TVGameSurface(renderer: renderer, menuVisible: menuVisible)
                 .ignoresSafeArea()
             TVBiasGlow(renderer: renderer, level: glowLevel)
+            #if DEBUG
+            if let pairingCode {
+                pairingOverlay(code: pairingCode)
+            }
+            #endif
             if menuVisible {
                 pauseMenu
             }
@@ -338,6 +376,11 @@ struct TVPlayerView: View {
                     },
                     onPhone: { joined in
                         Task { @MainActor in phoneConnected = joined }
+                    },
+                    onPairingCode: { code in
+                        Task { @MainActor in
+                            withAnimation(.easeInOut(duration: 0.25)) { pairingCode = code }
+                        }
                     },
                     // A dropped phone is a disconnected controller:
                     // nobody is holding anything, so pause into the

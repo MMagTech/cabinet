@@ -231,6 +231,10 @@ struct ControllerPadView: View {
     @AppStorage("com.mmagtech.RommApp.linkGyroGun") private var gyroGun = true
     @State private var gunAim = GunAim()
     @State private var triggerHeld = false
+    /// The pairing code being typed. Cleared on submit, so a wrong
+    /// answer leaves an empty field rather than the failed guess.
+    @State private var codeInput = ""
+    @FocusState private var codeFieldFocused: Bool
 
     var body: some View {
         ZStack {
@@ -238,11 +242,15 @@ struct ControllerPadView: View {
             if let shortname = link.shortname {
                 pad(for: shortname)
             } else {
-                VStack(spacing: 12) {
-                    ProgressView()
-                    Text(link.status)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                switch link.phase {
+                case .codeEntry(let triesLeft):
+                    pairingEntry(triesLeft: triesLeft)
+                case .verifying:
+                    waitingView("Checking the code")
+                case .ended(let message):
+                    endedView(message)
+                default:
+                    waitingView(link.status)
                 }
             }
         }
@@ -297,6 +305,66 @@ struct ControllerPadView: View {
                 link.pause(false)
             }
         }
+    }
+
+    /// This screen sits on its own black, whatever the system's
+    /// appearance, so the connection states style themselves for it
+    /// explicitly rather than trusting semantic colors that flip with
+    /// light mode.
+    private func waitingView(_ message: String) -> some View {
+        VStack(spacing: 12) {
+            ProgressView()
+                .tint(.gray)
+            Text(message)
+                .font(.callout)
+                .foregroundStyle(.gray)
+        }
+    }
+
+    private func endedView(_ message: String) -> some View {
+        VStack(spacing: 18) {
+            Text(message)
+                .font(.callout)
+                .foregroundStyle(.gray)
+                .multilineTextAlignment(.center)
+            Button("Try Again") { link.retry() }
+                .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: 460)
+    }
+
+    /// The other half of the television's corner card: the same
+    /// PairingView gesture, a code appears, you approve it once, it
+    /// never asks again. Typing the sixth digit submits by itself.
+    private func pairingEntry(triesLeft: Int) -> some View {
+        VStack(spacing: 14) {
+            Text("Enter the code on your TV")
+                .font(.title3.bold())
+                .foregroundStyle(.white)
+            TextField("", text: $codeInput, prompt: Text("000 000").foregroundStyle(.gray.opacity(0.4)))
+                .keyboardType(.numberPad)
+                .font(.system(size: 44, weight: .bold, design: .monospaced))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .tint(.white)
+                .focused($codeFieldFocused)
+                .frame(maxWidth: 300)
+                .onChange(of: codeInput) { _, raw in
+                    let digits = String(raw.filter(\.isNumber).prefix(6))
+                    if digits != raw { codeInput = digits }
+                    if digits.count == 6 {
+                        link.submitCode(digits)
+                        codeInput = ""
+                    }
+                }
+            if triesLeft < 3 {
+                Text(triesLeft == 1 ? "Wrong code. Last try." : "Wrong code. \(triesLeft) tries left.")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.red)
+            }
+        }
+        .frame(maxWidth: 460)
+        .onAppear { codeFieldFocused = true }
     }
 
     /// A complete off-screen shot as one press: flag up, trigger pull,

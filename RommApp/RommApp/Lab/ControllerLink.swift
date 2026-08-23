@@ -3,34 +3,38 @@ import Network
 
 /// The phone driving a game running on the television.
 ///
-/// This is the first slice of the accessory idea and it is deliberately
-/// thin: the phone already knows how to draw a cabinet's panel and turn
-/// touches into the five verbs the player speaks (a button, a stick, a
-/// relative roll, an absolute aim, an off-screen shot), and both players
-/// already know how to feed those verbs to a core. So nothing here
-/// invents input. It carries those same five verbs over a wire and hands
-/// them to the television's renderer exactly as its own overlay would.
+/// This is deliberately thin: the phone already knows how to draw a
+/// cabinet's panel and turn touches into the five verbs the player
+/// speaks (a button, a stick, a relative roll, an absolute aim, an
+/// off-screen shot), and both players already know how to feed those
+/// verbs to a core. So nothing here invents input. It carries those same
+/// five verbs over a wire and hands them to the television's renderer
+/// exactly as its own overlay would.
 ///
-/// WHAT THIS IS NOT YET, and the difference matters because the shipping
-/// design turns on it: discovery here is Bonjour, which browses the local
-/// network. The real feature must not do that. It learns which
-/// television is playing from RomM, which both devices are already
-/// authenticated to, and touches the network only once a person has
-/// chosen a specific television. That keeps a phone on a stranger's Wi-Fi
-/// completely inert, which a browse cannot promise. Bonjour is here
-/// because it is what the aim lab already had working and this slice
-/// exists to prove the input chain, not the rendezvous.
-///
-/// Likewise the receiver is opened by hand for now. In the shipping
-/// design the television binds nothing until someone has enabled it, and
-/// accepts no phone it has not been introduced to.
+/// The rendezvous is the settled design of
+/// docs/scope-phone-controller-pairing.md. The television binds nothing
+/// unless its "Allow a phone as a controller" setting is on and a game
+/// is running. The first time a given phone connects, the television
+/// shows a short code, the person types it on the phone, and both sides
+/// store a shared secret through ControllerPairing; that is the last
+/// time anyone does anything. A phone the television has never met gets
+/// that pairing conversation instead of a control connection, and its
+/// input is not applied. Discovery is Bonjour and stays Bonjour in the
+/// shipping design: pairing is what makes browsing harmless, since a
+/// phone on a stranger's network finds a television it cannot prove
+/// anything to and does nothing. An older plan gated discovery through
+/// RomM presence instead; the design doc replaced it, see "What was
+/// originally planned, and why it changed" there.
 enum ControllerLink {
     static let bonjourType = "_cabinet-probe._udp"
     static let serviceName = "CabinetLink"
 
     /// One player action. Fixed width, no lengths and no allocation, so
     /// the only thing an unexpected packet can do is decode to nonsense
-    /// inside a known range and be dropped.
+    /// inside a known range and be dropped. Pairing kinds append a
+    /// payload after the fixed header, the same way hello appends the
+    /// romset name, and every payload is length-checked before a byte
+    /// of it is read.
     struct Packet {
         enum Kind: UInt8 {
             case hello = 0      // television to phone: what is running
@@ -52,6 +56,26 @@ enum ControllerLink {
             // keeps the game running for the remote or a rejoin, a
             // drop pauses it, because nobody is holding anything.
             case goodbye = 9
+            // The front door. A phone announces who it is; a known
+            // phone gets hello back and only then does its input
+            // count, an unknown one is sent to pairing.
+            case join = 10          // phone to tv: phoneID (8)
+            case pairNeeded = 11    // tv to phone: tvID (8)
+            case pairRequest = 12   // phone to tv: phoneID (8) + public key (32)
+            case pairChallenge = 13 // tv to phone: tvID (8) + public key (32) + salt (16)
+            case pairProof = 14     // phone to tv: phoneID (8) + proof (32)
+            case pairSuccess = 15   // tv to phone: acknowledgement (32)
+            case pairFail = 16      // tv to phone: a: reason, b: tries left
+        }
+
+        /// pairFail's `a` field. Small and explicit, so the phone can
+        /// say something truthful instead of "error".
+        enum FailReason: Int16 {
+            case wrongCode = 1
+            case cancelled = 2
+            case busy = 3
+            case expired = 4
+            case storage = 5
         }
 
         var seq: UInt32 = 0
@@ -130,8 +154,12 @@ enum ControllerLink {
 /// starts it, so the television's player wires them to exactly the calls
 /// its own controller path already makes, and this file never learns what
 /// a renderer is.
+///
+/// A connection starts as a stranger. Input only counts once it has
+/// joined, which takes a stored pairing; everything else it sends is a
+/// pairing conversation or noise.
 final class ControllerLinkReceiver {
-    /// What is running, sent to a phone the moment it connects so it can
+    /// What is running, sent to a phone the moment it joins so it can
     /// draw the right cabinet.
     private let shortname: String
     private let onButton: (Int, Bool) -> Void
@@ -143,26 +171,55 @@ final class ControllerLinkReceiver {
     private let onSave: () -> Void
     private let onLoad: () -> Void
     private let onPhone: (Bool) -> Void
+    /// The code to show on screen, or nil to take it down. The overlay
+    /// is the player view's; this only says what is true.
+    private let onPairingCode: (String?) -> Void
 
     private var listener: NWListener?
     private var connections: [NWConnection] = []
     private let queue = DispatchQueue(label: "cabinet.link.receive", qos: .userInteractive)
-    /// UDP reorders, so absolute positions carry a sequence and stale
-    /// ones are dropped. Per connection, not per receiver: a phone that
-    /// backgrounds and returns is a NEW connection whose numbering
-    /// restarts at one, and a shared high-water mark silently discarded
-    /// every stick and aim packet after a reconnect while letting
-    /// buttons through, which is the worst kind of half-working.
-    private var lastSeq: [ObjectIdentifier: UInt32] = [:]
-    /// When each phone last said anything. Input flows constantly from
-    /// a held phone (aim at 60Hz, every touch), so silence IS absence.
-    private var lastHeard: [ObjectIdentifier: Date] = [:]
+
+    /// Everything known about one connection. UDP reorders, so absolute
+    /// positions carry a sequence and stale ones are dropped, per
+    /// connection: a phone that backgrounds and returns is a NEW
+    /// connection whose numbering restarts at one, and a shared
+    /// high-water mark would silently discard every stick and aim packet
+    /// after a reconnect while letting buttons through, which is the
+    /// worst kind of half-working.
+    private struct Peer {
+        var joined = false
+        var phoneID: Data?
+        /// When this phone last said anything. Input flows constantly
+        /// from a held phone (aim at 60Hz, every touch, a heartbeat
+        /// otherwise), so silence IS absence.
+        var lastHeard: Date
+        var lastSeq: UInt32 = 0
+    }
+    private var peers: [ObjectIdentifier: Peer] = [:]
+
     private var liveness: DispatchSourceTimer?
     /// Generous next to the 60Hz reality, tight next to a person
     /// wondering why the game is still playing itself.
     private let dropAfter: TimeInterval = 5
     /// A drop is not a goodbye: deliberate leaves pass through here.
     private let onDrop: () -> Void
+
+    /// This television's own name on the link, for pairing.
+    private let tvID = ControllerPairing.deviceID
+    /// The one pairing attempt allowed at a time, if any.
+    private var acceptor: ControllerPairing.Acceptor?
+    /// A code that sat unanswered this long is taken down. Long enough
+    /// to fetch the phone from another room, short enough that a
+    /// wandering overlay does not haunt the game.
+    private let pairingTimeout: TimeInterval = 90
+    /// Set after three wrong codes. While it holds, new pairing
+    /// requests are answered busy, so a guesser gets three tries per
+    /// half minute instead of a stream.
+    private var pairingLockedUntil: Date?
+    /// The last successful pairing's acknowledgement, kept briefly so a
+    /// phone whose success reply was lost in transit can ask again and
+    /// get the same answer instead of a dead end.
+    private var lastAck: (phoneID: Data, ack: Data, at: Date)?
 
     init(shortname: String,
          onButton: @escaping (Int, Bool) -> Void,
@@ -174,6 +231,7 @@ final class ControllerLinkReceiver {
          onSave: @escaping () -> Void,
          onLoad: @escaping () -> Void,
          onPhone: @escaping (Bool) -> Void,
+         onPairingCode: @escaping (String?) -> Void,
          onDrop: @escaping () -> Void) {
         self.shortname = shortname
         self.onButton = onButton
@@ -185,6 +243,7 @@ final class ControllerLinkReceiver {
         self.onSave = onSave
         self.onLoad = onLoad
         self.onPhone = onPhone
+        self.onPairingCode = onPairingCode
         self.onDrop = onDrop
     }
 
@@ -194,7 +253,7 @@ final class ControllerLinkReceiver {
         // The game rides in the service name, so a phone can know what
         // is playing, and show the person a truthful offer, without ever
         // connecting. The hello packet stays as confirmation once a
-        // connection exists; this is for before one does.
+        // phone has joined; this is for before one does.
         l.service = NWListener.Service(name: "\(ControllerLink.serviceName)-\(shortname)",
                                        type: ControllerLink.bonjourType)
         l.newConnectionHandler = { [weak self] connection in
@@ -210,21 +269,31 @@ final class ControllerLinkReceiver {
     }
 
     /// Silence past the threshold is a drop. The stale connection is
-    /// forgotten, the presence flag goes truthful, and the game pauses
-    /// through the same reaction a Bluetooth controller's disconnect
-    /// has always had: nobody is holding anything.
+    /// forgotten; if it was the last joined phone, the presence flag
+    /// goes truthful and the game pauses through the same reaction a
+    /// Bluetooth controller's disconnect has always had: nobody is
+    /// holding anything. A stranger going quiet mid-pairing pauses
+    /// nothing, and its code comes down on its own timeout below.
     private func checkLiveness() {
         let cutoff = Date().addingTimeInterval(-dropAfter)
-        let dead = lastHeard.filter { $0.value < cutoff }
-        guard !dead.isEmpty else { return }
-        for key in dead.keys {
-            lastHeard[key] = nil
-            lastSeq[key] = nil
+        let dead = peers.filter { $0.value.lastHeard < cutoff }
+        if !dead.isEmpty {
+            let hadJoined = peers.values.contains { $0.joined }
+            for key in dead.keys { peers[key] = nil }
+            connections.removeAll { c in
+                guard dead.keys.contains(ObjectIdentifier(c)) else { return false }
+                c.cancel()
+                return true
+            }
+            let hasJoined = peers.values.contains { $0.joined }
+            if hadJoined, !hasJoined {
+                onPhone(false)
+                onDrop()
+            }
         }
-        connections.removeAll { dead.keys.contains(ObjectIdentifier($0)) }
-        if connections.isEmpty {
-            onPhone(false)
-            onDrop()
+        if let acceptor, Date().timeIntervalSince(acceptor.startedAt) > pairingTimeout {
+            self.acceptor = nil
+            onPairingCode(nil)
         }
     }
 
@@ -235,6 +304,9 @@ final class ControllerLinkReceiver {
         listener = nil
         connections.forEach { $0.cancel() }
         connections.removeAll()
+        peers.removeAll()
+        acceptor = nil
+        onPairingCode(nil)
         onPhone(false)
     }
 
@@ -244,17 +316,9 @@ final class ControllerLinkReceiver {
             if case .failed = c.state { return true }
             return false
         }
-        lastSeq[ObjectIdentifier(connection)] = 0
-        lastHeard[ObjectIdentifier(connection)] = Date()
+        peers[ObjectIdentifier(connection)] = Peer(lastHeard: Date())
         connections.append(connection)
         connection.start(queue: queue)
-        // Tell the phone what cabinet to draw. Name first, so a phone that
-        // joins mid-game shows the right panel immediately rather than
-        // waiting for the next thing to happen.
-        var hello = ControllerLink.Packet(kind: .hello).encoded()
-        hello.append(contentsOf: Array(shortname.utf8.prefix(32)))
-        connection.send(content: hello, completion: .idempotent)
-        onPhone(true)
         receive(on: connection)
     }
 
@@ -262,33 +326,153 @@ final class ControllerLinkReceiver {
         connection.receiveMessage { [weak self] data, _, _, error in
             guard let self else { return }
             if let data, let packet = ControllerLink.Packet.decode(data) {
-                self.lastHeard[ObjectIdentifier(connection)] = Date()
-                self.apply(packet, from: connection)
+                self.peers[ObjectIdentifier(connection)]?.lastHeard = Date()
+                self.apply(packet, payload: Data(data.dropFirst(ControllerLink.Packet.size)),
+                           from: connection)
             }
             if error == nil {
                 self.receive(on: connection)
-            } else {
-                self.lastSeq[ObjectIdentifier(connection)] = nil
             }
         }
     }
 
-    private var connectionForGoodbye: NWConnection?
+    /// The moment a phone becomes a controller: it gets told what is
+    /// running so it can draw the right panel, and its input starts to
+    /// count. Reached by proving a stored pairing (join) or by finishing
+    /// a fresh one (pairProof), never any other way.
+    private func markJoined(_ connection: NWConnection, phoneID: Data) {
+        let key = ObjectIdentifier(connection)
+        guard var peer = peers[key] else { return }
+        let alreadyJoined = peer.joined
+        peer.joined = true
+        peer.phoneID = phoneID
+        peers[key] = peer
+        var hello = ControllerLink.Packet(kind: .hello).encoded()
+        hello.append(contentsOf: Array(shortname.utf8.prefix(32)))
+        connection.send(content: hello, completion: .idempotent)
+        if !alreadyJoined { onPhone(true) }
+    }
 
-    private func apply(_ p: ControllerLink.Packet, from connection: NWConnection) {
-        connectionForGoodbye = connection
-        defer { connectionForGoodbye = nil }
+    private func reply(_ kind: ControllerLink.Packet.Kind, payload: Data = Data(),
+                       a: Int16 = 0, b: Int16 = 0, on connection: NWConnection) {
+        let packet = ControllerLink.Packet(kind: kind, a: a, b: b)
+        connection.send(content: packet.encoded() + payload, completion: .idempotent)
+    }
+
+    private func fail(_ reason: ControllerLink.Packet.FailReason, triesLeft: Int16 = 0,
+                      on connection: NWConnection) {
+        reply(.pairFail, a: reason.rawValue, b: triesLeft, on: connection)
+    }
+
+    private func apply(_ p: ControllerLink.Packet, payload: Data, from connection: NWConnection) {
+        let key = ObjectIdentifier(connection)
+        guard let peer = peers[key] else { return }
+
+        switch p.kind {
+        case .join:
+            guard payload.count >= 8 else { return }
+            let phoneID = Data(payload.prefix(8))
+            if ControllerPairing.secret(forPeer: phoneID) != nil {
+                markJoined(connection, phoneID: phoneID)
+            } else {
+                reply(.pairNeeded, payload: tvID, on: connection)
+            }
+            return
+
+        case .pairRequest:
+            guard payload.count == 8 + 32 else { return }
+            let phoneID = Data(payload.prefix(8))
+            let phonePub = Data(payload.suffix(32))
+            if let until = pairingLockedUntil, until > Date() {
+                fail(.busy, on: connection)
+                return
+            }
+            if let acceptor {
+                if acceptor.phoneID == phoneID, acceptor.phonePub == phonePub {
+                    // The same request again is a retry, not a rival:
+                    // answer with the same challenge so the exchange
+                    // converges instead of forking.
+                    reply(.pairChallenge, payload: acceptor.challengePayload, on: connection)
+                    return
+                }
+                if acceptor.phoneID == phoneID {
+                    // Same phone, new key: its app restarted mid-pair.
+                    // Start over with a fresh code below.
+                    self.acceptor = nil
+                } else {
+                    // A second phone while one is mid-pair. One code on
+                    // screen at a time; the second asks again later.
+                    fail(.busy, on: connection)
+                    return
+                }
+            }
+            guard let fresh = ControllerPairing.Acceptor(phoneID: phoneID, phonePub: phonePub, tvID: tvID)
+            else { return }
+            acceptor = fresh
+            onPairingCode(fresh.code)
+            reply(.pairChallenge, payload: fresh.challengePayload, on: connection)
+            return
+
+        case .pairProof:
+            guard payload.count == 8 + 32 else { return }
+            let phoneID = Data(payload.prefix(8))
+            let proof = Data(payload.suffix(32))
+            guard let acceptor, acceptor.phoneID == phoneID else {
+                if let lastAck, lastAck.phoneID == phoneID,
+                   Date().timeIntervalSince(lastAck.at) < 60 {
+                    // Its success reply was lost; say it again.
+                    reply(.pairSuccess, payload: lastAck.ack, on: connection)
+                    markJoined(connection, phoneID: phoneID)
+                } else {
+                    fail(.expired, on: connection)
+                }
+                return
+            }
+            switch acceptor.verify(proof: proof) {
+            case .success(let secret, let ack):
+                do {
+                    try ControllerPairing.savePairing(secret: secret, forPeer: phoneID)
+                    lastAck = (phoneID, ack, Date())
+                    self.acceptor = nil
+                    onPairingCode(nil)
+                    reply(.pairSuccess, payload: ack, on: connection)
+                    markJoined(connection, phoneID: phoneID)
+                } catch {
+                    self.acceptor = nil
+                    onPairingCode(nil)
+                    fail(.storage, on: connection)
+                }
+            case .wrong(let triesLeft):
+                fail(.wrongCode, triesLeft: Int16(triesLeft), on: connection)
+            case .cancelled:
+                self.acceptor = nil
+                onPairingCode(nil)
+                pairingLockedUntil = Date().addingTimeInterval(30)
+                fail(.cancelled, on: connection)
+            }
+            return
+
+        case .hello, .pairNeeded, .pairChallenge, .pairSuccess, .pairFail:
+            // Heartbeat, or kinds only the television sends. Nothing to
+            // do; the receive loop has already refreshed liveness.
+            return
+
+        default:
+            break
+        }
+
+        // Everything from here is control input, and a stranger has
+        // none. This gate is what the join conversation above earns.
+        guard peer.joined else { return }
+
         // Aim and stick positions are absolute, so a stale one snaps the
         // control backwards and is worth dropping. Buttons are edges and
         // must never be dropped: losing an "up" leaves it held forever.
-        let key = ObjectIdentifier(connection)
-        let last = lastSeq[key] ?? 0
+        let last = peer.lastSeq
         let stale = p.seq != 0 && p.seq < last
-        if p.seq > last { lastSeq[key] = p.seq }
+        if p.seq > last { peers[key]?.lastSeq = p.seq }
 
         switch p.kind {
-        case .hello:
-            break
         case .button:
             onButton(Int(p.a), p.flag)
         case .stick:
@@ -309,8 +493,12 @@ final class ControllerLinkReceiver {
             onLoad()
         case .goodbye:
             // Deliberate. Forget the phone without pausing anything.
-            connections.removeAll { $0 === connectionForGoodbye }
-            if connections.isEmpty { onPhone(false) }
+            connection.cancel()
+            peers[key] = nil
+            connections.removeAll { $0 === connection }
+            if !peers.values.contains(where: { $0.joined }) { onPhone(false) }
+        default:
+            break
         }
     }
 }
@@ -323,9 +511,6 @@ final class ControllerLinkReceiver {
 ///
 /// Browse only, never a connection: the offer has to know what is
 /// playing before the person decides anything, and deciding is theirs.
-/// In the shipping design this knowledge comes from RomM presence and
-/// no browse happens at all; this is the lab's stand-in, same as the
-/// rest of the discovery here.
 @MainActor
 final class ControllerLinkScout: ObservableObject {
     /// The romset a television on this network is running, or nil.
@@ -353,28 +538,51 @@ final class ControllerLinkScout: ObservableObject {
     }
 }
 
-/// Finds the television, then speaks the panel's verbs to it.
+/// Finds the television, joins or pairs as the television requires,
+/// then speaks the panel's verbs to it.
 @MainActor
 final class ControllerLinkSender: ObservableObject {
+    /// Where the conversation stands, which is also what the panel
+    /// screen should be showing.
+    enum Phase: Equatable {
+        case searching
+        /// Connected, announcing this phone, waiting to be recognised
+        /// or sent to pairing.
+        case joining
+        /// The television has shown a code and is waiting for it to be
+        /// typed here. triesLeft counts down on wrong entries.
+        case codeEntry(triesLeft: Int)
+        /// A code has been sent; the television is judging it.
+        case verifying
+        case connected
+        /// Over, with a sentence saying why. retry() starts again.
+        case ended(String)
+    }
+
+    @Published private(set) var phase: Phase = .searching
     @Published private(set) var status = "looking for the television"
     @Published private(set) var connected = false
-    /// The romset the television is running, once it has said so. The
-    /// panel is built from this, which is why the phone draws the right
-    /// cabinet without being told anything else.
+    /// The romset the television is running, once a join has been
+    /// answered. The panel is built from this, which is why the phone
+    /// draws the right cabinet without being told anything else.
     @Published private(set) var shortname: String?
 
     private var browser: NWBrowser?
     private var connection: NWConnection?
     private let queue = DispatchQueue(label: "cabinet.link.send", qos: .userInteractive)
     private var seq: UInt32 = 0
-    /// The liveness rule reads silence as absence, and a phone in touch
-    /// mode is silent whenever nobody is touching it: an attract screen
-    /// or a moment between lives would read as a drop and pause the
-    /// game under a player who is right there. So the phone hums. A
-    /// hello every two seconds says "still held" and means nothing
-    /// else; the gun's 60Hz aim stream makes it redundant there, and
-    /// redundant is fine.
-    private var heartbeat: DispatchSourceTimer?
+    /// One slow drumbeat drives everything that repeats: the join
+    /// retries (UDP loses things), the proof retries, and the
+    /// heartbeat that keeps the television's liveness rule from reading
+    /// an idle touch panel as an absent one. An attract screen or a
+    /// moment between lives would otherwise read as a drop and pause
+    /// the game under a player who is right there.
+    private var ticker: DispatchSourceTimer?
+    /// The pairing attempt in progress, if the television demanded one.
+    private var requester: ControllerPairing.Requester?
+    /// The last proof sent, kept for retries until the television
+    /// answers one way or the other.
+    private var pendingProof: Data?
     /// True only across an explicit stop, so a failure-driven teardown
     /// can be told apart from one the user asked for. Backgrounding the
     /// app kills the UDP flow; coming back must not need a relaunch.
@@ -382,6 +590,7 @@ final class ControllerLinkSender: ObservableObject {
 
     func start() {
         stopping = false
+        phase = .searching
         let browser = NWBrowser(for: .bonjour(type: ControllerLink.bonjourType, domain: nil),
                                 using: ControllerLink.parameters())
         browser.browseResultsChangedHandler = { [weak self] results, _ in
@@ -396,29 +605,49 @@ final class ControllerLinkSender: ObservableObject {
         browser.start(queue: queue)
     }
 
-    private func startHeartbeat() {
-        heartbeat?.cancel()
+    private func startTicker() {
+        ticker?.cancel()
         let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now() + 2, repeating: 2)
+        timer.schedule(deadline: .now() + 1, repeating: 1)
         timer.setEventHandler { [weak self] in
-            Task { @MainActor in
-                guard let self, self.connected else { return }
-                self.send(.init(kind: .hello))
-            }
+            Task { @MainActor in self?.tick() }
         }
         timer.resume()
-        heartbeat = timer
+        ticker = timer
+    }
+
+    private func tick() {
+        switch phase {
+        case .joining:
+            if let requester {
+                send(.init(kind: .pairRequest), payload: requester.requestPayload)
+            } else {
+                send(.init(kind: .join), payload: ControllerPairing.deviceID)
+            }
+        case .verifying:
+            if let pendingProof {
+                send(.init(kind: .pairProof), payload: pendingProof)
+            }
+        case .codeEntry, .connected:
+            // Still here: the person is typing, or playing.
+            send(.init(kind: .hello))
+        case .searching, .ended:
+            break
+        }
     }
 
     func stop() {
         stopping = true
-        heartbeat?.cancel(); heartbeat = nil
+        ticker?.cancel(); ticker = nil
         // The polite leave, so the television keeps the game running
         // rather than pausing for a controller that left on purpose.
         if connected { send(.init(kind: .goodbye)) }
         browser?.cancel(); browser = nil
         connection?.cancel(); connection = nil
         connected = false
+        phase = .searching
+        requester = nil
+        pendingProof = nil
     }
 
     /// The foreground edge. If the link died while the app was away,
@@ -427,7 +656,34 @@ final class ControllerLinkSender: ObservableObject {
         guard !connected, !stopping else { return }
         connection?.cancel(); connection = nil
         browser?.cancel(); browser = nil
+        requester = nil
+        pendingProof = nil
         start()
+    }
+
+    /// The Try Again button after an ended pairing: same connection if
+    /// it survived, fresh join either way.
+    func retry() {
+        guard case .ended = phase else { return }
+        requester = nil
+        pendingProof = nil
+        if connection != nil {
+            phase = .joining
+            send(.init(kind: .join), payload: ControllerPairing.deviceID)
+        } else {
+            wake()
+        }
+    }
+
+    /// The typed code, judged by the television. Wrong answers come
+    /// back as pairFail and land in codeEntry with one fewer try.
+    func submitCode(_ code: String) {
+        guard case .codeEntry = phase, let requester,
+              let proof = requester.proof(code: code) else { return }
+        let payload = requester.phoneID + proof
+        pendingProof = payload
+        phase = .verifying
+        send(.init(kind: .pairProof), payload: payload)
     }
 
     private func connect(to endpoint: NWEndpoint) {
@@ -438,19 +694,26 @@ final class ControllerLinkSender: ObservableObject {
             Task { @MainActor in
                 switch state {
                 case .ready:
-                    self?.connected = true
-                    self?.status = "connected"
-                    self?.startHeartbeat()
+                    guard let self else { return }
+                    self.phase = .joining
+                    self.status = "found the television"
+                    self.startTicker()
+                    // UDP has no handshake, so the television does not
+                    // know we exist until we say something. This is
+                    // that, and the ticker repeats it until answered.
+                    self.send(.init(kind: .join), payload: ControllerPairing.deviceID)
                     // The browse has done its job. Leaving it running is
                     // what kept AWDL awake and produced the stalls the
                     // aim lab spent an evening chasing.
-                    self?.browser?.cancel()
-                    self?.browser = nil
+                    self.browser?.cancel()
+                    self.browser = nil
                 case .failed, .cancelled:
                     guard let self else { return }
-                    self.heartbeat?.cancel(); self.heartbeat = nil
+                    self.ticker?.cancel(); self.ticker = nil
                     self.connected = false
                     self.status = "disconnected"
+                    self.requester = nil
+                    self.pendingProof = nil
                     // A failure with nobody having called stop() means
                     // the flow died under us, suspension being the
                     // common cause. Go back to looking; the sequence
@@ -458,6 +721,7 @@ final class ControllerLinkSender: ObservableObject {
                     // never sees numbering move backwards inside what it
                     // still thinks is one conversation.
                     if !self.stopping {
+                        self.phase = .searching
                         self.connection?.cancel()
                         self.connection = nil
                         self.start()
@@ -469,34 +733,95 @@ final class ControllerLinkSender: ObservableObject {
         }
         c.start(queue: queue)
         receive(on: c)
-        // UDP has no handshake, so the television does not know we exist
-        // until we say something. This is that.
-        send(.init(kind: .offscreen, flag: false))
     }
 
     private func receive(on connection: NWConnection) {
         connection.receiveMessage { [weak self] data, _, _, error in
             guard let self else { return }
-            if let data, data.count > ControllerLink.Packet.size,
-               let packet = ControllerLink.Packet.decode(data), packet.kind == .hello {
-                let raw = String(decoding: data.dropFirst(ControllerLink.Packet.size), as: UTF8.self)
-                if let name = ControllerLink.validShortname(raw) {
-                    Task { @MainActor in
-                        self.shortname = name
-                        self.status = name
-                    }
-                }
+            if let data, let packet = ControllerLink.Packet.decode(data) {
+                let payload = Data(data.dropFirst(ControllerLink.Packet.size))
+                Task { @MainActor in self.handle(packet, payload: payload) }
             }
             if error == nil { self.receive(on: connection) }
         }
     }
 
-    private func send(_ packet: ControllerLink.Packet) {
+    private func handle(_ packet: ControllerLink.Packet, payload: Data) {
+        switch packet.kind {
+        case .hello:
+            // Joined. The name confirms which cabinet to draw.
+            if let name = ControllerLink.validShortname(String(decoding: payload, as: UTF8.self)) {
+                shortname = name
+                status = name
+            }
+            requester = nil
+            pendingProof = nil
+            phase = .connected
+            connected = true
+
+        case .pairNeeded:
+            guard case .joining = phase, requester == nil else { return }
+            status = "this television needs pairing"
+            let fresh = ControllerPairing.Requester(phoneID: ControllerPairing.deviceID)
+            requester = fresh
+            send(.init(kind: .pairRequest), payload: fresh.requestPayload)
+
+        case .pairChallenge:
+            guard case .joining = phase, let requester else { return }
+            if requester.acceptChallenge(payload) {
+                phase = .codeEntry(triesLeft: 3)
+            }
+
+        case .pairSuccess:
+            guard let requester, payload.count == 32 else { return }
+            guard let secret = requester.acceptSuccess(payload), let tvID = requester.tvID else {
+                end("The television's answer did not check out, so nothing was stored.")
+                return
+            }
+            do {
+                try ControllerPairing.savePairing(secret: secret, forPeer: tvID)
+                self.requester = nil
+                pendingProof = nil
+                phase = .joining
+                send(.init(kind: .join), payload: ControllerPairing.deviceID)
+            } catch {
+                end("This phone could not store the pairing.")
+            }
+
+        case .pairFail:
+            switch ControllerLink.Packet.FailReason(rawValue: packet.a) {
+            case .wrongCode:
+                pendingProof = nil
+                phase = .codeEntry(triesLeft: max(1, Int(packet.b)))
+            case .cancelled:
+                end("Three wrong codes. The television took the code down; try again for a fresh one.")
+            case .busy:
+                end("The television is pairing another phone. Try again in a moment.")
+            case .expired:
+                end("The code expired. Try again for a fresh one.")
+            case .storage:
+                end("The television could not store the pairing.")
+            case nil:
+                end("Pairing failed.")
+            }
+
+        default:
+            break
+        }
+    }
+
+    private func end(_ message: String) {
+        requester = nil
+        pendingProof = nil
+        phase = .ended(message)
+    }
+
+    private func send(_ packet: ControllerLink.Packet, payload: Data = Data()) {
         guard let connection else { return }
         var p = packet
         seq &+= 1
         p.seq = seq
-        connection.send(content: p.encoded(), completion: .idempotent)
+        connection.send(content: p.encoded() + payload, completion: .idempotent)
     }
 
     // The five verbs, named for what the player did rather than for the
