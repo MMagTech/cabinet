@@ -98,6 +98,13 @@ struct LicensesView: View {
             file: "beetle-ngp"
         ),
         Entry(
+            id: "beetle-vb",
+            name: "Beetle VB",
+            role: "Native Virtual Boy core",
+            summary: "GPL version 2, from the Mednafen project.",
+            file: "beetle-vb"
+        ),
+        Entry(
             id: "prosystem",
             name: "ProSystem",
             role: "Native Atari 7800 core",

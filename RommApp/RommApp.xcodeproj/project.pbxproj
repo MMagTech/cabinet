@@ -49,6 +49,7 @@
 			membershipExceptions = (
 				Controls/TouchControlPad.swift,
 				Native/BeetleNGP/libbeetle_ngp_ios.a,
+				Native/BeetleVB/libbeetle_vb_ios.a,
 				Native/BeetlePCEFast/libbeetle_pce_fast_ios.a,
 				Native/FBNeo/libfbneo_libretro_ios.a,
 				Native/FCEUmm/libfceumm_ios.a,
@@ -133,6 +134,7 @@
 				Resources/ControlLayouts/snes.json,
 				Resources/ControlLayouts/threedo.json,
 				Resources/ControlLayouts/vectrex.json,
+				Resources/ControlLayouts/virtualboy.json,
 				Resources/ControlLayouts/wonderswan.json,
 			);
 			target = BB00000000000000000010 /* LayoutEditor */;
@@ -516,6 +518,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Vecx",
 					"$(PROJECT_DIR)/RommApp/Native/Stella2014",
 					"$(PROJECT_DIR)/RommApp/Native/Opera",
+					"$(PROJECT_DIR)/RommApp/Native/BeetleVB",
 				);
 				MARKETING_VERSION = 0.2.0;
 				OTHER_LDFLAGS = "-lz";
@@ -645,6 +648,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Vecx",
 					"$(PROJECT_DIR)/RommApp/Native/Stella2014",
 					"$(PROJECT_DIR)/RommApp/Native/Opera",
+					"$(PROJECT_DIR)/RommApp/Native/BeetleVB",
 				);
 				MARKETING_VERSION = 0.3.0;
 				OTHER_LDFLAGS = (
@@ -733,6 +737,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Vecx",
 					"$(PROJECT_DIR)/RommApp/Native/Stella2014",
 					"$(PROJECT_DIR)/RommApp/Native/Opera",
+					"$(PROJECT_DIR)/RommApp/Native/BeetleVB",
 				);
 				MARKETING_VERSION = 0.3.0;
 				OTHER_LDFLAGS = (
@@ -918,6 +923,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Vecx",
 					"$(PROJECT_DIR)/RommApp/Native/Stella2014",
 					"$(PROJECT_DIR)/RommApp/Native/Opera",
+					"$(PROJECT_DIR)/RommApp/Native/BeetleVB",
 				);
 				MARKETING_VERSION = 0.2.0;
 				OTHER_LDFLAGS = "-lz";

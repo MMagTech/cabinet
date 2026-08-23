@@ -186,6 +186,8 @@ struct ControlLayout: Decodable {
             name = "dreamcast"
         case "vectrex":
             name = "vectrex"
+        case "virtualboy":
+            name = "virtualboy"
         default:
             name = "default"
         }

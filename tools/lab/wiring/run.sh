@@ -84,6 +84,32 @@ for slug in $(grep -oE '^    case [a-z0-9]+$' RommApp/RommApp/Native/NativeCore.
 done
 [ -n "$missing_layouts" ] && note "platforms using the fallback pad:$missing_layouts"
 
+# 5. Every control layout is in the Layout Editor's own target.
+#
+# A layout that ships in the app but is missing from the editor cannot be
+# tuned, and nothing says so: you open the editor, the system is simply
+# not in the list, and it looks like the editor is broken rather than
+# like a missing line in the project file. Marcus asked whether the new
+# Virtual Boy layout was in the editor, which is how this gap was found;
+# the per-core station had already reported that core clean.
+#
+# Both facts are in the project file, so this is a text comparison, and
+# it is deliberately repo-wide rather than per-core: the invariant is
+# "every layout is editable", which has nothing to do with which core
+# happens to read it.
+missing_editor=""
+for f in RommApp/RommApp/Resources/ControlLayouts/*.json; do
+    base=$(basename "$f")
+    grep -q "ControlLayouts/$base" RommApp/RommApp.xcodeproj/project.pbxproj || \
+        missing_editor="$missing_editor $base"
+done
+if [ -n "$missing_editor" ]; then
+    for m in $missing_editor; do bad "layout $m is not in the Layout Editor target, so it cannot be tuned"; done
+else
+    count=$(ls RommApp/RommApp/Resources/ControlLayouts/*.json | wc -l | tr -d ' ')
+    note "all $count control layouts are editable in the Layout Editor"
+fi
+
 if [ "$FAIL" -eq 0 ]; then
     echo "WIRING OK"
 else

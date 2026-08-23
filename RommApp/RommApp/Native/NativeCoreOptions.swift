@@ -219,6 +219,50 @@ enum NativeCoreOptions {
         ),
     ]
 
+    /// The Virtual Boy's display is the whole point of the machine and
+    /// the one thing a phone cannot reproduce: a stereoscopic pair of
+    /// red monochrome screens, one per eye, inside a headset.
+    ///
+    /// Two separate answers to that, which is why there are two rows.
+    /// The colour is the flat presentation and defaults to the authentic
+    /// black and red. The anaglyph preset is real depth for anyone
+    /// holding a pair of coloured glasses, off by default because
+    /// without glasses it looks like a mistake. Every preset the core
+    /// offers is listed rather than only the common red and blue, since
+    /// which pair someone owns is not something this app can guess.
+    static let virtualBoy: [NativeCoreOption] = [
+        NativeCoreOption(
+            key: "vb_anaglyph_preset",
+            label: "3D glasses",
+            detail: "Renders in real stereoscopic 3D for coloured glasses. Pick the pair you actually have. Off shows the flat picture.",
+            choices: [
+                .init(value: "disabled", label: "Off"),
+                .init(value: "red & blue", label: "Red and blue"),
+                .init(value: "red & cyan", label: "Red and cyan"),
+                .init(value: "red & electric cyan", label: "Red and electric cyan"),
+                .init(value: "green & magenta", label: "Green and magenta"),
+                .init(value: "yellow & blue", label: "Yellow and blue"),
+            ],
+            defaultValue: "disabled"
+        ),
+        NativeCoreOption(
+            key: "vb_color_mode",
+            label: "Screen colour",
+            detail: "The Virtual Boy's screens were red. The others are here because hours of red is a lot to ask, and they cost nothing.",
+            choices: [
+                .init(value: "black & red", label: "Red (original)"),
+                .init(value: "black & white", label: "White"),
+                .init(value: "black & blue", label: "Blue"),
+                .init(value: "black & cyan", label: "Cyan"),
+                .init(value: "black & electric cyan", label: "Electric cyan"),
+                .init(value: "black & green", label: "Green"),
+                .init(value: "black & magenta", label: "Magenta"),
+                .init(value: "black & yellow", label: "Yellow"),
+            ],
+            defaultValue: "black & red"
+        ),
+    ]
+
     /// Not a core option at all: the screen overlay toggle, this app's
     /// own setting wearing the option plumbing so it gets storage and a
     /// Settings row for free. The "cabinet_" prefix marks it; it rides
@@ -384,6 +428,7 @@ enum NativeCoreOptions {
         case .atari2600: return atari2600
         case .threeDO: return threeDO
         case .vectrex: return vectrex
+        case .virtualBoy: return virtualBoy
         default: return []
         }
     }
@@ -531,6 +576,16 @@ enum NativeCoreOptionsStore {
     /// requirements this frontend imposes on a core.
     private static func forcedOptions(for platform: NativePlatform) -> [String: String] {
         switch platform {
+        case .virtualBoy:
+            // The Virtual Boy has TWO d-pads, and the core only reads the
+            // right one from the analog stick when this is on. It defaults
+            // to disabled, so without this the right pad is dead: its
+            // digital ids are RetroPad L3 and R3, 14 and 15, which are
+            // outside the range NativePlayerRenderer.setButton accepts,
+            // so that route is not available either. Answered here rather
+            // than exposed, since a controller with a missing d-pad is
+            // not a preference.
+            return ["vb_right_analog_to_digital": "enabled"]
         case .threeDO:
             // opera_bios is the defaults trap at its purest: the option's
             // declared default is NULL, its value must be a BIOS filename,
@@ -852,6 +907,17 @@ enum NativeCoreOptionsStore {
                 "fceumm_overscan_h_left": "0",
                 "fceumm_overscan_h_right": "0",
                 "fceumm_sndvolume": "7",
+            ]
+        case .virtualBoy:
+            // The rest of Beetle VB's table at its declared defaults. The
+            // CPU emulation choice stays on "fast": "accurate" exists for
+            // a handful of timing-sensitive titles and costs speed, and
+            // nothing here has been measured to need it.
+            return [
+                "vb_3dmode": "anaglyph",
+                "vb_cpu_emulation": "fast",
+                "vb_opposite_directions": "disabled",
+                "vb_sidebyside_separation": "0",
             ]
         case .threeDO:
             // The rest of Opera's table at its own declared defaults,

@@ -63,6 +63,11 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
     // The heaviest interpreter here after the CD consoles; its device
     // runs are a go/no-go the way PS1's were, not a formality.
     LibretroCoreIDOpera NS_SWIFT_NAME(opera) = 17,
+    // Virtual Boy. Interpreter V810, software rendered. Its display was
+    // stereoscopic red monochrome, which no flat screen reproduces; the
+    // core's own colour and anaglyph options are exposed as settings
+    // rather than chosen here.
+    LibretroCoreIDBeetleVB NS_SWIFT_NAME(beetleVB) = 18,
 };
 
 @interface LibretroFrame : NSObject

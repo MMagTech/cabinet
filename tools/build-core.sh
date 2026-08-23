@@ -96,6 +96,15 @@ opera)
     # Requires a BIOS (panafz10 family) via RomM, like Saturn.
     PREFIX=opr; REPO=https://github.com/libretro/opera-libretro.git
     MAKEDIR=.; MAKEFILE=Makefile; OUT=Opera; LIB=libopera_ios.a ;;
+beetle_vb)
+    # Virtual Boy. Interpreter V810, software rendered, so it clears the
+    # JIT boundary without an exception. Its whole identity is
+    # stereoscopic red monochrome, which a flat screen cannot reproduce:
+    # the core's own vb_color_mode keeps the authentic black & red as the
+    # default and vb_anaglyph_preset offers real 3D for anyone with a
+    # pair of red/blue glasses. See NativeCoreOptions.virtualBoy.
+    PREFIX=vb; REPO=https://github.com/libretro/beetle-vb-libretro.git
+    MAKEDIR=.; MAKEFILE=Makefile; OUT=BeetleVB; LIB=libbeetle_vb_ios.a ;;
 pcsx_rearmed)
     # platform=ios-arm64 (or tvos-arm64) forces DYNAREC=0 in this core's
     # own Makefile, a pure interpreter build, the same no-JIT exception

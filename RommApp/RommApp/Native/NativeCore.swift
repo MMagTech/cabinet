@@ -22,6 +22,7 @@ enum NativeCore {
     case vecx
     case stella2014
     case opera
+    case beetleVB
 
     /// The frontend's identifier for the statically linked core.
     var coreID: LibretroCoreID {
@@ -44,6 +45,7 @@ enum NativeCore {
         case .vecx: return .vecx
         case .stella2014: return .stella2014
         case .opera: return .opera
+        case .beetleVB: return .beetleVB
         }
     }
 
@@ -74,6 +76,7 @@ enum NativeCore {
         case .vecx: return "vecx-native"
         case .stella2014: return "stella2014-native"
         case .opera: return "opera-native"
+        case .beetleVB: return "beetle-vb-native"
         }
     }
 
@@ -99,6 +102,7 @@ enum NativeCore {
         case .vecx: return "vecx"
         case .stella2014: return "stella2014"
         case .opera: return "opera"
+        case .beetleVB: return "beetleVB"
         }
     }
 
@@ -126,6 +130,7 @@ enum NativeCore {
         case .vecx: return "vecx"
         case .stella2014: return "Stella"
         case .opera: return "Opera"
+        case .beetleVB: return "Beetle VB"
         }
     }
 
@@ -183,6 +188,7 @@ enum NativePlatform: String, CaseIterable {
     case vectrex
     case atari2600
     case threeDO
+    case virtualBoy
 
     /// Every core that can run this platform, default first. Arcade is
     /// the only platform with a real set; everywhere else this is the
@@ -215,6 +221,7 @@ enum NativePlatform: String, CaseIterable {
         case .vectrex: return .vecx
         case .atari2600: return .stella2014
         case .threeDO: return .opera
+        case .virtualBoy: return .beetleVB
         }
     }
 
@@ -251,7 +258,7 @@ enum NativePlatform: String, CaseIterable {
         // forced options), so it syncs through the segaCD/ngpc file
         // path, not this one.
         case .arcade, .atari7800, .atari2600, .dreamcast, .segaCD, .ngpc, .vectrex,
-             .threeDO:
+             .threeDO, .virtualBoy:
             return false
         default:
             return true
@@ -271,6 +278,8 @@ enum NativePlatform: String, CaseIterable {
     var supportsSecondPlayer: Bool {
         switch self {
         case .gb, .gbc, .gba, .gameGear, .ngpc: return false
+        // A headset with one pad attached: there is no second port.
+        case .virtualBoy: return false
         // Not a handheld, but off for a different, documented reason:
         // Opera's own opera_active_devices option defaults to 1 because
         // of a known bug where more than one emulated controller makes
@@ -310,6 +319,7 @@ enum NativePlatform: String, CaseIterable {
         case .vectrex: return "Vectrex"
         case .atari2600: return "Atari 2600"
         case .threeDO: return "3DO"
+        case .virtualBoy: return "Virtual Boy"
         }
     }
 
@@ -399,6 +409,8 @@ enum NativePlatform: String, CaseIterable {
             return .atari2600
         case "3do":
             return .threeDO
+        case "virtualboy":
+            return .virtualBoy
         default:
             return nil
         }

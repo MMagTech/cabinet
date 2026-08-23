@@ -206,10 +206,22 @@ if [ -n "$OUT" ]; then
     LNAME=$(echo "$NAME" | tr '_' '-')
     if grep -qi "$NAME\|$LNAME" docs/licenses.md; then ok "listed in docs/licenses.md"
     else bad "not listed in docs/licenses.md"; fi
-    if ls RommApp/RommApp/Resources/Licenses/ 2>/dev/null | grep -qi "^${LNAME}\.txt$\|^${NAME}\.txt$"; then
+    # Matched loosely on purpose: the bundled filename follows whatever
+    # LicensesView calls the core, which is not mechanically derivable
+    # from the build-script name (beetle_vb -> beetle-vb, pcsx_rearmed ->
+    # pcsx-rearmed, mame2003_plus -> mame2003-plus). A near miss here is
+    # a naming question, not a missing licence, so it notes rather than
+    # fails.
+    # A direct file test rather than a grep over `ls`. The pattern this
+    # replaces used BRE alternation and matched under zsh while silently
+    # failing under sh, which is what the lab actually runs, so it
+    # reported a missing licence for a file sitting right there. Shell
+    # portability is not worth a clever regex.
+    LDIR=RommApp/RommApp/Resources/Licenses
+    if [ -f "$LDIR/$LNAME.txt" ] || [ -f "$LDIR/$NAME.txt" ]; then
         ok "bundled licence text present"
     else
-        note "no Licenses/${LNAME}.txt; check what LicensesView calls it"
+        note "no $LDIR/$LNAME.txt; check what LicensesView calls it"
     fi
 fi
 
