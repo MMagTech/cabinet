@@ -238,10 +238,15 @@ struct ControllerPadView: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            // Black belongs to the cabinet panel alone. The states
+            // before it, searching, pairing, failing, are app UI and
+            // sit on the system background with semantic colors, the
+            // way PairingView's flow does.
             if let shortname = link.shortname {
+                Color.black.ignoresSafeArea()
                 pad(for: shortname)
             } else {
+                Color(.systemBackground).ignoresSafeArea()
                 switch link.phase {
                 case .codeEntry(let triesLeft):
                     pairingEntry(triesLeft: triesLeft)
@@ -307,17 +312,12 @@ struct ControllerPadView: View {
         }
     }
 
-    /// This screen sits on its own black, whatever the system's
-    /// appearance, so the connection states style themselves for it
-    /// explicitly rather than trusting semantic colors that flip with
-    /// light mode.
     private func waitingView(_ message: String) -> some View {
         VStack(spacing: 12) {
             ProgressView()
-                .tint(.gray)
             Text(message)
                 .font(.callout)
-                .foregroundStyle(.gray)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -325,28 +325,27 @@ struct ControllerPadView: View {
         VStack(spacing: 18) {
             Text(message)
                 .font(.callout)
-                .foregroundStyle(.gray)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             Button("Try Again") { link.retry() }
                 .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: 460)
+        .padding(24)
     }
 
     /// The other half of the television's corner card: the same
     /// PairingView gesture, a code appears, you approve it once, it
-    /// never asks again. Typing the sixth digit submits by itself.
+    /// never asks again. Typed here in the code style that screen
+    /// established. Typing the sixth digit submits by itself.
     private func pairingEntry(triesLeft: Int) -> some View {
         VStack(spacing: 14) {
             Text("Enter the code on your TV")
-                .font(.title3.bold())
-                .foregroundStyle(.white)
-            TextField("", text: $codeInput, prompt: Text("000 000").foregroundStyle(.gray.opacity(0.4)))
+                .font(.title2.bold())
+            TextField("000 000", text: $codeInput)
                 .keyboardType(.numberPad)
                 .font(.system(size: 44, weight: .bold, design: .monospaced))
-                .foregroundStyle(.white)
                 .multilineTextAlignment(.center)
-                .tint(.white)
                 .focused($codeFieldFocused)
                 .frame(maxWidth: 300)
                 .onChange(of: codeInput) { _, raw in
@@ -359,11 +358,12 @@ struct ControllerPadView: View {
                 }
             if triesLeft < 3 {
                 Text(triesLeft == 1 ? "Wrong code. Last try." : "Wrong code. \(triesLeft) tries left.")
-                    .font(.footnote.weight(.semibold))
+                    .font(.footnote)
                     .foregroundStyle(.red)
             }
         }
         .frame(maxWidth: 460)
+        .padding(24)
         .onAppear { codeFieldFocused = true }
     }
 

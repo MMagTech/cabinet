@@ -114,7 +114,9 @@ struct TVPlayerView: View {
     /// The corner card an unknown phone earns: the code, big enough to
     /// read from a couch, in the same monospaced style PairingView
     /// gives the RomM device code, because to the person in the room it
-    /// is the same gesture. The game keeps running underneath.
+    /// is the same gesture. The game keeps running underneath. Liquid
+    /// Glass on tvOS 26 with the flat material fallback, the same
+    /// pattern as the pause menu and every other card in the app.
     private func pairingOverlay(code: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Phone controller")
@@ -127,7 +129,15 @@ struct TVPlayerView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(36)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background {
+            if #available(tvOS 26.0, *) {
+                RoundedRectangle(cornerRadius: 32)
+                    .fill(.clear)
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 32))
+            } else {
+                RoundedRectangle(cornerRadius: 32).fill(.regularMaterial)
+            }
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
         .padding(60)
         .transition(.opacity)
