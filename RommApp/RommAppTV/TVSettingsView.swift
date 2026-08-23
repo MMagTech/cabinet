@@ -115,10 +115,16 @@ struct TVSettingsView: View {
                         // this is off the television never opens a
                         // socket, so the feature is invisible to the
                         // network, not merely refusing connections.
+                        // No detail line on purpose: flipping the
+                        // switch on makes a live "Ready to pair" row
+                        // appear right below, which answers where and
+                        // when better than a sentence could. The title
+                        // must not be reworded casually: the phone's
+                        // Settings footer quotes it verbatim.
                         Toggle(isOn: $allowPhoneController) {
                             actionRow(
                                 title: "Allow a phone as a controller",
-                                detail: "Pair a phone from this screen or during a game",
+                                detail: nil,
                                 chevron: false
                             )
                         }
