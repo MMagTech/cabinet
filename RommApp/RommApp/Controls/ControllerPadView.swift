@@ -239,6 +239,11 @@ struct ControllerPadView: View {
     /// True once searching has lasted long enough to deserve an
     /// explanation; see waitingView.
     @State private var searchHintReady = false
+    /// The delayed exact-landscape pin, held so leaving the screen can
+    /// cancel it. Untracked, it could fire after the exit's unlock and
+    /// leave the whole app wedged in landscape; found on device after
+    /// a run of quick reconnects.
+    @State private var pinTask: Task<Void, Never>?
     @FocusState private var codeFieldFocused: Bool
 
     var body: some View {
@@ -306,12 +311,16 @@ struct ControllerPadView: View {
         .onChange(of: link.connected && link.shortname != nil) { _, panelLive in
             guard panelLive else { return }
             OrientationLock.lockToLandscape()
-            Task {
+            pinTask?.cancel()
+            pinTask = Task {
                 try? await Task.sleep(for: .seconds(1))
+                if Task.isCancelled { return }
                 OrientationLock.pinCurrentLandscape()
             }
         }
         .onDisappear {
+            pinTask?.cancel()
+            pinTask = nil
             OrientationLock.unlock()
             tilt.stop()
             gunAim.stop()
