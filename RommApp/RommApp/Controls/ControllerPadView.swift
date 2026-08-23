@@ -521,7 +521,54 @@ struct ControllerPadView: View {
         gunAim.start()
     }
 
+    /// The phone as a Nintendo DS: the system's own buttons around the
+    /// one thing only a phone can be, the touchscreen. The layout is
+    /// nds.json's landscape arrangement, the same file the local player
+    /// draws, whose controls hug the edges precisely because its centre
+    /// is spoken for; here the centre holds the stylus surface instead
+    /// of the picture. Touches map to the frame's lower half, where
+    /// melonDS keeps its touchscreen, through the same coordinates the
+    /// local player's surface sends. The picture stays on the
+    /// television for now: the surface draws only a faint plate, and
+    /// the finger's feedback is the core's own cursor on the TV. The
+    /// bottom screen itself arrives here when the video leg is built.
+    private func dsPad() -> some View {
+        ZStack {
+            if let layout = ControlLayout.named("nds") {
+                TouchControlPad(
+                    items: layout.items(landscape: true),
+                    send: { id, down in
+                        if id == RetroPad.overlay {
+                            if down {
+                                link.pause(true)
+                                confirmingExit = true
+                            }
+                            return
+                        }
+                        link.button(id, down: down)
+                    },
+                    sendStick: { _, x, y in link.stick(x: x, y: y) },
+                    sendRelative: { _, _ in },
+                    sendPointer: { _, _, _ in },
+                    sendOffscreen: { _ in },
+                    system: "nds",
+                    opacity: 1.0
+                )
+            }
+            DSPanelTouchSurface { x, y, down in
+                link.pointer(x: x, y: y, down: down)
+            }
+        }
+    }
+
     private func pad(for shortname: String) -> some View {
+        // A namespaced shortname is a system, not a romset: the DS
+        // television advertises "nds.<rom id>" because its filenames
+        // cannot pass shortname validation and its panel is the same
+        // for every game. Everything else is arcade, resolved below.
+        if shortname.hasPrefix("nds.") {
+            return AnyView(dsPad())
+        }
         // The television is running MAME (the arcade receiver only
         // starts there), so resolve against that core's own data, the
         // same call NativePlayerView makes.
@@ -800,4 +847,53 @@ struct ControllerPadView: View {
     }
 }
 
+
+
+/// The stylus surface on the phone panel: a 4:3 plate standing in for
+/// the DS bottom screen, centred in the gap nds.json's landscape
+/// controls leave open. Coordinates leave here in libretro pointer
+/// space over melonDS's whole stacked frame, x across [-1, 1] and y in
+/// [0, 1] (the frame's lower half is the touchscreen), the identical
+/// mapping DSScreenLayout.pointer feeds the local player. Drags clamp
+/// at the plate's edge until the finger lifts, a stylus pressed
+/// against the bezel, and the plate is deliberately quiet: a hairline
+/// and a whisper of fill, since the eyes belong on the television.
+private struct DSPanelTouchSurface: View {
+    let sendPointer: (_ x: Double, _ y: Double, _ down: Bool) -> Void
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = min(geo.size.height * 0.66 * 4 / 3, geo.size.width * 0.44)
+            let h = w * 3 / 4
+            let rect = CGRect(
+                x: (geo.size.width - w) / 2,
+                y: (geo.size.height - h) / 2,
+                width: w, height: h
+            )
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.white.opacity(0.04))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
+                )
+                .contentShape(Rectangle())
+                .frame(width: rect.width, height: rect.height)
+                .position(x: rect.midX, y: rect.midY)
+                .gesture(
+                    DragGesture(minimumDistance: 0, coordinateSpace: .named("dsPanel"))
+                        .onChanged { g in
+                            let u = min(max((g.location.x - rect.minX) / rect.width, 0), 1)
+                            let v = min(max((g.location.y - rect.minY) / rect.height, 0), 1)
+                            sendPointer(u * 2 - 1, v, true)
+                        }
+                        .onEnded { g in
+                            let u = min(max((g.location.x - rect.minX) / rect.width, 0), 1)
+                            let v = min(max((g.location.y - rect.minY) / rect.height, 0), 1)
+                            sendPointer(u * 2 - 1, v, false)
+                        }
+                )
+        }
+        .coordinateSpace(name: "dsPanel")
+    }
+}
 #endif

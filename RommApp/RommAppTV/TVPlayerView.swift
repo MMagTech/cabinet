@@ -346,9 +346,20 @@ struct TVPlayerView: View {
             // got renamed into something phones refuse to parse, and
             // every join died until the app was force quit. Found by
             // probing the advertised port directly from the Mac.
-            if platform == .arcade, allowPhoneController, phoneLink == nil {
+            // Arcade and Nintendo DS: the two platforms where a phone
+            // in the hands genuinely beats a gamepad, a cabinet's own
+            // panel for one, the missing touchscreen for the other.
+            if platform == .arcade || platform == .nds, allowPhoneController, phoneLink == nil {
+                // DS advertises a namespaced id rather than a filename:
+                // DS filenames carry spaces, which validShortname
+                // rightly refuses, and the panel needs the system, not
+                // the title, to draw the right controls. The rom id
+                // lets the phone name the card from its own library.
+                let advertised = platform == .nds
+                    ? "nds.\(rom.id)"
+                    : rom.fsNameNoExt.lowercased()
                 let link = ControllerLinkReceiver(
-                    shortname: rom.fsNameNoExt.lowercased(),
+                    shortname: advertised,
                     // The seat comes from the same slot rule the pads
                     // use. The receiver asks on its own queue and needs
                     // the answer before it can finish the handshake, so
@@ -377,7 +388,15 @@ struct TVPlayerView: View {
                         LibretroFrontend.shared.addMouseDeltaX(dx, y: dy, port: port)
                     },
                     onPointer: { port, x, y, down in
-                        LibretroFrontend.shared.setPointerX(Float(x), y: Float(y), down: down, port: port)
+                        // melonDS reads the touchscreen on port 0 only,
+                        // so the stylus always lands there even when a
+                        // gamepad holds seat 0 and the phone was seated
+                        // second: pad on the buttons, phone as the
+                        // stylus is a legitimate two-hands setup, not a
+                        // conflict. Every other platform keeps the
+                        // seat's own port.
+                        let target = platform == .nds ? 0 : port
+                        LibretroFrontend.shared.setPointerX(Float(x), y: Float(y), down: down, port: target)
                     },
                     onOffscreen: { port, off in
                         LibretroFrontend.shared.setLightgunOffscreen(off, port: port)
@@ -402,7 +421,22 @@ struct TVPlayerView: View {
                         Task { @MainActor in loadLatestState() }
                     },
                     onPhone: { joined in
-                        Task { @MainActor in phoneConnected = joined }
+                        Task { @MainActor in
+                            phoneConnected = joined
+                            // The tvOS forced option keeps melonDS in
+                            // Joystick mode, the right-stick cursor a
+                            // controller can use. A phone IS a
+                            // touchscreen, so its presence flips the
+                            // core to Touch mid-game through the one
+                            // signalled update the frontend supports,
+                            // and its leaving flips back. Every other
+                            // platform's options never change mid-game.
+                            if platform == .nds {
+                                var opts = NativeCoreOptionsStore.dictionary(for: .nds)
+                                if joined { opts["melonds_touch_mode"] = "Touch" }
+                                LibretroFrontend.shared.updateCoreOptions(opts)
+                            }
+                        }
                     },
                     onPairingCode: { code in
                         Task { @MainActor in

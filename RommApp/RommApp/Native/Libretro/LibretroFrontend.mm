@@ -133,6 +133,11 @@ std::atomic<double> gTargetFPS{60.0};
 // main thread before a load; copied under a lock to keep that honest.
 std::mutex gOptionsMutex;
 NSDictionary<NSString *, NSString *> *gOptions = nil;
+// Raised only by updateCoreOptions, consumed once by the next
+// GET_VARIABLE_UPDATE answer. Every core polls that call; every core
+// but melonDS sees a flag nothing ever raises, so their answer stays
+// the constant false it has always been.
+std::atomic<bool> gOptionsDirty{false};
 // GET_VARIABLE hands out a borrowed pointer with no lifetime stated in
 // libretro.h, and nothing stops a core from keeping it across calls. So
 // answered values are interned in a set that only ever grows: a pointer
@@ -1093,8 +1098,12 @@ bool environmentCallback(unsigned cmd, void *data) {
             return true;
         }
         case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE:
-            // Options only change between loads, never mid-game.
-            *(bool *)data = false;
+            // False for every core whose options only change between
+            // loads, which is all of them except melonDS: the phone
+            // touch panel flips its touch mode mid-game through
+            // updateCoreOptions, and this hands that one change to the
+            // core exactly once.
+            *(bool *)data = gOptionsDirty.exchange(false);
             return true;
         case RETRO_ENVIRONMENT_SET_HW_RENDER: {
             // Flycast go/no-go spike: only GLES is supported here, nothing
@@ -1271,6 +1280,7 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
         gPortDevice[p] = 0;
     }
     gRotation.store(0, std::memory_order_relaxed);
+    gOptionsDirty.store(false, std::memory_order_relaxed);
     gUsesHWRender = false;
     gHWRender = {};
 }
@@ -1278,6 +1288,16 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
 - (void)setCoreOptions:(NSDictionary<NSString *, NSString *> *)options {
     std::lock_guard<std::mutex> lock(gOptionsMutex);
     gOptions = [options copy];
+    // Deliberately does NOT raise gOptionsDirty: load-time option
+    // setting has never signalled an update and must not start to.
+}
+
+- (void)updateCoreOptions:(NSDictionary<NSString *, NSString *> *)options {
+    {
+        std::lock_guard<std::mutex> lock(gOptionsMutex);
+        gOptions = [options copy];
+    }
+    gOptionsDirty.store(true, std::memory_order_release);
 }
 
 - (void)addMouseDeltaX:(NSInteger)dx y:(NSInteger)dy port:(NSInteger)port {

@@ -147,6 +147,11 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
 // the core's own defaults. FBNeo needs none; Beetle Saturn's speed levers
 // live here.
 - (void)setCoreOptions:(NSDictionary<NSString *, NSString *> *)options;
+/// Replaces the option set mid-game and tells the core, once, that its
+/// variables changed. Built for exactly one caller: the DS phone touch
+/// panel flipping melonds_touch_mode when a phone joins or leaves. Use
+/// setCoreOptions for load-time options; it never signals.
+- (void)updateCoreOptions:(NSDictionary<NSString *, NSString *> *)options;
 
 // The device type a port is told to present, applied right after the game
 // loads. Not a core variable: Genesis Plus GX picks 3-button versus

@@ -332,10 +332,19 @@ struct HomeView: View {
     /// with a single verb, appearing only while that stays true.
     private func controllerOffer(for shortname: String) -> some View {
         // The library's own name for the game when it has one; the
-        // romset name is an honest fallback, not a mystery string.
-        let name = (recent + favorites).first {
-            $0.fsNameNoExt.lowercased() == shortname
-        }?.displayName ?? shortname
+        // romset name is an honest fallback, not a mystery string. A
+        // DS television advertises "nds.<rom id>" instead of a romset
+        // (its filenames cannot pass shortname validation), so the id
+        // resolves through the same shelves, with the system as the
+        // fallback rather than the raw wire string.
+        let name: String
+        if shortname.hasPrefix("nds."), let id = Int(shortname.dropFirst(4)) {
+            name = (recent + favorites).first { $0.id == id }?.displayName ?? "Nintendo DS"
+        } else {
+            name = (recent + favorites).first {
+                $0.fsNameNoExt.lowercased() == shortname
+            }?.displayName ?? shortname
+        }
 
         return Button {
             showingControllerPad = true
