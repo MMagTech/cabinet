@@ -397,6 +397,25 @@ enum NativeLauncher {
             // render path is touched.
             coreOptions["mame2003-plus_skip_disclaimer"] = "enabled"
             coreOptions["mame2003-plus_skip_warnings"] = "enabled"
+            // MAME's own menu, closed deliberately. It is the only way
+            // a DIP switch or an input rebind gets changed, and MAME
+            // writes whatever it holds into cfg/ra_<game>.cfg when the
+            // game exits, which is then reapplied at every later
+            // launch. Bowl-O-Rama spent a day unplayable that way: a
+            // stray combo during phone-controller testing reached that
+            // menu, the exit saved it, and every launch afterwards
+            // booted a game whose inputs did nothing. Nothing in
+            // Cabinet routes a person to that menu on purpose, so it
+            // can only ever be reached by accident, and the accident
+            // is permanent.
+            //
+            // The trade: MAME's per-game DIP switches (difficulty,
+            // lives, free play) stop being reachable. Cabinet has
+            // never surfaced them, so nothing on screen changes; what
+            // goes away is a hidden door that silently corrupts a
+            // game's saved settings.
+            coreOptions["mame2003-plus_display_setup"] = "disabled"
+            coreOptions["mame2003-plus_mame_remapping"] = "disabled"
         }
         LibretroFrontend.shared.setCoreOptions(coreOptions)
         let padDevice = NativeCoreOptionsStore.padDevice(for: platform)
