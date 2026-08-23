@@ -130,9 +130,9 @@ worth having in the open.
 
 Real, acknowledged holes, not yet started.
 
-- **Five platforms have no dedicated touch control layout**: Amiga CD32,
-  Atari Jaguar, Neo Geo AES/MVS, Philips CD-i, Virtual Boy. They fall
-  back to a generic layout today.
+- **Two platforms have no dedicated touch control layout**: Amiga CD32
+  and Philips CD-i. They fall back to a generic layout today, and both
+  play only through the web player on iPhone.
 - **No native autosave.** Native play only resumes from an explicit save
   state, not automatically on quit or backgrounding, unlike the web
   player.
@@ -148,8 +148,6 @@ Real, acknowledged holes, not yet started.
   cannot generate code at runtime, and the settings that would buy speed
   back are already at their fastest usable values.
 
-- **PC Engine's 2-button vs. 6-button controller mode** isn't wired up
-  to its touch layout yet, even though the core supports it.
 - **PS1 and Saturn multi-disc games aren't supported**, and whether they
   should be is genuinely undecided, it would need real `.m3u`-style disc
   swapping support, not just a missing feature flag.
