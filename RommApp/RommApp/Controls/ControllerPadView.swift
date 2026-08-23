@@ -1,6 +1,7 @@
 #if os(iOS)
 import CoreMotion
 import AVFoundation
+import CoreHaptics
 import SwiftUI
 
 /// The phone as the steering wheel itself: gravity-referenced roll,
@@ -221,6 +222,8 @@ struct ControllerPadView: View {
     /// offers a stream. Owned here so it survives panel re-renders and
     /// dies with the screen.
     @StateObject private var dsVideo = DSVideoClient()
+    /// The warp rumble under the split; see DSWarpHaptics below.
+    @State private var warp = DSWarpHaptics()
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss
     /// The Menu pill's question. Putting the phone down mid-game is the
@@ -566,19 +569,32 @@ struct ControllerPadView: View {
         }
         .onChange(of: link.videoOffer) { _, offer in
             if let offer, let host = link.remoteHost {
+                warp.beginTransit()
                 dsVideo.connect(host: host, port: offer.port, token: offer.token)
             } else {
+                warp.abort()
                 dsVideo.disconnect()
             }
+        }
+        .onChange(of: dsVideo.receiving) { _, on in
+            // True is the first frame on the plate: the arrival. False
+            // after a real stream is the screen going home; a spool
+            // that never arrived never lands, teardown publishes no
+            // change for it.
+            if on { warp.land() } else { warp.depart() }
         }
         .onAppear {
             // An offer that arrived before the panel did (the join
             // races the navigation) still connects.
             if let offer = link.videoOffer, let host = link.remoteHost {
+                warp.beginTransit()
                 dsVideo.connect(host: host, port: offer.port, token: offer.token)
             }
         }
-        .onDisappear { dsVideo.disconnect() }
+        .onDisappear {
+            warp.abort()
+            dsVideo.disconnect()
+        }
     }
 
     private func pad(for shortname: String) -> some View {
@@ -925,6 +941,114 @@ private struct DSPanelTouchSurface: View {
         .coordinateSpace(name: "dsPanel")
     }
 }
+/// The warp drive under the DS split: a rumble that tracks the bottom
+/// screen's real journey to the phone, not a recording of one. Spools
+/// up when the phone starts dialing the stream, holds through encoder
+/// spin-up and the first frames crossing the wire, cuts to a beat of
+/// silence, and lands one clean thump the instant the first frame is
+/// on the plate. The silence before the thump is the trick: it reads
+/// as mass arriving rather than a phone buzzing. Departure gets the
+/// mirror, a short falling rumble and no impact, because leaving
+/// should not land.
+private final class DSWarpHaptics {
+    private var engine: CHHapticEngine?
+    private var transit: CHHapticAdvancedPatternPlayer?
+
+    private func runningEngine() -> CHHapticEngine? {
+        guard CHHapticEngine.capabilitiesForHardware().supportsHaptics else { return nil }
+        if let engine { return engine }
+        guard let fresh = try? CHHapticEngine() else { return nil }
+        fresh.isAutoShutdownEnabled = true
+        engine = fresh
+        return fresh
+    }
+
+    /// The spool-up. Open-ended on purpose: the transit takes as long
+    /// as the stream takes, so the curve climbs for the typical case
+    /// and holds a plateau for a slow one, until land() or abort()
+    /// ends it.
+    func beginTransit() {
+        guard let engine = runningEngine(), (try? engine.start()) != nil else { return }
+        transit = nil
+        let rumble = CHHapticEvent(
+            eventType: .hapticContinuous,
+            parameters: [
+                CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.9),
+                CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.3),
+            ],
+            relativeTime: 0, duration: 8)
+        let climb = CHHapticParameterCurve(
+            parameterID: .hapticIntensityControl,
+            controlPoints: [
+                .init(relativeTime: 0.0, value: 0.12),
+                .init(relativeTime: 0.5, value: 0.55),
+                .init(relativeTime: 0.9, value: 1.0),
+                .init(relativeTime: 8.0, value: 1.0),
+            ],
+            relativeTime: 0)
+        let sharpen = CHHapticParameterCurve(
+            parameterID: .hapticSharpnessControl,
+            controlPoints: [
+                .init(relativeTime: 0.0, value: 0.0),
+                .init(relativeTime: 0.9, value: 0.5),
+                .init(relativeTime: 8.0, value: 0.5),
+            ],
+            relativeTime: 0)
+        guard let pattern = try? CHHapticPattern(events: [rumble], parameterCurves: [climb, sharpen]),
+              let player = try? engine.makeAdvancedPlayer(with: pattern) else { return }
+        transit = player
+        try? player.start(atTime: CHHapticTimeImmediate)
+    }
+
+    /// Drop out of warp: kill the rumble, one beat of nothing, thump.
+    func land() {
+        try? transit?.stop(atTime: CHHapticTimeImmediate)
+        transit = nil
+        guard let engine = runningEngine(), (try? engine.start()) != nil else { return }
+        let thump = CHHapticEvent(
+            eventType: .hapticTransient,
+            parameters: [
+                CHHapticEventParameter(parameterID: .hapticIntensity, value: 1.0),
+                CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.55),
+            ],
+            relativeTime: 0.07)
+        guard let pattern = try? CHHapticPattern(events: [thump], parameters: []),
+              let player = try? engine.makePlayer(with: pattern) else { return }
+        try? player.start(atTime: CHHapticTimeImmediate)
+    }
+
+    /// The screen going home: a short fall, no impact.
+    func depart() {
+        try? transit?.stop(atTime: CHHapticTimeImmediate)
+        transit = nil
+        guard let engine = runningEngine(), (try? engine.start()) != nil else { return }
+        let fall = CHHapticEvent(
+            eventType: .hapticContinuous,
+            parameters: [
+                CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.6),
+                CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.3),
+            ],
+            relativeTime: 0, duration: 0.45)
+        let fade = CHHapticParameterCurve(
+            parameterID: .hapticIntensityControl,
+            controlPoints: [
+                .init(relativeTime: 0.0, value: 1.0),
+                .init(relativeTime: 0.45, value: 0.0),
+            ],
+            relativeTime: 0)
+        guard let pattern = try? CHHapticPattern(events: [fall], parameterCurves: [fade]),
+              let player = try? engine.makePlayer(with: pattern) else { return }
+        try? player.start(atTime: CHHapticTimeImmediate)
+    }
+
+    /// A transit that never arrived (the dial failed, the offer was
+    /// revoked mid-spool): fade out and say nothing.
+    func abort() {
+        try? transit?.stop(atTime: CHHapticTimeImmediate)
+        transit = nil
+    }
+}
+
 /// Hosts the decoder's display layer in UIKit, where layers live. The
 /// layer fills the hosting view; SwiftUI decides the view's frame.
 private struct DSVideoLayerView: UIViewRepresentable {
