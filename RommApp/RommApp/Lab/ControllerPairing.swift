@@ -119,6 +119,51 @@ enum ControllerPairing {
         phonePub + tvPub + phoneID + tvID + salt
     }
 
+    // MARK: The session, and proof on every packet
+
+    /// A pairing is forever; a session is one conversation. Each join
+    /// mixes the stored secret with a fresh nonce from each side, so a
+    /// recording of last night's packets proves nothing about tonight,
+    /// and a phone that reconnects gets a clean replay window instead
+    /// of inheriting an old one.
+
+    /// Authenticates the television's hello before a session exists.
+    /// Keyed by the phone's nonce alone, because the hello is the
+    /// packet that delivers the television's, and it must not be
+    /// forgeable by anything that merely watched the join go past.
+    static func helloKey(secret: SymmetricKey, phoneNonce: Data) -> SymmetricKey {
+        HKDF<SHA256>.deriveKey(inputKeyMaterial: secret, salt: phoneNonce,
+                               info: Data("cabinet-hello-v1".utf8), outputByteCount: 32)
+    }
+
+    /// The key every packet in one session proves itself with.
+    static func sessionKey(secret: SymmetricKey, phoneNonce: Data, tvNonce: Data) -> SymmetricKey {
+        HKDF<SHA256>.deriveKey(inputKeyMaterial: secret, salt: phoneNonce + tvNonce,
+                               info: Data("cabinet-session-v1".utf8), outputByteCount: 32)
+    }
+
+    /// Eight bytes of a full HMAC. Forging one is a shot in eight bytes
+    /// of dark per packet, with nothing reusable learned from a miss;
+    /// next to a ten byte header, thirty two would be all tax.
+    static let tagLength = 8
+
+    /// The context string keeps directions apart: a packet proven for
+    /// one direction can never double as proof in the other.
+    static func tag(key: SymmetricKey, context: String, bytes: Data) -> Data {
+        Data(HMAC<SHA256>.authenticationCode(for: Data(context.utf8) + bytes, using: key))
+            .prefix(tagLength)
+    }
+
+    /// Constant time on the comparison, so a wrong tag reveals nothing
+    /// about how wrong it was.
+    static func validTag(_ candidate: Data, key: SymmetricKey, context: String, bytes: Data) -> Bool {
+        guard candidate.count == tagLength else { return false }
+        let expected = tag(key: key, context: context, bytes: bytes)
+        var diff: UInt8 = 0
+        for (a, b) in zip(expected, candidate) { diff |= a ^ b }
+        return diff == 0
+    }
+
     static func makeCode() -> String {
         var rng = SystemRandomNumberGenerator()
         return String(format: "%06u", UInt32.random(in: 0..<1_000_000, using: &rng))
