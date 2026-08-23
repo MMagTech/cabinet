@@ -448,6 +448,18 @@ enum NativeLauncher {
             // game's saved settings.
             coreOptions["mame2003-plus_display_setup"] = "disabled"
             coreOptions["mame2003-plus_mame_remapping"] = "disabled"
+            // Eighth of the same class. Plenty of arcade boards keep
+            // their configuration, and sometimes calibration, in
+            // battery-backed RAM that an operator set once on the real
+            // cabinet. Emulated blank, those games boot to a factory
+            // settings screen, a CMOS error, or simply wrong, and the
+            // core carries known-good images for exactly that. It logs
+            // "NVRAM bootstrap available, but disabled via core option"
+            // when it cannot use one, which is what Cabinet has been
+            // asking for since day one by never answering. Seeds only
+            // where the game has no NVRAM of its own yet, so a machine
+            // with history keeps it.
+            coreOptions["mame2003-plus_nvram_bootstraps"] = "enabled"
         }
         LibretroFrontend.shared.setCoreOptions(coreOptions)
         let padDevice = NativeCoreOptionsStore.padDevice(for: platform)
