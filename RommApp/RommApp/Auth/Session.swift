@@ -16,6 +16,13 @@ final class Session: ObservableObject {
         /// Server known, but this device is not paired with it.
         case needsPairing
         case ready
+        /// No server, and none wanted: this phone is here to be a
+        /// controller for an Apple TV in the room and nothing else.
+        /// Chosen deliberately on the first screen, never fallen into,
+        /// and left the moment someone enters a server address. iOS
+        /// only in practice; a television cannot be its own
+        /// controller, so nothing on tvOS ever sets it.
+        case controllerOnly
     }
 
     @Published private(set) var stage: Stage = .needsServer
@@ -64,6 +71,10 @@ final class Session: ObservableObject {
     private var client: RommClient?
 
     private let serverKey = "com.mmagtech.RommApp.serverURL"
+    /// Set only by choosing the controller door on the first screen.
+    /// Read by restore(), so a guest's relaunch lands back on their
+    /// panel instead of being asked for a server they do not have.
+    private let controllerOnlyKey = "com.mmagtech.RommApp.controllerOnly"
     private let versionKey = "com.mmagtech.RommApp.serverVersion"
     private let localServerKey = "com.mmagtech.RommApp.localServerURL"
     /// RomM's own id for the active pairing, kept because the presence
@@ -142,6 +153,14 @@ final class Session: ObservableObject {
     // MARK: Restoring a previous pairing
 
     private func restore() {
+        // The guest's choice outranks the absence of a server, but not
+        // the presence of one: someone who later enters an address has
+        // graduated, and the key is cleared there rather than here.
+        if UserDefaults.standard.bool(forKey: controllerOnlyKey),
+           UserDefaults.standard.string(forKey: serverKey) == nil {
+            stage = .controllerOnly
+            return
+        }
         guard let stored = UserDefaults.standard.string(forKey: serverKey),
               let url = URL(string: stored)
         else { return }
@@ -434,6 +453,22 @@ final class Session: ObservableObject {
     // MARK: Leaving
 
     /// Forgets the token but keeps the address, so pairing again is one step.
+    /// The controller door on the first screen. No network, no
+    /// account, nothing to undo: this phone simply stops asking for a
+    /// server until someone gives it one.
+    func useAsControllerOnly() {
+        UserDefaults.standard.set(true, forKey: controllerOnlyKey)
+        stage = .controllerOnly
+    }
+
+    /// Graduating: a guest who now has a server of their own. Called
+    /// when they ask for the address screen, so the choice is undone
+    /// before they type rather than after they succeed.
+    func leaveControllerOnly() {
+        UserDefaults.standard.removeObject(forKey: controllerOnlyKey)
+        stage = .needsServer
+    }
+
     func signOut() {
         if let host = serverURL?.host { Keychain.deleteToken(forHost: host) }
         scopes = []
@@ -454,6 +489,7 @@ final class Session: ObservableObject {
         localServerURL = nil
         isUsingLocalAddress = false
         scopes = []
+        UserDefaults.standard.removeObject(forKey: controllerOnlyKey)
         stage = .needsServer
     }
 

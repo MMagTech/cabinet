@@ -775,7 +775,7 @@ final class ControllerLinkSender: ObservableObject {
     /// When the phase last moved, for the two giving-up rules in
     /// tick(). Everything else is event driven.
     private var phaseChangedAt = Date()
-    @Published private(set) var status = "looking for the television"
+    @Published private(set) var status = "Looking for a TV"
     @Published private(set) var connected = false
     /// The romset the television is running, once a join has been
     /// answered. The panel is built from this, which is why the phone
@@ -1015,7 +1015,7 @@ final class ControllerLinkSender: ObservableObject {
                 case .ready:
                     guard let self else { return }
                     self.phase = .joining
-                    self.status = "found the television"
+                    self.status = "Found the TV"
                     self.startTicker()
                     // UDP has no handshake, so the television does not
                     // know we exist until we say something. This is
@@ -1030,7 +1030,7 @@ final class ControllerLinkSender: ObservableObject {
                     guard let self else { return }
                     self.ticker?.cancel(); self.ticker = nil
                     self.connected = false
-                    self.status = "disconnected"
+                    self.status = "Disconnected"
                     self.requester = nil
                     self.pendingProof = nil
                     self.sessionKey = nil
@@ -1086,7 +1086,7 @@ final class ControllerLinkSender: ObservableObject {
                 // not remember the television, a reinstall usually.
                 // Pair again, which overwrites cleanly on both sides.
                 guard requester == nil else { return }
-                status = "this television needs pairing"
+                status = "This TV needs pairing"
                 let fresh = ControllerPairing.Requester(phoneID: ControllerPairing.deviceID)
                 requester = fresh
                 send(.init(kind: .pairRequest), payload: fresh.requestPayload)
@@ -1102,7 +1102,7 @@ final class ControllerLinkSender: ObservableObject {
                 // cleanly on both sides.
                 badHelloCount += 1
                 if badHelloCount >= 3, requester == nil {
-                    status = "re-pairing with this television"
+                    status = "Pairing again"
                     let fresh = ControllerPairing.Requester(phoneID: ControllerPairing.deviceID)
                     requester = fresh
                     send(.init(kind: .pairRequest), payload: fresh.requestPayload)
@@ -1145,7 +1145,7 @@ final class ControllerLinkSender: ObservableObject {
 
         case .pairNeeded:
             guard case .joining = phase, requester == nil else { return }
-            status = "this television needs pairing"
+            status = "This TV needs pairing"
             let fresh = ControllerPairing.Requester(phoneID: ControllerPairing.deviceID)
             requester = fresh
             send(.init(kind: .pairRequest), payload: fresh.requestPayload)

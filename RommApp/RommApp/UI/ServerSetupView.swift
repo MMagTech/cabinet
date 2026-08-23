@@ -1,7 +1,14 @@
 import SwiftUI
 
-/// First screen on a fresh install. Nobody's server is assumed or remembered,
-/// so this is where anyone using the app puts in their own RomM address.
+/// Where a RomM address gets typed. Shared by both platforms: on tvOS
+/// this is the first screen on a fresh install, on iOS it sits behind
+/// the first door of `WelcomeView`.
+///
+/// The copy is deliberately short. A field showing romm.example.com
+/// already says "enter an address", and the old footnote spent
+/// twenty-six words narrating the pairing screen, which explains
+/// itself when it arrives. What survives is the one thing someone
+/// genuinely wonders here: no password is coming.
 struct ServerSetupView: View {
     @EnvironmentObject private var session: Session
     @State private var address = ""
@@ -16,7 +23,7 @@ struct ServerSetupView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Connect to RomM")
                     .font(.largeTitle.bold())
-                Text("Enter the address of your own RomM server. It is the same address you use in a browser.")
+                Text("The same address you open in a browser.")
                     .foregroundStyle(.secondary)
             }
 
@@ -53,7 +60,7 @@ struct ServerSetupView: View {
             .buttonStyle(.borderedProminent)
             .disabled(address.trimmingCharacters(in: .whitespaces).isEmpty || checking)
 
-            Text("You will not type a password here. The next step opens RomM in your browser, where you approve this device while signed in as yourself.")
+            Text("No password here. You approve this device in RomM itself.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 

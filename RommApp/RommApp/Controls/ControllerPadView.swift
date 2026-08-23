@@ -217,6 +217,14 @@ final class GunAim {
 /// appears and not before, the settled design's rule. The lab's
 /// -cabinetLink launch argument opens it directly too.
 struct ControllerPadView: View {
+    /// True when this panel IS the app, the guest's controller-only
+    /// root rather than a screen presented over Home. A root has
+    /// nowhere to dismiss to, so the close button is withheld and the
+    /// screen's own navigation chrome carries the way out instead.
+    /// Defaults to false, so both existing callers behave exactly as
+    /// they did.
+    var isRoot = false
+
     @StateObject private var link = ControllerLinkSender()
     /// The DS bottom screen's decoder, inert until the television
     /// offers a stream. Owned here so it survives panel re-renders and
@@ -300,7 +308,7 @@ struct ControllerPadView: View {
             // the phone down mid-game stays a deliberate act; this is
             // for the person who tapped the row with no television
             // playing.
-            if link.shortname == nil {
+            if link.shortname == nil, !isRoot {
                 Button {
                     dismiss()
                 } label: {
@@ -312,7 +320,10 @@ struct ControllerPadView: View {
                 .padding(20)
             }
         }
-        .statusBarHidden()
+        .statusBarHidden(!isRoot)
+        .toolbar(isRoot ? .visible : .hidden, for: .navigationBar)
+        .navigationTitle(isRoot ? "Controller" : "")
+        .navigationBarTitleDisplayMode(.large)
         .onAppear {
             link.start()
         }
@@ -408,7 +419,7 @@ struct ControllerPadView: View {
             // sitting in it silently reads as broken. After a few
             // seconds, name what the television actually requires.
             if searchHintReady, stillLooking {
-                Text("On the TV, turn on \u{201C}Allow a phone as a controller\u{201D} in Settings, then pair from that screen or start a game.")
+                Text("On the Apple TV, turn on \u{201C}Allow a phone as a controller\u{201D} in Settings.")
                     .font(.footnote)
                     .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)
