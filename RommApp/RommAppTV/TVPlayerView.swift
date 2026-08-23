@@ -46,13 +46,12 @@ struct TVPlayerView: View {
     /// that logic, which had silently fallen behind iOS at PS1/N64-only
     /// while iOS grew every platform (issue #5).
     @State private var cardSync: MemoryCardSync?
-    #if DEBUG
-    /// First slice of the phone-as-accessory idea: while an arcade game
-    /// runs, a phone on the same network can drive it through the exact
-    /// calls the local controller path makes below. DEBUG only, and the
-    /// discovery is the lab's Bonjour scaffolding; the shipping design
-    /// binds nothing without a person enabling it and learns presence
-    /// from RomM, not the LAN. See ControllerLink.swift's header.
+    /// The phone as a controller: while an arcade game runs and the
+    /// Settings switch allows it, a paired phone can drive this game
+    /// through the exact calls the local controller path makes below.
+    /// Pairing, per-packet proof and the rest of the design live in
+    /// ControllerLink.swift and ControllerPairing.swift; this view
+    /// only wires verbs to the renderer and shows the pairing code.
     @State private var phoneLink: ControllerLinkReceiver?
     @State private var phoneConnected = false
     /// Paused from the phone's own menu, tracked so the idle rule below
@@ -68,7 +67,6 @@ struct TVPlayerView: View {
     /// in the room wanting to join is not a reason to stop somebody
     /// else's run.
     @State private var pairingCode: String?
-    #endif
 
     private var canonicalSlug: String {
         rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
@@ -105,7 +103,6 @@ struct TVPlayerView: View {
         return engine
     }
 
-    #if DEBUG
     private func updatePhoneIdleRule() {
         UIApplication.shared.isIdleTimerDisabled =
             phoneConnected && !phonePaused && !menuVisible
@@ -148,7 +145,6 @@ struct TVPlayerView: View {
         guard code.count == 6 else { return code }
         return "\(code.prefix(3)) \(code.suffix(3))"
     }
-    #endif
 
     private func openMenu() {
         renderer.paused = true
@@ -264,11 +260,9 @@ struct TVPlayerView: View {
             TVGameSurface(renderer: renderer, menuVisible: menuVisible)
                 .ignoresSafeArea()
             TVBiasGlow(renderer: renderer, level: glowLevel)
-            #if DEBUG
             if let pairingCode {
                 pairingOverlay(code: pairingCode)
             }
-            #endif
             if menuVisible {
                 pauseMenu
             }
@@ -346,7 +340,6 @@ struct TVPlayerView: View {
             // device afterwards. The recording itself lives in the shared
             // renderer, so without these the trace simply never starts.
             FrameTrace.shared.begin(core: "\(core)")
-            #if DEBUG
             if platform == .arcade, allowPhoneController {
                 let link = ControllerLinkReceiver(
                     shortname: rom.fsNameNoExt.lowercased(),
@@ -406,9 +399,7 @@ struct TVPlayerView: View {
                 link.start()
                 phoneLink = link
             }
-            #endif
         }
-        #if DEBUG
         // The screensaver rule for a phone-driven game. A physical
         // controller keeps tvOS awake through its own button presses;
         // the phone's input is network packets the system cannot see,
@@ -421,13 +412,10 @@ struct TVPlayerView: View {
         .onChange(of: phoneConnected) { _, _ in updatePhoneIdleRule() }
         .onChange(of: phonePaused) { _, _ in updatePhoneIdleRule() }
         .onChange(of: menuVisible) { _, _ in updatePhoneIdleRule() }
-        #endif
         .onDisappear {
-            #if DEBUG
             phoneLink?.stop()
             phoneLink = nil
             UIApplication.shared.isIdleTimerDisabled = false
-            #endif
             FrameTrace.shared.end()
             controllers.capturesMenuButton = false
             // Guarded: if another game's view already claimed the

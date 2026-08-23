@@ -31,14 +31,12 @@ struct HomeView: View {
     #endif
     #if os(iOS)
     @State private var directLaunch: DirectLaunch?
-    #if DEBUG
     /// The phone-as-controller entry. Deliberately not knowledge
     /// driven: the settled design has the phone browse the network
     /// only after someone taps to connect, so Home cannot know what is
     /// on the television and does not pretend to. The row is quiet and
     /// constant; the panel screen behind it does the finding.
     @State private var showingControllerPad = false
-    #endif
     #endif
     @State private var nativeDirectLaunch: NativeDirectLaunch?
     @State private var preparingResume = false
@@ -211,7 +209,7 @@ struct HomeView: View {
             .onAppear {
                 Task { await load() }
             }
-            #if os(iOS) && DEBUG
+            #if os(iOS)
             .fullScreenCover(isPresented: $showingControllerPad) {
                 ControllerPadView()
             }
@@ -289,7 +287,7 @@ struct HomeView: View {
 
     private func tallLayout(height: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 28) {
-            #if os(iOS) && DEBUG
+            #if os(iOS)
             controllerRow.padding(.horizontal, 20)
             #endif
             if let hero = recent.first {
@@ -317,7 +315,7 @@ struct HomeView: View {
     /// gets its own top-to-bottom shape instead, full-width banner over
     /// full-width shelves, the same structure Home's own mockups settled
     /// on and the shape Apple's own TV app uses.
-    #if os(iOS) && DEBUG
+    #if os(iOS)
     /// The quiet, constant front door. It promises nothing about what
     /// is playing, because the phone has not looked and will not until
     /// this is tapped: that is the settled design's rule, and it is
@@ -455,7 +453,6 @@ struct HomeView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    #if DEBUG
                     // Landscape is the orientation a phone that is
                     // about to be a controller is already in, so the
                     // row leads this column the same way it leads the
@@ -463,7 +460,6 @@ struct HomeView: View {
                     // landscape entirely; found by Marcus on the first
                     // front-door run.
                     controllerRow.padding(.top, 20)
-                    #endif
                     if recent.count > 1 {
                         rotationRow("Recent", Array(recent.dropFirst()), seeAll: .recentlyPlayed)
                     } else if loaded, recent.isEmpty {
