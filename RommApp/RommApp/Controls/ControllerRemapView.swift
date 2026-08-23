@@ -111,6 +111,30 @@ struct ControllerRemapView: View {
                 }
             }
 
+            // Above the per-input rows on purpose: swapping the face
+            // pair is the one remap almost everybody wants and nobody
+            // should have to rebind two inputs by hand to get. It edits
+            // the same stored map those rows show, so the change is
+            // visible there rather than hidden behind a second
+            // mechanism, and Reset clears it with everything else.
+            if controllers.isConnected {
+                Section {
+                    Toggle(isOn: Binding(
+                        get: { controllers.faceButtonsSwapped },
+                        set: { _ in controllers.swapFaceButtons() }
+                    )) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Swap A and B")
+                            Text(controllers.faceButtonsSwapped
+                                 ? "Matching the letters on the pad."
+                                 : "Matching where the buttons sit, not their letters.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+
             // The instruction leads right into the rows it explains, rather
             // than sitting above the presets section it has nothing to do
             // with: pressing a controller button before choosing an input

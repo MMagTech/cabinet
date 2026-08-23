@@ -768,6 +768,33 @@ final class GameControllerManager: ObservableObject {
         player1Bindings == map
     }
 
+    /// Whether the two face buttons currently read by their labels
+    /// rather than by their positions.
+    ///
+    /// Cabinet binds positionally by default: the bottom face button
+    /// drives RetroPad B and the right one drives RetroPad A, which is
+    /// where those inputs physically sat on the consoles being
+    /// emulated. Plenty of people read the letters instead, and on a
+    /// Nintendo-style pad the letters are already the other way round
+    /// from an Xbox one, so the same physical thumb movement means two
+    /// different things depending on which pad is in hand. Swapped
+    /// means A drives A and B drives B.
+    var faceButtonsSwapped: Bool {
+        player1Bindings[GCInputButtonA] == RetroPad.a
+            && player1Bindings[GCInputButtonB] == RetroPad.b
+    }
+
+    /// Exchanges what the two face buttons send, leaving every other
+    /// binding, including any the player set by hand, exactly as it is.
+    func swapFaceButtons() {
+        var map = player1Bindings
+        let a = map[GCInputButtonA]
+        let b = map[GCInputButtonB]
+        map[GCInputButtonA] = b
+        map[GCInputButtonB] = a
+        applyBindings(map)
+    }
+
     func clearBinding(for id: Int) {
         player1Bindings = player1Bindings.filter { $0.value != id }
         ControllerBindings.save(player1Bindings, for: storageKey)
