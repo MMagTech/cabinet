@@ -322,6 +322,10 @@ struct TVPlayerView: View {
             renderer.pendingState = initialState
             renderer.awaitingSaveRAM = hasMemoryCard
             renderer.shader = NativeShader.current(for: platform)
+            // Two screens with the hinge break, melonDS only; false
+            // leaves every other core's draw path untouched. See
+            // DSScreenLayout.swift.
+            renderer.dsDualScreen = core == .melonDS
             // The game's own translucent screen sheet, Vectrex only,
             // same line the iOS player runs: the store and renderer
             // layer are shared, only this assignment is per platform.

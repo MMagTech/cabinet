@@ -51,6 +51,8 @@ from the commits below.
 | Beetle PCE Fast | TurboGrafx-16, TurboGrafx-CD | GPL v2 | [libretro/beetle-pce-fast-libretro](https://github.com/libretro/beetle-pce-fast-libretro) | `b211204c7026` |
 | Beetle NeoPop | Neo Geo Pocket Color | GPL v2 | [libretro/beetle-ngp-libretro](https://github.com/libretro/beetle-ngp-libretro) | `a50d5ac288a8` |
 | Beetle VB | Virtual Boy | GPL v2 | [libretro/beetle-vb-libretro](https://github.com/libretro/beetle-vb-libretro) | `3f53a40bf8aa` |
+| melonDS | Nintendo DS | GPL v3 | [libretro/melonDS](https://github.com/libretro/melonDS) | `66b5d2634cd0` |
+| DraStic FreeBIOS | DS BIOS replacement inside melonDS | BSD 2-clause | bundled in the fork above | `66b5d2634cd0` |
 | ProSystem | Atari 7800 | GPL v2 | [libretro/prosystem-libretro](https://github.com/libretro/prosystem-libretro) | `363b6dfbd3e2` |
 | vecx | Vectrex | GPL v3 | [libretro/libretro-vecx](https://github.com/libretro/libretro-vecx) | `8f671cc9d737` |
 | Stella 2014 | Atari 2600 | GPL v2 | [libretro/stella2014-libretro](https://github.com/libretro/stella2014-libretro) | `4a7da82595d2` |

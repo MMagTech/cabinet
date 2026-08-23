@@ -68,6 +68,13 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
     // core's own colour and anaglyph options are exposed as settings
     // rather than chosen here.
     LibretroCoreIDBeetleVB NS_SWIFT_NAME(beetleVB) = 18,
+    // Nintendo DS. The libretro melonDS fork, interpreter-only on both
+    // Apple platforms (its ios-arm64/tvos-arm64 builds set no JIT_ARCH),
+    // software rendered with the core's own threaded-3D rasterizer
+    // carrying the heavy frames. Two ARM CPUs interpreted at once makes
+    // this the heaviest core in the binary; its device runs are a
+    // go/no-go the way Opera's and PS1's were.
+    LibretroCoreIDMelonDS NS_SWIFT_NAME(melonDS) = 19,
 };
 
 @interface LibretroFrame : NSObject

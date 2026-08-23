@@ -200,6 +200,9 @@ struct NativePlayerView: View {
                         // has the picture the phone draws none.
                         if !external.showsGameExternally {
                             MetalGameView(renderer: renderer)
+                            if core == .melonDS {
+                                DSTouchScreenView(sendPointer: handlePointer)
+                            }
                         }
                         if showsControls {
                             TouchControlPad(items: layoutItems(landscape: isLandscape), send: handleInput, sendStick: handleStick, sendRelative: handleRelative, sendPointer: handlePointer, sendOffscreen: handleOffscreen, pictureAspect: renderer.displayAspect, system: controlLayout.system, opacity: controlOpacity)
@@ -226,8 +229,13 @@ struct NativePlayerView: View {
                     let padHeight = controlStripHeight * (1 + (controlLayout.headroom ?? 0))
                     ZStack(alignment: .top) {
                         if !external.showsGameExternally {
-                            MetalGameView(renderer: renderer)
-                                .frame(height: max(geometry.size.height - controlStripHeight, 0))
+                            ZStack {
+                                MetalGameView(renderer: renderer)
+                                if core == .melonDS {
+                                    DSTouchScreenView(sendPointer: handlePointer)
+                                }
+                            }
+                            .frame(height: max(geometry.size.height - controlStripHeight, 0))
                         }
                         TouchControlPad(items: layoutItems(landscape: false), send: handleInput, sendStick: handleStick, sendRelative: handleRelative, sendPointer: handlePointer, sendOffscreen: handleOffscreen, pictureAspect: renderer.displayAspect, system: controlLayout.system, opacity: controlOpacity)
                             .frame(height: padHeight)
@@ -313,6 +321,10 @@ struct NativePlayerView: View {
             if platform == .vectrex {
                 renderer.overlayImage = VectrexOverlays.image(md5: rom.md5Hash, name: rom.fsNameNoExt)
             }
+            // Two screens with the hinge break, melonDS only; false
+            // leaves every other core's draw path untouched. See
+            // DSScreenLayout.swift.
+            renderer.dsDualScreen = core == .melonDS
             NativeSessionMarker.recordGameRunning(romId: rom.id)
             // Temporary, for issue #6. One file per play session, so there
             // is never a question which run the numbers came from.
@@ -583,3 +595,37 @@ struct NativePlayerView: View {
 // NativePlayerAudio now lives in its own file, Native/NativePlayerAudio.swift,
 // shared with tvOS's PS1PlayTestView rather than duplicated for it.
 
+/// The DS bottom screen as a touch surface, layered over the Metal view
+/// when melonDS runs. Occupies exactly DSScreenLayout's bottom-screen
+/// rect, so a finger on the picture is a stylus on the touchscreen and
+/// a finger anywhere else falls through to the control pad beneath.
+/// Drags that wander off the screen's edge clamp to it (see
+/// DSScreenLayout.pointer) until the finger lifts, the way a stylus
+/// pressed against the bezel would keep contact.
+private struct DSTouchScreenView: View {
+    let sendPointer: (_ x: Double, _ y: Double, _ down: Bool) -> Void
+
+    var body: some View {
+        GeometryReader { geo in
+            let rect = DSScreenLayout.bottomScreenRect(in: geo.size)
+            if rect.width > 0, rect.height > 0 {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .frame(width: rect.width, height: rect.height)
+                    .position(x: rect.midX, y: rect.midY)
+                    .gesture(
+                        DragGesture(minimumDistance: 0, coordinateSpace: .named("dsPlayerSurface"))
+                            .onChanged { g in
+                                let p = DSScreenLayout.pointer(for: g.location, in: geo.size)
+                                sendPointer(Double(p.x), Double(p.y), true)
+                            }
+                            .onEnded { g in
+                                let p = DSScreenLayout.pointer(for: g.location, in: geo.size)
+                                sendPointer(Double(p.x), Double(p.y), false)
+                            }
+                    )
+            }
+        }
+        .coordinateSpace(name: "dsPlayerSurface")
+    }
+}

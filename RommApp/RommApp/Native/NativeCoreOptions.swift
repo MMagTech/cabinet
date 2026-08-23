@@ -586,6 +586,45 @@ enum NativeCoreOptionsStore {
             // than exposed, since a controller with a missing d-pad is
             // not a preference.
             return ["vb_right_analog_to_digital": "enabled"]
+        case .nds:
+            // boot_directly is this core's defaults trap: the option
+            // table declares "enabled" but the unanswered C global is
+            // DirectBoot = 0, which boots to the DS firmware menu, and
+            // with the compiled-in FreeBIOS there is no firmware menu,
+            // so nothing boots at all.
+            //
+            // screen_layout stays Top/Bottom and screen_gap stays 0 so
+            // the core always delivers the same stacked 256x384 frame.
+            // Presentation is this app's job: the player slices that
+            // frame into the two screens and places them per platform,
+            // so the core's other layouts must never change the
+            // geometry underneath it.
+            //
+            // touch_mode is Touch on iOS, where the screen's own
+            // touches feed RETRO_DEVICE_POINTER directly, and Joystick
+            // on tvOS, where the right stick moves the core's own
+            // cursor: the only touch a controller-first platform has.
+            //
+            // threaded_renderer is a hard requirement, not a tuning
+            // choice: it moves 3D rasterization off the thread
+            // interpreting two ARM CPUs, and the bench measured it
+            // nearly halving worst-frame time (p99 8.2ms to 4.5ms on
+            // the build machine). console_mode pins DS because DSi
+            // mode needs NAND files this app does not stage, and the
+            // core's own savestate code refuses DSi mode anyway.
+            #if os(tvOS)
+            let touchMode = "Joystick"
+            #else
+            let touchMode = "Touch"
+            #endif
+            return [
+                "melonds_console_mode": "DS",
+                "melonds_boot_directly": "enabled",
+                "melonds_screen_layout": "Top/Bottom",
+                "melonds_screen_gap": "0",
+                "melonds_touch_mode": touchMode,
+                "melonds_threaded_renderer": "enabled",
+            ]
         case .threeDO:
             // opera_bios is the defaults trap at its purest: the option's
             // declared default is NULL, its value must be a BIOS filename,

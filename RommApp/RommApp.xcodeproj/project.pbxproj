@@ -58,6 +58,7 @@
 				Native/GenesisPlusGX/libgenesis_plus_gx_ios.a,
 				Native/MGBA/libmgba_ios.a,
 				Native/MAME2003Plus/libmame2003_plus_ios.a,
+				Native/MelonDS/libmelonds_ios.a,
 				Native/Mupen64Plus/libmupen64plus_ios.a,
 				Native/NativePlayerView.swift,
 				Native/Opera/libopera_ios.a,
@@ -519,6 +520,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Stella2014",
 					"$(PROJECT_DIR)/RommApp/Native/Opera",
 					"$(PROJECT_DIR)/RommApp/Native/BeetleVB",
+					"$(PROJECT_DIR)/RommApp/Native/MelonDS",
 				);
 				MARKETING_VERSION = 0.2.0;
 				OTHER_LDFLAGS = "-lz";
@@ -649,6 +651,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Stella2014",
 					"$(PROJECT_DIR)/RommApp/Native/Opera",
 					"$(PROJECT_DIR)/RommApp/Native/BeetleVB",
+					"$(PROJECT_DIR)/RommApp/Native/MelonDS",
 				);
 				MARKETING_VERSION = 0.3.0;
 				OTHER_LDFLAGS = (
@@ -738,6 +741,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Stella2014",
 					"$(PROJECT_DIR)/RommApp/Native/Opera",
 					"$(PROJECT_DIR)/RommApp/Native/BeetleVB",
+					"$(PROJECT_DIR)/RommApp/Native/MelonDS",
 				);
 				MARKETING_VERSION = 0.3.0;
 				OTHER_LDFLAGS = (
@@ -924,6 +928,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Stella2014",
 					"$(PROJECT_DIR)/RommApp/Native/Opera",
 					"$(PROJECT_DIR)/RommApp/Native/BeetleVB",
+					"$(PROJECT_DIR)/RommApp/Native/MelonDS",
 				);
 				MARKETING_VERSION = 0.2.0;
 				OTHER_LDFLAGS = "-lz";

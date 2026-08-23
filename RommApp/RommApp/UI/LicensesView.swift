@@ -105,6 +105,20 @@ struct LicensesView: View {
             file: "beetle-vb"
         ),
         Entry(
+            id: "melonds",
+            name: "melonDS",
+            role: "Native Nintendo DS core",
+            summary: "GPL version 3, the libretro fork.",
+            file: "melonds"
+        ),
+        Entry(
+            id: "drastic-freebios",
+            name: "DraStic FreeBIOS",
+            role: "DS BIOS replacement compiled into melonDS",
+            summary: "BSD 2-clause, by Gilead Kutnick. This notice is the reproduction its binary redistribution terms require.",
+            file: "drastic-freebios"
+        ),
+        Entry(
             id: "prosystem",
             name: "ProSystem",
             role: "Native Atari 7800 core",

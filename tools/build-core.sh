@@ -105,6 +105,16 @@ beetle_vb)
     # pair of red/blue glasses. See NativeCoreOptions.virtualBoy.
     PREFIX=vb; REPO=https://github.com/libretro/beetle-vb-libretro.git
     MAKEDIR=.; MAKEFILE=Makefile; OUT=BeetleVB; LIB=libbeetle_vb_ios.a ;;
+melonds)
+    # Nintendo DS. The libretro melonDS fork builds interpreter-only for
+    # ios-arm64/tvos-arm64 out of the box (no JIT_ARCH set for either),
+    # so it clears the JIT boundary without patching. Software renderer,
+    # with the core's own threaded-3D option carrying the heavy frames;
+    # FreeBIOS is compiled in, so direct boot needs no user firmware.
+    # Chosen over desmume2015, whose no-JIT arm64 build does not even
+    # link (MMU.cpp calls JIT hooks with DESMUME_JIT=0).
+    PREFIX=mds; REPO=https://github.com/libretro/melonDS.git
+    MAKEDIR=.; MAKEFILE=Makefile; OUT=MelonDS; LIB=libmelonds_ios.a ;;
 pcsx_rearmed)
     # platform=ios-arm64 (or tvos-arm64) forces DYNAREC=0 in this core's
     # own Makefile, a pure interpreter build, the same no-JIT exception

@@ -94,6 +94,14 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     var overlayImage: CGImage? {
         didSet { overlayTexture = nil }
     }
+    /// Nintendo DS only, set by the player views when the core is
+    /// melonDS. The core's frame is two stacked 256x192 screens; with
+    /// this on, `draw` slices that frame into two quads and places them
+    /// with DSScreenLayout's hinge break instead of drawing the stack
+    /// as one picture. False for every other core, whose draw path is
+    /// untouched. Like `overlayImage`, this never combines with
+    /// rotation or flipped frames: melonDS does neither.
+    var dsDualScreen = false
     private var overlayTexture: MTLTexture?
     private var overlayPipeline: MTLRenderPipelineState?
     private var overlaySampler: MTLSamplerState?
@@ -477,6 +485,15 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
               let pipelineState = pipelines[shader] ?? pipelines[.sharp]
         else { return }
 
+        if dsDualScreen {
+            drawDualScreen(
+                texture: texture, drawable: drawable,
+                passDescriptor: passDescriptor, pipelineState: pipelineState,
+                viewSize: view.drawableSize
+            )
+            return
+        }
+
         let vertices = aspectFitVertices(
             textureSize: CGSize(width: textureWidth, height: textureHeight),
             viewSize: view.drawableSize,
@@ -512,6 +529,81 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
             }
         }
 
+        encoder.endEncoding()
+
+        commandBuffer.present(drawable)
+        commandBuffer.commit()
+    }
+
+    /// The Nintendo DS presentation: the core's stacked 256x384 frame
+    /// drawn as two quads, top screen and bottom screen, separated by
+    /// DSScreenLayout's hinge break. Same pipeline, same shader, same
+    /// texture as the single-quad path; the only difference is that two
+    /// slices of the texture land in two places instead of one covering
+    /// quad. The break itself is nothing: canvas the quads leave bare.
+    ///
+    /// No rotation, no flip: melonDS is software rendered and never
+    /// requests either, which is asserted by this path simply not
+    /// reading them.
+    private func drawDualScreen(
+        texture: MTLTexture, drawable: CAMetalDrawable,
+        passDescriptor: MTLRenderPassDescriptor, pipelineState: MTLRenderPipelineState,
+        viewSize: CGSize
+    ) {
+        guard viewSize.width > 0, viewSize.height > 0 else { return }
+
+        let canvasAspect = Double(DSScreenLayout.canvasAspect)
+        let viewAspect = Double(viewSize.width / viewSize.height)
+        if displayAspect != canvasAspect {
+            displayAspect = canvasAspect
+        }
+
+        var scaleX: Float = 1
+        var scaleY: Float = 1
+        if canvasAspect > viewAspect {
+            scaleY = Float(canvasAspect > 0 ? viewAspect / canvasAspect : 1)
+        } else {
+            scaleX = Float(viewAspect > 0 ? canvasAspect / viewAspect : 1)
+        }
+
+        // Canvas fractions to NDC: canvas t (0 at the top) maps to
+        // y = scaleY - 2*scaleY*t. The top screen spans t in
+        // [0, screenFraction], the bottom [bottomStartFraction, 1].
+        let sf = Float(DSScreenLayout.screenFraction)
+        let bs = Float(DSScreenLayout.bottomStartFraction)
+        let topLow = scaleY - 2 * scaleY * sf
+        let botHigh = scaleY - 2 * scaleY * bs
+
+        // Triangle strips, bottom-left, bottom-right, top-left,
+        // top-right, the same corner order every other quad here uses.
+        // Texture v: 0 is the frame's top row, the top screen is
+        // v in [0, 0.5], the bottom screen v in [0.5, 1].
+        let topQuad: [Vertex] = [
+            Vertex(position: [-scaleX, topLow], texCoord: [0, 0.5]),
+            Vertex(position: [scaleX, topLow], texCoord: [1, 0.5]),
+            Vertex(position: [-scaleX, scaleY], texCoord: [0, 0]),
+            Vertex(position: [scaleX, scaleY], texCoord: [1, 0]),
+        ]
+        let bottomQuad: [Vertex] = [
+            Vertex(position: [-scaleX, -scaleY], texCoord: [0, 1]),
+            Vertex(position: [scaleX, -scaleY], texCoord: [1, 1]),
+            Vertex(position: [-scaleX, botHigh], texCoord: [0, 0.5]),
+            Vertex(position: [scaleX, botHigh], texCoord: [1, 0.5]),
+        ]
+
+        guard let commandBuffer = commandQueue.makeCommandBuffer(),
+              let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: passDescriptor)
+        else { return }
+
+        encoder.setRenderPipelineState(pipelineState)
+        encoder.setFragmentTexture(texture, index: 0)
+        encoder.setFragmentSamplerState(samplerState, index: 0)
+        var texelSize = SIMD2<Float>(1.0 / Float(max(textureWidth, 1)), 1.0 / Float(max(textureHeight, 1)))
+        encoder.setFragmentBytes(&texelSize, length: MemoryLayout<SIMD2<Float>>.stride, index: 1)
+        for quad in [topQuad, bottomQuad] {
+            encoder.setVertexBytes(quad, length: MemoryLayout<Vertex>.stride * quad.count, index: 0)
+            encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+        }
         encoder.endEncoding()
 
         commandBuffer.present(drawable)

@@ -23,6 +23,7 @@ enum NativeCore {
     case stella2014
     case opera
     case beetleVB
+    case melonDS
 
     /// The frontend's identifier for the statically linked core.
     var coreID: LibretroCoreID {
@@ -46,6 +47,7 @@ enum NativeCore {
         case .stella2014: return .stella2014
         case .opera: return .opera
         case .beetleVB: return .beetleVB
+        case .melonDS: return .melonDS
         }
     }
 
@@ -77,6 +79,7 @@ enum NativeCore {
         case .stella2014: return "stella2014-native"
         case .opera: return "opera-native"
         case .beetleVB: return "beetle-vb-native"
+        case .melonDS: return "melonds-native"
         }
     }
 
@@ -103,6 +106,7 @@ enum NativeCore {
         case .stella2014: return "stella2014"
         case .opera: return "opera"
         case .beetleVB: return "beetleVB"
+        case .melonDS: return "melonDS"
         }
     }
 
@@ -131,6 +135,7 @@ enum NativeCore {
         case .stella2014: return "Stella"
         case .opera: return "Opera"
         case .beetleVB: return "Beetle VB"
+        case .melonDS: return "melonDS"
         }
     }
 
@@ -189,6 +194,7 @@ enum NativePlatform: String, CaseIterable {
     case atari2600
     case threeDO
     case virtualBoy
+    case nds
 
     /// Every core that can run this platform, default first. Arcade is
     /// the only platform with a real set; everywhere else this is the
@@ -222,6 +228,7 @@ enum NativePlatform: String, CaseIterable {
         case .atari2600: return .stella2014
         case .threeDO: return .opera
         case .virtualBoy: return .beetleVB
+        case .nds: return .melonDS
         }
     }
 
@@ -257,8 +264,14 @@ enum NativePlatform: String, CaseIterable {
         // retro_unload_game instead (opera/shared/nvram.0.srm under the
         // forced options), so it syncs through the segaCD/ngpc file
         // path, not this one.
+        // nds: melonDS answers RETRO_MEMORY_SAVE_RAM with NULL and
+        // manages the cartridge save itself, writing <save dir>/
+        // <game>.sav through its own NDSCart_SRAMManager, flushed by
+        // retro_unload_game. The segaCD/ngpc file path is the fit; its
+        // NativeLauncher wiring is still to come, so until then a DS
+        // game's progress stays on the device that made it.
         case .arcade, .atari7800, .atari2600, .dreamcast, .segaCD, .ngpc, .vectrex,
-             .threeDO, .virtualBoy:
+             .threeDO, .virtualBoy, .nds:
             return false
         default:
             return true
@@ -277,7 +290,7 @@ enum NativePlatform: String, CaseIterable {
     /// port), and Neo Geo Pocket Color.
     var supportsSecondPlayer: Bool {
         switch self {
-        case .gb, .gbc, .gba, .gameGear, .ngpc: return false
+        case .gb, .gbc, .gba, .gameGear, .ngpc, .nds: return false
         // A headset with one pad attached: there is no second port.
         case .virtualBoy: return false
         // Not a handheld, but off for a different, documented reason:
@@ -320,6 +333,7 @@ enum NativePlatform: String, CaseIterable {
         case .atari2600: return "Atari 2600"
         case .threeDO: return "3DO"
         case .virtualBoy: return "Virtual Boy"
+        case .nds: return "Nintendo DS"
         }
     }
 
@@ -411,6 +425,8 @@ enum NativePlatform: String, CaseIterable {
             return .threeDO
         case "virtualboy":
             return .virtualBoy
+        case "nds":
+            return .nds
         default:
             return nil
         }
