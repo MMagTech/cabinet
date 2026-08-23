@@ -236,6 +236,9 @@ struct ControllerPadView: View {
     /// The pairing code being typed. Cleared on submit, so a wrong
     /// answer leaves an empty field rather than the failed guess.
     @State private var codeInput = ""
+    /// True once searching has lasted long enough to deserve an
+    /// explanation; see waitingView.
+    @State private var searchHintReady = false
     @FocusState private var codeFieldFocused: Bool
 
     var body: some View {
@@ -243,8 +246,12 @@ struct ControllerPadView: View {
             // Black belongs to the cabinet panel alone. The states
             // before it, searching, pairing, failing, are app UI and
             // sit on the system background with semantic colors, the
-            // way PairingView's flow does.
-            if let shortname = link.shortname {
+            // way PairingView's flow does. The panel needs a proven
+            // session, not just a name: discovery alone sets shortname
+            // (the Bonjour service name carries the game), and an
+            // unpaired phone must land in code entry, not on a dead
+            // panel the television ignores.
+            if link.connected, let shortname = link.shortname {
                 Color.black.ignoresSafeArea()
                 pad(for: shortname)
             } else {
@@ -281,14 +288,21 @@ struct ControllerPadView: View {
         }
         .statusBarHidden()
         .onAppear {
-            OrientationLock.lockToLandscape()
             link.start()
         }
-        // Let the rotation settle into a landscape, then pin that exact
-        // one so tilt steering cannot flip the interface mid-corner.
-        .task {
-            try? await Task.sleep(for: .seconds(1))
-            OrientationLock.pinCurrentLandscape()
+        // The landscape lock belongs to the cabinet panel, not to the
+        // states before it: searching and code entry follow the device
+        // like any screen, and a code is typed on a portrait keyboard.
+        // Once the panel exists, force landscape, let the rotation
+        // settle, then pin that exact one so tilt steering cannot flip
+        // the interface mid-corner.
+        .onChange(of: link.connected) { _, connected in
+            guard connected else { return }
+            OrientationLock.lockToLandscape()
+            Task {
+                try? await Task.sleep(for: .seconds(1))
+                OrientationLock.pinCurrentLandscape()
+            }
         }
         .onDisappear {
             OrientationLock.unlock()
@@ -344,12 +358,38 @@ struct ControllerPadView: View {
             .background(.thinMaterial, in: Capsule())
     }
 
+    /// The phases where the hint about the television's requirements
+    /// is the truthful explanation for the wait.
+    private var stillLooking: Bool {
+        switch link.phase {
+        case .searching, .joining: return true
+        default: return false
+        }
+    }
+
     private func waitingView(_ message: String) -> some View {
         VStack(spacing: 12) {
             ProgressView()
             Text(message)
                 .font(.callout)
                 .foregroundStyle(.secondary)
+            // The looking state covers four different absences (Wi-Fi
+            // off, wrong network, switch off, no game running) and
+            // sitting in it silently reads as broken. After a few
+            // seconds, name what the television actually requires.
+            if searchHintReady, stillLooking {
+                Text("The TV can be found while a game is running and \u{201C}Allow a phone as a controller\u{201D} is on in its settings.")
+                    .font(.footnote)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
+                    .transition(.opacity)
+            }
+        }
+        .padding(24)
+        .task {
+            try? await Task.sleep(for: .seconds(6))
+            withAnimation { searchHintReady = true }
         }
     }
 
