@@ -84,6 +84,16 @@ enum ControllerPairing {
         SecItemDelete(query(peer: peer) as CFDictionary)
     }
 
+    /// Every pairing at once, for the television's forget row. Coarse
+    /// on purpose: per-phone rows would need names phones do not have.
+    static func forgetAllPairings() {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+
     /// Whether this device has ever completed a pairing. Home shows
     /// its TV Controller row only when this is true, so someone with
     /// no Apple TV never sees the feature at all; the first pairing

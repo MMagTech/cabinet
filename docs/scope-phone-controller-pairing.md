@@ -190,5 +190,6 @@ side is whatever each platform's Keychain does; nothing here promises
 it. What re-pairing feels like when it does not survive is now
 answered in behavior: a side that lost its secret is simply sent
 through pairing again, a fresh code on the television, automatically,
-and the new secret overwrites cleanly on both sides. Deliberately
-forgetting a pairing from either side's settings has no UI yet.
+and the new secret overwrites cleanly on both sides. The television
+can forget all paired phones from its Controllers settings; a
+per-television forget on the phone side has no UI yet.

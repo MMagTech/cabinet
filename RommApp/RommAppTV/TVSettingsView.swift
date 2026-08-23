@@ -195,6 +195,7 @@ private struct TVControllersSettingsView: View {
     @State private var pairingLink: ControllerLinkReceiver?
     @State private var phonePairingCode: String?
     @State private var phoneLinkConnected = false
+    @State private var confirmingForgetPhones = false
 
     var body: some View {
         SettingsUI.page("Controllers") {
@@ -253,7 +254,29 @@ private struct TVControllersSettingsView: View {
                         value: ""
                     )
                 }
+                Button {
+                    confirmingForgetPhones = true
+                } label: {
+                    SettingsUI.actionRow(
+                        title: "Forget paired phones", detail: nil,
+                        chevron: false, destructive: true
+                    )
+                }
+                .buttonStyle(RowFocusStyle())
             }
+        }
+        .alert("Forget paired phones?", isPresented: $confirmingForgetPhones) {
+            Button("Forget", role: .destructive) {
+                ControllerPairing.forgetAllPairings()
+                // A phone joined through the live lobby holds a valid
+                // session key; bouncing the lobby ends it, so forget
+                // means forgotten now, not at the next reconnect.
+                stopPairingLobby()
+                startPairingLobby()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Each phone will need a new code to join again.")
         }
         // The lobby's whole lifecycle: alive while this page is in
         // front with the switch on and the app active, gone the moment
