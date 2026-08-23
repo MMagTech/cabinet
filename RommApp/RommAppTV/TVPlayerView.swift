@@ -349,18 +349,24 @@ struct TVPlayerView: View {
             // got renamed into something phones refuse to parse, and
             // every join died until the app was force quit. Found by
             // probing the advertised port directly from the Mac.
-            // Arcade and Nintendo DS: the two platforms where a phone
-            // in the hands genuinely beats a gamepad, a cabinet's own
-            // panel for one, the missing touchscreen for the other.
-            if platform == .arcade || platform == .nds, allowPhoneController, phoneLink == nil {
-                // DS advertises a namespaced id rather than a filename:
-                // DS filenames carry spaces, which validShortname
-                // rightly refuses, and the panel needs the system, not
-                // the title, to draw the right controls. The rom id
-                // lets the phone name the card from its own library.
-                let advertised = platform == .nds
-                    ? "nds.\(rom.id)"
-                    : rom.fsNameNoExt.lowercased()
+            // Every platform now, not just the two the panel started
+            // with: a phone is a legitimate second controller for any
+            // game, and the layouts to draw it already ship. The
+            // socket still exists only while the setting is on and a
+            // game is running, exactly as before.
+            if allowPhoneController, phoneLink == nil {
+                // Arcade advertises its romset, because the phone
+                // resolves a whole cabinet from it (panel, analog
+                // controls, button count). Everything else advertises
+                // "<layout>.<rom id>": the layout name is what the
+                // phone needs to draw, and the id lets its Home name
+                // the offer card from its own library. Filenames are
+                // never used here, they carry spaces and case that
+                // validShortname rightly refuses.
+                let layoutName = ControlLayout.forPlatform(slug: canonicalSlug)?.system ?? "default"
+                let advertised = platform == .arcade
+                    ? rom.fsNameNoExt.lowercased()
+                    : "\(layoutName).\(rom.id)"
                 let link = ControllerLinkReceiver(
                     shortname: advertised,
                     // The seat comes from the same slot rule the pads

@@ -338,8 +338,15 @@ struct HomeView: View {
         // resolves through the same shelves, with the system as the
         // fallback rather than the raw wire string.
         let name: String
-        if shortname.hasPrefix("nds."), let id = Int(shortname.dropFirst(4)) {
-            name = (recent + favorites).first { $0.id == id }?.displayName ?? "Nintendo DS"
+        if let dot = shortname.firstIndex(of: "."),
+           let id = Int(shortname[shortname.index(after: dot)...]) {
+            // "<layout>.<rom id>": the id names the game from this
+            // phone's own shelves. A game the phone has never seen
+            // falls back to the system, which is still true and still
+            // better than a wire string.
+            let system = String(shortname[shortname.startIndex..<dot])
+            name = (recent + favorites).first { $0.id == id }?.displayName
+                ?? ControlLayout.displayName(forSystem: system)
         } else {
             name = (recent + favorites).first {
                 $0.fsNameNoExt.lowercased() == shortname

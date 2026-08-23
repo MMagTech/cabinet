@@ -134,6 +134,46 @@ struct ControlLayout: Decodable {
         return layout
     }
 
+    /// A human name for a layout's own system id, for the moments a
+    /// phone has to say what is on the television without having the
+    /// game itself: the controller offer card, when the game is not
+    /// on this phone's shelves. Falls back to the id, which is at
+    /// least honest, never a wire string dressed up as a title.
+    static func displayName(forSystem system: String) -> String {
+        switch system {
+        case "nds": return "Nintendo DS"
+        case "snes": return "SNES"
+        case "nes": return "NES"
+        case "n64": return "Nintendo 64"
+        case "gb": return "Game Boy"
+        case "gba": return "Game Boy Advance"
+        case "genesis", "genesis6": return "Genesis"
+        case "sms": return "Master System"
+        case "gamegear": return "Game Gear"
+        case "psx": return "PlayStation"
+        case "saturn": return "Saturn"
+        case "dreamcast": return "Dreamcast"
+        case "pce", "pce6": return "TurboGrafx-16"
+        case "pcfx": return "PC-FX"
+        case "ngpc": return "Neo Geo Pocket Color"
+        case "atari2600": return "Atari 2600"
+        case "atari7800": return "Atari 7800"
+        case "lynx": return "Lynx"
+        case "vectrex": return "Vectrex"
+        case "virtualboy": return "Virtual Boy"
+        case "wonderswan": return "WonderSwan"
+        case "threedo": return "3DO"
+        case "psp": return "PSP"
+        case "arcade": return "Arcade"
+        // The fallback layout, which forPlatform hands back for a
+        // machine with no honest fixed pad shape. The card reads
+        // "<this> is on your TV", so it has to be a subject: "Default"
+        // is a UI word leaking out, and naming the TV twice is worse.
+        case "default": return "A game"
+        default: return system
+        }
+    }
+
     static func forPlatform(slug: String) -> ControlLayout? {
         let name: String
         switch slug {

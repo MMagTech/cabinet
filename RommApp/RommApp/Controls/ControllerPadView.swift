@@ -546,6 +546,54 @@ struct ControllerPadView: View {
     /// television for now: the surface draws only a faint plate, and
     /// the finger's feedback is the core's own cursor on the TV. The
     /// bottom screen itself arrives here when the video leg is built.
+    /// The phone as any console's pad: the platform's own landscape
+    /// layout, the same file the local player draws from, spread over
+    /// a screen with no picture on it. Everything the DS panel does
+    /// minus the screen, and every verb goes over the same wire.
+    ///
+    /// Layout resolution is deliberately the base one: iOS's player
+    /// swaps in the six-button Genesis and Avenue Pad variants from
+    /// settings, and those are the local player's own preference
+    /// lookups, not something a companion phone should second-guess
+    /// from across the room.
+    private func consolePad(system: String) -> some View {
+        Group {
+            if let layout = ControlLayout.named(system) {
+                TouchControlPad(
+                    items: layout.items(landscape: true),
+                    send: { id, down in
+                        if id == RetroPad.overlay {
+                            if down {
+                                link.pause(true)
+                                confirmingExit = true
+                            }
+                            return
+                        }
+                        link.button(id, down: down)
+                    },
+                    sendStick: { _, x, y in link.stick(x: x, y: y) },
+                    sendRelative: { dx, dy in link.relative(dx: dx, dy: dy) },
+                    sendPointer: { x, y, down in link.pointer(x: x, y: y, down: down) },
+                    sendOffscreen: { off in link.offscreen(off) },
+                    system: system,
+                    opacity: 1.0
+                )
+            } else {
+                // A television naming a layout this build does not
+                // carry: say so rather than showing an empty screen.
+                VStack(spacing: 8) {
+                    Image(systemName: "gamecontroller")
+                        .font(.largeTitle)
+                        .foregroundStyle(.secondary)
+                    Text("This game needs a newer Cabinet on this phone")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .overlay(alignment: .top) { playerBadge.padding(.top, 10) }
+    }
+
     private func dsPad() -> some View {
         ZStack {
             if let layout = ControlLayout.named("nds") {
@@ -623,12 +671,16 @@ struct ControllerPadView: View {
     }
 
     private func pad(for shortname: String) -> some View {
-        // A namespaced shortname is a system, not a romset: the DS
-        // television advertises "nds.<rom id>" because its filenames
-        // cannot pass shortname validation and its panel is the same
-        // for every game. Everything else is arcade, resolved below.
-        if shortname.hasPrefix("nds.") {
-            return AnyView(dsPad())
+        // A namespaced shortname is a system, not a romset: every
+        // non-arcade television advertises "<layout>.<rom id>",
+        // because a console's panel is the same for every game on it
+        // and filenames cannot pass shortname validation anyway.
+        // Nintendo DS is the one with a screen in it. A bare
+        // shortname is a romset, and a cabinet, resolved below.
+        if let dot = shortname.firstIndex(of: ".") {
+            let system = String(shortname[shortname.startIndex..<dot])
+            if system == "nds" { return AnyView(dsPad()) }
+            return AnyView(consolePad(system: system))
         }
         // The television is running MAME (the arcade receiver only
         // starts there), so resolve against that core's own data, the
