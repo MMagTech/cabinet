@@ -107,15 +107,19 @@ private struct ExternalGameScreen: View {
                         }
                 }
             } else {
-                VStack(spacing: 16) {
+                // Sized for the room, not the hand: this renders on
+                // the television, where title3 and caption read as
+                // specks from a couch. Same rounded vocabulary as the
+                // Paused pill above, which already learned this.
+                VStack(spacing: 28) {
                     Image(systemName: "gamecontroller")
-                        .font(.system(size: 64))
+                        .font(.system(size: 140))
                         .foregroundStyle(.tertiary)
                     Text("Start a game on your iPhone")
-                        .font(.title3)
+                        .font(.system(size: 46, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
                     Text("\(Int(external.screenSize.width)) x \(Int(external.screenSize.height))")
-                        .font(.caption)
+                        .font(.system(size: 22, design: .rounded))
                         .foregroundStyle(.tertiary)
                 }
             }
