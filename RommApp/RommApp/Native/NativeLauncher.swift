@@ -164,7 +164,8 @@ enum NativeLauncher {
             romId: rom.id, core: platform.cores.count > 1 ? core : nil)
         await restoreVMUSaveIfNeeded(rom: rom, session: session, platform: platform, workDir: workDir)
         await restoreCoreFileSaveIfNeeded(
-            rom: rom, session: session, platform: platform, loadURL: loadURL, saveDir: saveDir
+            rom: rom, session: session, platform: platform, core: core,
+            loadURL: loadURL, saveDir: saveDir
         )
         // A gun cabinet's aim is absolute, so the core reads the pointer
         // channel; everything else reads relative mouse deltas.
@@ -238,8 +239,71 @@ enum NativeLauncher {
     /// boot, the same shape as the VMU path above and with the same
     /// own-rows-only rule: a web-player .srm for these platforms is not
     /// this file, so there is nothing foreign worth adopting.
+    /// Where an arcade core keeps this game's NVRAM, relative to the
+    /// save directory it was given. The two emulators disagree about
+    /// both the folder and the extension, and their contents are not
+    /// interchangeable, which is exactly why the sync keeps them apart
+    /// rather than treating "the arcade save" as one thing.
+    static func arcadeNVRAMFile(core: NativeCore, saveDir: URL, stem: String) -> URL? {
+        switch core {
+        case .mame2003Plus:
+            return saveDir
+                .appendingPathComponent("nvram", isDirectory: true)
+                .appendingPathComponent("\(stem).nv")
+        case .fbneo:
+            return saveDir
+                .appendingPathComponent("fbneo", isDirectory: true)
+                .appendingPathComponent("\(stem).fs")
+        default:
+            return nil
+        }
+    }
+
+    /// Arcade NVRAM in, before the core boots.
+    ///
+    /// Same decision rules the memory-card platforms use, keyed by core
+    /// as well as by game: a copy this device still owes an upload wins
+    /// outright, else a newer row from the server, else whatever is
+    /// already on disk. What differs is only that a game legitimately
+    /// has two of these, one per arcade emulator, and they are never
+    /// candidates for each other.
+    private static func restoreArcadeNVRAM(
+        rom: Rom, session: Session, core: NativeCore, loadURL: URL, saveDir: URL
+    ) async {
+        let stem = loadURL.deletingPathExtension().lastPathComponent
+        guard let target = arcadeNVRAMFile(core: core, saveDir: saveDir, stem: stem) else { return }
+        let store = MemoryCardStore.shared
+
+        func place(_ bytes: Data) {
+            try? FileManager.default.createDirectory(
+                at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? bytes.write(to: target, options: .atomic)
+        }
+
+        let local = store.localCard(romId: rom.id, core: core)
+        if store.pendingUpload(romId: rom.id, core: core), let local {
+            place(local)
+            return
+        }
+        if let own = (try? await session.saves(romId: rom.id))?
+            .filter({ $0.emulator == core.emulatorTag })
+            .sorted(by: { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") })
+            .first,
+           own.updatedAt != store.serverStamp(romId: rom.id, core: core) || local == nil,
+           let bytes = try? await session.saveContent(own) {
+            store.storeDownloaded(
+                romId: rom.id, data: bytes, serverStamp: own.updatedAt, core: core)
+            place(bytes)
+            return
+        }
+        if let local {
+            place(local)
+        }
+    }
+
     private static func restoreCoreFileSaveIfNeeded(
-        rom: Rom, session: Session, platform: NativePlatform, loadURL: URL, saveDir: URL
+        rom: Rom, session: Session, platform: NativePlatform, core: NativeCore,
+        loadURL: URL, saveDir: URL
     ) async {
         // nil suffix means the platform's file lives at a fixed nested
         // path instead of `<stem>.<suffix>`: Opera writes its NVRAM to
@@ -251,6 +315,10 @@ enum NativeLauncher {
         case .segaCD: suffix = "brm"
         case .ngpc: suffix = "flash"
         case .threeDO: suffix = nil
+        case .arcade:
+            await restoreArcadeNVRAM(
+                rom: rom, session: session, core: core, loadURL: loadURL, saveDir: saveDir)
+            return
         default: return
         }
         let store = MemoryCardStore.shared

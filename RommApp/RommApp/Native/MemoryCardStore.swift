@@ -86,14 +86,25 @@ final class MemoryCardStore {
         }
     }
 
-    private func cardURL(romId: Int, region: Region) -> URL {
-        directory.appendingPathComponent("rom_\(romId).\(region.rawValue)")
+    /// `core` is nil for every platform that has exactly one, which is
+    /// all of them but arcade, and those files keep the names they
+    /// always had. Arcade needs the extra dimension because its two
+    /// emulators write genuinely different NVRAM formats for the same
+    /// game, so one game legitimately has two saves that must never be
+    /// mistaken for each other.
+    private func cardURL(romId: Int, region: Region, core: NativeCore?) -> URL {
+        guard let core else {
+            return directory.appendingPathComponent("rom_\(romId).\(region.rawValue)")
+        }
+        return directory.appendingPathComponent("rom_\(romId).\(core.storageKey).\(region.rawValue)")
     }
 
     /// Save RAM keeps the bare rom id it always had, so every card
     /// already on a device stays recognized; other regions suffix it.
-    private func metaKey(romId: Int, region: Region) -> String {
-        region == .saveRAM ? String(romId) : "\(romId).\(region.rawValue)"
+    private func metaKey(romId: Int, region: Region, core: NativeCore?) -> String {
+        var key = region == .saveRAM ? String(romId) : "\(romId).\(region.rawValue)"
+        if let core { key += ".\(core.storageKey)" }
+        return key
     }
 
     private func persistMeta() {
@@ -102,36 +113,36 @@ final class MemoryCardStore {
         }
     }
 
-    func localCard(romId: Int, region: Region = .saveRAM) -> Data? {
-        try? Data(contentsOf: cardURL(romId: romId, region: region))
+    func localCard(romId: Int, region: Region = .saveRAM, core: NativeCore? = nil) -> Data? {
+        try? Data(contentsOf: cardURL(romId: romId, region: region, core: core))
     }
 
-    func pendingUpload(romId: Int, region: Region = .saveRAM) -> Bool {
-        meta[metaKey(romId: romId, region: region)]?.pendingUpload ?? false
+    func pendingUpload(romId: Int, region: Region = .saveRAM, core: NativeCore? = nil) -> Bool {
+        meta[metaKey(romId: romId, region: region, core: core)]?.pendingUpload ?? false
     }
 
-    func serverStamp(romId: Int, region: Region = .saveRAM) -> String? {
-        meta[metaKey(romId: romId, region: region)]?.serverStamp
+    func serverStamp(romId: Int, region: Region = .saveRAM, core: NativeCore? = nil) -> String? {
+        meta[metaKey(romId: romId, region: region, core: core)]?.serverStamp
     }
 
     /// A fresh snapshot from the core: written to disk immediately and
     /// flagged pending until an upload confirms.
-    func storeSnapshot(romId: Int, data: Data, region: Region = .saveRAM) {
-        try? data.write(to: cardURL(romId: romId, region: region), options: .atomic)
-        meta[metaKey(romId: romId, region: region), default: Meta(serverStamp: nil, pendingUpload: false)].pendingUpload = true
+    func storeSnapshot(romId: Int, data: Data, region: Region = .saveRAM, core: NativeCore? = nil) {
+        try? data.write(to: cardURL(romId: romId, region: region, core: core), options: .atomic)
+        meta[metaKey(romId: romId, region: region, core: core), default: Meta(serverStamp: nil, pendingUpload: false)].pendingUpload = true
         persistMeta()
     }
 
     /// A card downloaded from the server: the local copy now matches the
     /// server's, nothing pending.
-    func storeDownloaded(romId: Int, data: Data, serverStamp: String?, region: Region = .saveRAM) {
-        try? data.write(to: cardURL(romId: romId, region: region), options: .atomic)
-        meta[metaKey(romId: romId, region: region)] = Meta(serverStamp: serverStamp, pendingUpload: false)
+    func storeDownloaded(romId: Int, data: Data, serverStamp: String?, region: Region = .saveRAM, core: NativeCore? = nil) {
+        try? data.write(to: cardURL(romId: romId, region: region, core: core), options: .atomic)
+        meta[metaKey(romId: romId, region: region, core: core)] = Meta(serverStamp: serverStamp, pendingUpload: false)
         persistMeta()
     }
 
-    func markUploaded(romId: Int, serverStamp: String?, region: Region = .saveRAM) {
-        meta[metaKey(romId: romId, region: region)] = Meta(serverStamp: serverStamp, pendingUpload: false)
+    func markUploaded(romId: Int, serverStamp: String?, region: Region = .saveRAM, core: NativeCore? = nil) {
+        meta[metaKey(romId: romId, region: region, core: core)] = Meta(serverStamp: serverStamp, pendingUpload: false)
         persistMeta()
     }
 

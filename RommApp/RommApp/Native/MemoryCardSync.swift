@@ -285,6 +285,14 @@ final class MemoryCardSync {
     /// never saved uploads nothing.
     func captureAfterShutdown() {
         captureVMUSave()
+        // Arcade NVRAM, the one kind of save that until now never left
+        // the device it was made on. Both arcade cores write it at
+        // unload, each to its own path and format, so this runs after
+        // the same shutdown the other file-based platforms wait for.
+        if platform == .arcade {
+            captureArcadeNVRAM()
+            return
+        }
         // 3DO first, in its own block rather than the suffix scan below:
         // Opera writes to a fixed nested path (opera/shared/nvram.0.srm,
         // pinned by the options NativeCoreOptionsStore forces), not a
@@ -351,6 +359,62 @@ final class MemoryCardSync {
     }
 
     // MARK: Upload
+
+    /// A file the game has never actually written to: MAME's own fresh
+    /// NVRAM is a uniform fill (0x01 for the capbowl family, 0x00
+    /// elsewhere), and with bootstraps enabled a seeded image is
+    /// likewise the same for everyone who plays that board. Uploading
+    /// those would fill somebody's RomM with rows carrying no history,
+    /// and would then be pulled down onto their other device as if
+    /// they meant something.
+    private func isUntouchedNVRAM(_ data: Data) -> Bool {
+        guard let first = data.first else { return true }
+        return data.allSatisfy { $0 == first }
+    }
+
+    private func captureArcadeNVRAM() {
+        let saveDir = NativeLauncher.coreSaveDirectory(romId: rom.id, core: core)
+        let stem = rom.fsNameNoExt
+        guard let file = NativeLauncher.arcadeNVRAMFile(core: core, saveDir: saveDir, stem: stem),
+              let data = try? Data(contentsOf: file)
+        else { return }
+        let previous = MemoryCardStore.shared.localCard(romId: rom.id, core: core)
+        guard data != previous else { return }
+        // Nothing to say yet, and nothing said before either: a board
+        // that has only ever been switched on is not a save. Once a
+        // real one exists, later states upload even if they look
+        // uniform, because losing history is worse than an empty row.
+        guard !isUntouchedNVRAM(data) || previous != nil else { return }
+        MemoryCardStore.shared.storeSnapshot(romId: rom.id, data: data, core: core)
+        DiagnosticsLog.record(
+            context: "Arcade NVRAM",
+            message: "Captured \(file.lastPathComponent), \(data.count) bytes, after core shutdown.",
+            romVersion: session.serverVersion
+        )
+        Task { await self.uploadArcadeNVRAM(data) }
+    }
+
+    /// Uploaded under a filename carrying the core, not just the
+    /// Cabinet marker the other platforms use. RomM matches rows for
+    /// overwrite by filename alone, emulator tag not included, so two
+    /// arcade emulators sharing one name would quietly overwrite each
+    /// other's high scores on the server despite being tagged
+    /// differently.
+    private func uploadArcadeNVRAM(_ data: Data) async {
+        do {
+            try await session.uploadSave(
+                romId: rom.id, emulator: core.emulatorTag,
+                fileName: "\(rom.fsNameNoExt) (Cabinet \(core.storageKey)).srm", saveData: data
+            )
+            let stamp = ((try? await session.saves(romId: rom.id)) ?? [])
+                .filter { $0.emulator == core.emulatorTag }
+                .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
+                .first?.updatedAt
+            MemoryCardStore.shared.markUploaded(romId: rom.id, serverStamp: stamp, core: core)
+        } catch {
+            // Disk copy and pending flag survive; the next launch retries.
+        }
+    }
 
     private func uploadMemoryCard(_ data: Data, region: MemoryCardStore.Region = .saveRAM) async {
         do {
