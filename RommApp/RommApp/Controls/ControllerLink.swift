@@ -76,7 +76,7 @@ enum ControllerLink {
             case pairChallenge = 13 // tv to phone: tvID (8) + public key (32) + salt (16)
             case pairProof = 14     // phone to tv: phoneID (8) + proof (32)
             case pairSuccess = 15   // tv to phone: acknowledgement (32)
-            case pairFail = 16      // tv to phone: a: reason, b: tries left
+            case pairFail = 16      // tv to phone: a: reason, b: tries left, or seconds for the lockout reasons
         }
 
         /// pairFail's `a` field. Small and explicit, so the phone can
@@ -430,9 +430,9 @@ final class ControllerLinkReceiver {
         connection.send(content: packet.encoded() + payload, completion: .idempotent)
     }
 
-    private func fail(_ reason: ControllerLink.Packet.FailReason, triesLeft: Int16 = 0,
+    private func fail(_ reason: ControllerLink.Packet.FailReason, b: Int16 = 0,
                       on connection: NWConnection) {
-        reply(.pairFail, a: reason.rawValue, b: triesLeft, on: connection)
+        reply(.pairFail, a: reason.rawValue, b: b, on: connection)
     }
 
     private func apply(_ p: ControllerLink.Packet, payload: Data, from connection: NWConnection) {
@@ -492,7 +492,10 @@ final class ControllerLinkReceiver {
             let phoneID = Data(payload.prefix(8))
             let phonePub = Data(payload.suffix(32))
             if let until = pairingLockedUntil, until > Date() {
-                fail(.cooldown, on: connection)
+                // The phone runs a countdown off this and retries by
+                // itself, the passcode-lockout pattern, so the seconds
+                // are the message.
+                fail(.cooldown, b: Int16(clamping: Int(until.timeIntervalSinceNow.rounded(.up))), on: connection)
                 return
             }
             if let acceptor {
@@ -554,12 +557,12 @@ final class ControllerLinkReceiver {
                     fail(.storage, on: connection)
                 }
             case .wrong(let triesLeft):
-                fail(.wrongCode, triesLeft: Int16(triesLeft), on: connection)
+                fail(.wrongCode, b: Int16(triesLeft), on: connection)
             case .cancelled:
                 self.acceptor = nil
                 onPairingCode(nil)
                 pairingLockedUntil = Date().addingTimeInterval(30)
-                fail(.cancelled, on: connection)
+                fail(.cancelled, b: 30, on: connection)
             }
             return
 
@@ -695,6 +698,11 @@ final class ControllerLinkSender: ObservableObject {
         /// A code has been sent; the television is judging it.
         case verifying
         case connected
+        /// Three wrong codes: the television is refusing attempts
+        /// until the deadline. The panel shows a countdown and the
+        /// ticker retries by itself the moment it passes, the
+        /// passcode-lockout pattern, so a fresh code simply appears.
+        case cooldown(until: Date)
         /// Over, with a sentence saying why. retry() starts again.
         case ended(String)
     }
@@ -791,6 +799,13 @@ final class ControllerLinkSender: ObservableObject {
             end("The television stopped answering.")
             return
         }
+        if case .cooldown(let until) = phase, Date() >= until {
+            requester = nil
+            pendingProof = nil
+            phase = .joining
+            send(.init(kind: .join), payload: ControllerPairing.deviceID + phoneNonce)
+            return
+        }
         switch phase {
         case .joining:
             if let requester {
@@ -814,7 +829,7 @@ final class ControllerLinkSender: ObservableObject {
             // Still held. Tagged like all session traffic, so absence
             // cannot be faked any more than input can.
             send(.init(kind: .hello))
-        case .searching, .ended:
+        case .searching, .ended, .cooldown:
             break
         }
     }
@@ -1013,12 +1028,16 @@ final class ControllerLinkSender: ObservableObject {
             case .wrongCode:
                 pendingProof = nil
                 phase = .codeEntry(triesLeft: max(1, Int(packet.b)))
-            case .cancelled:
-                end("Three wrong codes. The television took the code down; wait half a minute, then try again for a fresh one.")
+            case .cancelled, .cooldown:
+                // One extra second absorbs the packet's flight time,
+                // so the automatic retry lands after the television's
+                // own clock has released, never just before.
+                let seconds = TimeInterval(max(1, packet.b)) + 1
+                requester = nil
+                pendingProof = nil
+                phase = .cooldown(until: Date().addingTimeInterval(seconds))
             case .busy:
                 end("The television is pairing another phone. Try again in a moment.")
-            case .cooldown:
-                end("The television is waiting out three wrong codes. Try again in half a minute.")
             case .expired:
                 end("The code expired. Try again for a fresh one.")
             case .storage:

@@ -263,6 +263,8 @@ struct ControllerPadView: View {
                     waitingView("Checking the code")
                 case .ended(let message):
                     endedView(message)
+                case .cooldown(let until):
+                    cooldownView(until: until)
                 case .connected:
                     // Paired through the television's settings screen,
                     // where nothing is playing yet. The panel takes
@@ -409,6 +411,26 @@ struct ControllerPadView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: 460)
+        .padding(24)
+    }
+
+    /// The passcode-lockout pattern: three wrong codes, a live
+    /// countdown in the code's own style, and nothing to press. When
+    /// it reaches zero the sender rejoins by itself and a fresh code
+    /// appears on the television.
+    private func cooldownView(until: Date) -> some View {
+        VStack(spacing: 14) {
+            Text("Three wrong codes")
+                .font(.title2.bold())
+            Text(timerInterval: Date.now...until, countsDown: true)
+                .font(.system(size: 44, weight: .bold, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+            Text("A fresh code will appear on the TV.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: 460)
         .padding(24)
