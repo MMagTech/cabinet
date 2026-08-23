@@ -1080,17 +1080,21 @@ struct GameLaunchView: View {
     @ViewBuilder
     private var resetSettingsCard: some View {
         if hasCoreSettings, let core = NativeCore.core(for: rom, canonicalSlug: canonicalSlug) {
-            LaunchCard(title: "Emulator settings", systemImage: "arrow.counterclockwise") {
+            // Named for the tvOS capsule that does the same job, so
+            // one idea carries one name across both platforms. Not
+            // "Emulator settings": that reads global, and Cabinet has
+            // a genuinely global one in Settings > Native cores. What
+            // this clears is the emulator's own config for this one
+            // game, and neither the Emulator choice nor the Arcade
+            // controls override above it are touched.
+            LaunchCard(title: "Troubleshoot", systemImage: "wrench.and.screwdriver") {
                 VStack(alignment: .leading, spacing: 10) {
                     Button("Reset", role: .destructive) {
                         NativeLauncher.resetCoreSettings(romId: rom.id, core: core)
                         hasCoreSettings = false
                     }
                     .font(.callout)
-                    // The card is titled Emulator settings and the
-                    // button says Reset, so the only line worth adding
-                    // is the one thing neither implies.
-                    Text("Saves and high scores are kept.")
+                    Text("Clears this game's emulator settings. Saves are kept.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
