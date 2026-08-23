@@ -244,6 +244,9 @@ struct ControllerPadView: View {
     /// touch equivalent of unplugging a controller, so it takes a
     /// deliberate answer, never a stray tap or a swipe.
     @State private var confirmingExit = false
+    /// Guest root only: this phone has put the controller away and is
+    /// deliberately not looking for a television until asked.
+    @State private var putAway = false
     /// Tilt steering on the driving cabinets: default off, wheel by
     /// touch, exactly as Marcus specced it. Persisted because a person
     /// who steers by tilt steers by tilt every session.
@@ -270,6 +273,9 @@ struct ControllerPadView: View {
 
     var body: some View {
         ZStack {
+            if putAway {
+                putAwayView
+            } else {
             // Black belongs to the cabinet panel alone. The states
             // before it, searching, pairing, failing, are app UI and
             // sit on the system background with semantic colors, the
@@ -300,6 +306,7 @@ struct ControllerPadView: View {
                 default:
                     waitingView(link.status)
                 }
+            }
             }
         }
         .overlay(alignment: .topLeading) {
@@ -369,17 +376,37 @@ struct ControllerPadView: View {
             // one that also resumes it: putting the panel away leaves
             // the game running on the television, ready for the remote
             // or for this phone to come back.
-            Button("Save State") {
-                link.saveState()
-                link.pause(false)
-            }
-            Button("Load Latest State") {
-                link.loadState()
-                link.pause(false)
+            // A guest drives someone else's game, on someone else's
+            // server, into someone else's save slots. Saving and
+            // loading are the owner's to do, from the television or
+            // from their own phone, so a controller-only phone is not
+            // offered them at all rather than offered them and
+            // refused.
+            if !isRoot {
+                Button("Save State") {
+                    link.saveState()
+                    link.pause(false)
+                }
+                Button("Load Latest State") {
+                    link.loadState()
+                    link.pause(false)
+                }
             }
             Button("Put Away Controller", role: .destructive) {
                 link.pause(false)
-                dismiss()
+                // A guest's panel IS the app, so there is nothing to
+                // dismiss to and dismiss() did nothing at all. Leaving
+                // means leaving the television: say goodbye, drop the
+                // link, and rest until this phone asks for another
+                // one. Without the resting state the panel would
+                // simply find the same television again and walk
+                // straight back in.
+                if isRoot {
+                    link.stop()
+                    putAway = true
+                } else {
+                    dismiss()
+                }
             }
             Button("Resume", role: .cancel) {
                 link.pause(false)
@@ -491,6 +518,27 @@ struct ControllerPadView: View {
     /// PairingView gesture, a code appears, you approve it once, it
     /// never asks again. Typed here in the code style that screen
     /// established. Typing the sixth digit submits by itself.
+    /// Guest root only: the controller is put away. Nothing is being
+    /// looked for, which is the point, so the screen says so and one
+    /// button starts again.
+    private var putAwayView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "iphone.gen3.slash")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text("Controller put away")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            Button("Find a TV") {
+                putAway = false
+                link.start()
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemBackground).ignoresSafeArea())
+    }
+
     private func pairingEntry(triesLeft: Int) -> some View {
         VStack(spacing: 14) {
             Text("Enter the code on your TV")
