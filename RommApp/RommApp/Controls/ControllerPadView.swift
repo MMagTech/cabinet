@@ -224,6 +224,12 @@ struct ControllerPadView: View {
     @StateObject private var dsVideo = DSVideoClient()
     /// The warp rumble under the split; see DSWarpHaptics below.
     @State private var warp = DSWarpHaptics()
+    /// When the current transit began, and whether the landing has
+    /// revealed the picture. The stream is usually ready long before
+    /// the performance ends; the reveal waits so the thump and the
+    /// bottom screen appearing are always one moment.
+    @State private var dsTransitStart: Date?
+    @State private var dsRevealed = false
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss
     /// The Menu pill's question. Putting the phone down mid-game is the
@@ -563,30 +569,49 @@ struct ControllerPadView: View {
                     opacity: 1.0
                 )
             }
-            DSPanelTouchSurface(video: dsVideo) { x, y, down in
+            DSPanelTouchSurface(video: dsVideo, revealed: dsRevealed) { x, y, down in
                 link.pointer(x: x, y: y, down: down)
             }
         }
         .onChange(of: link.videoOffer) { _, offer in
             if let offer, let host = link.remoteHost {
+                dsRevealed = false
+                dsTransitStart = Date()
                 warp.beginTransit()
                 dsVideo.connect(host: host, port: offer.port, token: offer.token)
             } else {
                 warp.abort()
+                dsRevealed = false
+                dsTransitStart = nil
                 dsVideo.disconnect()
             }
         }
         .onChange(of: dsVideo.receiving) { _, on in
-            // True is the first frame on the plate: the arrival. False
-            // after a real stream is the screen going home; a spool
-            // that never arrived never lands, teardown publishes no
-            // change for it.
-            if on { warp.land() } else { warp.depart() }
+            guard on else {
+                // A real stream ending is the screen going home; a
+                // spool that never arrived never lands, teardown
+                // publishes no change for it.
+                if dsRevealed { warp.depart() }
+                dsRevealed = false
+                return
+            }
+            // The stream is ready; the performance may not be. Hold
+            // the reveal for whatever remains of the transit, then
+            // land the thump and the picture together.
+            let elapsed = dsTransitStart.map { Date().timeIntervalSince($0) } ?? .infinity
+            let remaining = max(0, DSWarpHaptics.transitSeconds - elapsed)
+            DispatchQueue.main.asyncAfter(deadline: .now() + remaining) {
+                guard dsVideo.receiving else { return }
+                warp.land()
+                withAnimation(.easeOut(duration: 0.18)) { dsRevealed = true }
+            }
         }
         .onAppear {
             // An offer that arrived before the panel did (the join
             // races the navigation) still connects.
             if let offer = link.videoOffer, let host = link.remoteHost {
+                dsRevealed = false
+                dsTransitStart = Date()
                 warp.beginTransit()
                 dsVideo.connect(host: host, port: offer.port, token: offer.token)
             }
@@ -896,6 +921,9 @@ struct ControllerPadView: View {
 /// and a whisper of fill, since the eyes belong on the television.
 private struct DSPanelTouchSurface: View {
     @ObservedObject var video: DSVideoClient
+    /// The landing's gate: the stream may be ready early, but the
+    /// picture appears only when the performance says so.
+    var revealed: Bool
     let sendPointer: (_ x: Double, _ y: Double, _ down: Bool) -> Void
 
     var body: some View {
@@ -916,9 +944,10 @@ private struct DSPanelTouchSurface: View {
                 .overlay {
                     // The live bottom screen, the moment it exists;
                     // until then the quiet plate is the promise of it.
-                    if video.receiving {
+                    if video.receiving && revealed {
                         DSVideoLayerView(layer: video.displayLayer)
                             .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .transition(.opacity)
                     }
                 }
                 .contentShape(Rectangle())
@@ -941,16 +970,22 @@ private struct DSPanelTouchSurface: View {
         .coordinateSpace(name: "dsPanel")
     }
 }
-/// The warp drive under the DS split: a rumble that tracks the bottom
-/// screen's real journey to the phone, not a recording of one. Spools
-/// up when the phone starts dialing the stream, holds through encoder
-/// spin-up and the first frames crossing the wire, cuts to a beat of
-/// silence, and lands one clean thump the instant the first frame is
-/// on the plate. The silence before the thump is the trick: it reads
-/// as mass arriving rather than a phone buzzing. Departure gets the
-/// mirror, a short falling rumble and no impact, because leaving
-/// should not land.
+/// The warp drive under the DS split. The first version tracked the
+/// stream's real transit and taught the obvious lesson: the wire is
+/// too fast to feel, a tenth of a second of blip. Magic owns its own
+/// clock, so this is a fixed performance, about 1.4 seconds, and the
+/// picture's reveal waits for the landing (the stream is ready long
+/// before; it holds behind the curtain). The texture is a warp
+/// charge, not a hum: a continuous rumble climbing to full strength
+/// under a train of accelerating ticks, a cut to silence, then a
+/// double-hit landing, heavy strike and settle. Departure stays a
+/// short falling rumble with no impact.
 private final class DSWarpHaptics {
+    /// How long the spool runs before the landing may fire. The
+    /// reveal is held to this, so the thump and the picture are
+    /// always one moment.
+    static let transitSeconds: TimeInterval = 1.4
+
     private var engine: CHHapticEngine?
     private var transit: CHHapticAdvancedPatternPlayer?
 
@@ -963,56 +998,79 @@ private final class DSWarpHaptics {
         return fresh
     }
 
-    /// The spool-up. Open-ended on purpose: the transit takes as long
-    /// as the stream takes, so the curve climbs for the typical case
-    /// and holds a plateau for a slow one, until land() or abort()
-    /// ends it.
     func beginTransit() {
         guard let engine = runningEngine(), (try? engine.start()) != nil else { return }
         transit = nil
-        let rumble = CHHapticEvent(
-            eventType: .hapticContinuous,
-            parameters: [
-                CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.9),
-                CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.3),
-            ],
-            relativeTime: 0, duration: 8)
+        let spool = Self.transitSeconds
+        var events: [CHHapticEvent] = [
+            CHHapticEvent(
+                eventType: .hapticContinuous,
+                parameters: [
+                    CHHapticEventParameter(parameterID: .hapticIntensity, value: 1.0),
+                    CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.5),
+                ],
+                relativeTime: 0, duration: spool),
+        ]
+        // The charge: ticks accelerating from a slow knock to a race,
+        // each harder than the last. Spacing shrinks geometrically so
+        // the rhythm itself says "almost there".
+        var t: TimeInterval = 0.12
+        var gap: TimeInterval = 0.22
+        var strength: Float = 0.45
+        while t < spool - 0.08 {
+            events.append(CHHapticEvent(
+                eventType: .hapticTransient,
+                parameters: [
+                    CHHapticEventParameter(parameterID: .hapticIntensity, value: min(strength, 1.0)),
+                    CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.6),
+                ],
+                relativeTime: t))
+            t += gap
+            gap = max(gap * 0.82, 0.045)
+            strength += 0.06
+        }
         let climb = CHHapticParameterCurve(
             parameterID: .hapticIntensityControl,
             controlPoints: [
-                .init(relativeTime: 0.0, value: 0.12),
-                .init(relativeTime: 0.5, value: 0.55),
-                .init(relativeTime: 0.9, value: 1.0),
-                .init(relativeTime: 8.0, value: 1.0),
+                .init(relativeTime: 0.0, value: 0.35),
+                .init(relativeTime: spool * 0.5, value: 0.75),
+                .init(relativeTime: spool, value: 1.0),
             ],
             relativeTime: 0)
         let sharpen = CHHapticParameterCurve(
             parameterID: .hapticSharpnessControl,
             controlPoints: [
-                .init(relativeTime: 0.0, value: 0.0),
-                .init(relativeTime: 0.9, value: 0.5),
-                .init(relativeTime: 8.0, value: 0.5),
+                .init(relativeTime: 0.0, value: 0.1),
+                .init(relativeTime: spool, value: 0.8),
             ],
             relativeTime: 0)
-        guard let pattern = try? CHHapticPattern(events: [rumble], parameterCurves: [climb, sharpen]),
+        guard let pattern = try? CHHapticPattern(events: events, parameterCurves: [climb, sharpen]),
               let player = try? engine.makeAdvancedPlayer(with: pattern) else { return }
         transit = player
         try? player.start(atTime: CHHapticTimeImmediate)
     }
 
-    /// Drop out of warp: kill the rumble, one beat of nothing, thump.
+    /// Drop out of warp: kill the charge, one beat of nothing, then
+    /// the double hit: the strike, and the settle right behind it.
     func land() {
         try? transit?.stop(atTime: CHHapticTimeImmediate)
         transit = nil
         guard let engine = runningEngine(), (try? engine.start()) != nil else { return }
-        let thump = CHHapticEvent(
+        let strike = CHHapticEvent(
             eventType: .hapticTransient,
             parameters: [
                 CHHapticEventParameter(parameterID: .hapticIntensity, value: 1.0),
-                CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.55),
+                CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.7),
             ],
-            relativeTime: 0.07)
-        guard let pattern = try? CHHapticPattern(events: [thump], parameters: []),
+            relativeTime: 0.09)
+        let settle = CHHapticEvent(
+            eventType: .hapticTransient,
+            parameters: [
+                CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.6),
+                CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.35),
+            ],
+            relativeTime: 0.19)
+        guard let pattern = try? CHHapticPattern(events: [strike, settle], parameters: []),
               let player = try? engine.makePlayer(with: pattern) else { return }
         try? player.start(atTime: CHHapticTimeImmediate)
     }
@@ -1025,7 +1083,7 @@ private final class DSWarpHaptics {
         let fall = CHHapticEvent(
             eventType: .hapticContinuous,
             parameters: [
-                CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.6),
+                CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.8),
                 CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.3),
             ],
             relativeTime: 0, duration: 0.45)
@@ -1041,8 +1099,7 @@ private final class DSWarpHaptics {
         try? player.start(atTime: CHHapticTimeImmediate)
     }
 
-    /// A transit that never arrived (the dial failed, the offer was
-    /// revoked mid-spool): fade out and say nothing.
+    /// A transit that never arrived: fade out and say nothing.
     func abort() {
         try? transit?.stop(atTime: CHHapticTimeImmediate)
         transit = nil
