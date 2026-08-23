@@ -1082,14 +1082,17 @@ struct GameLaunchView: View {
         if hasCoreSettings, let core = NativeCore.core(for: rom, canonicalSlug: canonicalSlug) {
             LaunchCard(title: "Emulator settings", systemImage: "arrow.counterclockwise") {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("This game has its own saved emulator settings. Reset them if it stops responding to the controls; your saves and high scores are not touched.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button("Reset emulator settings", role: .destructive) {
+                    Button("Reset", role: .destructive) {
                         NativeLauncher.resetCoreSettings(romId: rom.id, core: core)
                         hasCoreSettings = false
                     }
                     .font(.callout)
+                    // The card is titled Emulator settings and the
+                    // button says Reset, so the only line worth adding
+                    // is the one thing neither implies.
+                    Text("Saves and high scores are kept.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
