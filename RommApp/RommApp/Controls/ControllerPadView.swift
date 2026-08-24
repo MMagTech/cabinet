@@ -291,6 +291,25 @@ struct ControllerPadView: View {
     @State private var pinTask: Task<Void, Never>?
     @FocusState private var codeFieldFocused: Bool
 
+    /// True exactly when the pad itself is on screen, which is the
+    /// same condition the body draws it under. Kept as one property so
+    /// the chrome above can never disagree with what is drawn.
+    /// Landscape now, then pinned to whichever landscape it settled
+    /// in once the rotation has finished.
+    private func goLandscape() {
+        OrientationLock.lockToLandscape()
+        pinTask?.cancel()
+        pinTask = Task {
+            try? await Task.sleep(for: .seconds(1))
+            if Task.isCancelled { return }
+            OrientationLock.pinCurrentLandscape()
+        }
+    }
+
+    private var panelIsLive: Bool {
+        !putAway && link.connected && link.shortname != nil
+    }
+
     var body: some View {
         ZStack {
             if putAway {
@@ -347,9 +366,23 @@ struct ControllerPadView: View {
                 .padding(20)
             }
         }
-        .statusBarHidden(!isRoot)
-        .toolbar(isRoot ? .visible : .hidden, for: .navigationBar)
-        .navigationTitle(isRoot ? "Controller" : "")
+        // Chrome belongs to the states BEFORE the panel, never to the
+        // panel itself. A guest's screen needs a title and a menu
+        // while it is looking for a television, and needs to be edge
+        // to edge black the moment it becomes a control panel, exactly
+        // like the phone that arrived here from Home.
+        //
+        // Getting this wrong is what Marcus saw as N64 looking
+        // "squished" on his daughter's phone and not on his: the
+        // navigation bar, its large title and the status bar were
+        // still there, so her pad was drawn into a shorter box and
+        // every normalised height compressed to fit. The four pills
+        // along the top took it worst, sitting at 6% where the bar
+        // was, which is why the arrangement read as different rather
+        // than merely smaller.
+        .statusBarHidden(!isRoot || panelIsLive)
+        .toolbar(isRoot && !panelIsLive ? .visible : .hidden, for: .navigationBar)
+        .navigationTitle(isRoot && !panelIsLive ? "Controller" : "")
         .navigationBarTitleDisplayMode(.large)
         .onAppear {
             link.start()
@@ -360,15 +393,19 @@ struct ControllerPadView: View {
         // Once the panel exists, force landscape, let the rotation
         // settle, then pin that exact one so tilt steering cannot flip
         // the interface mid-corner.
-        .onChange(of: link.connected && link.shortname != nil) { _, panelLive in
-            guard panelLive else { return }
-            OrientationLock.lockToLandscape()
-            pinTask?.cancel()
-            pinTask = Task {
-                try? await Task.sleep(for: .seconds(1))
-                if Task.isCancelled { return }
-                OrientationLock.pinCurrentLandscape()
-            }
+        .onChange(of: panelIsLive) { _, live in
+            guard live else { return }
+            goLandscape()
+        }
+        .task {
+            // onChange alone never fires for a value that is ALREADY
+            // true when the screen appears, which a fast reconnect or
+            // a rebuilt view can both produce. The panel draws
+            // landscape controls unconditionally, so missing the lock
+            // means drawing them into a portrait box: far worse than
+            // the squeeze this file just fixed, and the same shape of
+            // bug. Cheap to close, so closed.
+            if panelIsLive { goLandscape() }
         }
         .onDisappear {
             pinTask?.cancel()
