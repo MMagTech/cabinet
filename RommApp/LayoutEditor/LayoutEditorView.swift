@@ -76,9 +76,7 @@ struct LayoutEditorView: View {
                         } else {
                             ScreenBackdrop(layout: layout.name)
                         }
-                        if !testing {
-                            EditorGrid(area: CGRect(origin: .zero, size: geo.size))
-                        }
+                        EditorGrid(area: CGRect(origin: .zero, size: geo.size))
                         pad(size: padSize, landscape: true)
                     }
                     .frame(width: geo.size.width, height: geo.size.height)
@@ -89,11 +87,9 @@ struct LayoutEditorView: View {
                         // Portrait layouts are normalised against the
                         // strip, not the screen, so the grid measures
                         // the strip or it measures nothing useful.
-                        if !testing {
-                            EditorGrid(area: CGRect(
-                                x: 0, y: geo.size.height - padPortraitHeight,
-                                width: geo.size.width, height: padPortraitHeight))
-                        }
+                        EditorGrid(area: CGRect(
+                            x: 0, y: geo.size.height - padPortraitHeight,
+                            width: geo.size.width, height: padPortraitHeight))
                         pad(size: padSize, landscape: false)
                             .frame(height: padPortraitHeight)
                             .frame(maxHeight: .infinity, alignment: .bottom)

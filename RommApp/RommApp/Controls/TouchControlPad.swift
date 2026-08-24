@@ -925,6 +925,27 @@ final class ControlPadView: UIView {
     }
 
     private func drawDpad(in frame: CGRect, inputs: [Int], label: String? = nil, tint: UIColor? = nil) {
+        // A d-pad is square. Every real one ever made is, and a thumb
+        // rolling between up and left expects the same travel either
+        // way. The cross used to fill whatever rect it was given, so
+        // it inherited the frame's aspect AND the screen's: snes is
+        // authored 0.19 by 0.42, which is square on a screen with no
+        // safe-area insets and 16% taller once the drawing area is
+        // inset to 773x407, which is what Marcus saw and measured.
+        // Fitting a square inside the frame makes a d-pad the same
+        // shape on every phone, whatever the layout says and whatever
+        // the insets do.
+        // Area-preserving rather than fitted inside: the frame was
+        // never a deliberate box, it was a d-pad drawn to a size that
+        // happened to render oblong, so keeping the weight the author
+        // chose is closer to the intent than keeping a rectangle
+        // nobody picked. Comes out 159pt where fitting inside gave
+        // 147. Checked against every layout: no d-pad at this size
+        // touches a neighbouring control.
+        let side = (frame.width * frame.height).squareRoot()
+        let frame = CGRect(
+            x: frame.midX - side / 2, y: frame.midY - side / 2,
+            width: side, height: side)
         let armThickness = frame.width * 0.34
         let cross = UIBezierPath()
 
