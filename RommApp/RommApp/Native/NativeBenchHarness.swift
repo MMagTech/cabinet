@@ -53,6 +53,43 @@ enum NativeBenchHarness {
         return s > 0 ? s : 40
     }
 
+    /// Scripted button presses, so a bench can get past a title screen
+    /// and measure gameplay instead of an idling menu. The Mac lab's
+    /// PSP numbers (2026-08-24) came from exactly this kind of script,
+    /// and its harness notes both traps that fake a clean result; a
+    /// device bench parked on a static menu is one of them.
+    ///
+    /// `-cabinetBenchPresses "3@5;3@8;0@12"` presses RetroPad id 3 at
+    /// five and eight seconds after the core starts drawing, id 0 at
+    /// twelve, each held for four tenths of a second, long enough for
+    /// any game's debounce. Ids are the standard RetroPad numbers the
+    /// control layouts already use (start is 3, the south face button
+    /// is 0). Port 0 only.
+    ///
+    /// `currentPressMask()` is called by the renderer's per-frame input
+    /// push on the draw thread; everything it touches is set up once,
+    /// lazily, on first call. With no argument it returns 0 forever and
+    /// the renderer's OR of it is a no-op.
+    struct TimedPress { let mask: UInt32; let start: Double; let end: Double }
+    nonisolated(unsafe) private static var pressScript: [TimedPress]?
+    nonisolated(unsafe) private static var pressClockStart: Double = 0
+
+    static func currentPressMask() -> UInt32 {
+        if pressScript == nil {
+            pressClockStart = CFAbsoluteTimeGetCurrent()
+            let raw = UserDefaults.standard.string(forKey: "cabinetBenchPresses") ?? ""
+            pressScript = raw.split(separator: ";").compactMap { entry in
+                let parts = entry.split(separator: "@")
+                guard parts.count == 2, let id = Int(parts[0]), let at = Double(parts[1]),
+                      (0...13).contains(id) else { return nil }
+                return TimedPress(mask: 1 << UInt32(id), start: at, end: at + 0.4)
+            }
+        }
+        guard let script = pressScript, !script.isEmpty else { return 0 }
+        let t = CFAbsoluteTimeGetCurrent() - pressClockStart
+        return script.reduce(into: UInt32(0)) { if t >= $1.start && t < $1.end { $0 |= $1.mask } }
+    }
+
     /// A kept game resolves with no network at all, which is the fast path
     /// and the one repeat runs want.
     ///

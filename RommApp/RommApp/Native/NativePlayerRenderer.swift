@@ -346,7 +346,12 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
                 _ = frontend.loadMemoryRegion(clock, region: 1)
             }
             for (port, held) in heldButtons.enumerated() {
-                let mask = held.reduce(into: UInt32(0)) { $0 |= (1 << $1) }
+                var mask = held.reduce(into: UInt32(0)) { $0 |= (1 << $1) }
+                #if DEBUG
+                // Scripted bench input; 0 unless this launch passed
+                // -cabinetBenchPresses. See NativeBenchHarness.
+                if port == 0 { mask |= NativeBenchHarness.currentPressMask() }
+                #endif
                 frontend.setButtonMask(mask, port: port)
             }
             // Run the core at the rate the core asked for, not once per

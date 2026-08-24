@@ -472,8 +472,19 @@ enum NativeLauncher {
         if platform.supportsSecondPlayer {
             LibretroFrontend.shared.setControllerPortDevice(padDevice, port: 1)
         }
+        // PPSSPP's system files are not firmware RomM serves, they ship
+        // inside this app: the core resolves fonts, VFPU tables and its
+        // per-game compat.ini under "<system directory>/PPSSPP", and the
+        // app bundle carries exactly that folder at its root. So for PSP
+        // the bundle itself is the system directory; the core only ever
+        // reads it (saves, shader cache and NAND all live under the
+        // save directory it is given separately). A symlink from the
+        // work directory was tried first and tvOS's sandbox refuses
+        // symlink creation outright (EPERM, 2026-08-24), and a 13MB
+        // copy per launch buys nothing over pointing at the original.
+        let systemDir = platform == .psp ? Bundle.main.bundlePath : workDir.path
         if let failure = LibretroFrontend.shared.loadGame(
-            loadURL.path, systemDirectory: workDir.path, saveDirectory: saveDir.path
+            loadURL.path, systemDirectory: systemDir, saveDirectory: saveDir.path
         ) {
             // Deliberately does NOT claim the core is wrong, because
             // nothing here knows that: a refusal is equally what a missing

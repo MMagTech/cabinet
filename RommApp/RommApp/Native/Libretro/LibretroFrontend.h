@@ -75,6 +75,16 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
     // this the heaviest core in the binary; its device runs are a
     // go/no-go the way Opera's and PS1's were.
     LibretroCoreIDMelonDS NS_SWIFT_NAME(melonDS) = 19,
+    // PSP. PPSSPP with its CPU core forced to the IR interpreter
+    // (ppsspp_cpu_core, a runtime option rather than a build flag), no
+    // dynarec, hardware-rendered through the frontend's GLES context;
+    // its GL backend asks for OPENGLES2, which this frontend already
+    // accepts, and Apple's ES3 context answers the ES2 API. The Mac
+    // lab (2026-08-24) showed the interpreter alone clearing real
+    // gameplay with headroom but could not test GLES rendering at all,
+    // so its device runs are the go/no-go, the way Opera's, PS1's and
+    // DS's were.
+    LibretroCoreIDPPSSPP NS_SWIFT_NAME(ppsspp) = 20,
 };
 
 @interface LibretroFrame : NSObject

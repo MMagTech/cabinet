@@ -24,6 +24,7 @@ enum NativeCore {
     case opera
     case beetleVB
     case melonDS
+    case ppsspp
 
     /// The frontend's identifier for the statically linked core.
     var coreID: LibretroCoreID {
@@ -48,6 +49,7 @@ enum NativeCore {
         case .opera: return .opera
         case .beetleVB: return .beetleVB
         case .melonDS: return .melonDS
+        case .ppsspp: return .ppsspp
         }
     }
 
@@ -80,6 +82,7 @@ enum NativeCore {
         case .opera: return "opera-native"
         case .beetleVB: return "beetle-vb-native"
         case .melonDS: return "melonds-native"
+        case .ppsspp: return "ppsspp-native"
         }
     }
 
@@ -107,6 +110,7 @@ enum NativeCore {
         case .opera: return "opera"
         case .beetleVB: return "beetleVB"
         case .melonDS: return "melonDS"
+        case .ppsspp: return "ppsspp"
         }
     }
 
@@ -136,6 +140,7 @@ enum NativeCore {
         case .opera: return "Opera"
         case .beetleVB: return "Beetle VB"
         case .melonDS: return "melonDS"
+        case .ppsspp: return "PPSSPP"
         }
     }
 
@@ -195,6 +200,7 @@ enum NativePlatform: String, CaseIterable {
     case threeDO
     case virtualBoy
     case nds
+    case psp
 
     /// Every core that can run this platform, default first. Arcade is
     /// the only platform with a real set; everywhere else this is the
@@ -229,6 +235,7 @@ enum NativePlatform: String, CaseIterable {
         case .threeDO: return .opera
         case .virtualBoy: return .beetleVB
         case .nds: return .melonDS
+        case .psp: return .ppsspp
         }
     }
 
@@ -271,8 +278,12 @@ enum NativePlatform: String, CaseIterable {
         // own patch, see build-core.sh). Synced through the
         // segaCD/ngpc file path: restored by NativeLauncher before
         // boot, captured by MemoryCardSync after the quit-time unload.
+        // psp: PSP games save to memory-stick SAVEDATA directories,
+        // whole folders of files under the save directory, which
+        // neither SAVE_RAM nor the single-file capture path models.
+        // Save sync for PSP is its own future feature.
         case .arcade, .atari7800, .atari2600, .dreamcast, .segaCD, .ngpc, .vectrex,
-             .threeDO, .virtualBoy, .nds:
+             .threeDO, .virtualBoy, .nds, .psp:
             return false
         default:
             return true
@@ -291,7 +302,7 @@ enum NativePlatform: String, CaseIterable {
     /// port), and Neo Geo Pocket Color.
     var supportsSecondPlayer: Bool {
         switch self {
-        case .gb, .gbc, .gba, .gameGear, .ngpc, .nds: return false
+        case .gb, .gbc, .gba, .gameGear, .ngpc, .nds, .psp: return false
         // A headset with one pad attached: there is no second port.
         case .virtualBoy: return false
         // Not a handheld, but off for a different, documented reason:
@@ -335,6 +346,7 @@ enum NativePlatform: String, CaseIterable {
         case .threeDO: return "3DO"
         case .virtualBoy: return "Virtual Boy"
         case .nds: return "Nintendo DS"
+        case .psp: return "PSP"
         }
     }
 
@@ -428,6 +440,8 @@ enum NativePlatform: String, CaseIterable {
             return .virtualBoy
         case "nds":
             return .nds
+        case "psp":
+            return .psp
         default:
             return nil
         }

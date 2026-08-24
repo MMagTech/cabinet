@@ -29,6 +29,7 @@
 #import "N64Core.h"
 #import "FlycastCore.h"
 #import "MAME2003PlusCore.h"
+#import "PPSSPPCore.h"
 #endif
 
 #import <UIKit/UIKit.h>
@@ -453,10 +454,18 @@ static bool coreToleratesDeinit(LibretroCoreID coreID) {
 // Flycast, reach none of this. Flycast is the only other hardware-render
 // core and it works today; scoping by the deinit keeps it byte-identical
 // without needing a core check of its own.
+// Set the moment context_destroy has been driven for the current game,
+// cleared when a game loads. Only PPSSPP can see this be true at the
+// unload-time call site below, because it is the only core whose
+// context_destroy is driven anywhere else; for every other core this is
+// false there exactly as it always was.
+static bool gHWContextDestroyed = false;
+
 static void destroyHWContextIfNeeded(void) {
-    if (!gUsesHWRender || !gHWRender.context_destroy) {
+    if (!gUsesHWRender || !gHWRender.context_destroy || gHWContextDestroyed) {
         return;
     }
+    gHWContextDestroyed = true;
     // The core is about to release GL objects, so the context those
     // objects live in has to be the current one.
     if (gGLContext) {
@@ -1196,6 +1205,8 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
             return BeetleVBCoreAPI();
         case LibretroCoreIDMelonDS:
             return MelonDSCoreAPI();
+        case LibretroCoreIDPPSSPP:
+            return PPSSPPCoreAPI();
         default:
             // This used to fall through to the PlayStation core, so a
             // core id with no case did not fail to load: it silently ran
@@ -1297,6 +1308,7 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     gOptionsDirty.store(false, std::memory_order_relaxed);
     gUsesHWRender = false;
     gHWRender = {};
+    gHWContextDestroyed = false;
 }
 
 - (void)setCoreOptions:(NSDictionary<NSString *, NSString *> *)options {
@@ -1608,6 +1620,25 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     if (!gCore || !gInitialized || !gGameLoaded) {
         return;
     }
+    // PPSSPP, and only PPSSPP, needs its context torn down BEFORE the
+    // game unloads. Its retro_unload_game does `delete ctx; ctx =
+    // nullptr`, and its context_destroy is a trampoline that
+    // dereferences that same ctx, so driving the two in the order every
+    // other core here wants is a null deref inside the core: crashed on
+    // quit, on real hardware, 2026-08-24, symbolicated to
+    // context_destroy +12 on the main thread. Calling it first is also
+    // simply what the libretro contract means, the context is destroyed
+    // while it still exists; the existing call site below is a
+    // deliberate exception documented in destroyHWContextIfNeeded, kept
+    // because N64's GLSM needs the pairing with deinit rather than with
+    // unload.
+    //
+    // Additive on purpose: this runs for PPSSPP alone, and the flag it
+    // sets is the only thing the later call site sees differently, so
+    // Mupen64Plus and Flycast execute byte-identical code to before.
+    if (gCoreID == LibretroCoreIDPPSSPP) {
+        destroyHWContextIfNeeded();
+    }
     gCore->unload_game();
     gGameLoaded = false;
     // Motion sensing belongs to the game that asked for it. Without this
@@ -1711,16 +1742,30 @@ static void cabinetInputTrace(void) {
 }
 
 - (BOOL)needsAudioGovernor {
-    // Flycast alone. Its threaded rendering mode runs emulation on its
-    // own thread, so this frontend's frame pacing does not gate it and
-    // nothing else does either (its libretro audio path drops samples
-    // rather than blocking): measured free-running at up to 5x realtime.
-    // Every other core here advances exactly one emulated frame per
-    // retro_run, so the frame pacing alone already holds them to
-    // realtime, and a governor can only ever subtract runs from them.
-    // Applying it to all cores slowed N64 down, reported on device
-    // 2026-08-16 within hours of the governor landing.
-    return gCoreID == LibretroCoreIDFlycast;
+    // Flycast and PPSSPP, the two cores whose emulation is not one
+    // frame per retro_run. Every other core here advances exactly one
+    // emulated frame per retro_run, so the frame pacing alone already
+    // holds them to realtime, and a governor can only ever subtract
+    // runs from them. Applying it to all cores slowed N64 down,
+    // reported on device 2026-08-16 within hours of the governor
+    // landing.
+    //
+    // Flycast: threaded rendering runs emulation on its own thread, so
+    // frame pacing does not gate it and nothing else does either (its
+    // libretro audio path drops samples rather than blocking):
+    // measured free-running at up to 5x realtime.
+    //
+    // PPSSPP: its GL emu thread produces one SWAP per retro_run, and a
+    // swap is one game frame, not one 60Hz vblank. A 30fps PSP game
+    // flips every other vblank, so 60 swaps a second is two seconds of
+    // emulated time per real one: Lumines measured at exactly 2.0x on
+    // the Apple TV, 2026-08-24, 120 emulated vblanks a second against
+    // 60 EmuFrames. In RetroArch the brake is the blocking audio
+    // callback; here it is this governor, which skips retro_run while
+    // the core's audio output is ahead of the wall clock, exactly the
+    // Flycast arrangement. 60fps PSP games are at 1.0x already and the
+    // governor never engages for them.
+    return gCoreID == LibretroCoreIDFlycast || gCoreID == LibretroCoreIDPPSSPP;
 }
 
 - (double)debugCoreRunMS {

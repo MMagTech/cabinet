@@ -59,6 +59,7 @@
 				Native/MGBA/libmgba_ios.a,
 				Native/MAME2003Plus/libmame2003_plus_ios.a,
 				Native/MelonDS/libmelonds_ios.a,
+				Native/PPSSPP/libppsspp_ios.a,
 				Native/Mupen64Plus/libmupen64plus_ios.a,
 				Native/NativePlayerView.swift,
 				Native/Opera/libopera_ios.a,
@@ -170,6 +171,9 @@
 			exceptions = (
 				BB00000000000000000018 /* Exceptions for "RommApp" folder in "LayoutEditor" target */,
 				513F6A9773DFE2CED6ED0E91 /* Exceptions for "RommApp" folder in "RommAppTV" target */,
+			);
+			explicitFolders = (
+				Resources/PPSSPP,
 			);
 			path = RommApp;
 			sourceTree = "<group>";
@@ -521,6 +525,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Opera",
 					"$(PROJECT_DIR)/RommApp/Native/BeetleVB",
 					"$(PROJECT_DIR)/RommApp/Native/MelonDS",
+					"$(PROJECT_DIR)/RommApp/Native/PPSSPP",
 				);
 				MARKETING_VERSION = 0.2.0;
 				OTHER_LDFLAGS = "-lz";
@@ -652,6 +657,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Opera",
 					"$(PROJECT_DIR)/RommApp/Native/BeetleVB",
 					"$(PROJECT_DIR)/RommApp/Native/MelonDS",
+					"$(PROJECT_DIR)/RommApp/Native/PPSSPP",
 				);
 				MARKETING_VERSION = 0.3.0;
 				OTHER_LDFLAGS = (
@@ -668,6 +674,7 @@
 					"-lpicodrive_ios",
 					"-lpcsx_rearmed_ios",
 					"-lc++",
+					"-lz",
 				);
 				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = "-lc++";
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev;
@@ -742,6 +749,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Opera",
 					"$(PROJECT_DIR)/RommApp/Native/BeetleVB",
 					"$(PROJECT_DIR)/RommApp/Native/MelonDS",
+					"$(PROJECT_DIR)/RommApp/Native/PPSSPP",
 				);
 				MARKETING_VERSION = 0.3.0;
 				OTHER_LDFLAGS = (
@@ -758,6 +766,7 @@
 					"-lpicodrive_ios",
 					"-lpcsx_rearmed_ios",
 					"-lc++",
+					"-lz",
 				);
 				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = "-lc++";
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet;
@@ -929,6 +938,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Opera",
 					"$(PROJECT_DIR)/RommApp/Native/BeetleVB",
 					"$(PROJECT_DIR)/RommApp/Native/MelonDS",
+					"$(PROJECT_DIR)/RommApp/Native/PPSSPP",
 				);
 				MARKETING_VERSION = 0.2.0;
 				OTHER_LDFLAGS = "-lz";

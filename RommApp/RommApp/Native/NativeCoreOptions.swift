@@ -586,6 +586,38 @@ enum NativeCoreOptionsStore {
             // than exposed, since a controller with a missing d-pad is
             // not a preference.
             return ["vb_right_analog_to_digital": "enabled"]
+        case .psp:
+            // cpu_core's declared default is "JIT", which cannot run in
+            // this process (no dynamic-code entitlement). The core has
+            // its own guard, System_GetPropertyBool(SYSPROP_CAN_JIT)
+            // asks the frontend RETRO_ENVIRONMENT_GET_JIT_CAPABLE and
+            // falls back to the IR interpreter when unanswered, but
+            // that guard is upstream's to keep; the configuration this
+            // app benched and ships is stated here rather than
+            // inherited. "IR JIT" is the source-exact value that means
+            // the IR interpreter (libretro.cpp maps it to
+            // CPUCore::IR_INTERPRETER), the middle option between the
+            // slow plain interpreter and the impossible dynarec, and
+            // the one the Mac lab measured 2026-08-24.
+            //
+            // internal_resolution is this core's defaults trap, the
+            // same class N64's zeroed globals were. g_Config.Load's own
+            // default is 0, "Auto (native)", which sizes the render to
+            // the DISPLAY, and a libretro frontend never reports a
+            // display size, so pixelWidth/pixelHeight stay 0x0: the
+            // game runs, audio streams, and every frame is dropped as
+            // zero-sized before readback. Found on the Apple TV
+            // 2026-08-24, first PPSSPP boot. "480x272" is the option's
+            // own declared default (1x), the value RetroArch would have
+            // answered.
+            //
+            // Everything else stays at the core's own defaults:
+            // hardware rendering (ppsspp_software_rendering defaults
+            // disabled), no frameskip.
+            return [
+                "ppsspp_cpu_core": "IR JIT",
+                "ppsspp_internal_resolution": "480x272",
+            ]
         case .nds:
             // boot_directly is this core's defaults trap: the option
             // table declares "enabled" but the unanswered C global is
