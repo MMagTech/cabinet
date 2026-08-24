@@ -13,11 +13,13 @@ import UIKit
 /// a system with no colour of its own would look like the theme had
 /// failed rather than like a choice.
 ///
-/// So the two jobs are separated. STRUCTURE says the panel was
-/// designed, and every system gets the same structure. HUE says which
-/// machine you are holding, and a system without one simply stays
-/// neutral, which now reads as a neutral controller rather than a
-/// broken one.
+/// The answer is structure, not hue. Every system gets the SAME
+/// deliberate surface, so nothing can look forgotten because nothing
+/// is ever missing. An earlier version leaned each ground toward its
+/// machine's colour; Marcus cut that, and rightly: a controller is
+/// one object and should not redecorate itself per console. Colour
+/// belongs to the buttons, where ControlTheme already gives it real
+/// hardware meaning.
 enum PanelGroundStyle: String, CaseIterable, Identifiable {
     /// What ships today, kept so the others can be judged against it.
     case flat
@@ -40,64 +42,19 @@ enum PanelGroundStyle: String, CaseIterable, Identifiable {
     }
 }
 
-/// The hue a machine actually has, at panel strength.
-///
-/// Taken from the thing in your hands rather than the box on the
-/// shelf, because the box is what tends to be black: the SNES pad's
-/// lavender, the Mega Drive's red, PlayStation's grey-blue. Where even
-/// the controller is plain, the next honest source is the logo or the
-/// screen, which is why Vectrex is phosphor green and Virtual Boy is
-/// red. A machine with no colour anywhere gets none, and lands on the
-/// neutral charcoal every other panel is already built from.
-enum PanelTint {
-    static func color(forSystem system: String) -> Color {
-        // Hue and saturation only; the ground decides brightness.
-        switch system.hasPrefix("arcade") ? "arcade" : system {
-        case "snes", "nds": return Color(hue: 0.72, saturation: 0.55, brightness: 1)
-        case "gba": return Color(hue: 0.70, saturation: 0.50, brightness: 1)
-        case "genesis", "genesis6", "sms", "atari7800": return Color(hue: 0.99, saturation: 0.70, brightness: 1)
-        case "nes": return Color(hue: 0.02, saturation: 0.45, brightness: 1)
-        case "n64": return Color(hue: 0.60, saturation: 0.55, brightness: 1)
-        case "psx", "psp": return Color(hue: 0.58, saturation: 0.30, brightness: 1)
-        case "gb": return Color(hue: 0.24, saturation: 0.45, brightness: 1)
-        case "gamegear": return Color(hue: 0.55, saturation: 0.45, brightness: 1)
-        case "dreamcast": return Color(hue: 0.07, saturation: 0.65, brightness: 1)
-        case "pce", "pce6": return Color(hue: 0.09, saturation: 0.55, brightness: 1)
-        case "ngpc": return Color(hue: 0.62, saturation: 0.50, brightness: 1)
-        case "virtualboy": return Color(hue: 0.00, saturation: 0.80, brightness: 1)
-        case "vectrex": return Color(hue: 0.33, saturation: 0.60, brightness: 1)
-        case "atari2600": return Color(hue: 0.06, saturation: 0.60, brightness: 1)
-        case "lynx": return Color(hue: 0.15, saturation: 0.55, brightness: 1)
-        case "arcade": return Color(hue: 0.95, saturation: 0.50, brightness: 1)
-        // 3DO, Saturn and anything unlisted: black box, black pad, no
-        // colour to borrow. Neutral is the honest answer, and the
-        // shared structure is what keeps it from reading as missing.
-        default: return .white
-        }
-    }
-}
-
 struct PanelGround: View {
     let system: String
     let style: PanelGroundStyle
     /// Light that moves with the phone. Nil draws the ground flat lit,
     /// which is also what someone with Reduce Motion on will see.
     var light: PanelLight? = nil
-    /// How far the machine's own colour is allowed to lean the ground.
-    /// Deliberately small: at panel strength these are near-black, and
-    /// the difference between two systems should be felt before it is
-    /// noticed.
-    var tintStrength: Double = 0.5
-
-    // Deliberately overshot for judging. Marcus could not tell the
-    // first pass from flat black, which is the same mistake the warp
-    // haptics made: too polite to perceive. Easier to pull a visible
-    // thing back than to argue about an invisible one.
     private var base: Color { Color(white: 0.11) }
-    private var lit: Color {
-        PanelTint.color(forSystem: system)
-            .opacity(0.42 * tintStrength)
-    }
+    /// The panel's own light, the same on every machine. A per-system
+    /// tint lived here and Marcus cut it: a controller is one object
+    /// and should not redecorate itself per console. Colour lives in
+    /// the BUTTONS, where ControlTheme already gives it real hardware
+    /// meaning rather than a hue invented for a background.
+    private var lit: Color { Color.white.opacity(0.10) }
 
     /// How far the sheen slides, as a fraction of the panel. Small on
     /// purpose: enough that turning the phone is felt, not enough to
