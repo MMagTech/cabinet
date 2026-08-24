@@ -114,14 +114,33 @@ enum AimSpeed: String, CaseIterable {
 final class GunAim {
     private let motion = CMMotionManager()
     private var smoothedRateX = 0.0, smoothedRateY = 0.0
-    private var cursorX = 0.0, cursorY = 0.0
-    /// How far past the clamp the wrist has pushed, in the same
-    /// normalised units as the cursor. Only outward pressure while
-    /// pinned at an edge accumulates here; the moment the aim comes
-    /// back inside, it drains. Crossing the threshold is what "off the
-    /// screen" means, so a hair of overshoot on an edge target never
-    /// reads as a reload, and a deliberate sweep past the bezel does.
-    private var overshoot = 0.0
+    /// Where the gun is actually pointed, which is NOT always on the
+    /// screen: a reload is a sweep past the bezel, so the aim has to
+    /// be allowed off the picture and back without losing anything.
+    ///
+    /// It used to be clamped in place, and that was the drift. Each
+    /// frame integrated from the clamped value, so wrist rotation that
+    /// happened while pinned at an edge was thrown away going out and
+    /// counted in full coming back: an out-and-back sweep that should
+    /// cancel exactly left the aim short by however far past the bezel
+    /// it went. Simulated against this same arithmetic: 20 degrees
+    /// past the edge came back at -0.36, 40 degrees came back pinned
+    /// to the OPPOSITE edge, while the unclamped control returned to
+    /// 0.00 every time. Reported by Marcus on Lethal Enforcers, where
+    /// it compounds because every reload is by definition a sweep past
+    /// the edge.
+    ///
+    /// Bounded rather than free: two screens of travel is more than
+    /// any reload needs and keeps a wild swing from stranding the aim
+    /// somewhere it takes a recentre to escape.
+    private var aimX = 0.0, aimY = 0.0
+    private let aimBound = 2.0
+    /// What the game is told, the aim clamped onto the picture.
+    private var cursorX: Double { min(1, max(-1, aimX)) }
+    private var cursorY: Double { min(1, max(-1, aimY)) }
+    /// How far past the picture the gun must point before it counts
+    /// as off the screen, so a hair of overshoot on an edge target
+    /// never reads as a reload and a deliberate sweep out does.
     private let offscreenThreshold = 0.35
     private(set) var isOffscreen = false
     /// Fired on the edge in and out, so the wire only carries changes.
@@ -139,7 +158,7 @@ final class GunAim {
 
     func start() {
         guard motion.isDeviceMotionAvailable, !motion.isDeviceMotionActive else { return }
-        cursorX = 0; cursorY = 0
+        aimX = 0; aimY = 0
         smoothedRateX = 0; smoothedRateY = 0
         history.removeAll()
         motion.deviceMotionUpdateInterval = 1.0 / 60.0
@@ -153,20 +172,22 @@ final class GunAim {
             smoothedRateY += alpha * (-m.rotationRate.x - smoothedRateY)
             let speed = (smoothedRateX * smoothedRateX + smoothedRateY * smoothedRateY).squareRoot()
             let gain = (9.0 / max(degreesToEdge, 3)) * (1 + min(speed, 6) * 0.45)
-            let rawX = cursorX + smoothedRateX * gain * dt
-            cursorX = min(1, max(-1, rawX))
+            let rawX = aimX + smoothedRateX * gain * dt
+            aimX = min(aimBound, max(-aimBound, rawX))
             // 1.7x: the screen is half as tall as it is wide, and equal
             // normalized gains made the same wrist arc cover far less
             // picture vertically.
-            let rawY = cursorY + smoothedRateY * gain * 1.7 * dt
-            cursorY = min(1, max(-1, rawY))
+            let rawY = aimY + smoothedRateY * gain * 1.7 * dt
+            aimY = min(aimBound, max(-aimBound, rawY))
             // The reload gesture: the cabinet's own, shoot past the
-            // screen. Pressure past the clamp accumulates; aim inside
-            // drains it fast, so the state never lingers after the gun
-            // swings back onto the picture.
-            let outward = max(abs(rawX), abs(rawY)) - 1
-            overshoot = outward > 0 ? overshoot + outward : max(0, overshoot - 0.15)
-            let off = overshoot > offscreenThreshold
+            // screen. Now that the aim keeps its place off the picture
+            // instead of pinning, this is simply where the gun points:
+            // a hair past an edge target is not a reload, a deliberate
+            // sweep out is. It used to accumulate pressure frame by
+            // frame because the clamp left nothing else to measure,
+            // and that accumulator would fire almost instantly against
+            // a real off-picture distance.
+            let off = max(abs(aimX), abs(aimY)) > 1 + offscreenThreshold
             if off != isOffscreen {
                 isOffscreen = off
                 offscreenChanged?(off)
@@ -185,9 +206,8 @@ final class GunAim {
     /// calibration, it is a declaration, and it is instant. The lab
     /// called recentring a first-class control; this is that control.
     func recenter() {
-        cursorX = 0; cursorY = 0
+        aimX = 0; aimY = 0
         smoothedRateX = 0; smoothedRateY = 0
-        overshoot = 0
         if isOffscreen { isOffscreen = false; offscreenChanged?(false) }
         history.removeAll()
         aim?(0, 0)
