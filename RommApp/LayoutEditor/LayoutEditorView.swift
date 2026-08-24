@@ -76,6 +76,9 @@ struct LayoutEditorView: View {
                         } else {
                             ScreenBackdrop(layout: layout.name)
                         }
+                        if !testing {
+                            EditorGrid(area: CGRect(origin: .zero, size: geo.size))
+                        }
                         pad(size: padSize, landscape: true)
                     }
                     .frame(width: geo.size.width, height: geo.size.height)
@@ -83,6 +86,14 @@ struct LayoutEditorView: View {
                     ZStack(alignment: .top) {
                         ScreenBackdrop(layout: layout.name)
                             .frame(height: max(geo.size.height - Self.stripHeight, 0))
+                        // Portrait layouts are normalised against the
+                        // strip, not the screen, so the grid measures
+                        // the strip or it measures nothing useful.
+                        if !testing {
+                            EditorGrid(area: CGRect(
+                                x: 0, y: geo.size.height - padPortraitHeight,
+                                width: geo.size.width, height: padPortraitHeight))
+                        }
                         pad(size: padSize, landscape: false)
                             .frame(height: padPortraitHeight)
                             .frame(maxHeight: .infinity, alignment: .bottom)
@@ -274,6 +285,11 @@ struct LayoutEditorView: View {
                 Button("Share file", systemImage: "square.and.arrow.up") { exportFile() }
                 Button("Copy JSON", systemImage: "doc.on.doc") { copyJSON() }
                 Button("Snap everything to the grid", systemImage: "grid") { tidy() }
+                if selection.count > 1 {
+                    Button("Even up the selection", systemImage: "align.horizontal.center") {
+                        evenUpSelection()
+                    }
+                }
                 if layout.landscapeItems == nil {
                     Button("Create landscape set from portrait", systemImage: "rectangle.landscape.rotate") {
                         seedLandscape()
@@ -590,6 +606,76 @@ struct LayoutEditorView: View {
         layout.companionItems = out
         commit()
         flash("Controller-only set seeded: same sizes, thumb placement")
+    }
+
+    /// Makes a selection symmetric about its own centre.
+    ///
+    /// Built for a real defect Marcus felt before anyone measured it:
+    /// every landscape face-button diamond in the library is off, the
+    /// left button sitting 0.005 closer to centre than the right and
+    /// the top and bottom pair nudged 0.0025 across. The same error in
+    /// PlayStation, SNES and DS, so one hand made it once and it was
+    /// copied. About four points on screen, which survives review and
+    /// still reads as wrong in the hand.
+    ///
+    /// Each item is mirrored onto the partner opposite it, and the two
+    /// are averaged, so the cluster keeps its size and its position and
+    /// only its evenness changes. An item with no partner across the
+    /// centre (an odd one out, a lone Z) is left exactly where it is
+    /// rather than dragged onto an axis it never belonged to.
+    private func evenUpSelection() {
+        let binding = itemsBinding(landscape: currentIsLandscape)
+        var items = binding.wrappedValue
+        let picked = items.indices.filter { selection.contains(items[$0].id) }
+        guard picked.count > 1 else { return }
+
+        func centre(_ i: Int) -> CGPoint {
+            CGPoint(x: items[i].frame.x + items[i].frame.w / 2,
+                    y: items[i].frame.y + items[i].frame.h / 2)
+        }
+        let cx = picked.map { centre($0).x }.reduce(0, +) / Double(picked.count)
+        let cy = picked.map { centre($0).y }.reduce(0, +) / Double(picked.count)
+
+        var moved = 0
+        for i in picked {
+            let c = centre(i)
+            // The partner is whichever selected item sits closest to
+            // this one's mirror image through the cluster centre.
+            let mirror = CGPoint(x: 2 * cx - c.x, y: 2 * cy - c.y)
+            let partner = picked
+                .filter { $0 != i }
+                .min { a, b in
+                    hypot(centre(a).x - mirror.x, centre(a).y - mirror.y)
+                        < hypot(centre(b).x - mirror.x, centre(b).y - mirror.y)
+                }
+            guard let partner,
+                  hypot(centre(partner).x - mirror.x, centre(partner).y - mirror.y) < 0.08
+            else { continue }
+            // Average this item with its partner's mirror, so neither
+            // one wins and the cluster does not drift.
+            let target = CGPoint(
+                x: (c.x + (2 * cx - centre(partner).x)) / 2,
+                y: (c.y + (2 * cy - centre(partner).y)) / 2)
+            let dx = target.x - c.x, dy = target.y - c.y
+            if abs(dx) > 0.0001 || abs(dy) > 0.0001 { moved += 1 }
+            items[i].frame = EditRect(
+                x: items[i].frame.x + dx, y: items[i].frame.y + dy,
+                w: items[i].frame.w, h: items[i].frame.h)
+            items[i].extended = EditRect(
+                x: items[i].extended.x + dx, y: items[i].extended.y + dy,
+                w: items[i].extended.w, h: items[i].extended.h)
+        }
+        binding.wrappedValue = items
+        commit()
+        flash(moved == 0 ? "Already even" : "Evened \(moved)")
+    }
+
+    /// Which set the toolbar actions apply to, matching what is drawn.
+    private var currentIsLandscape: Bool {
+        UIDevice.current.orientation.isLandscape
+            || (UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }.first?
+                .interfaceOrientation.isLandscape ?? false)
     }
 
     private func revert() {
