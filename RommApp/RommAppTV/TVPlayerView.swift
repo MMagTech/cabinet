@@ -493,6 +493,13 @@ struct TVPlayerView: View {
                 )
                 link.start()
                 phoneLink = link
+                // A phone holding a seat is that player's controller,
+                // so the game's rumble has to reach it over the wire.
+                // Nothing else in the room can deliver it: an Apple TV
+                // has no Taptic Engine of its own.
+                GameControllerManager.companionRumble = { [weak link] port, strong, strength in
+                    link?.sendRumble(port: port, strong: strong, strength: strength)
+                }
                 // The settings screen may still be alive underneath
                 // this cover with its own pairing listener up (a top
                 // shelf launch does exactly that); one advertisement
@@ -521,6 +528,7 @@ struct TVPlayerView: View {
             videoServer = nil
             phoneLink?.stop()
             phoneLink = nil
+            GameControllerManager.companionRumble = nil
             GameControllerManager.shared.releaseAllPhoneSlots()
             UIApplication.shared.isIdleTimerDisabled = false
             FrameTrace.shared.end()

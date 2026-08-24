@@ -128,7 +128,6 @@
 				Resources/ControlLayouts/ngpc.json,
 				Resources/ControlLayouts/pce.json,
 				Resources/ControlLayouts/pce6.json,
-				Resources/ControlLayouts/pcfx.json,
 				Resources/ControlLayouts/psp.json,
 				Resources/ControlLayouts/psx.json,
 				Resources/ControlLayouts/saturn.json,

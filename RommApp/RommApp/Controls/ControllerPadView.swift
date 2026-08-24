@@ -246,6 +246,9 @@ struct ControllerPadView: View {
     var isRoot = false
 
     @StateObject private var link = ControllerLinkSender()
+    /// The motor, for a game running on the television that just
+    /// knocked this player's controller.
+    @StateObject private var padRumble = PadRumble()
     /// The DS bottom screen's decoder, inert until the television
     /// offers a stream. Owned here so it survives panel re-renders and
     /// dies with the screen.
@@ -385,6 +388,13 @@ struct ControllerPadView: View {
         .navigationTitle(isRoot && !panelIsLive ? "Controller" : "")
         .navigationBarTitleDisplayMode(.large)
         .onAppear {
+            // The game's own rumble, felt on the phone that is playing
+            // it. Set here rather than at construction because the
+            // engine is lazy and this view is the thing a person is
+            // actually holding.
+            link.onRumble = { strong, strength in
+                padRumble.fire(strong: strong, strength: strength)
+            }
             link.start()
         }
         // The landscape lock belongs to the cabinet panel, not to the
@@ -1160,6 +1170,47 @@ private struct DSPanelTouchSurface: View {
 /// under a train of accelerating ticks, a cut to silence, then a
 /// double-hit landing, heavy strike and settle. Departure stays a
 /// short falling rumble with no impact.
+/// The companion panel's rumble motor.
+///
+/// A phone holding a seat is that player's controller, so when the
+/// game on the television knocks the motor this is what answers. One
+/// engine kept alive rather than built per knock, the same reasoning
+/// GameControllerManager's own controller engines use: a sustained
+/// effect can fire many times a second and CHHapticEngine creation is
+/// not free, while starting an already-running engine is.
+///
+/// Strength maps to intensity and the strong/weak motor to sharpness,
+/// matching what GameControllerManager does for a real pad, so the
+/// same game event feels like the same thing whichever controller a
+/// person is holding.
+@MainActor
+final class PadRumble: ObservableObject {
+    private var engine: CHHapticEngine?
+
+    private func runningEngine() -> CHHapticEngine? {
+        guard CHHapticEngine.capabilitiesForHardware().supportsHaptics else { return nil }
+        if let engine { return engine }
+        guard let fresh = try? CHHapticEngine() else { return nil }
+        fresh.isAutoShutdownEnabled = true
+        engine = fresh
+        return fresh
+    }
+
+    func fire(strong: Bool, strength: UInt16) {
+        let intensity = Float(strength) / Float(UInt16.max)
+        guard intensity > 0, let engine = runningEngine() else { return }
+        let event = CHHapticEvent(eventType: .hapticTransient, parameters: [
+            CHHapticEventParameter(parameterID: .hapticIntensity, value: intensity),
+            CHHapticEventParameter(parameterID: .hapticSharpness, value: strong ? 1.0 : 0.3),
+        ], relativeTime: 0)
+        guard let pattern = try? CHHapticPattern(events: [event], parameters: []),
+              let player = try? engine.makePlayer(with: pattern),
+              (try? engine.start()) != nil
+        else { return }
+        try? player.start(atTime: CHHapticTimeImmediate)
+    }
+}
+
 private final class DSWarpHaptics {
     /// How long the spool runs before the landing may fire. The
     /// reveal is held to this, so the thump and the picture are

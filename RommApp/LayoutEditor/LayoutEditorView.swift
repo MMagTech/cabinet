@@ -291,6 +291,29 @@ struct LayoutEditorView: View {
                         seedLandscape()
                     }
                 }
+                // Re-seeding was only ever reachable through the empty
+                // state, so once a controller-only set existed there was
+                // NO path back to the landscape layout at all. Change
+                // something in landscape, switch to controller-only, and
+                // the change simply was not there, with nothing in the
+                // interface to say why or what to do about it. Reported
+                // by Marcus 2026-08-24: "if in normal editor I edit
+                // something and then jump to the companion it doesn't go
+                // over."
+                //
+                // The two sets staying independent is deliberate and
+                // stays that way, since the whole point is moving a
+                // button on one without disturbing the other. What was
+                // missing is the deliberate act of pulling the landscape
+                // work across when that IS what you want. Destructive
+                // because it replaces the controller-only set outright,
+                // and marked as such so it reads that way in the menu.
+                if editingCompanion, layout.companionItems != nil {
+                    Button("Re-seed controller-only from landscape",
+                           systemImage: "arrow.triangle.2.circlepath", role: .destructive) {
+                        seedCompanion()
+                    }
+                }
                 Divider()
                 Button("Revert to bundled", systemImage: "arrow.uturn.backward", role: .destructive) {
                     revert()
@@ -567,41 +590,161 @@ struct LayoutEditorView: View {
         let right = rest.filter { $0.frame.x + $0.frame.w / 2 >= 0.5 }
         var out: [EditableItem] = []
 
-        // Service pills move sideways ONLY, keeping the vertical
-        // arrangement they were authored with. The first version laid
-        // them in one row, first half left and the rest right, which
-        // split PlayStation's shoulders wrongly: L1 and L2 are stacked
-        // above each other and so are R1 and R2, and R1/R2 sit on the
-        // RIGHT. Marcus found all four bunched into the top left.
-        // Sides and stacking both carry meaning, so both are kept.
-        let leftPills = pills.filter { $0.frame.x + $0.frame.w / 2 < 0.5 }
-        let rightPills = pills.filter { $0.frame.x + $0.frame.w / 2 >= 0.5 }
-        for (group, edge) in [(leftPills, 0.04), (rightPills, -0.04)] {
-            guard !group.isEmpty else { continue }
-            let minX = group.map(\.frame.x).min()!
-            let maxX = group.map { $0.frame.x + $0.frame.w }.max()!
-            let shift = edge > 0 ? edge - minX : (0.96 - maxX)
-            for pill in group {
-                var copy = pill
-                let r = EditRect(
-                    x: pill.frame.x + shift, y: pill.frame.y,
-                    w: pill.frame.w, h: pill.frame.h)
-                copy.frame = r
-                copy.extended = EditRect(
-                    x: r.x - 0.015, y: r.y - 0.015, w: r.w + 0.03, h: r.h + 0.03)
-                out.append(copy)
+        // Service pills lay out as ONE row across the top edge: the
+        // left group packed from the left corner, the right group from
+        // the right corner, and Menu centred between them.
+        //
+        // This is the companion panel, not the television's overlay.
+        // There is no picture to keep clear of and the top edge is one
+        // long uninterrupted strip, so the stacking the television
+        // layout uses to stay out of the screen's way buys nothing
+        // here and only pushes pills down into the thumbs. Marcus,
+        // reviewing SNES: "l on the left with select next to it and r
+        // on the right with start next to it with menu in the top
+        // middle."
+        //
+        // Within a side the television's own reading order is kept,
+        // top row first, so the pill that sits outermost is the one
+        // that sat highest: L then Select going inward on the left, R
+        // then Start going inward on the right. That is the second
+        // half of the same instruction, and it is what stops this
+        // being an arbitrary shuffle.
+        //
+        // Menu is not a game input, it is the panel's own control, so
+        // it is pulled out before the sides are divided (it cannot
+        // skew which group a real pill joins) and centred every time,
+        // rather than landing wherever the television happened to park
+        // it. It is then the one control in the same place on every
+        // machine.
+        let pillGap = 0.012
+        let menuPills = pills.filter { $0.label == "Menu" }
+        let sidePills = pills.filter { $0.label != "Menu" }
+        let topY = pills.map(\.frame.y).min() ?? 0.04
+
+        func place(_ item: EditableItem, x: Double) -> EditableItem {
+            var copy = item
+            let r = EditRect(x: x, y: topY, w: item.frame.w, h: item.frame.h)
+            copy.frame = r
+            copy.extended = EditRect(
+                x: r.x - 0.015, y: r.y - 0.015, w: r.w + 0.03, h: r.h + 0.03)
+            return copy
+        }
+
+        // Reading order on the television: highest row first, then
+        // left to right within a row.
+        // Outermost first on BOTH sides: highest row first, then
+        // nearest that side's own edge. Sorting the right-hand group by
+        // ascending x sends the innermost button to the corner, which
+        // is how Start ended up outside R.
+        var leftPills = sidePills.filter { $0.frame.x + $0.frame.w / 2 < 0.5 }
+        var rightPills = sidePills.filter { $0.frame.x + $0.frame.w / 2 >= 0.5 }
+        leftPills.sort { $0.frame.y == $1.frame.y ? $0.frame.x < $1.frame.x : $0.frame.y < $1.frame.y }
+        rightPills.sort { $0.frame.y == $1.frame.y ? $0.frame.x > $1.frame.x : $0.frame.y < $1.frame.y }
+
+        // Menu takes the LEFT CORNER, unless a shoulder already owns
+        // it. It is the one control that is not part of the game, so it
+        // belongs in the same place on every machine; L and R simply
+        // have a stronger claim to a corner than it does, and only
+        // there does it take the centre instead. Two earlier versions
+        // of this, "always centred" and "always left", each produced
+        // something Marcus had to correct, because neither is the rule.
+        // The corner is.
+        let shoulders: Set<String> = ["L", "R", "L1", "L2", "R1", "R2"]
+        let hasShoulders = !shoulders.isDisjoint(with: Set(pills.compactMap(\.label)))
+        if !hasShoulders, let menu = menuPills.first, !sidePills.isEmpty {
+            out.append(place(menu, x: 0.03))
+            // The rest keep their order and pack to the right corner,
+            // so the last of them lands in it.
+            var x = 0.97
+            for pill in sidePills.sorted(by: { $0.frame.x > $1.frame.x }) {
+                x -= pill.frame.w
+                out.append(place(pill, x: x))
+                x -= pillGap
+            }
+        } else {
+            for menu in menuPills {
+                out.append(place(menu, x: 0.5 - menu.frame.w / 2))
+            }
+            var cursor = 0.04
+            for pill in leftPills {
+                out.append(place(pill, x: cursor))
+                cursor += pill.frame.w + pillGap
+            }
+            cursor = 0.96
+            for pill in rightPills {
+                cursor -= pill.frame.w
+                out.append(place(pill, x: cursor))
+                cursor -= pillGap
             }
         }
 
         // Movement: same size, off the left bezel, sitting in the
         // lower band rather than pinned to an edge.
         out += moved(left, scale: 1.0, leftEdge: 0.07, rightEdge: nil, centreY: 0.60)
-        // Actions: one modest step up, mirrored on the right.
-        out += moved(right, scale: 1.15, leftEdge: nil, rightEdge: 0.93, centreY: 0.60)
+        // Actions: one modest step up, mirrored on the right, then the
+        // cluster pulled back in to the spacing the PORTRAIT layout
+        // uses.
+        //
+        // Growing the group by 1.15 grows the gaps by 1.15 too, and the
+        // television's landscape layout is already the loosest of the
+        // three because it has a picture to sit under. Seeding from it
+        // and then scaling up compounds both, which is how NES ended up
+        // with A and B a thumb-roll apart. Marcus: "buttons are to far
+        // apart should be closer like on portrait."
+        //
+        // Measured in units of the buttons' OWN size rather than in
+        // layout units, because x and y normalise against different
+        // lengths and a gap that reads as equal in the numbers is not
+        // equal on glass. Only ever tightens: a cluster already at or
+        // inside portrait's spacing is left alone, since the complaint
+        // is always about reaching too far, never too little.
+        var actions = moved(right, scale: 1.15, leftEdge: nil, rightEdge: 0.93, centreY: 0.60)
+        actions = tightenedToPortrait(actions)
+        out += actions
 
         layout.companionItems = out
         commit()
         flash("Controller-only set seeded: same sizes, thumb placement")
+    }
+
+    /// Pulls a seeded action cluster in until it is spaced like the
+    /// portrait layout's, which is the one authored for a thumb rather
+    /// than for sitting under a picture. See the call site.
+    private func tightenedToPortrait(_ group: [EditableItem]) -> [EditableItem] {
+        let buttons = group.filter { $0.kind == .button }
+        let reference = layout.items.filter { $0.kind == .button }
+        guard buttons.count > 1, reference.count > 1 else { return group }
+
+        func spread(_ items: [EditableItem]) -> (Double, Double) {
+            let w = items.map(\.frame.w).reduce(0, +) / Double(items.count)
+            let h = items.map(\.frame.h).reduce(0, +) / Double(items.count)
+            let cx = items.map { $0.frame.x + $0.frame.w / 2 }
+            let cy = items.map { $0.frame.y + $0.frame.h / 2 }
+            let dx = (cx.max()! - cx.min()!) / max(w, 0.0001)
+            let dy = (cy.max()! - cy.min()!) / max(h, 0.0001)
+            return (dx, dy)
+        }
+        let want = spread(reference), have = spread(buttons)
+        let fx = (have.0 > 0.01 && want.0 > 0.01 && have.0 / want.0 > 1.15) ? want.0 / have.0 : 1.0
+        let fy = (have.1 > 0.01 && want.1 > 0.01 && have.1 / want.1 > 1.15) ? want.1 / have.1 : 1.0
+        guard fx < 1.0 || fy < 1.0 else { return group }
+
+        let ccx = buttons.map { $0.frame.x + $0.frame.w / 2 }.reduce(0, +) / Double(buttons.count)
+        let ccy = buttons.map { $0.frame.y + $0.frame.h / 2 }.reduce(0, +) / Double(buttons.count)
+        return group.map { item in
+            guard item.kind == .button else { return item }
+            var copy = item
+            let padX = item.extended.x - item.frame.x, padY = item.extended.y - item.frame.y
+            let cx = ccx + (item.frame.x + item.frame.w / 2 - ccx) * fx
+            let cy = ccy + (item.frame.y + item.frame.h / 2 - ccy) * fy
+            copy.frame = EditRect(
+                x: cx - item.frame.w / 2, y: cy - item.frame.h / 2,
+                w: item.frame.w, h: item.frame.h)
+            copy.extended = EditRect(
+                x: copy.frame.x + padX, y: copy.frame.y + padY,
+                w: item.extended.w, h: item.extended.h)
+            return copy
+        }
     }
 
     /// Makes a selection symmetric about its own centre.

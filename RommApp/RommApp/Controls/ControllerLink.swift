@@ -83,6 +83,18 @@ enum ControllerLink {
             /// key, so a seat cannot be forged any more than input
             /// can. Phones that predate this kind drop it unread.
             case seat = 18
+            /// Television to phone: the game just knocked the motor.
+            /// A phone holding a seat IS that player's controller, and
+            /// on an Apple TV it is the only thing in the room with a
+            /// Taptic Engine, so without this the person holding it
+            /// feels nothing a game ever does. Payload is an 8-byte
+            /// tag over the body (session key, context "t2p-rumble"),
+            /// then one flag byte for the strong motor and two
+            /// big-endian bytes of strength. Tagged like every other
+            /// television-to-phone kind, so nobody on the network can
+            /// buzz a stranger's phone. Phones that predate this kind
+            /// drop it unread, which is the packet format's own rule.
+            case rumble = 19
 
             /// True for the kinds a person generates by playing, which
             /// is what earns a seat. Deliberately excludes the
@@ -489,6 +501,22 @@ final class ControllerLinkReceiver {
         let body = Data([UInt8(clamping: port)])
         let tag = ControllerPairing.tag(key: key, context: "t2p-seat", bytes: body)
         reply(.seat, payload: tag + body, on: connection)
+    }
+
+    /// Knock the motor on whichever phone holds this seat, if one
+    /// does. Silent when the seat belongs to a real controller or to
+    /// nobody, which is every case but the companion one, so this
+    /// costs a dictionary walk and nothing else.
+    func sendRumble(port: Int, strong: Bool, strength: UInt16) {
+        queue.async {
+            guard let peer = self.peers.values.first(where: { $0.port == port }),
+                  let key = peer.sessionKey, let connection = peer.connection
+            else { return }
+            var body = Data([strong ? 1 : 0])
+            body.append(UInt8(strength >> 8)); body.append(UInt8(strength & 0xff))
+            let tag = ControllerPairing.tag(key: key, context: "t2p-rumble", bytes: body)
+            self.reply(.rumble, payload: tag + body, on: connection)
+        }
     }
 
     private func sendVideoOffer(port: UInt16, token: Data, to peer: Peer) {
@@ -966,6 +994,12 @@ final class ControllerLinkSender: ObservableObject {
         let token: Data
     }
 
+    /// Fired on the main thread when the game knocks this player's
+    /// motor. A closure rather than a published property because a
+    /// rumble is an event, not a state: two identical knocks in a row
+    /// are two knocks, and a property would swallow the second.
+    var onRumble: ((_ strong: Bool, _ strength: UInt16) -> Void)?
+
     /// The television's address, for dialing the stream: the video
     /// connection goes to the same host the datagrams already reach.
     var remoteHost: NWEndpoint.Host? {
@@ -1314,6 +1348,22 @@ final class ControllerLinkSender: ObservableObject {
             else { return }
             let seat = Int(body[body.startIndex])
             playerIndex = seat == ControllerLink.unseatedPort ? nil : seat
+
+        case .rumble:
+            // The game knocked this player's motor. Believed only under
+            // the session key's proof, like every other packet the
+            // television sends, so nothing on the network can buzz a
+            // phone that is not playing with it.
+            guard let key = sessionKey,
+                  payload.count >= ControllerPairing.tagLength + 3 else { return }
+            let tag = Data(payload.prefix(ControllerPairing.tagLength))
+            let body = Data(payload.dropFirst(ControllerPairing.tagLength))
+            guard ControllerPairing.validTag(tag, key: key, context: "t2p-rumble", bytes: body)
+            else { return }
+            let bytes = [UInt8](body)
+            let strong = bytes[0] != 0
+            let strength = UInt16(bytes[1]) << 8 | UInt16(bytes[2])
+            DispatchQueue.main.async { self.onRumble?(strong, strength) }
 
         case .videoOffer:
             // Believed only under the session key's own proof, the same

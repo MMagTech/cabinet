@@ -656,6 +656,18 @@ final class GameControllerManager: ObservableObject {
               let haptics = controller.haptics,
               let engine = hapticEngine(from: haptics, slot: slot)
         else {
+            // A companion phone holding this seat IS this player's
+            // controller, so its own Taptic Engine is the motor to
+            // knock. Checked here, in the branch that already means
+            // "no real controller on this port", so a pad with
+            // haptics never reaches it and nothing about the existing
+            // path changes. It matters most on tvOS, where the
+            // fallback below is compiled out entirely and a phone
+            // player therefore felt nothing at all.
+            if phoneClaims.values.contains(port) {
+                GameControllerManager.companionRumble?(port, strong, strength)
+                return
+            }
             // The phone is player 1's device, so only player 1's rumble
             // falls back to it. Buzzing the handset for player 2's pad
             // would be felt by the wrong person entirely.
@@ -687,6 +699,13 @@ final class GameControllerManager: ObservableObject {
     /// that the handler was nil, and the fallback for a nil handler is a
     /// phone haptic an Apple TV does not have. Nothing on tvOS ever rumbled,
     /// and nothing said so.
+    /// Where a companion phone's rumble goes, set by whichever screen
+    /// currently owns the phone link and cleared when it lets go.
+    /// Shaped like LibretroFrontend's own rumble handler and for the
+    /// same reason: this file knows a phone holds a seat, but not
+    /// which link is carrying it.
+    nonisolated(unsafe) static var companionRumble: ((Int, Bool, UInt16) -> Void)?
+
     static func installRumbleRouting() {
         UserDefaults.standard.register(defaults: ["com.mmagtech.RommApp.rumbleEnabled": true])
         LibretroFrontend.setRumbleHandler { port, strong, strength in
