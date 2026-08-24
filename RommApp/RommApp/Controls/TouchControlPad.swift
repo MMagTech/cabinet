@@ -45,6 +45,14 @@ struct TouchControlPad: UIViewRepresentable {
     /// this on its pad directly; this wrapper carries it for hosts that
     /// use the SwiftUI view, so both players draw the same controls.
     var system: String = ""
+    /// Draw controls as moulded objects rather than flat shapes: a
+    /// shadow beneath, light falling from above, a specular edge.
+    /// Off by default, so every existing caller, and the local player
+    /// in particular, draws byte-identically to before. Only the
+    /// phone-as-controller panel turns it on, where the controls ARE
+    /// the screen and there is no game for them to sit politely
+    /// beside.
+    var material: Bool = false
     /// The visibility slider's value, applied as UIKit alpha on the view
     /// itself, exactly as the webview player's overlay does (`pad.alpha`).
     /// Never apply SwiftUI `.opacity()` to this view instead: on iOS 26 a
@@ -68,6 +76,7 @@ struct TouchControlPad: UIViewRepresentable {
     func updateUIView(_ view: ControlPadView, context: Context) {
         view.items = items
         view.pictureAspect = pictureAspect
+        view.material = material
         view.system = system
         view.theme = ControlTheme.current
         view.alpha = opacity
@@ -80,6 +89,7 @@ final class ControlPadView: UIView {
     }
     /// The layout's system, which decides what colours the controls take:
     /// a Neo Geo panel and a Game Boy do not look alike.
+    var material: Bool = false { didSet { setNeedsDisplay() } }
     var system: String = "" {
         didSet { if system != oldValue { setNeedsDisplay() } }
     }
@@ -854,11 +864,21 @@ final class ControlPadView: UIView {
         let colors = style(active: active)
 
         let base = UIBezierPath(arcCenter: center, radius: radius, startAngle: 0, endAngle: .pi * 2, clockwise: true)
-        colors.fill.setFill()
-        base.fill()
-        colors.stroke.setStroke()
-        base.lineWidth = 1.5
-        base.stroke()
+        if material {
+            // A stick sits IN its housing, so the base is the one part
+            // of a panel that goes the other way: sunk rather than
+            // raised, lit from below because the far wall of a dish is
+            // what catches the light. The knob on top is moulded like
+            // everything else, which is what makes the pair read as an
+            // object standing in a well.
+            fillSunken(base, fill: colors.fill)
+        } else {
+            colors.fill.setFill()
+            base.fill()
+            colors.stroke.setStroke()
+            base.lineWidth = 1.5
+            base.stroke()
+        }
 
         let knobRadius = radius * 0.42
         let knobCenter = CGPoint(
@@ -866,8 +886,13 @@ final class ControlPadView: UIView {
             y: center.y + stickPosition.y * (radius - knobRadius)
         )
         let knob = UIBezierPath(arcCenter: knobCenter, radius: knobRadius, startAngle: 0, endAngle: .pi * 2, clockwise: true)
-        UIColor.white.withAlphaComponent(active ? 0.85 : 0.55).setFill()
-        knob.fill()
+        let knobFill = UIColor.white.withAlphaComponent(active ? 0.85 : 0.55)
+        if material {
+            fillMoulded(knob, fill: knobFill, active: active)
+        } else {
+            knobFill.setFill()
+            knob.fill()
+        }
     }
 
     /// Labels sit on colour rather than on the game, so they need to be
@@ -921,11 +946,21 @@ final class ControlPadView: UIView {
 
         let anyActive = inputs.contains(where: pressed.contains)
         let colors = style(active: anyActive, tint: tint)
-        colors.fill.setFill()
-        cross.fill()
-        colors.stroke.setStroke()
-        cross.lineWidth = 1.5
-        cross.stroke()
+        if material {
+            // usesEvenOddFillRule matters here: the cross is two
+            // overlapping rounded rects, and the moulded fill draws
+            // the path once rather than twice.
+            cross.usesEvenOddFillRule = false
+            fillMoulded(cross, fill: colors.fill, active: anyActive)
+        } else {
+            colors.fill.setFill()
+            cross.fill()
+        }
+        if !material {
+            colors.stroke.setStroke()
+            cross.lineWidth = 1.5
+            cross.stroke()
+        }
 
         // A cluster distinct enough from the real d-pad to name (N64's C
         // buttons, tinted yellow) gets its label centred over the cross,
@@ -955,6 +990,156 @@ final class ControlPadView: UIView {
         }
     }
 
+    /// Fills a control so it stands off the panel: a side wall you can
+    /// actually see, a tight contact shadow at its base, a lit face,
+    /// and a soft edge along the top.
+    ///
+    /// The first attempt lit the face and cast a soft shadow and
+    /// Marcus's verdict was that the controls still had no height. He
+    /// was right, and the reason is that a dark canvas cannot receive
+    /// a dark shadow: black on near-black is invisible, so the whole
+    /// depth cue was doing nothing. Height on a dark ground has to be
+    /// DRAWN rather than shaded, which is what the side wall below is,
+    /// a darker copy of the shape offset downward, so the control
+    /// reads as an object with a thickness rather than a disc lying
+    /// flat. Pressing collapses that wall, which is a real key going
+    /// down rather than a colour changing.
+    private func fillMoulded(_ path: UIBezierPath, fill: UIColor, active: Bool) {
+        guard let ctx = UIGraphicsGetCurrentContext() else {
+            fill.setFill(); path.fill(); return
+        }
+        // Depth in points. Overshot to 8 while proving the effect was
+        // working at all, which it now visibly is, so pulled back to
+        // where a control reads as raised rather than as stacked. The
+        // press depth stays near zero: the collapse is what sells it.
+        let depth: CGFloat = active ? 1 : 4
+
+        // The side wall: the shape again, below, in the fill's own
+        // colour taken well down. Its own colour rather than black, so
+        // a green button has a green edge and still reads as one piece.
+        //
+        // SOLID, and that is the whole trick. The fills these controls
+        // use are translucent by design (14% white for an untinted
+        // one, so a game shows through underneath), and the first
+        // version inherited that alpha for the wall: 14% of a dark
+        // colour on a dark panel is nothing at all, which is exactly
+        // why Marcus saw no height. A panel has no game behind it, so
+        // its walls can be opaque, and an opaque edge is the only part
+        // of this that a dark ground can actually show.
+        var hue: CGFloat = 0, sat: CGFloat = 0, bri: CGFloat = 0, alpha: CGFloat = 0
+        let wall: UIColor = fill.getHue(&hue, saturation: &sat, brightness: &bri, alpha: &alpha)
+            ? UIColor(hue: hue, saturation: min(sat * 1.2, 1),
+                      brightness: max(bri * 0.42, 0.10), alpha: 1)
+            : UIColor(white: 0.14, alpha: 1)
+        ctx.saveGState()
+        let side = path.copy() as! UIBezierPath
+        side.apply(CGAffineTransform(translationX: 0, y: depth))
+        // A tight contact shadow under the wall. Tight on purpose: a
+        // wide soft one dissolves into a dark panel and says nothing.
+        ctx.setShadow(
+            offset: CGSize(width: 0, height: active ? 1 : 2),
+            blur: active ? 2 : 4,
+            color: UIColor.black.withAlphaComponent(0.7).cgColor)
+        wall.setFill()
+        side.fill()
+        ctx.restoreGState()
+
+        // A hairline of the wall's colour just inside the face, so the
+        // join between the two is a turned edge rather than a step.
+        // The face, sitting on top of its own wall, and opaque for the
+        // same reason: a translucent face lets its own wall show
+        // through and the object flattens back out. The alpha these
+        // fills carry is for sitting over a game, which a panel does
+        // not have.
+        var fr: CGFloat = 0, fg: CGFloat = 0, fb: CGFloat = 0, fa: CGFloat = 0
+        let solidFace: UIColor = fill.getRed(&fr, green: &fg, blue: &fb, alpha: &fa)
+            ? UIColor(red: fr, green: fg, blue: fb, alpha: 1)
+            : fill
+        // Untinted controls fill at 14% white, which is nearly the
+        // panel itself once opaque; lift those so a grey control has
+        // any presence at all.
+        let face = fa < 0.5
+            ? UIColor(white: 0.30 + Double(fa) * 0.4, alpha: 1)
+            : solidFace
+        face.setFill()
+        path.fill()
+        ctx.saveGState()
+        ctx.addPath(path.cgPath)
+        ctx.clip()
+        wall.withAlphaComponent(0.55).setStroke()
+        path.lineWidth = 2.2
+        path.stroke()
+        ctx.restoreGState()
+
+        // Light from above, fixed. A light that moved with the phone
+        // was tried and looked wrong to Marcus; a real handheld thing
+        // is lit by the room, and the room does not swing.
+        ctx.saveGState()
+        ctx.addPath(path.cgPath)
+        ctx.clip()
+        let top = UIColor.white.withAlphaComponent(active ? 0.02 : 0.16).cgColor
+        let mid = UIColor.white.withAlphaComponent(active ? 0.0 : 0.04).cgColor
+        let bottom = UIColor.black.withAlphaComponent(active ? 0.34 : 0.24).cgColor
+        let stops: [CGColor] = active
+            ? [bottom, UIColor.clear.cgColor, mid, top]
+            : [top, mid, UIColor.clear.cgColor, bottom]
+        if let gradient = CGGradient(
+            colorsSpace: CGColorSpaceCreateDeviceRGB(),
+            colors: stops as CFArray, locations: [0, 0.35, 0.62, 1]) {
+            let b = path.bounds
+            ctx.drawLinearGradient(
+                gradient,
+                start: CGPoint(x: b.midX, y: b.minY),
+                end: CGPoint(x: b.midX, y: b.maxY),
+                options: [])
+        }
+        ctx.restoreGState()
+
+        // A soft rim along the top edge, feathered over three passes:
+        // one crisp stroke read as a hard band painted across the face.
+        if !active {
+            ctx.saveGState()
+            ctx.addPath(path.cgPath)
+            ctx.clip()
+            let edge = path.copy() as! UIBezierPath
+            edge.apply(CGAffineTransform(translationX: 0, y: 1.2))
+            for (width, a) in [(3.4, 0.04), (2.2, 0.07), (1.2, 0.11)] {
+                UIColor.white.withAlphaComponent(a).setStroke()
+                edge.lineWidth = width
+                edge.stroke()
+            }
+            ctx.restoreGState()
+        }
+    }
+
+    /// The inverse of `fillMoulded`, for the parts of a panel that are
+    /// holes rather than objects: a stick's housing, a trackball's
+    /// well. Darker than the panel, its shadow cast inward from the
+    /// near rim, lit along the far one.
+    private func fillSunken(_ path: UIBezierPath, fill: UIColor) {
+        guard let ctx = UIGraphicsGetCurrentContext() else {
+            fill.setFill(); path.fill(); return
+        }
+        UIColor(white: 0.055, alpha: 1).setFill()
+        path.fill()
+        ctx.saveGState()
+        ctx.addPath(path.cgPath)
+        ctx.clip()
+        let b = path.bounds
+        if let gradient = CGGradient(
+            colorsSpace: CGColorSpaceCreateDeviceRGB(),
+            colors: [UIColor.black.withAlphaComponent(0.75).cgColor,
+                     UIColor.clear.cgColor,
+                     UIColor.white.withAlphaComponent(0.10).cgColor] as CFArray,
+            locations: [0, 0.45, 1]) {
+            ctx.drawLinearGradient(
+                gradient,
+                start: CGPoint(x: b.midX, y: b.minY),
+                end: CGPoint(x: b.midX, y: b.maxY), options: [])
+        }
+        ctx.restoreGState()
+    }
+
     private func drawRoundButton(in frame: CGRect, label: String?, tint: UIColor?, active: Bool) {
         let diameter = min(frame.width, frame.height)
         let circleRect = CGRect(
@@ -965,11 +1150,24 @@ final class ControlPadView: UIView {
         )
         let circle = UIBezierPath(ovalIn: circleRect)
         let colors = style(active: active, tint: tint)
-        colors.fill.setFill()
-        circle.fill()
-        colors.stroke.setStroke()
-        circle.lineWidth = 1.5
-        circle.stroke()
+        if material {
+            fillMoulded(circle, fill: colors.fill, active: active)
+        } else {
+            colors.fill.setFill()
+            circle.fill()
+        }
+        // No outline on a moulded control. A hard bright line around
+        // an opaque object is what makes it read as cut out and stuck
+        // on rather than formed, which is what Marcus saw once the
+        // height started working. The wall, the shading and the rim
+        // already say where the edge is. The stroke stays for the
+        // translucent controls, where it is the only thing separating
+        // them from the game behind.
+        if !material {
+            colors.stroke.setStroke()
+            circle.lineWidth = 1.5
+            circle.stroke()
+        }
 
         drawLabel(label, in: circleRect, fontSize: diameter * 0.34, color: labelColor(tint: tint))
     }
@@ -977,11 +1175,17 @@ final class ControlPadView: UIView {
     private func drawPill(in frame: CGRect, label: String?, tint: UIColor?, active: Bool) {
         let pill = UIBezierPath(roundedRect: frame, cornerRadius: frame.height / 2)
         let colors = style(active: active, tint: tint)
-        colors.fill.setFill()
-        pill.fill()
-        colors.stroke.setStroke()
-        pill.lineWidth = 1.5
-        pill.stroke()
+        if material {
+            fillMoulded(pill, fill: colors.fill, active: active)
+        } else {
+            colors.fill.setFill()
+            pill.fill()
+        }
+        if !material {
+            colors.stroke.setStroke()
+            pill.lineWidth = 1.5
+            pill.stroke()
+        }
 
         drawLabel(label, in: frame, fontSize: frame.height * 0.42, color: labelColor(tint: tint))
     }

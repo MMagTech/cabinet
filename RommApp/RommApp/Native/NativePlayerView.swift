@@ -237,7 +237,18 @@ struct NativePlayerView: View {
                             }
                             .frame(height: max(geometry.size.height - controlStripHeight, 0))
                         }
-                        TouchControlPad(items: layoutItems(landscape: false), send: handleInput, sendStick: handleStick, sendRelative: handleRelative, sendPointer: handlePointer, sendOffscreen: handleOffscreen, pictureAspect: renderer.displayAspect, system: controlLayout.system, opacity: controlOpacity)
+                        // Moulded in portrait, where the controls sit on
+                        // their own strip below the picture rather than
+                        // over it, so an opaque control hides nothing.
+                        // The visibility slider still works: it is the
+                        // pad view's own alpha, so a moulded control
+                        // fades as a whole and keeps its depth on the
+                        // way down. Landscape deliberately stays flat,
+                        // Marcus's call: there the controls flank a
+                        // centred picture, and a wide game or a rotated
+                        // arcade board shrinks those gutters until they
+                        // really are sitting on it.
+                        TouchControlPad(items: layoutItems(landscape: false), send: handleInput, sendStick: handleStick, sendRelative: handleRelative, sendPointer: handlePointer, sendOffscreen: handleOffscreen, pictureAspect: renderer.displayAspect, system: controlLayout.system, material: true, opacity: controlOpacity)
                             .frame(height: padHeight)
                             .frame(maxHeight: .infinity, alignment: .bottom)
                     }

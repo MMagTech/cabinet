@@ -40,6 +40,10 @@ struct LayoutEditorView: View {
     /// they mean rather than by their JSON keys: one shares the screen
     /// with a game, the other does not.
     @State private var editingCompanion = false
+    /// Which candidate ground is being previewed behind a
+    /// controller-only pad. Preview only: whichever survives real
+    /// hands moves into the app and the rest are deleted.
+    @State private var ground: PanelGroundStyle = .pools
 
     private var padPortraitHeight: CGFloat {
         Self.stripHeight * (1 + (layout.headroom ?? 0))
@@ -66,8 +70,10 @@ struct LayoutEditorView: View {
                         // A controller-only pad has no game behind it,
                         // and drawing one would invite exactly the
                         // gutter-hugging arrangement this mode exists
-                        // to get away from.
-                        if !editingCompanion {
+                        // to get away from. It gets a ground instead.
+                        if editingCompanion {
+                            PanelGround(system: layout.system, style: ground)
+                        } else {
                             ScreenBackdrop(layout: layout.name)
                         }
                         pad(size: padSize, landscape: true)
@@ -96,7 +102,9 @@ struct LayoutEditorView: View {
         .background(Color.black.ignoresSafeArea())
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
-        .onAppear { ready = WorkingCopy.isReady(layout.name) }
+        .onAppear {
+            ready = WorkingCopy.isReady(layout.name)
+        }
         .sheet(item: $share) { item in
             ActivityView(url: item.url)
         }
@@ -110,7 +118,14 @@ struct LayoutEditorView: View {
             TouchControlPad(
                 items: binding.wrappedValue.map(\.rendered),
                 send: { _, _ in },
-                system: layout.system
+                system: layout.system,
+                // Moulded wherever the app moulds: the controller-only
+                // panel, and portrait, whose controls sit on a black
+                // strip below the picture rather than over it. Flat in
+                // landscape-with-picture, matching the app exactly, so
+                // the editor never flatters a layout the player will
+                // draw differently.
+                material: editingCompanion || !landscape
             )
             // In test mode the real pad takes the touches, so presses light up
             // and haptics fire exactly as they would in a game. In edit mode
@@ -198,6 +213,20 @@ struct LayoutEditorView: View {
                 Text(landscape ? (editingCompanion ? "controller only" : "landscape") : "portrait")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
+            }
+
+            // Preview grounds, companion only: the arrangement that
+            // has no picture is the only one with a ground to judge.
+            if landscape && editingCompanion {
+                Menu {
+                    Picker("", selection: $ground) {
+                        ForEach(PanelGroundStyle.allCases) { style in
+                            Text(style.label).tag(style)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "paintpalette")
+                }
             }
 
             // Only landscape has two arrangements to choose between.
@@ -526,20 +555,30 @@ struct LayoutEditorView: View {
         let right = rest.filter { $0.frame.x + $0.frame.w / 2 >= 0.5 }
         var out: [EditableItem] = []
 
-        // Service pills stay small and out of the way along the top,
-        // first half from the left, the rest from the right, middle
-        // clear. They are pressed a few times a session.
-        let pillW = 0.10, pillH = 0.09, pillY = 0.04
-        let leftCount = (pills.count + 1) / 2
-        for (i, pill) in pills.enumerated() {
-            let x = i < leftCount
-                ? 0.04 + Double(i) * (pillW + 0.02)
-                : 0.96 - pillW - Double(pills.count - 1 - i) * (pillW + 0.02)
-            var copy = pill
-            let r = EditRect(x: x, y: pillY, w: pillW, h: pillH)
-            copy.frame = r
-            copy.extended = EditRect(x: r.x - 0.015, y: r.y - 0.015, w: r.w + 0.03, h: r.h + 0.03)
-            out.append(copy)
+        // Service pills move sideways ONLY, keeping the vertical
+        // arrangement they were authored with. The first version laid
+        // them in one row, first half left and the rest right, which
+        // split PlayStation's shoulders wrongly: L1 and L2 are stacked
+        // above each other and so are R1 and R2, and R1/R2 sit on the
+        // RIGHT. Marcus found all four bunched into the top left.
+        // Sides and stacking both carry meaning, so both are kept.
+        let leftPills = pills.filter { $0.frame.x + $0.frame.w / 2 < 0.5 }
+        let rightPills = pills.filter { $0.frame.x + $0.frame.w / 2 >= 0.5 }
+        for (group, edge) in [(leftPills, 0.04), (rightPills, -0.04)] {
+            guard !group.isEmpty else { continue }
+            let minX = group.map(\.frame.x).min()!
+            let maxX = group.map { $0.frame.x + $0.frame.w }.max()!
+            let shift = edge > 0 ? edge - minX : (0.96 - maxX)
+            for pill in group {
+                var copy = pill
+                let r = EditRect(
+                    x: pill.frame.x + shift, y: pill.frame.y,
+                    w: pill.frame.w, h: pill.frame.h)
+                copy.frame = r
+                copy.extended = EditRect(
+                    x: r.x - 0.015, y: r.y - 0.015, w: r.w + 0.03, h: r.h + 0.03)
+                out.append(copy)
+            }
         }
 
         // Movement: same size, off the left bezel, sitting in the
