@@ -701,7 +701,7 @@ struct ControllerPadView: View {
                     sendPointer: { x, y, down in link.pointer(x: x, y: y, down: down) },
                     sendOffscreen: { off in link.offscreen(off) },
                     system: system,
-                    material: true,
+                    material: RaisedControls.isOn,
                     opacity: 1.0
                 )
             } else {
@@ -740,7 +740,7 @@ struct ControllerPadView: View {
                     sendPointer: { _, _, _ in },
                     sendOffscreen: { _ in },
                     system: "nds",
-                    material: true,
+                    material: RaisedControls.isOn,
                     opacity: 1.0
                 )
             }
@@ -860,7 +860,7 @@ struct ControllerPadView: View {
                 },
                 sendOffscreen: { off in link.offscreen(off) },
                 system: "arcade:\(shortname)",
-                material: true,
+                material: RaisedControls.isOn,
                 opacity: 1.0
             )
         }

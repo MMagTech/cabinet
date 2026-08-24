@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var confirmingForget = false
     @AppStorage("com.mmagtech.RommApp.controlOpacity") private var controlOpacity = 0.7
     @AppStorage("com.mmagtech.RommApp.rumbleEnabled") private var rumbleEnabled = true
+    @AppStorage(RaisedControls.key) private var raisedControls = true
     @AppStorage(ControlTheme.key) private var controlTheme = ControlTheme.system.rawValue
     @AppStorage(PlayerAutosave.key) private var autosaveEnabled = true
     @AppStorage(PlatformLabelSource.key) private var platformLabelSourceRaw = PlatformLabelSource.platformName.rawValue
@@ -90,6 +91,13 @@ struct SettingsView: View {
                             .font(.callout.monospacedDigit())
                     }
                     Slider(value: $controlOpacity, in: 0.25...1.0, step: 0.05)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Raised controls", isOn: $raisedControls)
+                    Text("Off draws them flat, which is easier to read.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
 
                 Toggle("Rumble", isOn: $rumbleEnabled)
