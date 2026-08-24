@@ -452,36 +452,72 @@ struct LayoutEditorView: View {
         flash("Landscape set seeded from portrait")
     }
 
-    /// A controller-only set, rebuilt at companion scale rather than
-    /// copied. A copy would reproduce exactly the problem this mode
-    /// exists to solve: the landscape sets are authored to sit in the
-    /// gutters around a centred game, so on a panel with no game they
-    /// use 13 to 21 per cent of the screen and their buttons are a
-    /// quarter to a sixth of the area of the hand-tuned arcade
-    /// companion's (measured across every layout, 2026-08-23).
+    /// A controller-only set: the SAME controls, moved to where thumbs
+    /// actually rest once no picture is in the way.
     ///
-    /// The proportions come from that arcade companion, which is the
-    /// one companion arrangement already proven by a day of real
-    /// hands: movement on the left at roughly a third of the width and
-    /// most of the height, actions on the right in a grid, service
-    /// pills along the top out of both thumbs' way.
+    /// The first version of this scaled everything up, taking its
+    /// proportions from the arcade companion. Marcus played it and
+    /// said the d-pad had too much travel between presses, and the
+    /// measurements agreed with him: that arcade d-pad is 50mm across
+    /// where a real one is about 25, while the authored landscape
+    /// d-pads are already 28mm and the buttons 10 to 12mm against a
+    /// real button's 10. They were never too small. An arcade STICK is
+    /// gripped by a whole hand so big is right; a d-pad is a thumb
+    /// pivot with a correct size, and past it bigger is strictly
+    /// worse, because the thumb has to lift and reposition instead of
+    /// roll.
     ///
-    /// What it keeps from the existing layout is everything that
-    /// carries meaning: every item, its kind, its label, its inputs,
-    /// and which SIDE the author put it on, so N64's C cluster stays
-    /// right and does not migrate to the left with the d-pad.
-    /// Positions are a starting point to be moved by thumb, not an
-    /// answer.
+    /// So this preserves every size and every RELATIVE position: a
+    /// face-button diamond stays a diamond, N64's C cluster stays
+    /// beside its buttons, a stick stacked over a d-pad stays stacked.
+    /// Each side moves as one piece, off the bezel it was pinned
+    /// against and into the lower band where a thumb sits. Buttons get
+    /// one modest step up, since a cluster is tapped rather than
+    /// pivoted on and a little more room between them costs nothing.
     private func seedCompanion() {
         let source = layout.landscapeItems ?? layout.items
         guard !source.isEmpty else { return }
 
-        func placed(_ item: EditableItem, _ r: EditRect, pad: Double = 0.02) -> EditableItem {
-            var copy = item
-            copy.frame = r
-            copy.extended = EditRect(
-                x: r.x - pad, y: r.y - pad, w: r.w + pad * 2, h: r.h + pad * 2)
-            return copy
+        /// Moves a whole group as one piece, optionally growing it
+        /// about its own centre, so nothing inside it rearranges.
+        /// Everything below the service pills is the playing area.
+        let pillBand = 0.16
+
+        func moved(
+            _ group: [EditableItem], scale requested: Double,
+            leftEdge: Double?, rightEdge: Double?, centreY: Double
+        ) -> [EditableItem] {
+            guard !group.isEmpty else { return [] }
+            let minX = group.map(\.frame.x).min()!
+            let maxX = group.map { $0.frame.x + $0.frame.w }.max()!
+            let minY = group.map(\.frame.y).min()!
+            let maxY = group.map { $0.frame.y + $0.frame.h }.max()!
+            let cx = (minX + maxX) / 2, cy = (minY + maxY) / 2
+            // Never grow a group past the room below the pill row.
+            // N64's right side runs from Z at the top to the C cluster
+            // at the bottom, and a flat 15% pushed Z up underneath the
+            // pills, seeding a collision the editor would then warn
+            // about. A group that tall simply does not get the nudge.
+            let band = 0.97 - pillBand
+            let fit = (maxY - minY) > 0 ? band / (maxY - minY) : requested
+            let scale = min(requested, fit)
+            let width = (maxX - minX) * scale, height = (maxY - minY) * scale
+            let targetX = leftEdge ?? ((rightEdge ?? 0.94) - width)
+            let targetY = min(max(centreY - height / 2, pillBand), 0.97 - height)
+            return group.map { item in
+                var copy = item
+                let w = item.frame.w * scale, h = item.frame.h * scale
+                // Position within the group, scaled about its centre,
+                // then the whole group placed at its target.
+                let ox = (item.frame.x - cx) * scale + width / 2
+                let oy = (item.frame.y - cy) * scale + height / 2
+                let r = EditRect(x: targetX + ox, y: targetY + oy, w: w, h: h)
+                copy.frame = r
+                let pad = 0.02
+                copy.extended = EditRect(
+                    x: r.x - pad, y: r.y - pad, w: r.w + pad * 2, h: r.h + pad * 2)
+                return copy
+            }
         }
 
         let pills = source.filter { $0.kind == .pill }
@@ -490,56 +526,31 @@ struct LayoutEditorView: View {
         let right = rest.filter { $0.frame.x + $0.frame.w / 2 >= 0.5 }
         var out: [EditableItem] = []
 
-        // Service pills along the top: the first half from the left
-        // edge, the rest to the right, leaving the middle clear.
-        let pillW = 0.11, pillH = 0.10, pillY = 0.04
+        // Service pills stay small and out of the way along the top,
+        // first half from the left, the rest from the right, middle
+        // clear. They are pressed a few times a session.
+        let pillW = 0.10, pillH = 0.09, pillY = 0.04
         let leftCount = (pills.count + 1) / 2
         for (i, pill) in pills.enumerated() {
             let x = i < leftCount
-                ? 0.03 + Double(i) * (pillW + 0.02)
-                : 0.97 - pillW - Double(pills.count - 1 - i) * (pillW + 0.02)
-            out.append(placed(pill, EditRect(x: x, y: pillY, w: pillW, h: pillH), pad: 0.015))
+                ? 0.04 + Double(i) * (pillW + 0.02)
+                : 0.96 - pillW - Double(pills.count - 1 - i) * (pillW + 0.02)
+            var copy = pill
+            let r = EditRect(x: x, y: pillY, w: pillW, h: pillH)
+            copy.frame = r
+            copy.extended = EditRect(x: r.x - 0.015, y: r.y - 0.015, w: r.w + 0.03, h: r.h + 0.03)
+            out.append(copy)
         }
 
-        // The left column: movement, at companion scale. Two of them
-        // (a stick above a d-pad, as N64 has) share the height.
-        let colTop = 0.24, colH = 0.60, colW = 0.30
-        for (i, item) in left.enumerated() {
-            let each = left.count > 1 ? (colH - 0.04) / Double(left.count) : colH
-            let y = colTop + Double(i) * (each + 0.04)
-            out.append(placed(item, EditRect(x: 0.05, y: y, w: colW, h: each)))
-        }
-
-        // The right side: anything that is not a button (an N64 C
-        // cluster) takes a block low on the right where a thumb rests,
-        // and the buttons fill the space above it in a two-column grid.
-        let blocks = right.filter { $0.kind != .button }
-        let buttons = right.filter { $0.kind == .button }
-        var buttonsBottom = 0.90
-        for (i, block) in blocks.enumerated() {
-            let h = 0.26
-            let y = 0.90 - h - Double(i) * (h + 0.03)
-            out.append(placed(block, EditRect(x: 0.63, y: y, w: 0.30, h: h)))
-            buttonsBottom = min(buttonsBottom, y - 0.03)
-        }
-        if !buttons.isEmpty {
-            let columns = buttons.count == 1 ? 1 : 2
-            let rows = (buttons.count + columns - 1) / columns
-            let w = buttons.count == 1 ? 0.20 : 0.15
-            let top = 0.22
-            let available = max(buttonsBottom - top, 0.2)
-            let h = min((available - Double(rows - 1) * 0.03) / Double(rows), 0.30)
-            for (i, button) in buttons.enumerated() {
-                let row = i / columns, column = i % columns
-                let x = 0.96 - Double(columns - column) * (w + 0.03)
-                let y = top + Double(row) * (h + 0.03)
-                out.append(placed(button, EditRect(x: x, y: y, w: w, h: h)))
-            }
-        }
+        // Movement: same size, off the left bezel, sitting in the
+        // lower band rather than pinned to an edge.
+        out += moved(left, scale: 1.0, leftEdge: 0.07, rightEdge: nil, centreY: 0.60)
+        // Actions: one modest step up, mirrored on the right.
+        out += moved(right, scale: 1.15, leftEdge: nil, rightEdge: 0.93, centreY: 0.60)
 
         layout.companionItems = out
         commit()
-        flash("Controller-only set seeded at panel scale")
+        flash("Controller-only set seeded: same sizes, thumb placement")
     }
 
     private func revert() {
