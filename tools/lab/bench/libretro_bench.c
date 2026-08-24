@@ -168,6 +168,25 @@ static void log_cb(enum retro_log_level level, const char *fmt, ...) {
     (void)level; (void)fmt;
 }
 
+/* Rumble observation, lab only. The app fires a haptic here; this only
+ * counts, so a run can answer "did the core ask for the motor at all"
+ * with no device and nobody's hand involved. g_rumble_on counts
+ * off-to-on edges, the same edge the app turns into one haptic, so it
+ * reads as "times the motor was kicked" rather than "times the core
+ * mentioned it". Added 2026-08-24 to A/B whether an unanswered rumble
+ * option silently disables a core's rumble. */
+static int g_rumble_asked = 0;
+static long g_rumble_calls = 0, g_rumble_on = 0;
+static int g_rumble_was_on[8][2];
+static bool rumble_cb(unsigned port, enum retro_rumble_effect effect, uint16_t strength) {
+    if (port >= 8 || effect > RETRO_RUMBLE_WEAK) return false;
+    g_rumble_calls++;
+    int on = strength > 0;
+    if (on && !g_rumble_was_on[port][effect]) g_rumble_on++;
+    g_rumble_was_on[port][effect] = on;
+    return true;
+}
+
 // Mirrors LibretroFrontend.mm's environmentCallback case for case. Anything
 // it does not answer is not answered here either.
 static bool env_cb(unsigned cmd, void *data) {
@@ -188,6 +207,13 @@ static bool env_cb(unsigned cmd, void *data) {
         return true;
     case RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME:
         return true;
+    case RETRO_ENVIRONMENT_GET_RUMBLE_INTERFACE: {
+        struct retro_rumble_interface *ri = (struct retro_rumble_interface *)data;
+        if (!ri) return false;
+        ri->set_rumble_state = rumble_cb;
+        g_rumble_asked = 1;
+        return true;
+    }
     case RETRO_ENVIRONMENT_GET_CAN_DUPE:
         *(bool *)data = true; return true;
     case RETRO_ENVIRONMENT_SET_ROTATION:
@@ -561,6 +587,9 @@ int main(int argc, char **argv) {
     printf("  \"height\": %u,\n", g_last_h);
     printf("  \"rotation\": %u,\n", g_rotation);
     printf("  \"pixel_format\": %d,\n", (int)g_pixfmt);
+    printf("  \"rumble_interface_requested\": %d,\n", g_rumble_asked);
+    printf("  \"rumble_edges\": %ld,\n", g_rumble_on);
+    printf("  \"rumble_calls\": %ld,\n", g_rumble_calls);
     printf("  \"output_hash\": \"%llu\",\n", (unsigned long long)total);
     printf("  \"audio_hash\": \"%llu\"\n", (unsigned long long)g_audio_hash);
     printf("}\n");

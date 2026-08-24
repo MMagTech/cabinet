@@ -586,6 +586,23 @@ enum NativeCoreOptionsStore {
             // than exposed, since a controller with a missing d-pad is
             // not a preference.
             return ["vb_right_analog_to_digital": "enabled"]
+        case .gb, .gbc:
+            // Rumble carts (Pokemon Pinball and friends) are dead without
+            // this. Gambatte sets `rumble_level = 0` before reading the
+            // variable and follows it immediately with
+            // `if (rumble_level == 0) deactivate_rumble();`, so an
+            // unanswered key does not leave the core at its declared
+            // default of 10, it explicitly turns rumble off. Same
+            // defaults-gap class as N64's zeroed globals and PSP's
+            // resolution. Answered with the option's own declared
+            // default.
+            //
+            // This is a STRENGTH, 0 to 10, not an on/off switch. Whether
+            // the player actually feels anything is still the one global
+            // Rumble toggle in Settings, which the frontend checks in
+            // rumbleSetState before any haptic fires; this only makes
+            // sure the core still has something to report.
+            return ["gambatte_rumble_level": "10"]
         case .psp:
             // cpu_core's declared default is "JIT", which cannot run in
             // this process (no dynamic-code entitlement). The core has
