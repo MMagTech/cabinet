@@ -229,6 +229,10 @@ enum ArcadeLayout {
             system: "arcade:\(profile.profile):\(buttons)",
             items: build(landscape: false),
             landscapeItems: build(landscape: true),
+            // Arcade builds its own companion arrangement in code (see
+            // `companion(for:analog:)`), rather than carrying one as
+            // data the way the console layouts do.
+            companionItems: nil,
             headroom: nil)
     }
 
@@ -288,7 +292,8 @@ enum ArcadeLayout {
             }
             return ControlLayout(
                 system: base.system, items: mark(base.items),
-                landscapeItems: base.landscapeItems.map(mark), headroom: base.headroom)
+                landscapeItems: base.landscapeItems.map(mark),
+                companionItems: base.companionItems.map(mark), headroom: base.headroom)
         }
         if (analog.trackball ?? 0) > 0 { analogKinds.append(.trackball) }
         if (analog.dial ?? 0) > 0 || (analog.paddle ?? 0) > 0 { analogKinds.append(.spinner) }
@@ -456,7 +461,7 @@ enum ArcadeLayout {
 
         return ControlLayout(
             system: base.system, items: items,
-            landscapeItems: wide, headroom: base.headroom)
+            landscapeItems: wide, companionItems: base.companionItems, headroom: base.headroom)
     }
 
     /// One pedal is an accelerator and says so; two are gas and brake.
@@ -500,6 +505,7 @@ enum ArcadeLayout {
         return ControlLayout(
             system: base.system, items: base.items + [item],
             landscapeItems: base.landscapeItems.map { $0 + [item] },
+            companionItems: base.companionItems.map { $0 + [item] },
             headroom: base.headroom)
     }
 
@@ -610,6 +616,7 @@ enum ArcadeLayout {
             system: "arcade:\(profile.profile):\(max(0, min(profile.buttons, 6)))",
             items: items,
             landscapeItems: landscapeItems(for: profile, clearOfPedals: clearOfPedals),
+            companionItems: nil,
             headroom: nil
         )
     }
@@ -649,6 +656,7 @@ enum ArcadeLayout {
             system: "arcade:\(profile.profile):\(count)",
             items: applied(file.items),
             landscapeItems: file.landscapeItems.map(applied),
+            companionItems: file.companionItems.map(applied),
             headroom: file.headroom
         )
     }

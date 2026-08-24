@@ -33,6 +33,14 @@ struct LayoutEditorView: View {
     /// Mirrors both players' `padHeight` exactly: zero headroom reproduces
     /// `stripHeight` unchanged, so every layout that has never asked for
     /// headroom edits at the same size it always has.
+    /// Which landscape arrangement is being shaped. Rotation picks
+    /// portrait from landscape, and always did, but companion is ALSO
+    /// landscape, so for the first time two arrangements share an
+    /// orientation and rotation cannot separate them. Named by what
+    /// they mean rather than by their JSON keys: one shares the screen
+    /// with a game, the other does not.
+    @State private var editingCompanion = false
+
     private var padPortraitHeight: CGFloat {
         Self.stripHeight * (1 + (layout.headroom ?? 0))
     }
@@ -55,7 +63,13 @@ struct LayoutEditorView: View {
             ZStack(alignment: landscape ? .bottom : .top) {
                 if landscape {
                     ZStack {
-                        ScreenBackdrop(layout: layout.name)
+                        // A controller-only pad has no game behind it,
+                        // and drawing one would invite exactly the
+                        // gutter-hugging arrangement this mode exists
+                        // to get away from.
+                        if !editingCompanion {
+                            ScreenBackdrop(layout: layout.name)
+                        }
                         pad(size: padSize, landscape: true)
                     }
                     .frame(width: geo.size.width, height: geo.size.height)
@@ -70,7 +84,7 @@ struct LayoutEditorView: View {
                     .frame(width: geo.size.width, height: geo.size.height)
                 }
 
-                if landscape && layout.landscapeItems == nil {
+                if landscape, editingCompanion ? layout.companionItems == nil : layout.landscapeItems == nil {
                     missingLandscapeNotice
                 }
                 if showsChrome {
@@ -137,9 +151,20 @@ struct LayoutEditorView: View {
 
     private func itemsBinding(landscape: Bool) -> Binding<[EditableItem]> {
         Binding(
-            get: { landscape ? (layout.landscapeItems ?? []) : layout.items },
+            get: {
+                guard landscape else { return layout.items }
+                return editingCompanion
+                    ? (layout.companionItems ?? [])
+                    : (layout.landscapeItems ?? [])
+            },
             set: { updated in
-                if landscape { layout.landscapeItems = updated } else { layout.items = updated }
+                if !landscape {
+                    layout.items = updated
+                } else if editingCompanion {
+                    layout.companionItems = updated
+                } else {
+                    layout.landscapeItems = updated
+                }
             }
         )
     }
@@ -170,9 +195,20 @@ struct LayoutEditorView: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(layout.name).font(.system(size: 13, weight: .semibold, design: .monospaced))
-                Text(landscape ? "landscape" : "portrait")
+                Text(landscape ? (editingCompanion ? "controller only" : "landscape") : "portrait")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
+            }
+
+            // Only landscape has two arrangements to choose between.
+            if landscape {
+                Picker("", selection: $editingCompanion) {
+                    Image(systemName: "tv").tag(false)
+                    Image(systemName: "iphone.gen3").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .fixedSize()
+                .onChange(of: editingCompanion) { _, _ in selection.removeAll() }
             }
 
             Spacer(minLength: 4)
@@ -294,14 +330,18 @@ struct LayoutEditorView: View {
 
     private var missingLandscapeNotice: some View {
         VStack(spacing: 10) {
-            Text("No landscape set")
+            Text(editingCompanion ? "No controller-only set" : "No landscape set")
                 .font(.headline)
-            Text("The player falls back to the portrait items here, which works but looks wrong.")
+            Text(editingCompanion
+                 ? "A phone driving a TV falls back to the landscape items, which were drawn to sit around a game that is not there."
+                 : "The player falls back to the portrait items here, which works but looks wrong.")
                 .font(.caption)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
-            Button("Create one from portrait") { seedLandscape() }
-                .buttonStyle(.borderedProminent)
+            Button(editingCompanion ? "Create one at panel scale" : "Create one from portrait") {
+                if editingCompanion { seedCompanion() } else { seedLandscape() }
+            }
+            .buttonStyle(.borderedProminent)
         }
         .padding(20)
         .frame(maxWidth: 320)
@@ -317,7 +357,8 @@ struct LayoutEditorView: View {
 
     private var singleSelected: EditableItem? {
         guard selection.count == 1 else { return nil }
-        return (layout.items + (layout.landscapeItems ?? [])).first { selection.contains($0.id) }
+        return (layout.items + (layout.landscapeItems ?? []) + (layout.companionItems ?? []))
+            .first { selection.contains($0.id) }
     }
 
     private var selectionTitle: String {
@@ -409,6 +450,96 @@ struct LayoutEditorView: View {
         layout.landscapeItems = layout.items
         commit()
         flash("Landscape set seeded from portrait")
+    }
+
+    /// A controller-only set, rebuilt at companion scale rather than
+    /// copied. A copy would reproduce exactly the problem this mode
+    /// exists to solve: the landscape sets are authored to sit in the
+    /// gutters around a centred game, so on a panel with no game they
+    /// use 13 to 21 per cent of the screen and their buttons are a
+    /// quarter to a sixth of the area of the hand-tuned arcade
+    /// companion's (measured across every layout, 2026-08-23).
+    ///
+    /// The proportions come from that arcade companion, which is the
+    /// one companion arrangement already proven by a day of real
+    /// hands: movement on the left at roughly a third of the width and
+    /// most of the height, actions on the right in a grid, service
+    /// pills along the top out of both thumbs' way.
+    ///
+    /// What it keeps from the existing layout is everything that
+    /// carries meaning: every item, its kind, its label, its inputs,
+    /// and which SIDE the author put it on, so N64's C cluster stays
+    /// right and does not migrate to the left with the d-pad.
+    /// Positions are a starting point to be moved by thumb, not an
+    /// answer.
+    private func seedCompanion() {
+        let source = layout.landscapeItems ?? layout.items
+        guard !source.isEmpty else { return }
+
+        func placed(_ item: EditableItem, _ r: EditRect, pad: Double = 0.02) -> EditableItem {
+            var copy = item
+            copy.frame = r
+            copy.extended = EditRect(
+                x: r.x - pad, y: r.y - pad, w: r.w + pad * 2, h: r.h + pad * 2)
+            return copy
+        }
+
+        let pills = source.filter { $0.kind == .pill }
+        let rest = source.filter { $0.kind != .pill }
+        let left = rest.filter { $0.frame.x + $0.frame.w / 2 < 0.5 }
+        let right = rest.filter { $0.frame.x + $0.frame.w / 2 >= 0.5 }
+        var out: [EditableItem] = []
+
+        // Service pills along the top: the first half from the left
+        // edge, the rest to the right, leaving the middle clear.
+        let pillW = 0.11, pillH = 0.10, pillY = 0.04
+        let leftCount = (pills.count + 1) / 2
+        for (i, pill) in pills.enumerated() {
+            let x = i < leftCount
+                ? 0.03 + Double(i) * (pillW + 0.02)
+                : 0.97 - pillW - Double(pills.count - 1 - i) * (pillW + 0.02)
+            out.append(placed(pill, EditRect(x: x, y: pillY, w: pillW, h: pillH), pad: 0.015))
+        }
+
+        // The left column: movement, at companion scale. Two of them
+        // (a stick above a d-pad, as N64 has) share the height.
+        let colTop = 0.24, colH = 0.60, colW = 0.30
+        for (i, item) in left.enumerated() {
+            let each = left.count > 1 ? (colH - 0.04) / Double(left.count) : colH
+            let y = colTop + Double(i) * (each + 0.04)
+            out.append(placed(item, EditRect(x: 0.05, y: y, w: colW, h: each)))
+        }
+
+        // The right side: anything that is not a button (an N64 C
+        // cluster) takes a block low on the right where a thumb rests,
+        // and the buttons fill the space above it in a two-column grid.
+        let blocks = right.filter { $0.kind != .button }
+        let buttons = right.filter { $0.kind == .button }
+        var buttonsBottom = 0.90
+        for (i, block) in blocks.enumerated() {
+            let h = 0.26
+            let y = 0.90 - h - Double(i) * (h + 0.03)
+            out.append(placed(block, EditRect(x: 0.63, y: y, w: 0.30, h: h)))
+            buttonsBottom = min(buttonsBottom, y - 0.03)
+        }
+        if !buttons.isEmpty {
+            let columns = buttons.count == 1 ? 1 : 2
+            let rows = (buttons.count + columns - 1) / columns
+            let w = buttons.count == 1 ? 0.20 : 0.15
+            let top = 0.22
+            let available = max(buttonsBottom - top, 0.2)
+            let h = min((available - Double(rows - 1) * 0.03) / Double(rows), 0.30)
+            for (i, button) in buttons.enumerated() {
+                let row = i / columns, column = i % columns
+                let x = 0.96 - Double(columns - column) * (w + 0.03)
+                let y = top + Double(row) * (h + 0.03)
+                out.append(placed(button, EditRect(x: x, y: y, w: w, h: h)))
+            }
+        }
+
+        layout.companionItems = out
+        commit()
+        flash("Controller-only set seeded at panel scale")
     }
 
     private func revert() {

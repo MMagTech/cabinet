@@ -682,7 +682,10 @@ struct ControllerPadView: View {
         Group {
             if let layout = ControlLayout.named(system) {
                 TouchControlPad(
-                    items: layout.items(landscape: true),
+                    // The companion arrangement when this platform has
+                    // one: no picture here, so the controls get the
+                    // whole screen rather than the gutters.
+                    items: layout.companionOrLandscapeItems(),
                     send: { id, down in
                         if id == RetroPad.overlay {
                             if down {
