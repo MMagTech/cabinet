@@ -808,6 +808,16 @@ final class ControllerLinkScout: ObservableObject {
 
     private var browser: NWBrowser?
     private let queue = DispatchQueue(label: "cabinet.link.scout")
+    /// The advertisement the browser is currently reporting, believed
+    /// only once a television has answered for it.
+    private var advertised: (name: String, endpoint: NWEndpoint)?
+    private var probe: NWConnection?
+    private var prover: DispatchSourceTimer?
+    /// When the television last actually answered. A Bonjour record
+    /// outlives the thing that published it whenever the goodbye is
+    /// missed, which a killed app or a Wi-Fi hiccup both manage, so
+    /// an advertisement alone is a rumour.
+    private var lastAnswer = Date.distantPast
 
     func start() {
         guard ControllerPairing.hasAnyPairing else { return }
@@ -815,16 +825,87 @@ final class ControllerLinkScout: ObservableObject {
         let browser = NWBrowser(for: .bonjour(type: ControllerLink.bonjourType, domain: nil),
                                 using: ControllerLink.parameters())
         browser.browseResultsChangedHandler = { [weak self] results, _ in
-            let name = results.compactMap { ControllerLink.shortname(fromService: $0.endpoint) }.first
-            Task { @MainActor in self?.playing = name }
+            guard let self else { return }
+            let found = results.compactMap { r -> (String, NWEndpoint)? in
+                guard let name = ControllerLink.shortname(fromService: r.endpoint) else { return nil }
+                return (name, r.endpoint)
+            }.first
+            Task { @MainActor in
+                if found?.0 != self.advertised?.name {
+                    // A different game, or none: nothing carries over
+                    // from the last one, including its proof.
+                    self.lastAnswer = .distantPast
+                    self.playing = nil
+                }
+                self.advertised = found
+                self.askTelevision()
+            }
         }
         self.browser = browser
         browser.start(queue: queue)
+
+        // Keep asking. A game that ends while the card is up has to
+        // take the card down with it, and the only honest signal is
+        // the television going quiet.
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + 4, repeating: 4)
+        timer.setEventHandler { [weak self] in Task { @MainActor in self?.askTelevision() } }
+        timer.resume()
+        prover = timer
+    }
+
+    /// Ask the advertised television whether it is really there, and
+    /// believe the card only while one keeps answering.
+    ///
+    /// The question is a join, which since seats became something a
+    /// person claims by playing is genuinely just arriving: it takes
+    /// no seat, and because this never sends a tagged packet it never
+    /// counts as joined, so it cannot mark this phone present or
+    /// pause anybody's game when it stops.
+    private func askTelevision() {
+        guard let advertised else {
+            probe?.cancel(); probe = nil
+            playing = nil
+            return
+        }
+        // Two silent rounds and the rumour is dropped.
+        if lastAnswer > .distantPast, Date().timeIntervalSince(lastAnswer) > 9 {
+            playing = nil
+        }
+        probe?.cancel()
+        let c = NWConnection(to: advertised.endpoint, using: ControllerLink.parameters())
+        probe = c
+        let name = advertised.name
+        c.stateUpdateHandler = { [weak self] state in
+            guard case .ready = state else { return }
+            var packet = ControllerLink.Packet(kind: .join)
+            packet.seq = 0
+            let payload = ControllerPairing.deviceID + ControllerPairing.randomBytes(16)
+            c.send(content: packet.encoded() + payload, completion: .idempotent)
+            Task { @MainActor in self?.listenForAnswer(on: c, name: name) }
+        }
+        c.start(queue: queue)
+    }
+
+    private func listenForAnswer(on connection: NWConnection, name: String) {
+        connection.receiveMessage { [weak self] data, _, _, _ in
+            guard let data, ControllerLink.Packet.decode(data) != nil else { return }
+            // Any answer at all proves a television is there and still
+            // advertising this game; what it says does not matter.
+            Task { @MainActor in
+                self?.lastAnswer = Date()
+                self?.playing = name
+            }
+        }
     }
 
     func stop() {
+        prover?.cancel(); prover = nil
+        probe?.cancel(); probe = nil
         browser?.cancel()
         browser = nil
+        advertised = nil
+        lastAnswer = .distantPast
         playing = nil
     }
 }

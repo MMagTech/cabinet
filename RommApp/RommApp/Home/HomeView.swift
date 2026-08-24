@@ -39,6 +39,14 @@ struct HomeView: View {
     /// sees the local-network prompt; the first pairing starts from
     /// Settings.
     @State private var showingControllerPad = false
+    /// Names for games a television is playing that this phone's own
+    /// shelves do not carry. The offer card used to fall back to the
+    /// system ("Nintendo DS is on your TV") whenever the game was not
+    /// in recent or favourites, which is why arcade looked right (the
+    /// cabinet is usually freshly played, so it IS on a shelf) and
+    /// everything else did not. Fetched once per id and kept for the
+    /// session; the shelves are still checked first and cost nothing.
+    @State private var offerNames: [Int: String] = [:]
     @StateObject private var linkScout = ControllerLinkScout()
     #endif
     @State private var nativeDirectLaunch: NativeDirectLaunch?
@@ -299,7 +307,9 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 28) {
             #if os(iOS)
             if let playing = linkScout.playing {
-                controllerOffer(for: playing).padding(.horizontal, 20)
+                controllerOffer(for: playing)
+                    .padding(.horizontal, 20)
+                    .task(id: playing) { await resolveOfferName(playing) }
             }
             #endif
             if let hero = recent.first {
@@ -330,6 +340,20 @@ struct HomeView: View {
     #if os(iOS)
     /// The offer, named for what is true ("Centipede is on your TV")
     /// with a single verb, appearing only while that stays true.
+    /// Resolves a television's game to a name this phone can show,
+    /// once, when its own shelves do not have it. Silent on failure:
+    /// the system name is a true fallback, not an error state.
+    private func resolveOfferName(_ shortname: String) async {
+        guard let dot = shortname.firstIndex(of: "."),
+              let id = Int(shortname[shortname.index(after: dot)...]),
+              offerNames[id] == nil,
+              !(recent + favorites).contains(where: { $0.id == id })
+        else { return }
+        if let rom = try? await session.rom(id: id) {
+            offerNames[id] = rom.displayName
+        }
+    }
+
     private func controllerOffer(for shortname: String) -> some View {
         // The library's own name for the game when it has one; the
         // romset name is an honest fallback, not a mystery string. A
@@ -346,6 +370,7 @@ struct HomeView: View {
             // better than a wire string.
             let system = String(shortname[shortname.startIndex..<dot])
             name = (recent + favorites).first { $0.id == id }?.displayName
+                ?? offerNames[id]
                 ?? ControlLayout.displayName(forSystem: system)
         } else {
             name = (recent + favorites).first {
@@ -361,9 +386,17 @@ struct HomeView: View {
                     .font(.title2)
                     .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 2) {
+                    // One line, always. The game's own name is what
+                    // makes this card worth tapping, but titles run
+                    // long (Teenage Mutant Ninja Turtles, Sonic Rush
+                    // Adventure) and a headline wrapping to three
+                    // lines inside a small row reads as broken. The
+                    // truncation keeps enough to recognise.
                     Text("\(name) is on your TV")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                     Text("Use this phone as the controls")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -491,7 +524,9 @@ struct HomeView: View {
                     // landscape entirely; found by Marcus on the first
                     // front-door run.
                     if let playing = linkScout.playing {
-                        controllerOffer(for: playing).padding(.top, 20)
+                        controllerOffer(for: playing)
+                            .padding(.top, 20)
+                            .task(id: playing) { await resolveOfferName(playing) }
                     }
                     if recent.count > 1 {
                         rotationRow("Recent", Array(recent.dropFirst()), seeAll: .recentlyPlayed)
