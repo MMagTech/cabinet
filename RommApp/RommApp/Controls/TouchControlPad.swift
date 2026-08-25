@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import CoreMotion
+import QuartzCore
 
 
 /// The native touch controls, drawn as vectors over the webview.
@@ -105,6 +106,36 @@ final class ControlPadView: UIView {
     var pictureAspect: Double = 0
     private let haptic = UIImpactFeedbackGenerator(style: .light)
     private let detent = UIImpactFeedbackGenerator(style: .light)
+    /// The ball's grain. Soft rather than light: this is meant to be
+    /// felt as texture under a moving thumb, not heard as a click.
+    private let grain = UIImpactFeedbackGenerator(style: .soft)
+
+    /// Whether the ball's grain is allowed to fire.
+    ///
+    /// The same Settings toggle every other controller's rumble obeys,
+    /// read here rather than threaded through as a property because
+    /// this view is built by three different hosts (both players and
+    /// the Layout Editor) and a new initialiser argument would have to
+    /// be right in all of them to be right anywhere.
+    ///
+    /// Registered on first read: the Layout Editor is its own app with
+    /// its own defaults domain, so the value Cabinet's launch registers
+    /// does not exist over there, and an unregistered bool reads false.
+    /// Without this the grain would simply never fire in the editor,
+    /// which is where it gets looked at.
+    private static let rumbleKey = "com.mmagtech.RommApp.rumbleEnabled"
+    private static let registerRumbleDefault: Void = {
+        UserDefaults.standard.register(defaults: [rumbleKey: true])
+    }()
+    private var rumbleAllowed: Bool {
+        _ = Self.registerRumbleDefault
+        return UserDefaults.standard.bool(forKey: Self.rumbleKey)
+    }
+
+    /// Which marks are under the thumb right now, so each one bumps
+    /// once as it passes rather than every frame it stays in the zone.
+    private var ballContact = Set<Int>()
+    private var lastGrainBump: TimeInterval = 0
 
     // Spinner state: one touch owns it, angle deltas accumulate into
     // counts with the fraction carried so slow precise spins are not
@@ -122,6 +153,60 @@ final class ControlPadView: UIView {
     private var trackballLast: (point: CGPoint, time: TimeInterval)?
     private var trackballVelocity = CGVector.zero
     private var trackballRemainder = (x: 0.0, y: 0.0)
+    /// The ball's actual orientation, as a 3x3 rotation, so the marks on
+    /// its surface go where a rolled ball's marks would go. Rows are the
+    /// rotated basis vectors; see `rollTrackball`.
+    private var trackballSpin: [[Double]] = [[1,0,0],[0,1,0],[0,0,1]]
+    /// Fixed marks on the unit sphere: x, y, z, then a size multiplier
+    /// and a darkness multiplier. Computed once, so the ball turns and
+    /// the marks stay put on it.
+    ///
+    /// Laid out by the Fibonacci method and then DELIBERATELY SPOILED.
+    /// Even spacing is what that method is for, and even spacing is
+    /// exactly wrong here: Marcus, 2026-08-25, "speckles look too
+    /// perfect if that makes sense." It does. Evenly spread dots of one
+    /// size read as a printed pattern, because nothing in a moulded
+    /// plastic ball is regular. So each mark is pushed off its lattice
+    /// point by up to most of the gap to its neighbour, and given its
+    /// own size and weight, which is what turns a texture into flecks.
+    ///
+    /// The randomness is from a fixed seed, so the ball has ONE face
+    /// that stays its face. Re-rolling per draw would make it crawl.
+    private static let ballSpeckle: [[Double]] = {
+        var seed: UInt64 = 0x9E3779B97F4A7C15
+        func rnd() -> Double {                       // xorshift, deterministic
+            seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17
+            return Double(seed % 100_000) / 100_000
+        }
+        let n = 34
+        let golden = Double.pi * (3 - 5.0.squareRoot())
+        return (0..<n).map { i in
+            let y0 = 1 - (Double(i) / Double(n - 1)) * 2
+            let a0 = golden * Double(i)
+            // Off the lattice, by a good fraction of the spacing.
+            let y = max(-0.98, min(0.98, y0 + (rnd() - 0.5) * 1.6 / Double(n)))
+            let a = a0 + (rnd() - 0.5) * 1.9
+            let r = max(0, 1 - y * y).squareRoot()
+            // Sizes over better than a 3:1 range, and weights that let
+            // some marks sit almost invisibly under the gloss.
+            let size = 0.45 + rnd() * 1.25
+            // Weighted toward the faint end. Dirt in a surface is
+            // mostly barely-there, with the occasional bit that
+            // actually caught: squaring a uniform gives that shape, so
+            // most marks sit under the gloss and a few read.
+            let u = rnd()
+            let weight = 0.10 + u * u * 1.15
+            // Shape, so no two marks are the same blob: how oblong it
+            // is, which way it lies, and where its second lobe sits.
+            let squash = 0.55 + rnd() * 0.85
+            let lean = rnd() * Double.pi
+            let lobeA = rnd() * Double.pi * 2
+            let lobeR = 0.25 + rnd() * 0.75
+            let lobeS = 0.30 + rnd() * 0.55
+            return [cos(a) * r, y, sin(a) * r, size, weight,
+                    squash, lean, lobeA, lobeR, lobeS]
+        }
+    }()
     private var momentum: CADisplayLink?
 
     // Wheel: a horizontal drag turns it, and the turn's CHANGE is what
@@ -349,6 +434,7 @@ final class ControlPadView: UIView {
                 trackballTouch = touch
                 trackballLast = (point, touch.timestamp)
                 trackballVelocity = .zero
+                if rumbleAllowed { grain.prepare() }
                 continue
             }
             touchInputs[touch] = inputs(at: point)
@@ -503,6 +589,14 @@ final class ControlPadView: UIView {
         let wx = dx.rounded(.towardZero), wy = dy.rounded(.towardZero)
         trackballRemainder = (dx - wx, dy - wy)
         if wx != 0 || wy != 0 { sendRelative(Int(wx), Int(wy)) }
+        // The ball turns by what the finger actually moved, not by the
+        // scaled count sent to the game: those are the same gesture but
+        // the second carries a sensitivity multiplier, and a ball that
+        // spins faster than the hand looks wrong.
+        let f = item.frame.resolved(in: bounds.size)
+        rollTrackball(dx: Double(point.x - last.point.x),
+                      dy: Double(point.y - last.point.y),
+                      radius: Double(min(f.width, f.height) / 2) * 0.95)
         trackballVelocity = CGVector(
             dx: (point.x - last.point.x) / dt, dy: (point.y - last.point.y) / dt)
         trackballLast = (point, touch.timestamp)
@@ -559,6 +653,83 @@ final class ControlPadView: UIView {
         sendPointer(max(-1, min(1, x)), max(-1, min(1, y)), down)
     }
 
+    /// Turns the ball by a surface displacement, in points.
+    ///
+    /// A ball dragged under a finger turns about the axis perpendicular
+    /// to the drag, by the distance travelled over its radius, which is
+    /// the whole of the physics and is why this needs no tuning
+    /// constant. The axis works out as (-dy, dx, 0) normalised: drag
+    /// right and the ball rolls about its vertical-screen axis, drag
+    /// down and it rolls about the horizontal one.
+    private func rollTrackball(dx: Double, dy: Double, radius: Double) {
+        let dist = (dx * dx + dy * dy).squareRoot()
+        guard dist > 0.0001, radius > 0 else { return }
+        let theta = dist / radius
+        let ax = -dy / dist, ay = dx / dist, az = 0.0
+        let c = cos(theta), s1 = sin(theta), t = 1 - c
+        // Rodrigues, written out rather than pulled in from anywhere.
+        let r = [
+            [t*ax*ax + c,     t*ax*ay - s1*az, t*ax*az + s1*ay],
+            [t*ax*ay + s1*az, t*ay*ay + c,     t*ay*az - s1*ax],
+            [t*ax*az - s1*ay, t*ay*az + s1*ax, t*az*az + c],
+        ]
+        var out = [[0.0,0,0],[0.0,0,0],[0.0,0,0]]
+        for i in 0..<3 {
+            for j in 0..<3 {
+                out[i][j] = r[i][0]*trackballSpin[0][j]
+                          + r[i][1]*trackballSpin[1][j]
+                          + r[i][2]*trackballSpin[2][j]
+            }
+        }
+        trackballSpin = out
+        grainBump(speed: theta)
+    }
+
+    /// A real trackball is not smooth to push. It is a heavy plastic
+    /// ball with a lifetime of grime worn into it, riding on rollers,
+    /// and what a hand feels is that texture passing underneath.
+    ///
+    /// So the grain is not a metronome. The marks already drawn on the
+    /// ball ARE the imperfections: each one is a fixed point on the
+    /// sphere, and a bump fires when the ball's turning carries it
+    /// under the thumb, at a strength taken from how heavy that
+    /// particular mark is. The same flick therefore feels the same way
+    /// twice, and a different one does not, because the ball has one
+    /// face and it keeps it.
+    ///
+    /// It fires from the coast as well as the drag, since the ball is
+    /// still turning after the thumb lifts.
+    private func grainBump(speed theta: Double) {
+        guard rumbleAllowed else {
+            if !ballContact.isEmpty { ballContact.removeAll() }
+            return
+        }
+        let now = CACurrentMediaTime()
+        for (i, p) in Self.ballSpeckle.enumerated() {
+            let z = trackballSpin[2][0]*p[0] + trackballSpin[2][1]*p[1] + trackballSpin[2][2]*p[2]
+            if z > 0.97 {                                   // under the thumb
+                guard ballContact.insert(i).inserted else { continue }
+                // The haptic engine saturates if fed faster than this,
+                // and a saturated engine feels like a buzz rather than
+                // like grain. A mark suppressed here is simply skipped,
+                // which is the honest outcome: at that speed a hand
+                // cannot tell two marks apart anyway.
+                guard now - lastGrainBump > 0.028 else { continue }
+                lastGrainBump = now
+                // Weight is the mark's own darkness, so the bits of
+                // dirt that read on the eye are the bits felt in the
+                // hand. Speed lifts it a little, the way pushing a ball
+                // harder makes its texture more obvious, and the cap
+                // keeps the whole thing at a graze.
+                let pace = min(1.0, theta / 0.10)
+                let strength = min(0.34, (0.05 + p[4] * 0.13) * (0.5 + pace))
+                grain.impactOccurred(intensity: CGFloat(strength))
+            } else if z < 0.94 {                            // hysteresis
+                ballContact.remove(i)
+            }
+        }
+    }
+
     private func startTrackballMomentum() {
         let speed = (trackballVelocity.dx * trackballVelocity.dx
                      + trackballVelocity.dy * trackballVelocity.dy).squareRoot()
@@ -583,6 +754,17 @@ final class ControlPadView: UIView {
         // The coast: a shade over a second from a hard flick to rest,
         // tuned against the feel of a real ball's bearing, or as close
         // as arithmetic gets before thumbs weigh in.
+        // Keep turning while it coasts, and repaint: the whole point of
+        // a coast is that the ball is still moving, which nobody can
+        // see unless it is redrawn. One small dirty rect per frame for
+        // about a second after a flick, on a display link that was
+        // already running.
+        let f = item.frame.resolved(in: bounds.size)
+        rollTrackball(dx: Double(trackballVelocity.dx) * dt,
+                      dy: Double(trackballVelocity.dy) * dt,
+                      radius: Double(min(f.width, f.height) / 2) * 0.95)
+        setNeedsDisplay(f.insetBy(dx: -8, dy: -8))
+
         trackballVelocity.dx *= 0.94
         trackballVelocity.dy *= 0.94
         let speed = (trackballVelocity.dx * trackballVelocity.dx
@@ -767,39 +949,128 @@ final class ControlPadView: UIView {
 
     /// A ring with tick marks that rotate with the accumulated spin, so
     /// the control visibly turns under the thumb the way the knob did.
+    /// A knurled dial standing in its housing. See drawTrackball for why
+    /// these two were flat until now.
+    ///
+    /// The knurling is the part that has to survive the material
+    /// treatment rather than be replaced by it: the marks are how a
+    /// spinner shows it is turning, and a smooth disc would take that
+    /// away to gain a highlight. So the dial is moulded like any other
+    /// raised part, and the grip lines are cut INTO its lit face,
+    /// darker toward the middle of the disc the way a groove in a real
+    /// knob is.
     private func drawSpinner(in frame: CGRect) {
         guard let ctx = UIGraphicsGetCurrentContext() else { return }
-        let radius = min(frame.width, frame.height) / 2 - 4
+        let radius = min(frame.width, frame.height) / 2
         let center = CGPoint(x: frame.midX, y: frame.midY)
-        ctx.setStrokeColor(UIColor.white.withAlphaComponent(0.45).cgColor)
-        ctx.setLineWidth(7)
-        ctx.strokeEllipse(in: CGRect(
-            x: center.x - radius, y: center.y - radius,
-            width: radius * 2, height: radius * 2))
-        ctx.setLineWidth(2.5)
+        let active = spinnerTouch != nil
+        let colors = style(active: active)
+
+        let plate = UIBezierPath(arcCenter: center, radius: radius,
+                                 startAngle: 0, endAngle: .pi * 2, clockwise: true)
+        let dialRadius = radius * 0.78
+        let dial = UIBezierPath(arcCenter: center, radius: dialRadius,
+                                startAngle: 0, endAngle: .pi * 2, clockwise: true)
+
+        if material {
+            fillSunken(plate, fill: colors.fill)
+            fillMoulded(dial, fill: UIColor.white.withAlphaComponent(active ? 0.8 : 0.5), active: active)
+        } else {
+            colors.fill.setFill(); plate.fill()
+            colors.stroke.setStroke(); plate.lineWidth = 1.5; plate.stroke()
+            UIColor.white.withAlphaComponent(active ? 0.5 : 0.22).setFill(); dial.fill()
+        }
+
+        // Grip lines, cut into the face rather than drawn on top of it.
+        ctx.saveGState()
+        dial.addClip()
+        ctx.setLineCap(.round)
+        // Knurling is a fine texture near the rim, not a set of spokes
+        // reaching for the middle. The first pass cut them 3pt wide at
+        // 30% black and took them more than halfway in, which made the
+        // dial read as a segmented plate rather than a knob you could
+        // grip. Thinner, lighter, and stopping well short of the centre.
+        let notchInner = dialRadius * 0.74
         for i in 0..<12 {
             let a = spinnerVisual + Double(i) * .pi / 6
-            let inner = CGPoint(
-                x: center.x + cos(a) * (radius - 12), y: center.y + sin(a) * (radius - 12))
-            let outer = CGPoint(
-                x: center.x + cos(a) * (radius - 3), y: center.y + sin(a) * (radius - 3))
-            ctx.move(to: inner); ctx.addLine(to: outer)
+            let outer = CGPoint(x: center.x + cos(a) * dialRadius,
+                                y: center.y + sin(a) * dialRadius)
+            let inner = CGPoint(x: center.x + cos(a) * notchInner,
+                                y: center.y + sin(a) * notchInner)
+            ctx.setStrokeColor(UIColor.black.withAlphaComponent(material ? 0.17 : 0.0).cgColor)
+            ctx.setLineWidth(1.7)
+            ctx.move(to: inner); ctx.addLine(to: outer); ctx.strokePath()
+            // The lit lip on the far side of each groove, the same
+            // trick the moulded rim uses at a smaller scale.
+            ctx.setStrokeColor(UIColor.white.withAlphaComponent(material ? 0.13 : 0.5).cgColor)
+            ctx.setLineWidth(1)
+            let off = CGPoint(x: cos(a + 0.05), y: sin(a + 0.05))
+            ctx.move(to: CGPoint(x: center.x + off.x * notchInner,
+                                 y: center.y + off.y * notchInner))
+            ctx.addLine(to: CGPoint(x: center.x + off.x * dialRadius,
+                                    y: center.y + off.y * dialRadius))
+            ctx.strokePath()
         }
-        ctx.strokePath()
+        ctx.restoreGState()
     }
 
     /// A tall pedal with its label laid out to fit the width it has:
     /// the pill renderer centres a fixed-size string and let "Brake"
     /// truncate to an initial.
+    /// A footplate sitting in its own housing.
+    ///
+    /// A pedal is the one control here whose whole identity is that it
+    /// MOVES, so the housing is drawn as a well and the plate as a
+    /// separate raised part inside it. Pressing collapses the plate's
+    /// wall and slides it down into the well, which is a foot pushing
+    /// something rather than a rectangle changing colour.
+    ///
+    /// The tread is cut in, not laid on, for the same reason the
+    /// spinner's knurling is: grooves in a lit surface read as texture,
+    /// lines drawn over one read as a sticker.
     private func drawPedal(in frame: CGRect, label: String?, tint: UIColor?, active: Bool) {
         guard let ctx = UIGraphicsGetCurrentContext() else { return }
         let path = UIBezierPath(roundedRect: frame, cornerRadius: min(frame.width, frame.height) * 0.28)
         let fill = tint ?? UIColor.white
-        ctx.setFillColor(fill.withAlphaComponent(active ? 0.55 : 0.22).cgColor)
-        ctx.addPath(path.cgPath); ctx.fillPath()
-        ctx.setStrokeColor(UIColor.white.withAlphaComponent(0.35).cgColor)
-        ctx.setLineWidth(2)
-        ctx.addPath(path.cgPath); ctx.strokePath()
+        var plate = frame
+
+        if material {
+            fillSunken(path, fill: UIColor.white)
+            // The plate travels into its housing. Small, because a real
+            // pedal's throw is short and a big jump reads as a bug.
+            plate = frame.insetBy(dx: frame.width * 0.07, dy: frame.height * 0.06)
+                .offsetBy(dx: 0, dy: active ? frame.height * 0.045 : 0)
+            let top = UIBezierPath(roundedRect: plate,
+                                   cornerRadius: min(plate.width, plate.height) * 0.24)
+            fillMoulded(top, fill: fill.withAlphaComponent(active ? 0.42 : 0.26), active: active)
+
+            ctx.saveGState()
+            top.addClip()
+            let rows = 4
+            for i in 1...rows {
+                let y = plate.minY + plate.height * CGFloat(i) / CGFloat(rows + 1)
+                let inset = plate.width * 0.16
+                for (dy, color, width) in [
+                    (CGFloat(0), UIColor.black.withAlphaComponent(0.34), CGFloat(2.5)),
+                    (1.4, UIColor.white.withAlphaComponent(0.18), 1.5),
+                ] {
+                    ctx.setStrokeColor(color.cgColor)
+                    ctx.setLineWidth(width)
+                    ctx.setLineCap(.round)
+                    ctx.move(to: CGPoint(x: plate.minX + inset, y: y + dy))
+                    ctx.addLine(to: CGPoint(x: plate.maxX - inset, y: y + dy))
+                    ctx.strokePath()
+                }
+            }
+            ctx.restoreGState()
+        } else {
+            ctx.setFillColor(fill.withAlphaComponent(active ? 0.55 : 0.22).cgColor)
+            ctx.addPath(path.cgPath); ctx.fillPath()
+            ctx.setStrokeColor(UIColor.white.withAlphaComponent(0.35).cgColor)
+            ctx.setLineWidth(2)
+            ctx.addPath(path.cgPath); ctx.strokePath()
+        }
+
         guard let label, !label.isEmpty else { return }
         var size: CGFloat = min(frame.height * 0.26, 20)
         var attrs: [NSAttributedString.Key: Any] = [
@@ -814,47 +1085,211 @@ final class ControlPadView: UIView {
             attrs[.font] = UIFont.systemFont(ofSize: size, weight: .semibold)
             text = label.size(withAttributes: attrs)
         }
+        // Against the plate, not the frame, so the label rides down with
+        // it rather than staying put while the pedal moves under it.
         label.draw(at: CGPoint(
-            x: frame.midX - text.width / 2, y: frame.midY - text.height / 2), withAttributes: attrs)
+            x: plate.midX - text.width / 2, y: plate.midY - text.height / 2), withAttributes: attrs)
     }
 
     /// An arc that tilts with the wheel's travel, so the control shows
     /// its own steering angle the way a wheel's spokes do.
+    /// The top of a steering wheel rising out of the panel.
+    ///
+    /// The last two controls the material pass never reached. A wheel
+    /// was a stroked arc and a pedal was a filled rectangle, which is
+    /// how they read next to a moulded stick and a shaded ball.
+    ///
+    /// A rim is a torus, so it is built as a closed band between two
+    /// arcs and moulded like any other raised part: the wall gives it
+    /// thickness, the lit face runs along the top of the tube. The grip
+    /// mark is cut INTO that face rather than drawn over it, the same
+    /// choice the spinner's knurling made, because a line lying on top
+    /// of a lit surface is the one thing that gives away a flat drawing.
     private func drawWheel(in frame: CGRect) {
         guard let ctx = UIGraphicsGetCurrentContext() else { return }
         let radius = min(frame.width, frame.height * 2) / 2 - 6
         let center = CGPoint(x: frame.midX, y: frame.maxY)
-        ctx.setStrokeColor(UIColor.white.withAlphaComponent(0.4).cgColor)
-        ctx.setLineWidth(9)
-        ctx.addArc(center: center, radius: radius,
-                   startAngle: .pi * 1.15, endAngle: .pi * 1.85, clockwise: false)
-        ctx.strokePath()
-        // The grip mark, showing how far the wheel is turned.
-        let a = .pi * 1.5 + wheelAngle * (.pi * 0.35)
-        ctx.setStrokeColor(UIColor.white.withAlphaComponent(0.75).cgColor)
-        ctx.setLineWidth(5)
-        ctx.move(to: CGPoint(x: center.x + cos(a) * (radius - 14),
-                             y: center.y + sin(a) * (radius - 14)))
-        ctx.addLine(to: CGPoint(x: center.x + cos(a) * (radius + 5),
-                                y: center.y + sin(a) * (radius + 5)))
-        ctx.strokePath()
+        let thickness = max(9.0, radius * 0.13)
+        let a0 = CGFloat.pi * 1.15, a1 = CGFloat.pi * 1.85
+        let colors = style(active: abs(wheelAngle) > 0.02)
+
+        let rim = UIBezierPath()
+        rim.addArc(withCenter: center, radius: radius + thickness / 2,
+                   startAngle: a0, endAngle: a1, clockwise: true)
+        rim.addArc(withCenter: center, radius: radius - thickness / 2,
+                   startAngle: a1, endAngle: a0, clockwise: false)
+        rim.close()
+
+        if material {
+            fillMoulded(rim, fill: colors.fill, active: false)
+        } else {
+            colors.fill.setFill(); rim.fill()
+            colors.stroke.setStroke(); rim.lineWidth = 1.5; rim.stroke()
+        }
+
+        // The grip, showing how far the wheel is turned, cut into the
+        // tube: a dark groove with a lit lip on one side of it.
+        let a = CGFloat.pi * 1.5 + CGFloat(wheelAngle) * (.pi * 0.35)
+        ctx.saveGState()
+        rim.addClip()
+        for (offset, color, width) in [
+            (CGFloat(0), UIColor.black.withAlphaComponent(material ? 0.42 : 0.0), CGFloat(5)),
+            (0.035, UIColor.white.withAlphaComponent(material ? 0.24 : 0.75), 2.5),
+        ] {
+            ctx.setStrokeColor(color.cgColor)
+            ctx.setLineWidth(width)
+            ctx.setLineCap(.round)
+            let ang = a + offset
+            ctx.move(to: CGPoint(x: center.x + cos(ang) * (radius - thickness),
+                                 y: center.y + sin(ang) * (radius - thickness)))
+            ctx.addLine(to: CGPoint(x: center.x + cos(ang) * (radius + thickness),
+                                    y: center.y + sin(ang) * (radius + thickness)))
+            ctx.strokePath()
+        }
+        ctx.restoreGState()
     }
 
     /// A filled ball in a shallow well. Deliberately plain: the picture
     /// is the game's, this only has to read as "roll me".
+    /// A ball standing in its housing, which is what the cabinet part
+    /// actually is: a sphere dropped into a dished plate with only the
+    /// top of it proud of the panel.
+    ///
+    /// This and the spinner were the two controls the material pass
+    /// missed. Everything else on a panel had been given a side wall, a
+    /// lit face and a contact shadow while these two stayed flat rings,
+    /// which is exactly how they read next to the rest. Marcus, 2026-08-25:
+    /// "we put all that work into the other stuff and it's like those
+    /// were forgotten."
+    ///
+    /// Built from the same two primitives as the stick, and for the same
+    /// reason: a sunken plate is a hole, a moulded dome is an object, and
+    /// the pair together is a ball sitting in one.
     private func drawTrackball(in frame: CGRect) {
-        guard let ctx = UIGraphicsGetCurrentContext() else { return }
-        let radius = min(frame.width, frame.height) / 2 - 4
+        let radius = min(frame.width, frame.height) / 2
         let center = CGPoint(x: frame.midX, y: frame.midY)
-        ctx.setStrokeColor(UIColor.white.withAlphaComponent(0.3).cgColor)
-        ctx.setLineWidth(4)
-        ctx.strokeEllipse(in: CGRect(
-            x: center.x - radius, y: center.y - radius,
-            width: radius * 2, height: radius * 2))
-        ctx.setFillColor(UIColor.white.withAlphaComponent(0.14).cgColor)
-        let ball = radius * 0.72
-        ctx.fillEllipse(in: CGRect(
-            x: center.x - ball, y: center.y - ball, width: ball * 2, height: ball * 2))
+        let active = trackballTouch != nil
+        let colors = style(active: active)
+
+        let plate = UIBezierPath(arcCenter: center, radius: radius,
+                                 startAngle: 0, endAngle: .pi * 2, clockwise: true)
+        let ballRadius = radius * 0.72
+        let ball = UIBezierPath(arcCenter: center, radius: ballRadius,
+                                startAngle: 0, endAngle: .pi * 2, clockwise: true)
+        guard material else {
+            colors.fill.setFill(); plate.fill()
+            colors.stroke.setStroke(); plate.lineWidth = 1.5; plate.stroke()
+            UIColor.white.withAlphaComponent(active ? 0.85 : 0.6).setFill(); ball.fill()
+            return
+        }
+        fillSunken(plate, fill: colors.fill)
+
+        // A trackball sits DOWN IN its housing: the cabinet part is a
+        // sphere dropped through a hole with only its crown proud of
+        // the panel, and you never see its equator. Marcus, 2026-08-25:
+        // "the balls usually sat below the surface a bit."
+        //
+        // So the sphere is drawn bigger than the hole, centred below
+        // it, and clipped to the aperture. What shows is the top of a
+        // large ball rather than the whole of a small one, which is
+        // the difference between something sunk into a panel and
+        // something resting on it. That is also what separates it from
+        // the joystick, which stands proud on a shaft and is red;
+        // white here, so the two read as different objects at a
+        // glance rather than the same object twice.
+        let apertureR = radius * 0.74
+        let aperture = UIBezierPath(arcCenter: center, radius: apertureR,
+                                    startAngle: 0, endAngle: .pi * 2, clockwise: true)
+        guard let ctx = UIGraphicsGetCurrentContext() else { return }
+
+        ctx.saveGState()
+        aperture.addClip()
+        let ballC = CGPoint(x: center.x, y: center.y + radius * 0.16)
+        let ballR = radius * 0.95
+        fillSphere(center: ballC, radius: ballR, fill: .white, active: active)
+
+        // The speckle, which is the only reason a rolling ball reads as
+        // rolling. A smooth uniform sphere spinning looks exactly like a
+        // smooth uniform sphere at rest, because nothing on it moves;
+        // real trackballs are flecked, and the flecks are the motion.
+        //
+        // Each mark is a fixed point on the ball, turned by the ball's
+        // own orientation and then projected, so they sweep across the
+        // crown and disappear over the limb the way marks on a real one
+        // do. Only the near hemisphere is drawn, and marks fade as they
+        // approach the edge, where a sphere's surface turns away from
+        // the viewer.
+        for p in Self.ballSpeckle {
+            let x = trackballSpin[0][0]*p[0] + trackballSpin[0][1]*p[1] + trackballSpin[0][2]*p[2]
+            let y = trackballSpin[1][0]*p[0] + trackballSpin[1][1]*p[1] + trackballSpin[1][2]*p[2]
+            let z = trackballSpin[2][0]*p[0] + trackballSpin[2][1]*p[1] + trackballSpin[2][2]*p[2]
+            guard z > 0.12 else { continue }                 // facing away
+            let px = ballC.x + CGFloat(x) * ballR
+            let py = ballC.y + CGFloat(y) * ballR
+            // Foreshortened: a disc seen at an angle is an ellipse, and
+            // near the limb it is nearly an edge.
+            let r = CGFloat((0.040 + 0.016 * z) * p[3]) * ballR
+            let fade = CGFloat(min(1, (z - 0.12) / 0.35))
+
+            // Each mark is a blob, not a dot: an oblong body lying at
+            // its own angle with a second lobe pushed off to one side,
+            // so the silhouette is irregular. Marcus, 2026-08-25:
+            // "some just look too dark and perfect, need more dirt,
+            // like penetrative."
+            //
+            // Drawn as a wide faint halo with a smaller darker core
+            // inside it, which is what gives a soft edge without a
+            // gradient per mark: grime soaked into plastic has no
+            // outline, and a hard-edged ellipse always reads as
+            // printed on top of the surface rather than down in it.
+            let ink = CGFloat(fade) * CGFloat(p[4])
+            let squash = CGFloat(p[5]), lean = CGFloat(p[6])
+            let lobe = CGPoint(x: px + CGFloat(cos(p[7]) * p[8]) * r * CGFloat(z),
+                               y: py + CGFloat(sin(p[7]) * p[8]) * r)
+            func blob(_ c: CGPoint, _ rad: CGFloat, _ alpha: CGFloat) {
+                guard alpha > 0.004 else { return }
+                ctx.saveGState()
+                ctx.translateBy(x: c.x, y: c.y)
+                ctx.rotate(by: lean)
+                UIColor(white: 0.26, alpha: alpha).setFill()
+                UIBezierPath(ovalIn: CGRect(
+                    x: -rad * CGFloat(z), y: -rad * squash,
+                    width: rad * 2 * CGFloat(z), height: rad * 2 * squash)).fill()
+                ctx.restoreGState()
+            }
+            blob(CGPoint(x: px, y: py), r * 1.45, 0.055 * ink)   // halo
+            blob(CGPoint(x: px, y: py), r,        0.150 * ink)   // body
+            blob(lobe, r * CGFloat(p[9]),         0.120 * ink)   // the second lobe
+            continue
+        }
+        // The lip's own shadow falling onto the ball, strongest under
+        // the near edge at the top, which is what actually says "this
+        // is below the surface" rather than merely small.
+        if let g = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                              colors: [UIColor.black.withAlphaComponent(0.55).cgColor,
+                                       UIColor.black.withAlphaComponent(0).cgColor] as CFArray,
+                              locations: [0, 1]) {
+            ctx.drawRadialGradient(
+                g,
+                startCenter: CGPoint(x: center.x, y: center.y - apertureR),
+                startRadius: 0,
+                endCenter: CGPoint(x: center.x, y: center.y - apertureR),
+                endRadius: apertureR * 1.25, options: [])
+        }
+        ctx.restoreGState()
+
+        // The cut edge of the hole itself, over everything.
+        ctx.saveGState()
+        UIColor.black.withAlphaComponent(0.5).setStroke()
+        aperture.lineWidth = 2
+        aperture.stroke()
+        UIColor.white.withAlphaComponent(0.16).setStroke()
+        let liplight = UIBezierPath(arcCenter: CGPoint(x: center.x, y: center.y + 1.2),
+                                    radius: apertureR, startAngle: 0, endAngle: .pi * 2,
+                                    clockwise: true)
+        liplight.lineWidth = 1
+        liplight.stroke()
+        ctx.restoreGState()
     }
 
     private func drawStick(in frame: CGRect) {
@@ -924,7 +1359,102 @@ final class ControlPadView: UIView {
         )
     }
 
+    /// An arcade cabinet has a JOYSTICK, not a d-pad, so on an arcade
+    /// panel that is what gets drawn: a ball standing in a round
+    /// housing, leaning the way it is being pushed.
+    ///
+    /// Rendering only. The item stays a `dpad` carrying the digital
+    /// inputs 4/5/6/7, the touch handling keeps the overlapping
+    /// direction rects that make diagonals reachable, and nothing goes
+    /// near the analogue axis. That last part is not incidental: FBNeo
+    /// reads the left stick through a fake-analogue fallback even for
+    /// digital games, which is what made a Bluetooth pad register up
+    /// and down in the same frame (issue #3). A joystick that LOOKS
+    /// like a joystick must not become one on the wire.
+    ///
+    /// The lean is the whole point of drawing it at all. A cross either
+    /// lights up or does not; a ball that tilts tells you which way it
+    /// went and how far, which is the feedback a real stick gives
+    /// through the hand and a touchscreen otherwise cannot.
+    private func drawArcadeStick(in frame: CGRect, inputs: [Int], tint: UIColor?) {
+        let side = (frame.width * frame.height).squareRoot()
+        let center = CGPoint(x: frame.midX, y: frame.midY)
+        let radius = side / 2
+
+        // inputs arrive as [up, down, left, right]
+        var dx = 0.0, dy = 0.0
+        if inputs.count >= 4 {
+            if pressed.contains(inputs[0]) { dy -= 1 }
+            if pressed.contains(inputs[1]) { dy += 1 }
+            if pressed.contains(inputs[2]) { dx -= 1 }
+            if pressed.contains(inputs[3]) { dx += 1 }
+        }
+        let len = (dx * dx + dy * dy).squareRoot()
+        if len > 0 { dx /= len; dy /= len }
+        let anyActive = len > 0
+        let colors = style(active: anyActive, tint: tint)
+
+        let housing = UIBezierPath(arcCenter: center, radius: radius,
+                                   startAngle: 0, endAngle: .pi * 2, clockwise: true)
+        if material {
+            fillSunken(housing, fill: colors.fill)
+        } else {
+            colors.fill.setFill(); housing.fill()
+            colors.stroke.setStroke(); housing.lineWidth = 1.5; housing.stroke()
+        }
+
+        // The eight gate notches around the plate, which is what tells
+        // you at a glance that this is a stick and not a dish.
+        if let ctx = UIGraphicsGetCurrentContext() {
+            ctx.saveGState()
+            ctx.setStrokeColor(UIColor.white.withAlphaComponent(material ? 0.18 : 0.3).cgColor)
+            ctx.setLineWidth(2)
+            ctx.setLineCap(.round)
+            for i in 0..<8 {
+                let a = Double(i) * .pi / 4
+                ctx.move(to: CGPoint(x: center.x + cos(a) * radius * 0.72,
+                                     y: center.y + sin(a) * radius * 0.72))
+                ctx.addLine(to: CGPoint(x: center.x + cos(a) * radius * 0.88,
+                                        y: center.y + sin(a) * radius * 0.88))
+            }
+            ctx.strokePath()
+            ctx.restoreGState()
+        }
+
+        // The shaft, drawn before the ball so the ball caps it.
+        let ballRadius = radius * 0.44
+        let throwDist = (radius - ballRadius) * 0.55
+        let ballCenter = CGPoint(x: center.x + dx * throwDist, y: center.y + dy * throwDist)
+        if anyActive, let ctx = UIGraphicsGetCurrentContext() {
+            ctx.saveGState()
+            ctx.setStrokeColor(UIColor.black.withAlphaComponent(material ? 0.35 : 0.2).cgColor)
+            ctx.setLineWidth(ballRadius * 0.5)
+            ctx.setLineCap(.round)
+            ctx.move(to: center)
+            ctx.addLine(to: ballCenter)
+            ctx.strokePath()
+            ctx.restoreGState()
+        }
+
+        let ballFill = tint ?? Self.ballTop
+        if material {
+            fillSphere(center: ballCenter, radius: ballRadius, fill: ballFill, active: anyActive)
+        } else {
+            let ball = UIBezierPath(arcCenter: ballCenter, radius: ballRadius,
+                                    startAngle: 0, endAngle: .pi * 2, clockwise: true)
+            ballFill.withAlphaComponent(anyActive ? 0.95 : 0.7).setFill()
+            ball.fill()
+        }
+    }
+
     private func drawDpad(in frame: CGRect, inputs: [Int], label: String? = nil, tint: UIColor? = nil) {
+        // An arcade panel gets a stick, because that is what the
+        // cabinet had. Same item, same digital inputs, different
+        // drawing. See drawArcadeStick.
+        if system.hasPrefix("arcade") {
+            drawArcadeStick(in: frame, inputs: inputs, tint: tint)
+            return
+        }
         // A d-pad is square. Every real one ever made is, and a thumb
         // rolling between up and left expects the same travel either
         // way. The cross used to fill whatever rect it was given, so
@@ -1131,6 +1661,106 @@ final class ControlPadView: UIView {
             }
             ctx.restoreGState()
         }
+    }
+
+    /// The classic arcade ball top. Red because that is what a cabinet
+    /// had, and because a white ball on a grey panel is the least
+    /// interesting object in the room. One constant, easy to change.
+    private static let ballTop = UIColor(red: 0.83, green: 0.14, blue: 0.17, alpha: 1)
+
+    /// A sphere, as opposed to a disc with a highlight on it.
+    ///
+    /// `fillMoulded` extrudes a flat shape: side wall, lit face, rim. It
+    /// is the right tool for a button, which IS a flat shape pushed up
+    /// out of a panel, and the wrong one for a ball, which has no face
+    /// and no wall. Marcus, 2026-08-25, on the joystick: "the white ball
+    /// seems kind of boring and it also doesn't look much like a ball."
+    /// It did not, because it was a moulded circle.
+    ///
+    /// What makes a sphere read is the gradient running off-centre.
+    /// Light arrives from the upper left, so the bright point sits up
+    /// and left of the middle rather than in it, the tone falls away in
+    /// every direction from there, and the far edge goes darkest. The
+    /// small hard specular near the light is what says the surface is
+    /// glossy plastic, and the faint bounce along the lower right is
+    /// light coming back off the panel, which is what stops the dark
+    /// side reading as a flat shadow.
+    private func fillSphere(center: CGPoint, radius: CGFloat, fill: UIColor, active: Bool) {
+        guard let ctx = UIGraphicsGetCurrentContext(), radius > 0 else {
+            fill.setFill()
+            UIBezierPath(arcCenter: center, radius: max(radius, 0),
+                         startAngle: 0, endAngle: .pi * 2, clockwise: true).fill()
+            return
+        }
+        var h: CGFloat = 0, sat: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        let hasHue = fill.getHue(&h, saturation: &sat, brightness: &b, alpha: &a)
+        func shade(_ bri: CGFloat, _ satMul: CGFloat = 1, _ alpha: CGFloat = 1) -> UIColor {
+            hasHue ? UIColor(hue: h, saturation: min(sat * satMul, 1),
+                             brightness: max(min(bri, 1), 0), alpha: alpha)
+                   : UIColor(white: bri, alpha: alpha)
+        }
+        let ball = UIBezierPath(arcCenter: center, radius: radius,
+                                startAngle: 0, endAngle: .pi * 2, clockwise: true)
+
+        // Grounded first: a ball resting in a housing casts under
+        // itself, and without it the thing floats.
+        ctx.saveGState()
+        ctx.setShadow(offset: CGSize(width: 0, height: active ? 1 : 3),
+                      blur: active ? 3 : 6,
+                      color: UIColor.black.withAlphaComponent(0.65).cgColor)
+        shade(max(b * 0.5, 0.06)).setFill()
+        ball.fill()
+        ctx.restoreGState()
+
+        ctx.saveGState()
+        ball.addClip()
+        let lit = CGPoint(x: center.x - radius * 0.34, y: center.y - radius * 0.38)
+        let stops: [CGFloat] = [0, 0.45, 0.78, 1]
+        let cols = [
+            shade(min(b * 1.55 + 0.20, 1.0), 0.55).cgColor,   // near the light
+            shade(min(b * 1.05, 1.0)).cgColor,                // body
+            shade(b * 0.52, 1.15).cgColor,                    // turning away
+            shade(b * 0.26, 1.25).cgColor,                    // the far edge
+        ]
+        if let g = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                              colors: cols as CFArray, locations: stops) {
+            ctx.drawRadialGradient(
+                g, startCenter: lit, startRadius: 0,
+                endCenter: center, endRadius: radius * 1.30,
+                options: [.drawsAfterEndLocation])
+        }
+        // Bounce off the panel along the lower right, so the dark side
+        // is a turning surface rather than a flat shadow.
+        if let g2 = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                               colors: [shade(1, 0.3, 0.16).cgColor,
+                                        shade(1, 0.3, 0).cgColor] as CFArray,
+                               locations: [0, 1]) {
+            ctx.drawRadialGradient(
+                g2,
+                startCenter: CGPoint(x: center.x + radius * 0.55, y: center.y + radius * 0.62),
+                startRadius: 0,
+                endCenter: CGPoint(x: center.x + radius * 0.55, y: center.y + radius * 0.62),
+                endRadius: radius * 0.85, options: [])
+        }
+        // The specular: small, hard-ish, near the light. This is the
+        // single detail that reads as "glossy" at a glance.
+        let sr = radius * 0.26
+        let sc = CGPoint(x: center.x - radius * 0.36, y: center.y - radius * 0.42)
+        if let g3 = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                               colors: [UIColor(white: 1, alpha: active ? 0.75 : 0.9).cgColor,
+                                        UIColor(white: 1, alpha: 0).cgColor] as CFArray,
+                               locations: [0, 1]) {
+            ctx.drawRadialGradient(g3, startCenter: sc, startRadius: 0,
+                                   endCenter: sc, endRadius: sr, options: [])
+        }
+        ctx.restoreGState()
+
+        // A dark contact line where the ball meets its housing.
+        ctx.saveGState()
+        shade(b * 0.20, 1.2, 0.55).setStroke()
+        ball.lineWidth = 1.5
+        ball.stroke()
+        ctx.restoreGState()
     }
 
     /// The inverse of `fillMoulded`, for the parts of a panel that are

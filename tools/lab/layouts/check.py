@@ -136,6 +136,11 @@ for path in sorted(glob.glob(os.path.join(ROOT, '*.json'))):
         # wrong place.
         for p in pills:
             for r in rest:
+                # A light gun's item IS the picture: it spans the whole
+                # panel because you aim anywhere on it. Every control
+                # necessarily sits on it, so overlapping one is the
+                # normal case rather than a fault.
+                if r.get('kind') == 'gun': continue
                 if ov(p['frame'], r['frame']):
                     fail(name, key, "pill %s sits on %s"
                          % (p.get('label'), r.get('label') or r.get('kind')))
