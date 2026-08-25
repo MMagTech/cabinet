@@ -1,11 +1,11 @@
 {
- "system": "arcade:special:2",
+ "system": "arcade:two_button:2",
  "_ergonomics": "Generated from ArcadeLayout for one analog panel shape, then tuned by hand. The mechanism takes the movement role and the stick's slot when the cabinet had no joystick, or its own lane beside a narrowed stick when it did. Pedals hold the right edge under a resting thumb. Coin, Start and Menu keep the top band. The file name states the whole panel: the mechanism, the button count, the pedal count and whether a stick was there too, because a file that matched a cabinet only approximately is how a brake once landed on a machine that never had one.",
  "items": [
   {
    "kind": "gun",
-   "frame": {"x": 0.0, "y": 0.0, "w": 1, "h": 1},
-   "extended": {"x": 0.0, "y": 0.0, "w": 1, "h": 1}
+   "frame": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0},
+   "extended": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0}
   },
   {
    "kind": "button",
@@ -32,22 +32,27 @@
    "kind": "pill",
    "label": "Start",
    "input": 3,
-   "frame": {"x": 0.4, "y": 0.0, "w": 0.18, "h": 0.038},
-   "extended": {"x": 0.38, "y": -0.014, "w": 0.22, "h": 0.066}
+   "frame": {"x": 0.4, "y": 0.955, "w": 0.18, "h": 0.038},
+   "extended": {"x": 0.38, "y": 0.941, "w": 0.22, "h": 0.066}
   },
   {
    "kind": "pill",
    "label": "Menu",
    "input": -1,
-   "frame": {"x": 0.72, "y": 0.0, "w": 0.153, "h": 0.038},
-   "extended": {"x": 0.7, "y": -0.014, "w": 0.193, "h": 0.066}
+   "frame": {"x": 0.72, "y": 0.955, "w": 0.153, "h": 0.038},
+   "extended": {"x": 0.7, "y": 0.941, "w": 0.193, "h": 0.066}
+  },
+  {
+   "kind": "trackball",
+   "frame": {"x": 0.06, "y": 0.7, "w": 0.26, "h": 0.12},
+   "extended": {"x": 0.03, "y": 0.68, "w": 0.32, "h": 0.16}
   }
  ],
  "landscapeItems": [
   {
    "kind": "gun",
-   "frame": {"x": 0.0, "y": 0.0, "w": 1, "h": 1},
-   "extended": {"x": 0.0, "y": 0.0, "w": 1, "h": 1}
+   "frame": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0},
+   "extended": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0}
   },
   {
    "kind": "button",
@@ -74,15 +79,20 @@
    "kind": "pill",
    "label": "Start",
    "input": 3,
-   "frame": {"x": 0.87, "y": 0.0, "w": 0.1, "h": 0.09},
-   "extended": {"x": 0.84, "y": -0.04, "w": 0.15, "h": 0.16}
+   "frame": {"x": 0.87, "y": 0.07, "w": 0.1, "h": 0.09},
+   "extended": {"x": 0.84, "y": 0.03, "w": 0.15, "h": 0.16}
   },
   {
    "kind": "pill",
    "label": "Menu",
    "input": -1,
-   "frame": {"x": 0.105, "y": 0.0, "w": 0.1, "h": 0.09},
-   "extended": {"x": 0.1, "y": -0.04, "w": 0.14, "h": 0.16}
+   "frame": {"x": 0.105, "y": 0.07, "w": 0.1, "h": 0.09},
+   "extended": {"x": 0.1, "y": 0.03, "w": 0.14, "h": 0.16}
+  },
+  {
+   "kind": "trackball",
+   "frame": {"x": 0.03, "y": 0.54, "w": 0.14, "h": 0.3},
+   "extended": {"x": 0.01, "y": 0.5, "w": 0.18, "h": 0.38}
   }
  ]
 }

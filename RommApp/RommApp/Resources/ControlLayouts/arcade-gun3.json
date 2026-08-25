@@ -1,28 +1,7 @@
 {
- "system": "arcade:special:3",
- "_ergonomics": "Light gun cabinet, 3 action buttons. Generated from ArcadeLayout so every panel a player can be shown exists as a file that can be looked at and tuned, rather than only while a game runs.",
+ "system": "arcade:three_button:3",
+ "_ergonomics": "Generated from ArcadeLayout for one analog panel shape, then tuned by hand. The mechanism takes the movement role and the stick's slot when the cabinet had no joystick, or its own lane beside a narrowed stick when it did. Pedals hold the right edge under a resting thumb. Coin, Start and Menu keep the top band. The file name states the whole panel: the mechanism, the button count, the pedal count and whether a stick was there too, because a file that matched a cabinet only approximately is how a brake once landed on a machine that never had one.",
  "items": [
-  {
-   "kind": "pill",
-   "label": "Coin",
-   "input": 2,
-   "frame": {"x": 0.03, "y": 0.045, "w": 0.11, "h": 0.055},
-   "extended": {"x": 0.01, "y": 0.025, "w": 0.15, "h": 0.095}
-  },
-  {
-   "kind": "pill",
-   "label": "Menu",
-   "input": -1,
-   "frame": {"x": 0.17, "y": 0.045, "w": 0.13, "h": 0.055},
-   "extended": {"x": 0.15, "y": 0.025, "w": 0.17, "h": 0.095}
-  },
-  {
-   "kind": "pill",
-   "label": "Start",
-   "input": 3,
-   "frame": {"x": 0.72, "y": 0.045, "w": 0.13, "h": 0.055},
-   "extended": {"x": 0.7, "y": 0.025, "w": 0.17, "h": 0.095}
-  },
   {
    "kind": "gun",
    "frame": {"x": 0.0, "y": 0.0, "w": 1, "h": 1},
@@ -32,47 +11,47 @@
    "kind": "button",
    "label": "1",
    "input": 0,
-   "frame": {"x": 0.03, "y": 0.86, "w": 0.2, "h": 0.1},
-   "extended": {"x": 0.01, "y": 0.84, "w": 0.24, "h": 0.14}
+   "frame": {"x": 0.1, "y": 0.86, "w": 0.2, "h": 0.075},
+   "extended": {"x": 0.08, "y": 0.845, "w": 0.24, "h": 0.105}
   },
   {
    "kind": "button",
    "label": "2",
    "input": 8,
-   "frame": {"x": 0.77, "y": 0.86, "w": 0.2, "h": 0.1},
-   "extended": {"x": 0.75, "y": 0.84, "w": 0.24, "h": 0.14}
+   "frame": {"x": 0.4, "y": 0.86, "w": 0.2, "h": 0.075},
+   "extended": {"x": 0.38, "y": 0.845, "w": 0.24, "h": 0.105}
   },
   {
    "kind": "button",
    "label": "3",
    "input": 1,
-   "frame": {"x": 0.55, "y": 0.86, "w": 0.2, "h": 0.1},
-   "extended": {"x": 0.53, "y": 0.84, "w": 0.24, "h": 0.14}
+   "frame": {"x": 0.7, "y": 0.86, "w": 0.2, "h": 0.075},
+   "extended": {"x": 0.68, "y": 0.845, "w": 0.24, "h": 0.105}
+  },
+  {
+   "kind": "button",
+   "label": "Coin",
+   "input": 2,
+   "frame": {"x": 0.05, "y": 0.955, "w": 0.126, "h": 0.038},
+   "extended": {"x": 0.03, "y": 0.941, "w": 0.166, "h": 0.066}
+  },
+  {
+   "kind": "pill",
+   "label": "Start",
+   "input": 3,
+   "frame": {"x": 0.4, "y": 0.0, "w": 0.18, "h": 0.038},
+   "extended": {"x": 0.38, "y": -0.014, "w": 0.22, "h": 0.066}
+  },
+  {
+   "kind": "pill",
+   "label": "Menu",
+   "input": -1,
+   "frame": {"x": 0.72, "y": 0.0, "w": 0.153, "h": 0.038},
+   "extended": {"x": 0.7, "y": -0.014, "w": 0.193, "h": 0.066}
   }
  ],
  "landscapeItems": [
   {
-   "kind": "pill",
-   "label": "Coin",
-   "input": 2,
-   "frame": {"x": 0.03, "y": 0.04, "w": 0.11, "h": 0.12},
-   "extended": {"x": 0.01, "y": 0.02, "w": 0.15, "h": 0.16}
-  },
-  {
-   "kind": "pill",
-   "label": "Menu",
-   "input": -1,
-   "frame": {"x": 0.17, "y": 0.04, "w": 0.13, "h": 0.12},
-   "extended": {"x": 0.15, "y": 0.02, "w": 0.17, "h": 0.16}
-  },
-  {
-   "kind": "pill",
-   "label": "Start",
-   "input": 3,
-   "frame": {"x": 0.84, "y": 0.04, "w": 0.13, "h": 0.12},
-   "extended": {"x": 0.82, "y": 0.02, "w": 0.17, "h": 0.16}
-  },
-  {
    "kind": "gun",
    "frame": {"x": 0.0, "y": 0.0, "w": 1, "h": 1},
    "extended": {"x": 0.0, "y": 0.0, "w": 1, "h": 1}
@@ -81,22 +60,43 @@
    "kind": "button",
    "label": "1",
    "input": 0,
-   "frame": {"x": 0.03, "y": 0.76, "w": 0.1, "h": 0.2},
-   "extended": {"x": 0.01, "y": 0.74, "w": 0.14, "h": 0.24}
+   "frame": {"x": 0.78, "y": 0.64, "w": 0.07, "h": 0.16},
+   "extended": {"x": 0.76, "y": 0.59, "w": 0.11, "h": 0.26}
   },
   {
    "kind": "button",
    "label": "2",
    "input": 8,
-   "frame": {"x": 0.87, "y": 0.76, "w": 0.1, "h": 0.2},
-   "extended": {"x": 0.85, "y": 0.74, "w": 0.14, "h": 0.24}
+   "frame": {"x": 0.85, "y": 0.46, "w": 0.07, "h": 0.16},
+   "extended": {"x": 0.83, "y": 0.41, "w": 0.11, "h": 0.26}
   },
   {
    "kind": "button",
    "label": "3",
    "input": 1,
-   "frame": {"x": 0.75, "y": 0.76, "w": 0.1, "h": 0.2},
-   "extended": {"x": 0.73, "y": 0.74, "w": 0.14, "h": 0.24}
+   "frame": {"x": 0.9, "y": 0.26, "w": 0.07, "h": 0.16},
+   "extended": {"x": 0.88, "y": 0.21, "w": 0.11, "h": 0.26}
+  },
+  {
+   "kind": "button",
+   "label": "Coin",
+   "input": 2,
+   "frame": {"x": 0.025, "y": 0.06, "w": 0.065, "h": 0.15},
+   "extended": {"x": 0.0, "y": 0.02, "w": 0.1, "h": 0.24}
+  },
+  {
+   "kind": "pill",
+   "label": "Start",
+   "input": 3,
+   "frame": {"x": 0.87, "y": 0.0, "w": 0.1, "h": 0.09},
+   "extended": {"x": 0.84, "y": -0.04, "w": 0.15, "h": 0.16}
+  },
+  {
+   "kind": "pill",
+   "label": "Menu",
+   "input": -1,
+   "frame": {"x": 0.105, "y": 0.0, "w": 0.1, "h": 0.09},
+   "extended": {"x": 0.1, "y": -0.04, "w": 0.14, "h": 0.16}
   }
  ]
 }

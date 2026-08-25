@@ -1,27 +1,13 @@
 {
- "system": "arcade:dual_stick:1",
- "_ergonomics": "Generated from ArcadeLayout.build and then tuned by hand. The stick sits low in the left thumb's arc pivoting from the bottom corner grip; action buttons curl through the right thumb's arc; Coin, Start and Menu take the top band where mid-game thumbs never stray. A twin-stick game shrinks the movement stick to give the aiming stick the right thumb's whole arc.",
+ "system": "arcade:no_buttons:0",
+ "_ergonomics": "Generated from ArcadeLayout for one analog panel shape, then tuned by hand. The mechanism takes the movement role and the stick's slot when the cabinet had no joystick, or its own lane beside a narrowed stick when it did. Pedals hold the right edge under a resting thumb. Coin, Start and Menu keep the top band. The file name states the whole panel: the mechanism, the button count, the pedal count and whether a stick was there too, because a file that matched a cabinet only approximately is how a brake once landed on a machine that never had one.",
  "items": [
   {
    "kind": "dpad",
    "inputs": [4, 5, 6, 7],
-   "frame": {"x": 0.04, "y": 0.4, "w": 0.34, "h": 0.46},
-   "extended": {"x": 0.0, "y": 0.32, "w": 0.4, "h": 0.62},
+   "frame": {"x": 0.04, "y": 0.38, "w": 0.3, "h": 0.52},
+   "extended": {"x": 0.01, "y": 0.32, "w": 0.34, "h": 0.62},
    "fourWay": false
-  },
-  {
-   "kind": "dpad",
-   "inputs": [23, 22, 21, 20],
-   "frame": {"x": 0.62, "y": 0.4, "w": 0.34, "h": 0.46},
-   "extended": {"x": 0.6, "y": 0.32, "w": 0.4, "h": 0.62},
-   "fourWay": false
-  },
-  {
-   "kind": "button",
-   "label": "1",
-   "input": 0,
-   "frame": {"x": 0.43, "y": 0.44, "w": 0.14, "h": 0.16},
-   "extended": {"x": 0.4, "y": 0.41, "w": 0.2, "h": 0.22}
   },
   {
    "kind": "button",
@@ -43,6 +29,11 @@
    "input": -1,
    "frame": {"x": 0.72, "y": 0.1, "w": 0.17, "h": 0.1},
    "extended": {"x": 0.68, "y": 0.05, "w": 0.25, "h": 0.2}
+  },
+  {
+   "kind": "spinner",
+   "frame": {"x": 0.38, "y": 0.6, "w": 0.24, "h": 0.28},
+   "extended": {"x": 0.36, "y": 0.58, "w": 0.28, "h": 0.32}
   }
  ],
  "landscapeItems": [
@@ -52,20 +43,6 @@
    "frame": {"x": 0.03, "y": 0.42, "w": 0.19, "h": 0.42},
    "extended": {"x": 0.0, "y": 0.32, "w": 0.24, "h": 0.58},
    "fourWay": false
-  },
-  {
-   "kind": "dpad",
-   "inputs": [23, 22, 21, 20],
-   "frame": {"x": 0.78, "y": 0.42, "w": 0.19, "h": 0.42},
-   "extended": {"x": 0.76, "y": 0.32, "w": 0.24, "h": 0.58},
-   "fourWay": false
-  },
-  {
-   "kind": "button",
-   "label": "1",
-   "input": 0,
-   "frame": {"x": 0.47, "y": 0.3, "w": 0.06, "h": 0.14},
-   "extended": {"x": 0.44, "y": 0.27, "w": 0.12, "h": 0.2}
   },
   {
    "kind": "button",
@@ -87,6 +64,11 @@
    "input": -1,
    "frame": {"x": 0.105, "y": 0.07, "w": 0.1, "h": 0.09},
    "extended": {"x": 0.1, "y": 0.03, "w": 0.14, "h": 0.16}
+  },
+  {
+   "kind": "spinner",
+   "frame": {"x": 0.3, "y": 0.6, "w": 0.13, "h": 0.3},
+   "extended": {"x": 0.28, "y": 0.57, "w": 0.17, "h": 0.36}
   }
  ]
 }

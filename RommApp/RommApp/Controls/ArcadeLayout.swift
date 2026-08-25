@@ -52,6 +52,21 @@ enum ArcadeLayout {
     /// the game cannot tell which layout produced a press.
     static func companion(for profile: ArcadeProfile, analog: AnalogControls?) -> ControlLayout {
         let analog = analog ?? AnalogControls()
+        // A hand-tuned companion set wins, the same way it does for a
+        // console. Every non-arcade platform has read its companionItems
+        // from the layout file since companion panels existed; arcade was
+        // the one family that always rebuilt them here and threw the
+        // tuning away. Falls through to the generated panel when a file
+        // has no companion set, which is every file until one is authored,
+        // so this changes nothing on its own.
+        let tunedName = tunedPanelName(for: profile, analog: analog)
+            ?? tunedStickName(for: profile)
+        if let file = loadLayout(named: tunedName),
+           let companion = file.companionItems, !companion.isEmpty {
+            return ControlLayout(
+                system: file.system, items: companion, landscapeItems: companion,
+                companionItems: companion, headroom: file.headroom)
+        }
         var kinds: [ControlLayout.Item.Kind] = []
         if (analog.rotary ?? 0) > 0 { kinds.append(.rotary) }
         if (analog.trackball ?? 0) > 0 { kinds.append(.trackball) }
@@ -243,7 +258,77 @@ enum ArcadeLayout {
     /// get made properly; this is what a shape looks like before anyone
     /// has tuned it, which is the same relationship every arcade layout
     /// has always had to its generator.
+    /// The file name a hand-tuned panel for this cabinet would live under,
+    /// or nil for a cabinet with no analog control at all (those are named
+    /// by tunedLayout's stick/twin scheme instead).
+    ///
+    /// EVERYTHING that moves a control has to be in this name, and that is
+    /// the whole lesson of the version this replaces. It named a file by
+    /// the control type and the button count only, so one name covered
+    /// cabinets with one pedal and cabinets with two. A file cannot be
+    /// right for both, which is why the old code refused to load a tuned
+    /// panel for any cabinet with pedals at all rather than draw a brake
+    /// on the 91 machines that never had one. Refusing was the correct
+    /// call given the name; the fix is to make the name complete.
+    ///
+    /// Naming is here, in one function, called by both the app and the
+    /// exporter in tools/lab/arcade. Two copies of this rule would drift,
+    /// and a drift means a file that is silently never read: exactly what
+    /// happened to the wheel, gun and rotary panels, which sat in the
+    /// bundle unreachable because nothing ever resolved their names.
+    ///
+    /// tools/lab/arcade/panels.sh proves the mapping is one to one over
+    /// every romset in the data before it exports anything: two cabinets
+    /// that share a name must generate the same panel, or that file is
+    /// wrong for one of them. It refuses to write if that fails.
+    static func tunedPanelName(for profile: ArcadeProfile, analog: AnalogControls) -> String? {
+        let rotary = (analog.rotary ?? 0) > 0
+        let gun = (analog.lightgun ?? 0) > 0
+        let trackball = (analog.trackball ?? 0) > 0
+        let spinner = (analog.dial ?? 0) > 0 || (analog.paddle ?? 0) > 0
+        let pedals = min(max(analog.pedals ?? 0, 0), 2)
+        guard rotary || gun || trackball || spinner || pedals > 0 else { return nil }
+
+        // A handful of cabinets carried two mechanisms at once, so the
+        // stem is a list rather than a choice. Fixed order, so the same
+        // panel always spells itself the same way.
+        var families: [String] = []
+        if rotary { families.append("rotary") }
+        if gun { families.append("gun") }
+        if trackball { families.append("trackball") }
+        if spinner { families.append("spinner") }
+        let stem = families.isEmpty ? "pedal" : families.joined(separator: "-")
+
+        var name = "arcade-\(stem)\(max(0, min(profile.buttons, 6)))"
+        if pedals > 0 { name += "p\(pedals)" }
+        // A joystick beside the mechanism narrows the stick and moves the
+        // mechanism into its own lane, so it is a different panel. It only
+        // changes anything when there IS a mechanism to sit beside.
+        if (trackball || spinner) && joystickPresent(profile: profile, analog: analog) {
+            name += "j"
+        }
+        return name
+    }
+
+    /// Did this cabinet have a joystick as well? Extracted so the name and
+    /// the layout cannot disagree about it.
+    private static func joystickPresent(profile: ArcadeProfile, analog: AnalogControls) -> Bool {
+        if let stated = analog.joystick { return stated != 0 }
+        if (analog.trackball ?? 0) > 0 { return false }
+        return profile.profile != "special"
+    }
+
     private static func panel(for profile: ArcadeProfile, analog: AnalogControls) -> ControlLayout? {
+        // A hand-tuned panel wins, and is looked up BEFORE anything else
+        // here so that every family reaches it. The rotary branch below
+        // returns early and the gun and pedal cases were refused outright,
+        // which between them left 21 of the bundle's 35 analog panels
+        // unreachable: they could be edited in the LayoutEditor and could
+        // never appear in a game.
+        if let name = tunedPanelName(for: profile, analog: analog),
+           let file = loadLayout(named: name) {
+            return file
+        }
         // Did this cabinet have a joystick? The profile is a weak
         // answer: it says "special" only when a modern MAME listxml
         // happened to classify the machine that way, which is how
@@ -251,11 +336,7 @@ enum ArcadeLayout {
         // chose that. A trackball takes the movement role outright, so a
         // trackball cabinet has no stick unless the curated file says
         // otherwise, and any panel can state the answer directly.
-        let hasJoystick: Bool = {
-            if let stated = analog.joystick { return stated != 0 }
-            if (analog.trackball ?? 0) > 0 { return false }
-            return profile.profile != "special"
-        }()
+        let hasJoystick = joystickPresent(profile: profile, analog: analog)
         var analogKinds: [ControlLayout.Item.Kind] = []
         // A rotary joystick was one control: the player pushed it and
         // twisted it with the same hand, at the same time. A thumb on
@@ -319,13 +400,9 @@ enum ArcadeLayout {
         // it, and the standard layout already draws one.
         if analogKinds.isEmpty && !gun && !pedals { return nil }
 
-        if let tuned = tunedPanel(for: profile, kinds: analogKinds, gun: gun, pedals: pedals) {
-            return tuned
-        }
-
         let besideStick = hasJoystick && !analogKinds.isEmpty
         let base = buildStandard(
-            for: profile, clearOfPedals: pedalCount > 0, narrowStick: besideStick)
+            for: profile, pedals: pedalCount, narrowStick: besideStick)
         var items = base.items
         var wide = base.landscapeItems ?? base.items
 
@@ -384,6 +461,39 @@ enum ArcadeLayout {
 
         for (index, kind) in analogKinds.enumerated() {
             let sens: Double = kind == .spinner ? 768 : (kind == .wheel ? 500 : 300)
+            if gun {
+                // A cabinet that carried a gun AND a mechanism. Two of
+                // them exist: Lucky & Wild, where one player steers while
+                // another shoots, and Born to Fight. Both lost their
+                // mechanism completely until now, because the placement
+                // below works by REPLACING the d-pad and the gun branch
+                // above has already stripped the d-pad out. Nothing
+                // errored; the control simply was not in the file.
+                //
+                // Aiming owns the screen here, so the mechanism cannot
+                // take a lane the way it does on an ordinary panel. It
+                // gets the lower left instead, the one corner a gun panel
+                // leaves free: the button band is along the bottom, Coin
+                // is under it, and a pedal, if the cabinet has one, holds
+                // the right edge. Normalised against the whole screen,
+                // like everything else on a gun panel.
+                let tall = ControlLayout.Item(
+                    kind: kind, label: nil, input: nil, inputs: nil,
+                    frame: ControlLayout.Rect(
+                        x: 0.06 + Double(index) * 0.30, y: 0.70, w: 0.26, h: 0.12),
+                    extended: ControlLayout.Rect(
+                        x: 0.03 + Double(index) * 0.30, y: 0.68, w: 0.32, h: 0.16),
+                    fourWay: nil, sensitivity: sens)
+                let flat = ControlLayout.Item(
+                    kind: kind, label: nil, input: nil, inputs: nil,
+                    frame: ControlLayout.Rect(
+                        x: 0.03 + Double(index) * 0.17, y: 0.54, w: 0.14, h: 0.30),
+                    extended: ControlLayout.Rect(
+                        x: 0.01 + Double(index) * 0.17, y: 0.50, w: 0.18, h: 0.38),
+                    fourWay: nil, sensitivity: sens)
+                items.append(tall); wide.append(flat)
+                continue
+            }
             if !hasJoystick && index == 0 {
                 // No stick on this panel: the analog control takes its
                 // slot and its reach.
@@ -476,15 +586,13 @@ enum ArcadeLayout {
         }
     }
 
-    /// A hand-tuned panel file, named for its shape, if one exists yet.
-    private static func tunedPanel(
-        for profile: ArcadeProfile, kinds: [ControlLayout.Item.Kind], gun: Bool, pedals: Bool
-    ) -> ControlLayout? {
-        guard !gun, !pedals, kinds.count == 1 else { return nil }
-        let stem = kinds[0] == .spinner ? "spinner" : (kinds[0] == .trackball ? "trackball" : "wheel")
-        let name = "arcade-\(stem)\(max(0, min(profile.buttons, 6)))"
-        guard profile.profile == "special",
-              let url = Bundle.main.url(forResource: name, withExtension: "json"),
+    /// One bundled layout file by name, or nil if it has never been
+    /// authored. Loaded here rather than through ControlLayout.named,
+    /// which asserts on a miss because everywhere else a missing layout IS
+    /// a bug; here it just means this panel shape has no tuned file and
+    /// the generator is the answer.
+    private static func loadLayout(named name: String) -> ControlLayout? {
+        guard let url = Bundle.main.url(forResource: name, withExtension: "json"),
               let data = try? Data(contentsOf: url),
               let file = try? JSONDecoder().decode(ControlLayout.self, from: data)
         else { return nil }
@@ -509,7 +617,8 @@ enum ArcadeLayout {
             headroom: base.headroom)
     }
 
-    private static func buildStandard(for profile: ArcadeProfile, clearOfPedals: Bool = false, narrowStick: Bool = false) -> ControlLayout {
+    private static func buildStandard(for profile: ArcadeProfile, pedals: Int = 0, narrowStick: Bool = false) -> ControlLayout {
+        let clearOfPedals = pedals > 0
         // A tuned file wins over the generated arrangement. The generator
         // below is what produced these files in the first place
         // (tools/arcade-layouts), so this changes nothing until one is
@@ -567,7 +676,7 @@ enum ArcadeLayout {
             ))
             items.append(contentsOf: actionButtons(
                 count: max(0, min(profile.buttons, 6)),
-                clearOfPedals: clearOfPedals, rightLane: narrowStick))
+                pedals: pedals, rightLane: narrowStick))
         }
 
         // Coin and Start are pressed a few times a session, so they take the
@@ -615,7 +724,7 @@ enum ArcadeLayout {
         return ControlLayout(
             system: "arcade:\(profile.profile):\(max(0, min(profile.buttons, 6)))",
             items: items,
-            landscapeItems: landscapeItems(for: profile, clearOfPedals: clearOfPedals),
+            landscapeItems: landscapeItems(for: profile, pedals: pedals),
             companionItems: nil,
             headroom: nil
         )
@@ -630,9 +739,16 @@ enum ArcadeLayout {
     /// (Pac-Man and Donkey Kong break when fed diagonals), so it overrides
     /// whatever the file happens to carry, and the system string is rebuilt
     /// so the palette still follows the running game.
+    /// The stick or twin-stick file name for a cabinet with no analog
+    /// mechanism. Split out so the companion path can ask for it by name
+    /// without building the whole layout.
+    static func tunedStickName(for profile: ArcadeProfile) -> String {
+        "arcade-\(profile.isDualStick ? "twin" : "stick")\(max(0, min(profile.buttons, 6)))"
+    }
+
     private static func tunedLayout(for profile: ArcadeProfile) -> ControlLayout? {
         let count = max(0, min(profile.buttons, 6))
-        let name = "arcade-\(profile.isDualStick ? "twin" : "stick")\(count)"
+        let name = tunedStickName(for: profile)
         // Loaded here rather than through ControlLayout.named, which
         // asserts on a miss because everywhere else a missing layout IS a
         // bug. Here it simply means this variant has never been tuned, and
@@ -663,7 +779,8 @@ enum ArcadeLayout {
 
     /// The landscape arrangement: canvas centred, controls flanking it in
     /// the gutters. Frames are normalised against the full screen.
-    private static func landscapeItems(for profile: ArcadeProfile, clearOfPedals: Bool = false) -> [ControlLayout.Item] {
+    private static func landscapeItems(for profile: ArcadeProfile, pedals: Int = 0) -> [ControlLayout.Item] {
+        let clearOfPedals = pedals > 0
         var items: [ControlLayout.Item] = []
 
         if profile.isDualStick {
@@ -718,18 +835,36 @@ enum ArcadeLayout {
             fourWay: profile.isFourWay
         ))
 
-        let count = max(0, min(profile.buttons, 6))
-        let singleRowIds = [0, 8, 1, 9]
-        let doubleRowIds = [1, 9, 10, 0, 8, 11]
+        // Same reservation the portrait panel makes: a pedal owns L or R,
+        // so an action button cannot also send it. See actionIds.
+        let singleRowIds = actionIds([0, 8, 1, 9], pedals: pedals)
+        let doubleRowIds = actionIds([1, 9, 10, 0, 8, 11], pedals: pedals)
+        let wanted = max(0, min(profile.buttons, 6))
+        let count = min(wanted, wanted <= 4 ? singleRowIds.count : doubleRowIds.count)
+
+        // Same growth the portrait panel makes, and for the same reason.
+        // Smaller here because landscape normalises x against the whole
+        // screen rather than a strip, so a landscape button is already
+        // wider in points than its fraction suggests.
+        let grow: Double = count == 1 ? 1.30 : (count == 2 ? 1.14 : 1)
 
         func button(id: Int, label: String, x: Double, y: Double) -> ControlLayout.Item {
-            ControlLayout.Item(
+            let w = 0.07 * grow, h = 0.16 * grow
+            // Grown about its own centre and then clamped so the TOUCH
+            // frame stays on the panel too. Without the clamp a grown
+            // button at the outer end of the arc pushes its own right
+            // side off, which is what the rotary and beside-the-stick
+            // panels did the first time this was tried.
+            let ox = min(max(x - (w - 0.07) / 2, 0.02), 1 - w - 0.02)
+            let oy = min(max(y - (h - 0.16) / 2, 0), 1 - h)
+            return ControlLayout.Item(
                 kind: .button,
                 label: label,
                 input: id,
                 inputs: nil,
-                frame: ControlLayout.Rect(x: x, y: y, w: 0.07, h: 0.16),
-                extended: ControlLayout.Rect(x: x - 0.02, y: y - 0.05, w: 0.11, h: 0.26),
+                frame: ControlLayout.Rect(x: ox, y: oy, w: w, h: h),
+                extended: ControlLayout.Rect(
+                    x: ox - 0.02, y: oy - 0.05, w: w + 0.04, h: h + 0.10),
                 fourWay: nil
             )
         }
@@ -815,22 +950,61 @@ enum ArcadeLayout {
     /// thumb rests on, so the collision is not theoretical.
     private static let pedalColumn = 0.815
 
-    private static func actionButtons(count: Int, clearOfPedals: Bool = false, rightLane: Bool = false) -> [ControlLayout.Item] {
-        guard count > 0 else { return [] }
 
-        let singleRowIds = [0, 8, 1, 9]                 // B A Y X
-        let doubleRowIds = [1, 9, 10, 0, 8, 11]         // Y X L / B A R
+    /// The RetroPad ids an action button may use on this panel.
+    ///
+    /// L and R are the PEDALS on a cabinet that has them: this core maps
+    /// MAME's button 6 to R and button 5 to L and renames them Pedal and
+    /// Pedal2 when a driver declares them. So a cabinet the profile calls
+    /// "six button" with one pedal really has five buttons and a pedal,
+    /// and drawing six put button 6 on the same id as the Gas. Pressing it
+    /// pressed the accelerator, on Cruis'n USA, San Francisco Rush,
+    /// California Speed, Spy Hunter II, Virtua Racing, Off Road Challenge,
+    /// Hydra and Golden Tee. Found 2026-08-25 by drawing every panel at
+    /// its real size and then checking what each control actually sends.
+    ///
+    /// The count follows the ids rather than the other way round: a panel
+    /// cannot show more buttons than the pad has left.
+    private static func actionIds(_ order: [Int], pedals: Int) -> [Int] {
+        let taken = Set(pedalSpecs(count: pedals).map(\.input))
+        return order.filter { !taken.contains($0) }
+    }
+
+    private static func actionButtons(count: Int, pedals: Int = 0, rightLane: Bool = false) -> [ControlLayout.Item] {
+        let clearOfPedals = pedals > 0
+        let singleRowIds = actionIds([0, 8, 1, 9], pedals: pedals)          // B A Y X
+        let doubleRowIds = actionIds([1, 9, 10, 0, 8, 11], pedals: pedals)  // Y X L / B A R
+        let count = min(count, count <= 4 ? singleRowIds.count : doubleRowIds.count)
+        guard count > 0 else { return [] }
 
         var items: [ControlLayout.Item] = []
 
+        // A panel with one or two buttons has the whole thumb arc to
+        // itself, so the buttons grow into it. The POSITIONS do not move:
+        // the arc starts at the thumb's resting place on purpose, and
+        // sliding a lone button up the sweep away from that rest would
+        // trade a good spot for a centred one. Size is what a sparse panel
+        // was actually wasting. Donkey Kong, Galaga, Dig Dug and most of
+        // the era get a target a third wider; three or more buttons are
+        // untouched, because there the arc is already full.
+        let grow: Double = count == 1 ? 1.34 : (count == 2 ? 1.16 : 1)
         func button(id: Int, label: String, x: Double, y: Double) -> ControlLayout.Item {
-            ControlLayout.Item(
+            let w = 0.15 * grow, h = 0.20 * grow
+            // Grown about its own centre and then clamped so the TOUCH
+            // frame stays on the panel too. Without the clamp a grown
+            // button at the outer end of the arc pushes its own right
+            // side off, which is what the rotary and beside-the-stick
+            // panels did the first time this was tried.
+            let ox = min(max(x - (w - 0.15) / 2, 0.04), 1 - w - 0.04)
+            let oy = min(max(y - (h - 0.20) / 2, 0), 1 - h)
+            return ControlLayout.Item(
                 kind: .button,
                 label: label,
                 input: id,
                 inputs: nil,
-                frame: ControlLayout.Rect(x: x, y: y, w: 0.15, h: 0.20),
-                extended: ControlLayout.Rect(x: x - 0.04, y: y - 0.06, w: 0.23, h: 0.32),
+                frame: ControlLayout.Rect(x: ox, y: oy, w: w, h: h),
+                extended: ControlLayout.Rect(
+                    x: ox - 0.04, y: oy - 0.06, w: w + 0.08, h: h + 0.12),
                 fourWay: nil
             )
         }
@@ -844,13 +1018,25 @@ enum ArcadeLayout {
             // be drawn straight through it, putting button 3 on the Gas.
             // The arc tightens instead of overlapping, which costs some
             // spread and costs nothing that works.
+            //
+            // A button is 0.20 tall and its touch frame reaches 0.26 below
+            // its own top, so 0.74 is the lowest a fourth button can start
+            // and still be on the panel at all. Both tightened arcs used to
+            // put it lower than that: the pedal arc at 0.84 drew button
+            // four thirteen points BELOW the bottom edge of the strip, and
+            // the right-lane arc at 0.80 kept the button on screen while
+            // hanging a third of its touch area off. Neither was visible
+            // until every panel was drawn side by side.
             let positions: [(Double, Double)]
             if rightLane {
                 // The analog control owns the middle lane, so the arc
                 // stacks in the right one rather than sweeping across it.
-                positions = [(0.70, 0.62), (0.84, 0.44), (0.70, 0.26), (0.84, 0.80)]
+                positions = [(0.70, 0.62), (0.84, 0.44), (0.70, 0.26), (0.84, 0.74)]
             } else if clearOfPedals {
-                positions = [(0.42, 0.62), (0.56, 0.44), (0.50, 0.24), (0.42, 0.84)]
+                // The pedal column starts at 0.855 and its touch frame at
+                // 0.815, so the fourth tucks inside that rather than under
+                // button one, where there is no room left below.
+                positions = [(0.42, 0.62), (0.56, 0.44), (0.50, 0.24), (0.62, 0.70)]
             } else {
                 positions = [(0.54, 0.58), (0.70, 0.44), (0.82, 0.28), (0.80, 0.62)]
             }
@@ -917,9 +1103,28 @@ enum ArcadeLayout {
     /// one open patch of strip; landscape has no equivalent gap, so they
     /// stack in the same top corner Start already occupies its own game's
     /// worth of room away from.
+    /// The buttons on a twin-stick panel, which live in the corridor
+    /// between the two sticks because both thumbs are already spoken for.
+    ///
+    /// Two faults, found by Marcus on 2026-08-25 looking at arcade-twin6
+    /// in the editor, and both invisible to the checks of the day. It
+    /// stopped at FOUR ids, so a six button cabinet silently lost buttons
+    /// five and six: Air Race, Last Starfighter and two others were
+    /// missing controls with nothing said. And the four it did draw
+    /// overlapped each other by 43 percent of their own area, three of
+    /// them sharing one row 0.08 apart when each was 0.14 wide, so the
+    /// circles drew straight through one another.
+    ///
+    /// The corridor is 0.24 wide in portrait, between sticks that end at
+    /// 0.38 and begin again at 0.62. Two columns of 0.11 fit inside it
+    /// with a gap, which is 47 points on the narrow axis, and three rows
+    /// carry six. Nothing here is allowed to touch its neighbour: buttons
+    /// may share a TOUCH frame, which is the deliberate diagonal-friendly
+    /// trick a face-button diamond uses, but two drawn circles running
+    /// through each other is just a mistake.
     private static func dualStickButtons(count: Int, landscape: Bool = false) -> [ControlLayout.Item] {
-        let ids = [0, 8, 1, 9]
-        let shown = max(0, min(count, 4))
+        let ids = [0, 8, 1, 9, 10, 11]              // B A Y X L R
+        let shown = max(0, min(count, ids.count))
         guard shown > 0 else { return [] }
 
         func item(id: Int, label: String, x: Double, y: Double, w: Double, h: Double) -> ControlLayout.Item {
@@ -931,20 +1136,33 @@ enum ArcadeLayout {
             )
         }
 
-        var items: [ControlLayout.Item] = []
-        if landscape {
-            let positions: [(Double, Double)] = [(0.50, 0.30), (0.50, 0.48), (0.44, 0.30), (0.44, 0.48)]
-            for index in 0..<shown {
-                let (x, y) = positions[index]
-                items.append(item(id: ids[index], label: "\(index + 1)", x: x, y: y, w: 0.06, h: 0.14))
-            }
-        } else {
-            let positions: [(Double, Double)] = [(0.43, 0.48), (0.43, 0.68), (0.35, 0.48), (0.51, 0.48)]
-            for index in 0..<shown {
-                let (x, y) = positions[index]
-                items.append(item(id: ids[index], label: "\(index + 1)", x: x, y: y, w: 0.14, h: 0.16))
+        // One or two buttons keep the single centred column they have
+        // always had: it is roomier than a grid and it does not overlap,
+        // and 170 of the 198 twin-stick cabinets in the data are in that
+        // group. Only three or more move.
+        let single: [(Double, Double)] = landscape
+            ? [(0.47, 0.30), (0.47, 0.52)]
+            : [(0.43, 0.44), (0.43, 0.68)]
+        let (w, h) = landscape ? (0.06, 0.14) : (0.14, 0.16)
+        if shown <= 2 {
+            return (0..<shown).map { i in
+                item(id: ids[i], label: "\(i + 1)", x: single[i].0, y: single[i].1, w: w, h: h)
             }
         }
-        return items
+
+        // Three or more: two columns in the corridor, filled in reading
+        // order, and only as many rows as the count actually needs so a
+        // four button panel sits centred rather than leaving a hole.
+        let columns: [Double] = landscape ? [0.42, 0.54] : [0.375, 0.505]
+        let gw = landscape ? 0.06 : 0.11
+        let gh = landscape ? 0.14 : 0.145
+        let rows = (shown + 1) / 2
+        let span = landscape ? 0.22 : 0.22
+        let top = landscape ? (0.50 - Double(rows - 1) * span / 2 - gh / 2)
+                            : (0.56 - Double(rows - 1) * span / 2 - gh / 2)
+        return (0..<shown).map { i in
+            item(id: ids[i], label: "\(i + 1)",
+                 x: columns[i % 2], y: top + Double(i / 2) * span, w: gw, h: gh)
+        }
     }
 }
