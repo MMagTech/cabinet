@@ -203,8 +203,15 @@ for path in sorted(glob.glob(os.path.join(ROOT, '*.json'))):
 
             # RULE 6: the action cluster is spaced like portrait's, which
             # is the one authored for a thumb. Only too-far is a failure.
+            #
+            # Arcade is exempt as of 2026-08-25: arcade companion sets are
+            # spread mechanically from arcade-stick6, whose companion
+            # Marcus laid out by hand and marked green, and his chosen
+            # companion spacing deliberately differs from his portrait
+            # spacing. The master is the standard there; this rule kept
+            # flagging the standard itself, 41 times.
             btns = [i for i in items if i.get('kind') == 'button']
-            if len(btns) > 1 and len(portrait_btns) > 1:
+            if not name.startswith('arcade-') and len(btns) > 1 and len(portrait_btns) > 1:
                 want, have = spread(portrait_btns), spread(btns)
                 for axis, i in (('x', 0), ('y', 1)):
                     if want[i] > 0.01 and have[i] > 0.01 and have[i]/want[i] > 1.20:

@@ -16,6 +16,20 @@ struct LayoutEditorView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State var layout: EditableLayout
+    /// The layout exactly as it was when this screen opened. Closing
+    /// used to save a working copy UNCONDITIONALLY, so merely LOOKING at
+    /// a layout forked a private snapshot of it, and that snapshot then
+    /// shadowed every newer bundled version forever. Fifty-two arcade
+    /// screens were shadowed that way by one browsing session, and each
+    /// looked stale with nothing anywhere saying why. Marcus, 2026-08-25:
+    /// "something isn't right with the app that I keep getting confused."
+    /// He was right. Now a working copy is written only when the layout
+    /// actually changed.
+    @State private var opened: String = ""
+    /// A working copy from an earlier session is hiding a newer bundled
+    /// layout underneath this screen. Offer the way out, visibly, instead
+    /// of leaving it to a menu item nobody knows to look for.
+    @State private var shadowingNewer = false
     @State private var selection: Set<UUID> = []
     @State private var testing = false
     @State private var showsExtended = true
@@ -116,10 +130,51 @@ struct LayoutEditorView: View {
         .persistentSystemOverlays(.hidden)
         .onAppear {
             ready = WorkingCopy.isReady(layout.name)
+            detectShadow()
         }
         .sheet(item: $share) { item in
             ActivityView(url: item.url)
         }
+        .safeAreaInset(edge: .top) {
+            if shadowingNewer {
+                shadowBanner
+            }
+        }
+    }
+
+    /// The way out of a stale shadow, in your face rather than in a menu.
+    /// "Keep my copy" dismisses for this visit only: the copy stays, and
+    /// so does the fact it is hiding something, so the banner returns
+    /// next time until one side actually wins.
+    private var shadowBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.yellow)
+            Text("An older saved copy is hiding a newer layout.")
+                .font(.footnote)
+                .foregroundStyle(.white)
+            Spacer()
+            Button("Use newest") {
+                if let bundled = EditableLayout.loadBundled(layout.name) {
+                    WorkingCopy.discard(layout.name)
+                    layout = bundled
+                    selection.removeAll()
+                    ready = false
+                    detectShadow()
+                    flash("Now on the newest layout")
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            Button("Keep my copy") {
+                shadowingNewer = false
+            }
+            .controlSize(.small)
+            .tint(.white)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(.black.opacity(0.82))
     }
 
     // MARK: The pad, and the layer that edits it
@@ -831,12 +886,23 @@ struct LayoutEditorView: View {
     }
 
     private func commit() {
+        // Only a real edit earns a working copy; see `opened`.
+        guard layout.jsonText() != opened else { return }
         WorkingCopy.save(layout)
     }
 
     private func close() {
         commit()
         dismiss()
+    }
+
+    private func detectShadow() {
+        opened = layout.jsonText()
+        guard WorkingCopy.isEdited(layout.name),
+              !WorkingCopy.isReady(layout.name),
+              let bundled = EditableLayout.loadBundled(layout.name)
+        else { shadowingNewer = false; return }
+        shadowingNewer = bundled.jsonText() != opened
     }
 
     // MARK: Getting the file out
