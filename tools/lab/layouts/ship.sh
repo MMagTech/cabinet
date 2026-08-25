@@ -58,11 +58,16 @@ done
 xcrun devicectl device install app --device $TV "$DD/Debug-appletvos/Cabinet TV.app" \
     >/dev/null 2>&1 && echo "   Cabinet TV -> Apple TV" || echo "   FAILED Cabinet TV"
 
-echo "== the editor's working copies, which shadow all of the above =="
+# The editor's working copies are HIS, and this script only ever READS
+# them. A layout comes into the repo when he marks it green and
+# pull-ready.sh collects it; nothing here writes to the device.
+# Reported, never repaired: a problem in a working copy is his to fix in
+# the editor.
+echo "== the editor's working copies (reported only, never written) =="
 WORK=$(mktemp -d)
 xcrun devicectl device copy from --device $PHONE --domain-type appDataContainer \
     --domain-identifier com.mmagtech.CabinetLayoutEditor \
     --source "Documents/Working" --destination "$WORK" >/dev/null 2>&1
-python3 tools/lab/layouts/check.py "$WORK" || {
-    echo "   working copies FAIL the rules; repair and re-run" >&2; exit 1; }
+python3 tools/lab/layouts/check.py "$WORK" || \
+    echo "   (that is a note about work in progress, not a failure)"
 echo "== done =="

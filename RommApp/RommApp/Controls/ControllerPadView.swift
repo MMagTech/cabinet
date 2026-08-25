@@ -734,7 +734,21 @@ struct ControllerPadView: View {
         ZStack {
             if let layout = ControlLayout.named("nds") {
                 TouchControlPad(
-                    items: layout.items(landscape: true),
+                    // The controller-only set, like every other system's
+                    // panel, falling back to landscape when none exists.
+                    // This used to take the landscape items outright,
+                    // which made DS the one layout a person could
+                    // arrange in the editor and never see change.
+                    //
+                    // DS is genuinely different from the others, because
+                    // the phone is holding the game's touch screen and
+                    // the controls have to live around it rather than
+                    // wherever there is room. That is a reason for its
+                    // companion set to be laid out carefully, not a
+                    // reason for it to be unreachable; the editor now
+                    // draws the screen so it can be arranged against
+                    // (DSScreenGuide).
+                    items: layout.companionOrLandscapeItems(),
                     send: { id, down in
                         if id == RetroPad.overlay {
                             if down {

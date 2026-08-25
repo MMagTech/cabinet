@@ -47,6 +47,16 @@ ACCEPTED = {
     ("psx", "landscapeItems", "R1", "R2"),
 }
 
+# Layouts Marcus has placed by hand, which the general rules must not
+# walk over. The rules exist to catch drift, not to overrule a decision
+# somebody actually made.
+HAND_PLACED = {
+    # PSX landscape was restored to its original arrangement on
+    # 2026-08-24 at his request, after I had restructured it uninvited.
+    # Menu sits left of centre there, and it stays there.
+    ("psx", "landscapeItems", "Menu"),
+}
+
 fails = []
 def fail(layout, key, msg): fails.append("%s/%s: %s" % (layout, key, msg))
 
@@ -67,6 +77,7 @@ def menu_rule(name, key, pills):
     """
     menu = [p for p in pills if p.get('label') == 'Menu']
     if not menu or len(pills) < 2: return
+    if (name, key, 'Menu') in HAND_PLACED: return
     labels = {p['label'] for p in pills}
     for m in menu:
         if SHOULDER & labels:

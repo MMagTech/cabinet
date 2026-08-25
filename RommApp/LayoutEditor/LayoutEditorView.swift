@@ -77,6 +77,11 @@ struct LayoutEditorView: View {
                             ScreenBackdrop(layout: layout.name)
                         }
                         EditorGrid(area: CGRect(origin: .zero, size: geo.size))
+                        // DS holds the game's touch screen on the phone,
+                        // so its controls have to be arranged around it.
+                        if editingCompanion, layout.system == "nds" {
+                            DSScreenGuide(area: CGRect(origin: .zero, size: geo.size))
+                        }
                         pad(size: padSize, landscape: true)
                     }
                     .frame(width: geo.size.width, height: geo.size.height)
