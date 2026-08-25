@@ -908,7 +908,11 @@ final class ControlPadView: UIView {
     override func draw(_ rect: CGRect) {
         for item in items {
             let frame = item.frame.resolved(in: bounds.size)
-            let tint = theme.tint(system: system, input: item.input)
+            // Coin's brass rides outside the per-input map: the label is
+            // the lookup because Coin shares its input id with Select.
+            let tint = item.label == "Coin"
+                ? (ControlTheme.arcadeCoinTint(system: system) ?? theme.tint(system: system, input: item.input))
+                : theme.tint(system: system, input: item.input)
             switch item.kind {
             case .dpad:
                 let dpadTint = theme.tint(system: system, input: item.inputs?.first)
@@ -1394,6 +1398,22 @@ final class ControlPadView: UIView {
         let anyActive = len > 0
         let colors = style(active: anyActive, tint: tint)
 
+        // The mounting plate under the stick, the square base a real
+        // one bolts to. The first cut was brushed steel from the
+        // MAME4iOS reference, and Marcus called it right: chrome is
+        // their world, and next to Cabinet's dark moulded panels it
+        // read as a part from a different machine. The plate is now the
+        // panel's own material, a shade off the ground so the base
+        // reads without announcing itself, and the grain is gone.
+        if material {
+            let plateHalf = radius * 1.12
+            let plate = UIBezierPath(
+                roundedRect: CGRect(x: center.x - plateHalf, y: center.y - plateHalf,
+                                    width: plateHalf * 2, height: plateHalf * 2),
+                cornerRadius: radius * 0.18)
+            fillMoulded(plate, fill: UIColor(white: 0.13, alpha: 1), active: false)
+        }
+
         let housing = UIBezierPath(arcCenter: center, radius: radius,
                                    startAngle: 0, endAngle: .pi * 2, clockwise: true)
         if material {
@@ -1791,6 +1811,102 @@ final class ControlPadView: UIView {
         ctx.restoreGState()
     }
 
+
+    /// An arcade button as a glossy dome in a bezel, the look of the
+    /// machine rather than of an interface. Prompted by MAME4iOS's
+    /// panels, which Marcus sent as the reference; built with this
+    /// file's own vocabulary rather than their assets, the way the
+    /// spinner and trackball were. Three parts sell it: a dark bezel
+    /// ring the dome sits INSIDE rather than on, a colour that runs
+    /// light-at-top to deep-at-bottom because a dome faces the light
+    /// with its crown, and one hard specular bead up and left. Pressing
+    /// flattens the dome: the gradient squashes, the bead dims, and the
+    /// whole face drops a point, which reads as travel the way the
+    /// moulded wall's collapse does on a flat key.
+    /// An arcade button as a CONCAVE cap in a bezel: the dished kind a
+    /// finger settles into, which is what most real panels carry.
+    /// Marcus, after two rounds of taming the convex version: "instead
+    /// of popping up I want them in." A dish is lit opposite to a dome.
+    /// The rim's top edge shades the bowl, the light pools low in it,
+    /// and the sheen is a soft floor glow rather than a crown bead.
+    /// Pressing settles the whole dish a shade darker and a point
+    /// deeper, a finger filling the bowl.
+    private func fillDome(center: CGPoint, radius: CGFloat, fill: UIColor, active: Bool) {
+        guard let ctx = UIGraphicsGetCurrentContext() else { return }
+        var hue: CGFloat = 0, sat: CGFloat = 0, bri: CGFloat = 0, alpha: CGFloat = 0
+        fill.getHue(&hue, saturation: &sat, brightness: &bri, alpha: &alpha)
+
+        // The bezel, unchanged from the domed pass: a dark ring the cap
+        // sits inside, with a faint lit inner edge.
+        let bezel = UIBezierPath(arcCenter: center, radius: radius,
+                                 startAngle: 0, endAngle: .pi * 2, clockwise: true)
+        UIColor(white: 0.16, alpha: 1).setFill(); bezel.fill()
+        ctx.saveGState()
+        bezel.addClip()
+        ctx.setStrokeColor(UIColor(white: 0.42, alpha: 1).cgColor)
+        ctx.setLineWidth(1.5)
+        ctx.strokeEllipse(in: CGRect(x: center.x - radius + 0.75, y: center.y - radius + 0.75,
+                                     width: radius * 2 - 1.5, height: radius * 2 - 1.5))
+        ctx.restoreGState()
+
+        let dr = radius * 0.82
+        let press: CGFloat = active ? 1.0 : 0
+        let dc = CGPoint(x: center.x, y: center.y + press)
+        let dish = UIBezierPath(ovalIn: CGRect(x: dc.x - dr, y: dc.y - dr,
+                                               width: dr * 2, height: dr * 2))
+        // Shading by pulling BRIGHTNESS out of a hue makes mud: yellow
+        // driven dark goes olive, orange goes brown, and Marcus felt it
+        // before either of us could name it, "it's the colors,
+        // something ain't right." A real shadow is not a darker paint,
+        // it is less light: so the walls and rim now darken by mixing
+        // toward the panel's own near-black, which keeps every hue
+        // itself all the way down, just further from the lamp.
+        func mixed(_ c: UIColor, toward dark: CGFloat) -> UIColor {
+            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            c.getRed(&r, green: &g, blue: &b, alpha: &a)
+            let dr2: CGFloat = 0.07, dg: CGFloat = 0.07, db: CGFloat = 0.08
+            return UIColor(red: r + (dr2 - r) * dark, green: g + (dg - g) * dark,
+                           blue: b + (db - b) * dark, alpha: 1)
+        }
+        let base = UIColor(hue: hue, saturation: sat, brightness: bri, alpha: 1)
+        let floorC = mixed(base, toward: active ? 0.16 : 0.02)
+        let wallC = mixed(base, toward: active ? 0.38 : 0.30)
+        let rimC = mixed(base, toward: active ? 0.66 : 0.60)
+        ctx.saveGState()
+        dish.addClip()
+        let space = CGColorSpaceCreateDeviceRGB()
+        let grad = CGGradient(colorsSpace: space,
+                              colors: [floorC.cgColor, wallC.cgColor, rimC.cgColor] as CFArray,
+                              locations: [0, 0.62, 1])!
+        // Light pools LOW in a dish: the bright centre sits below the
+        // middle and the walls climb darker toward the rim.
+        ctx.drawRadialGradient(
+            grad,
+            startCenter: CGPoint(x: dc.x, y: dc.y + dr * 0.30),
+            startRadius: 0,
+            endCenter: dc,
+            endRadius: dr * 1.02, options: [.drawsAfterEndLocation])
+        // The top rim's shadow falling into the bowl, the single
+        // strongest cue that this is a hole and not a hill.
+        let crescent = CGGradient(colorsSpace: space, colors: [
+            UIColor.black.withAlphaComponent(active ? 0.34 : 0.28).cgColor,
+            UIColor.black.withAlphaComponent(0).cgColor] as CFArray,
+            locations: [0, 1])!
+        ctx.saveGState()
+        ctx.translateBy(x: dc.x, y: dc.y - dr * 0.9)
+        ctx.scaleBy(x: 1.15, y: 0.5)
+        ctx.drawRadialGradient(crescent, startCenter: .zero, startRadius: 0,
+                               endCenter: .zero, endRadius: dr * 0.9, options: [])
+        ctx.restoreGState()
+        // And the lower inner lip catching the light on its way out.
+        ctx.setStrokeColor(UIColor.white.withAlphaComponent(active ? 0.10 : 0.18).cgColor)
+        ctx.setLineWidth(1.5)
+        ctx.addArc(center: dc, radius: dr - 1, startAngle: .pi * 0.15,
+                   endAngle: .pi * 0.85, clockwise: false)
+        ctx.strokePath()
+        ctx.restoreGState()
+    }
+
     private func drawRoundButton(in frame: CGRect, label: String?, tint: UIColor?, active: Bool) {
         let diameter = min(frame.width, frame.height)
         let circleRect = CGRect(
@@ -1801,7 +1917,13 @@ final class ControlPadView: UIView {
         )
         let circle = UIBezierPath(ovalIn: circleRect)
         let colors = style(active: active, tint: tint)
-        if material {
+        if material, system.hasPrefix("arcade") {
+            // Arcade panels get the machine's own domed cap; every
+            // other system keeps the flat moulded key, which is that
+            // hardware's honest shape.
+            fillDome(center: CGPoint(x: circleRect.midX, y: circleRect.midY),
+                     radius: diameter / 2, fill: colors.fill, active: active)
+        } else if material {
             fillMoulded(circle, fill: colors.fill, active: active)
         } else {
             colors.fill.setFill()

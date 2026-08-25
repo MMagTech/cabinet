@@ -52,6 +52,7 @@ P = {
     'btn':    (0.15, 0.20, 0.04, 0.06),               # w h padx pady
     'col0':   0.50, 'colstep': 0.16, 'rowbase': 0.61, 'rowstep2': 0.26,
     'btn3':   (0.15, 0.17, 0.04, 0.05), 'rowstep3': 0.185,
+    'stagger': 0.05, 'clusterrow': 0.22,
 }
 L = {
     'menu':  ((0.03, 0.085, 0.095, 0.09), (0.025, 0.045, 0.135, 0.16)),
@@ -61,6 +62,7 @@ L = {
     'btn':    (0.065, 0.15, 0.02, 0.05),
     'btn3':   (0.065, 0.13, 0.02, 0.04), 'rowstep3': 0.17,
     'col0':   0.725, 'colstep': 0.09, 'rowbase': 0.545, 'rowstep2': 0.23,
+    'stagger': 0.04, 'clusterrow': 0.19,
     # A pedal is held down for a whole race by the right thumb, so
     # buttons on the right cannot be reached. Marcus found that playing
     # Super Off Road. The lane mirrors rather than narrowing, and this is
@@ -91,6 +93,7 @@ C = {
     'btnpad': (0.02, 0.02),
     'cols':   [0.6382, 0.7418, 0.8452],
     'rowbase': 0.591, 'rowstep2': 0.2645,
+    'stagger': 0.045, 'clusterrow': 0.21,
 }
 
 
@@ -120,17 +123,51 @@ G = {
     'c_col':    0.8545, 'c_bottom': 0.7955, 'c_colstep': 0.095,
 }
 
+
+def shape_positions(n, anchor, stepx, stag, rowstep):
+    """Third pass on Marcus's button shapes, and this time from a
+    picture: MAME4iOS's cluster, which he sent 2026-08-25 saying "I want
+    it like their buttons." The look is a real cabinet's: buttons nearly
+    touching, each column stepped UP going right the way arcade panels
+    arc their rows, and a second row sitting tight above, offset half a
+    button so it nests into the stagger.
+
+    Button one keeps its anchor on every count. Two is a nested pair,
+    three is the full arcing row, four is the tight two-by-two with the
+    right column raised, five is the row of three with two nested above.
+    Six is the master's own grid and never comes through here."""
+    x0, y0 = anchor
+    row1 = [(x0 + i * stepx, y0 - i * stag) for i in range(3)]
+    if n == 1: return [row1[0]]
+    if n == 2: return row1[:2]
+    if n == 3: return row1
+    if n == 4: return [row1[0], row1[1],
+                       (x0, y0 - rowstep), (x0 + stepx, y0 - stag - rowstep)]
+    if n == 5: return row1 + [(x0 + 0.5 * stepx, y0 - rowstep),
+                              (x0 + 1.5 * stepx, y0 - stag - rowstep)]
+    return None
+
 def rows_for(n, cols):
     return max(1, math.ceil(n / cols))
 
 def place_buttons(items, S, cols, col0):
-    """Button 1 lands at (col0, rowbase) on EVERY panel. Extra buttons
-    fill that row rightward, then stack upward. That anchor is the whole
-    point of the exercise: a thumb should find button one in the same
-    place whatever cabinet is running."""
+    """Button 1 lands at (col0, rowbase) on EVERY panel. That anchor is
+    the point: a thumb finds button one in the same place whatever
+    cabinet is running. Two to five buttons arrange as constellations
+    inside the six-button footprint (see shape_positions); six, and any
+    panel narrowed by pedals, keeps the grid."""
     acts = [i for i in items if i['kind'] == 'button' and i.get('label') != 'Coin']
     n = len(acts)
     if not n: return
+    w, h, px, py = S['btn']
+    if cols == 3:
+        pts = shape_positions(n, (col0, S['rowbase']), S['colstep'],
+                              S['stagger'], S['clusterrow'])
+        if pts:
+            for it, (x, y) in zip(acts, pts):
+                f, e = R(x, y, w, h, px, py)
+                it['frame'], it['extended'] = f, e
+            return
     r = rows_for(n, cols)
     w, h, px, py = S['btn3'] if r >= 3 else S['btn']
     step = S['rowstep3'] if r >= 3 else S.get('rowstep2', 0.26)
@@ -289,12 +326,23 @@ def relayout_companion(d):
     cols = C['cols'][:2] if peds else C['cols']
     n = len(btns)
     if n:
-        r = rows_for(n, len(cols))
-        ys = [C['rowbase'] - C['rowstep2'] * (r - 1 - k) for k in range(r)]
-        for idx, b in enumerate(btns):
-            row, col = idx // len(cols), idx % len(cols)
-            x, y = cols[col], ys[len(ys) - 1 - row]
-            put(b, ((x, y, w, h), (x - px, y - py, w + px * 2, h + py * 2)))
+        pts = None
+        if not peds:
+            pts = shape_positions(n, (C['cols'][0], C['rowbase']),
+                                  C['cols'][1] - C['cols'][0],
+                                  C['stagger'], C['clusterrow'])
+        if pts:
+            for b, (x, y) in zip(btns, pts):
+                put(b, ((round(x, 4), round(y, 4), w, h),
+                        (round(x - px, 4), round(y - py, 4),
+                         round(w + px * 2, 4), round(h + py * 2, 4))))
+        else:
+            r = rows_for(n, len(cols))
+            ys = [C['rowbase'] - C['rowstep2'] * (r - 1 - k) for k in range(r)]
+            for idx, b in enumerate(btns):
+                row, col = idx // len(cols), idx % len(cols)
+                x, y = cols[col], ys[len(ys) - 1 - row]
+                put(b, ((x, y, w, h), (x - px, y - py, w + px * 2, h + py * 2)))
     # One pedal sits exactly where the racing master put it. Two stack
     # in the same lane, the pair centred where the one would be; no
     # master carries two, so the second's offset is arithmetic, stated

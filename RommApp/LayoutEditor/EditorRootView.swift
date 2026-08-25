@@ -53,7 +53,10 @@ struct EditorRootView: View {
                     }
                 }
             }
-            .onAppear { names = EditableLayout.allNames() }
+            .onAppear {
+                names = EditableLayout.allNames()
+                WorkingCopy.sweepStaleCopies(bundled: names)
+            }
         }
         .fullScreenCover(item: $opening) { layout in
             LayoutEditorView(layout: layout)

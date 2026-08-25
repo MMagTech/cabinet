@@ -154,9 +154,23 @@ enum ControlTheme: String, CaseIterable {
         default: return nil
         }
     }
+
+    /// Coin, on arcade panels only. The one exception to "service stays
+    /// neutral": with the dished caps, a neutral fill renders as a pale
+    /// dish and the white label sinks straight into it, which Marcus hit
+    /// on 2026-08-25, "can't read the text." And a coin button has a
+    /// natural colour anyway. Brass, like the slot it stands for.
+    static func arcadeCoinTint(system: String) -> UIColor? {
+        system.hasPrefix("arcade") ? .coinBrass : nil
+    }
 }
 
 private extension UIColor {
+    // First cut was true brass (0.78, 0.62, 0.26) and on a matte dish
+    // it read as mustard, Marcus's word: metal is a material, not a
+    // colour, and without the shine only the dull yellow-green is left.
+    // Champagne gold instead, lighter and away from green.
+    static let coinBrass = UIColor(red: 0.85, green: 0.72, blue: 0.47, alpha: 1)
     static let neoRed = UIColor(red: 0.93, green: 0.24, blue: 0.24, alpha: 1)
     static let neoYellow = UIColor(red: 0.98, green: 0.80, blue: 0.20, alpha: 1)
     static let neoGreen = UIColor(red: 0.30, green: 0.82, blue: 0.42, alpha: 1)

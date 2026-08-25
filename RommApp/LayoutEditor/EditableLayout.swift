@@ -325,6 +325,40 @@ enum WorkingCopy {
         FileManager.default.fileExists(atPath: readyURL(for: name).path)
     }
 
+    /// Clears the backlog the always-save bug left behind, once.
+    ///
+    /// Before 2026-08-25 the editor saved a working copy of every layout
+    /// it merely displayed, so one browsing session left ~50 snapshots
+    /// shadowing every newer bundled layout. The per-screen banner heals
+    /// them one visit at a time, which was the wrong cure for a backlog:
+    /// Marcus kept opening screens and seeing stale work, on the day the
+    /// whole arcade set changed underneath them. "Say it with me: editor
+    /// first."
+    ///
+    /// Green working copies are untouched, always: green is his mark and
+    /// outranks everything here. Copies whose layout no longer ships at
+    /// all (twin5 and friends, deleted upstream) are ghosts and go
+    /// unconditionally. The rest of the sweep runs ONCE, keyed in
+    /// defaults, because as a standing rule it would eat genuine
+    /// in-progress edits at launch; the always-save bug is fixed, so the
+    /// backlog cannot re-form.
+    static func sweepStaleCopies(bundled: [String]) {
+        let key = "sweep-stale-copies-2026-08-25"
+        let names = Set(bundled)
+        let fm = FileManager.default
+        let all = (try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        let runOnce = !UserDefaults.standard.bool(forKey: key)
+        for url in all where url.pathExtension == "json" {
+            let name = url.deletingPathExtension().lastPathComponent
+            if isReady(name) { continue }
+            if !names.contains(name) || runOnce {
+                try? fm.removeItem(at: url)
+                try? fm.removeItem(at: readyURL(for: name))
+            }
+        }
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
     static func setReady(_ name: String, _ ready: Bool) {
         if ready {
             FileManager.default.createFile(atPath: readyURL(for: name).path, contents: nil)
