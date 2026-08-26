@@ -4,9 +4,9 @@
  "items": [
   {
    "kind": "trackball",
-   "frame": {"x": 0.05, "y": 0.31, "w": 0.38, "h": 0.54},
-   "extended": {"x": 0.02, "y": 0.27, "w": 0.44, "h": 0.62},
-   "sensitivity": 300
+   "frame": {"x": 0.31, "y": 0.3, "w": 0.38, "h": 0.54},
+   "extended": {"x": 0.28, "y": 0.26, "w": 0.44, "h": 0.62},
+   "sensitivity": 300.0
   },
   {
    "kind": "button",
@@ -35,7 +35,7 @@
    "kind": "trackball",
    "frame": {"x": 0.03, "y": 0.31, "w": 0.19, "h": 0.42},
    "extended": {"x": 0.01, "y": 0.27, "w": 0.23, "h": 0.5},
-   "sensitivity": 300
+   "sensitivity": 300.0
   },
   {
    "kind": "button",
@@ -76,9 +76,9 @@
   },
   {
    "kind": "trackball",
-   "sensitivity": 300,
-   "frame": {"x": 0.07, "y": 0.335, "w": 0.19, "h": 0.42},
-   "extended": {"x": 0.05, "y": 0.315, "w": 0.23, "h": 0.46}
+   "frame": {"x": 0.07, "y": 0.315, "w": 0.19, "h": 0.42},
+   "extended": {"x": 0.05, "y": 0.295, "w": 0.23, "h": 0.46},
+   "sensitivity": 300.0
   },
   {
    "kind": "button",
