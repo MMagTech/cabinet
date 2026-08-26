@@ -108,8 +108,18 @@ from it too, automatically. Fixing at the shared layer, when a problem
 found on one platform can be, is the preferred outcome over a
 platform-only patch.
 
-No core has needed an actual platform-only exception yet. When one does,
-this section is where that reasoning belongs.
+One core carries a platform-only exception. **Game & Watch (gw-libretro)
+is iOS-only, by decision, 2026-08-25.** Not a technical failure: the
+core is a plain Lua 5.3 interpreter with working upstream tvOS makefile
+targets, and it would build. The reasons are presentational and
+deliberate. The simulators render at small per-game canvases (Banana's
+full scene is 562x374) which upscale acceptably on a phone and go soft
+on a 4K television, roughly a 7x blowup. And the artwork draws the
+entire handheld, buttons included, which suits a device held in the
+hand far better than a television across the room. Decided by the
+project owner as a scoping call; if the decision changes, nothing
+technical stands in the way of adding the tvOS build later, and this
+paragraph is what to update when it happens.
 
 On the Xcode project side: the `Native/<core>` folders hold both an
 `_ios.a` and a `_tvos.a` build of a core, and the shared `NativeCore.swift`
