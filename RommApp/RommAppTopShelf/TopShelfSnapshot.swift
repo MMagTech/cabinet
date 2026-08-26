@@ -59,6 +59,9 @@ enum TopShelfSnapshot {
         var games: [Game]
     }
 
+    /// Not private: the writer keys its own rules-version stamp off the
+    /// same suite, so a change in what BELONGS on the shelf can clear a
+    /// stale snapshot without waiting on a network round trip.
     static var defaults: UserDefaults? { UserDefaults(suiteName: appGroup) }
 
     // MARK: Reading, which is all the extension ever does

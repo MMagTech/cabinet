@@ -26,8 +26,24 @@ enum TVTopShelfWriter {
     /// directory and the same defaults key.
     private static var inFlight: Task<Void, Never>?
 
+    /// Bumped whenever the RULES that decide shelf contents change, as
+    /// opposed to the contents themselves: a new platform arriving on
+    /// iOS but not tvOS (Game & Watch, 2026-08-26) makes yesterday's
+    /// snapshot advertise games this device cannot play, and the shelf
+    /// only rewrites on a successful recents fetch, so a sleeping server
+    /// leaves the wrong shelf standing indefinitely. A mismatch here
+    /// clears the snapshot immediately, at launch, before the network is
+    /// involved at all: an empty shelf for a moment beats a shelf full of
+    /// promises this device cannot keep.
+    private static let rulesVersion = 2
+    private static let rulesKey = "topshelf.rulesVersion"
+
     @MainActor
     static func refresh(session: Session) {
+        if TopShelfSnapshot.defaults?.integer(forKey: rulesKey) != rulesVersion {
+            wipe()
+            TopShelfSnapshot.defaults?.set(rulesVersion, forKey: rulesKey)
+        }
         inFlight?.cancel()
         // Read here, where the main actor already is, rather than deep
         // inside the write: `platformsVersions` is main-actor isolated,
