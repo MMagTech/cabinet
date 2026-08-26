@@ -192,9 +192,16 @@ int16_t gMouseLatchedY[kMaxPorts];
 // Absolute pointing: a touch on the game's own picture, which is what a
 // lightgun means on a touchscreen. -0x7fff..0x7fff in libretro's
 // convention, pressed while the finger is down.
-std::atomic<int16_t> gPointerX[kMaxPorts];
-std::atomic<int16_t> gPointerY[kMaxPorts];
-std::atomic<bool> gPointerDown[kMaxPorts];
+// The pointer channel alone is sized past the pad ports: gw-libretro
+// declares its pointer on PORT 2, above the two seats every pad control
+// uses, and the old kMaxPorts guard silently swallowed every tap sent
+// there. Marcus, first Banana boot: "buttons don't seem to register."
+// The pad-facing arrays stay at kMaxPorts on purpose; only pointing
+// widens, so seats, masks and sticks are untouched.
+constexpr size_t kPointerPorts = 3;
+std::atomic<int16_t> gPointerX[kPointerPorts];
+std::atomic<int16_t> gPointerY[kPointerPorts];
+std::atomic<bool> gPointerDown[kPointerPorts];
 std::atomic<bool> gGunOffscreen[kMaxPorts];
 // TEST BUILD, with cabinetInputTrace below: samples-per-frame and last
 // value of the core's own analog-X reads on port 0.
@@ -796,6 +803,17 @@ void inputPoll(void) {
 }
 
 int16_t inputState(unsigned port, unsigned device, unsigned index, unsigned id) {
+    // The pointer lives above the pad ports (see kPointerPorts), so it
+    // answers before the pad-port guard can refuse the port number.
+    if (device == RETRO_DEVICE_POINTER && port < kPointerPorts) {
+        switch (id) {
+            case RETRO_DEVICE_ID_POINTER_X: return gPointerX[port].load(std::memory_order_relaxed);
+            case RETRO_DEVICE_ID_POINTER_Y: return gPointerY[port].load(std::memory_order_relaxed);
+            case RETRO_DEVICE_ID_POINTER_PRESSED: return gPointerDown[port].load(std::memory_order_relaxed) ? 1 : 0;
+            case RETRO_DEVICE_ID_POINTER_COUNT: return gPointerDown[port].load(std::memory_order_relaxed) ? 1 : 0;
+            default: return 0;
+        }
+    }
     if (port >= kMaxPorts) {
         return 0;
     }
@@ -1295,6 +1313,9 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
         std::lock_guard<std::mutex> lock(gAudioMutex);
         gAudioSamples.clear();
     }
+    for (size_t p = 0; p < kPointerPorts; p++) {
+        gPointerDown[p].store(false, std::memory_order_relaxed);
+    }
     for (size_t p = 0; p < kMaxPorts; p++) {
         gButtonMask[p].store(0, std::memory_order_relaxed);
         gAnalogLeftX[p].store(0, std::memory_order_relaxed);
@@ -1303,7 +1324,6 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
         gMouseAccumY[p].store(0, std::memory_order_relaxed);
         gMouseLatchedX[p] = 0;
         gMouseLatchedY[p] = 0;
-        gPointerDown[p].store(false, std::memory_order_relaxed);
         gGunOffscreen[p].store(false, std::memory_order_relaxed);
         // Cleared per activation, or a platform that skips port 1 (a
         // handheld, say) after one that used it would inherit the
@@ -1340,7 +1360,7 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
 }
 
 - (void)setPointerX:(float)x y:(float)y down:(BOOL)down port:(NSInteger)port {
-    if (port < 0 || (size_t)port >= kMaxPorts) { return; }
+    if (port < 0 || (size_t)port >= kPointerPorts) { return; }
     gPointerX[port].store((int16_t)(std::clamp(x, -1.0f, 1.0f) * 0x7fff), std::memory_order_relaxed);
     gPointerY[port].store((int16_t)(std::clamp(y, -1.0f, 1.0f) * 0x7fff), std::memory_order_relaxed);
     gPointerDown[port].store(down, std::memory_order_relaxed);
