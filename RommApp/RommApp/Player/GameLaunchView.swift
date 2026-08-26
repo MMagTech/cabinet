@@ -402,7 +402,16 @@ struct GameLaunchView: View {
     /// that toggle is worth, without a word of explanation on screen.
     private var playWillUseLocalNetwork: Bool {
         guard session.isUsingLocalAddress else { return false }
-        let willUseWebPlayer = !showsPlayerPicker || selectedBackend == .webview
+        // Ask what Play will ACTUALLY run, not whether a picker is on
+        // screen. "No picker" used to mean "webview only", and that
+        // inference broke the moment platforms began hiding their picker
+        // for the opposite reason: Saturn, Dreamcast, Vectrex and now PSP
+        // hide it because they are NATIVE only. Marcus caught it on a
+        // Dreamcast game showing a globe on his own network, traffic that
+        // by definition never leaves the house.
+        let willUseWebPlayer = LaunchChoices.defaultBackend(
+            rom: rom, canonicalSlug: canonicalSlug
+        ) == .webview && (!showsPlayerPicker || selectedBackend == .webview)
         let alreadyDownloaded = keptStore.kept(romId: rom.id) != nil
         return !willUseWebPlayer || alreadyDownloaded
     }
