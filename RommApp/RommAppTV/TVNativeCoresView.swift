@@ -85,11 +85,15 @@ private struct TVNativeCoreOptionsView: View {
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                         }
-                        HStack(spacing: 16) {
+                        // A wrapping row, not an HStack: Virtual Boy's
+                        // five glasses names overflow any single row at
+                        // this type size, and an overflowing HStack
+                        // compresses each Text into a one-letter column,
+                        // which is how the pills came to read vertically.
+                        WrapRow(spacing: 16) {
                             ForEach(option.choices, id: \.value) { choice in
                                 choicePill(choice, for: option)
                             }
-                            Spacer()
                         }
                     }
                 }
@@ -114,6 +118,8 @@ private struct TVNativeCoreOptionsView: View {
         } label: {
             Text(choice.label)
                 .font(.title3.weight(.semibold))
+                .lineLimit(1)
+                .fixedSize()
                 .padding(.horizontal, 30)
                 .padding(.vertical, 14)
                 .background {
@@ -134,6 +140,38 @@ private struct TVNativeCoreOptionsView: View {
                 }
         }
         .buttonStyle(TextFocusStyle())
+    }
+}
+
+/// Lays children left to right, wrapping to a new line when the width
+/// runs out, the flow every platform toolkit has and SwiftUI still does
+/// not ship. Only what this screen needs: uniform spacing both ways.
+private struct WrapRow: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? .infinity
+        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0
+        for v in subviews {
+            let size = v.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > width { x = 0; y += rowHeight + spacing; rowHeight = 0 }
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+        return CGSize(width: width == .infinity ? x : width, height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX, y = bounds.minY, rowHeight: CGFloat = 0
+        for v in subviews {
+            let size = v.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width > bounds.maxX {
+                x = bounds.minX; y += rowHeight + spacing; rowHeight = 0
+            }
+            v.place(at: CGPoint(x: x, y: y), proposal: .unspecified)
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
     }
 }
 #endif
