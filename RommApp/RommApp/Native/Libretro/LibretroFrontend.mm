@@ -30,6 +30,9 @@
 #import "FlycastCore.h"
 #import "MAME2003PlusCore.h"
 #import "PPSSPPCore.h"
+#if !TARGET_OS_TV
+#import "GWCore.h"
+#endif
 #endif
 
 #import <UIKit/UIKit.h>
@@ -1207,6 +1210,10 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
             return MelonDSCoreAPI();
         case LibretroCoreIDPPSSPP:
             return PPSSPPCoreAPI();
+#if !TARGET_OS_TV
+        case LibretroCoreIDGW:
+            return GWCoreAPI();
+#endif
         default:
             // This used to fall through to the PlayStation core, so a
             // core id with no case did not fail to load: it silently ran

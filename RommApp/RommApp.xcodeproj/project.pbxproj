@@ -60,6 +60,8 @@
 				Native/MAME2003Plus/libmame2003_plus_ios.a,
 				Native/MelonDS/libmelonds_ios.a,
 				Native/PPSSPP/libppsspp_ios.a,
+				Native/GW/libgw_ios.a,
+				Native/GW/GWCore.mm,
 				Native/Mupen64Plus/libmupen64plus_ios.a,
 				Native/NativePlayerView.swift,
 				Native/Opera/libopera_ios.a,

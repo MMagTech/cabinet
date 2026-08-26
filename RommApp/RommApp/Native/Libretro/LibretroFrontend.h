@@ -85,6 +85,15 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
     // so its device runs are the go/no-go, the way Opera's, PS1's and
     // DS's were.
     LibretroCoreIDPPSSPP NS_SWIFT_NAME(ppsspp) = 20,
+    // Game & Watch, via MADrigal's simulators compiled to Lua and run on
+    // a plain Lua 5.3 interpreter, no JIT anywhere. iOS-only by decision
+    // (docs/building.md): tiny per-game canvases and artwork that draws
+    // the whole handheld suit a hand, not a television. No save states:
+    // the core's serialize returns false, so slot UI hides for this
+    // platform. The mid-game SET_GEOMETRY its zoom performs needs no
+    // frontend case; every frame carries its own size through
+    // videoRefresh and the renderer refits per frame.
+    LibretroCoreIDGW NS_SWIFT_NAME(gw) = 21,
 };
 
 @interface LibretroFrame : NSObject

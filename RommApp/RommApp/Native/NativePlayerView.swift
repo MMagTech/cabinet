@@ -451,6 +451,9 @@ struct NativePlayerView: View {
                             .padding(.vertical, 6)
                     }
                     .buttonStyle(.bordered)
+                    // Game & Watch has no save states (the core cannot
+                    // serialize), so the slots hide rather than fail.
+                    if platform.supportsSaveStates {
                     Button {
                         saveState()
                     } label: {
@@ -467,6 +470,7 @@ struct NativePlayerView: View {
                             .padding(.vertical, 6)
                     }
                     .buttonStyle(.bordered)
+                    }
                     Button {
                         closeMenu()
                     } label: {

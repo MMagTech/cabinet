@@ -105,6 +105,15 @@ beetle_vb)
     # pair of red/blue glasses. See NativeCoreOptions.virtualBoy.
     PREFIX=vb; REPO=https://github.com/libretro/beetle-vb-libretro.git
     MAKEDIR=.; MAKEFILE=Makefile; OUT=BeetleVB; LIB=libbeetle_vb_ios.a ;;
+gw)
+    # Game & Watch, via MADrigal's simulators compiled to Lua. Plain Lua
+    # 5.3 interpreter, no LuaJIT, so it clears the JIT boundary without
+    # an exception. iOS-ONLY by decision, recorded in docs/building.md
+    # 2026-08-25: small per-game canvases (562x374) go soft at 4K and the
+    # artwork draws the whole handheld. Reversible; upstream has a
+    # tvos-arm64 case if it ever reverses.
+    PREFIX=gw; REPO=https://github.com/libretro/gw-libretro.git
+    MAKEDIR=.; MAKEFILE=Makefile.libretro; OUT=GW; LIB=libgw_ios.a ;;
 melonds)
     # Nintendo DS. The libretro melonDS fork builds interpreter-only for
     # ios-arm64/tvos-arm64 out of the box (no JIT_ARCH set for either),

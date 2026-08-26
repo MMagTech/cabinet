@@ -25,6 +25,10 @@ enum NativeCore {
     case beetleVB
     case melonDS
     case ppsspp
+    /// Game & Watch. iOS-only by decision (docs/building.md); the tvOS
+    /// build is gated out at the frontend and this case never resolves
+    /// there because the platform below never exists on tvOS.
+    case gw
 
     /// The frontend's identifier for the statically linked core.
     var coreID: LibretroCoreID {
@@ -50,6 +54,7 @@ enum NativeCore {
         case .beetleVB: return .beetleVB
         case .melonDS: return .melonDS
         case .ppsspp: return .ppsspp
+        case .gw: return .gw
         }
     }
 
@@ -83,6 +88,9 @@ enum NativeCore {
         case .beetleVB: return "beetle-vb-native"
         case .melonDS: return "melonds-native"
         case .ppsspp: return "ppsspp-native"
+        // No states exist for this core, so the tag never labels one;
+        // it is here because the switch is exhaustive on purpose.
+        case .gw: return "gw-native"
         }
     }
 
@@ -111,6 +119,7 @@ enum NativeCore {
         case .beetleVB: return "beetleVB"
         case .melonDS: return "melonDS"
         case .ppsspp: return "ppsspp"
+        case .gw: return "gw"
         }
     }
 
@@ -141,6 +150,7 @@ enum NativeCore {
         case .beetleVB: return "Beetle VB"
         case .melonDS: return "melonDS"
         case .ppsspp: return "PPSSPP"
+        case .gw: return "GW"
         }
     }
 
@@ -201,6 +211,7 @@ enum NativePlatform: String, CaseIterable {
     case virtualBoy
     case nds
     case psp
+    case gameAndWatch
 
     /// Every core that can run this platform, default first. Arcade is
     /// the only platform with a real set; everywhere else this is the
@@ -236,6 +247,7 @@ enum NativePlatform: String, CaseIterable {
         case .virtualBoy: return .beetleVB
         case .nds: return .melonDS
         case .psp: return .ppsspp
+        case .gameAndWatch: return .gw
         }
     }
 
@@ -283,11 +295,21 @@ enum NativePlatform: String, CaseIterable {
         // neither SAVE_RAM nor the single-file capture path models.
         // Save sync for PSP is its own future feature.
         case .arcade, .atari7800, .atari2600, .dreamcast, .segaCD, .ngpc, .vectrex,
-             .threeDO, .virtualBoy, .nds, .psp:
+             .threeDO, .virtualBoy, .nds, .psp, .gameAndWatch:
             return false
         default:
             return true
         }
+    }
+
+    /// Whether this platform can save and restore states at all. True
+    /// for everything but Game & Watch: gw-libretro's retro_serialize
+    /// returns false and its serialize_size is zero, a fact of the core
+    /// rather than a choice here, so offering slot buttons would offer
+    /// something that cannot work. The games are minute-long score
+    /// chasers; nothing of value is lost.
+    var supportsSaveStates: Bool {
+        self != .gameAndWatch
     }
 
     /// Whether a second local player's controller has anywhere to plug
@@ -302,7 +324,7 @@ enum NativePlatform: String, CaseIterable {
     /// port), and Neo Geo Pocket Color.
     var supportsSecondPlayer: Bool {
         switch self {
-        case .gb, .gbc, .gba, .gameGear, .ngpc, .nds, .psp: return false
+        case .gb, .gbc, .gba, .gameGear, .ngpc, .nds, .psp, .gameAndWatch: return false
         // A headset with one pad attached: there is no second port.
         case .virtualBoy: return false
         // Not a handheld, but off for a different, documented reason:
@@ -347,6 +369,7 @@ enum NativePlatform: String, CaseIterable {
         case .virtualBoy: return "Virtual Boy"
         case .nds: return "Nintendo DS"
         case .psp: return "PSP"
+        case .gameAndWatch: return "Game & Watch"
         }
     }
 
@@ -442,6 +465,21 @@ enum NativePlatform: String, CaseIterable {
             return .nds
         case "psp":
             return .psp
+        // A custom platform on RomM keeps whatever slug its folder had:
+        // Marcus's is literally "Game & Watch", lowercased to
+        // "game & watch" by canonicalPlatformSlug. Accept the tidy
+        // metadata slug and the folder spellings alike.
+        //
+        // Not on tvOS, and here rather than only at the frontend: this
+        // resolver is what makes Play buttons exist, so failing it is
+        // what keeps the television from offering a core it does not
+        // link. The exception's reasoning lives in docs/building.md.
+        case "game-and-watch", "game & watch", "game and watch", "gameandwatch":
+            #if os(tvOS)
+            return nil
+            #else
+            return .gameAndWatch
+            #endif
         default:
             return nil
         }
