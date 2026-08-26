@@ -101,14 +101,25 @@ struct LaunchChoices {
         // the one line to remove if RomM's own Saturn core is ever
         // fixed and a real choice becomes worth offering again.
         //
-        // Dreamcast forces native for a different reason, RomM has no
-        // webview core for it at all (`libretro_slug` is null on the
-        // platform), not merely a broken one, so there is nothing to
-        // pick between. Vectrex is the same case: RomM's stable cores
-        // map has no vectrex entry, so the native core is the only
-        // player that exists for it.
-        if canonicalSlug == "saturn" || canonicalSlug == "dc"
-            || canonicalSlug == "vectrex" { return .native }
+        // Two kinds of native-only, and only one of them needs naming
+        // here.
+        //
+        // The first is DERIVED, and covers Dreamcast, Vectrex and Game &
+        // Watch: RomM's core map has no entry for the platform at all, so
+        // no webview player exists to pick. That used to be a list of
+        // slugs, which meant every future platform in this shape arrived
+        // defaulting to a webview that cannot run it. Game & Watch did
+        // exactly that on the day it shipped. Asking the core map is the
+        // same question with an answer that maintains itself.
+        //
+        // The second is JUDGEMENT, and has to stay a list: Saturn and PSP
+        // both HAVE a mapped core that does not work, confirmed on real
+        // hardware. Remove a slug here if its core is ever fixed and
+        // worth offering.
+        let brokenWebviewCore: Set<String> = ["saturn", "psp"]
+        if brokenWebviewCore.contains(canonicalSlug) { return .native }
+        if CoreCatalog.cores(for: canonicalSlug).isEmpty,
+           NativeCore.core(for: rom, canonicalSlug: canonicalSlug) != nil { return .native }
         guard NativeCore.core(for: rom, canonicalSlug: canonicalSlug) != nil else { return .webview }
         if let stored = UserDefaults.standard.string(forKey: "romm.backend.rom.\(rom.id)"),
            let backend = PlayerBackend(rawValue: stored) {

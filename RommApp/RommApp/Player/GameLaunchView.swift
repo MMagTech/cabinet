@@ -456,10 +456,16 @@ struct GameLaunchView: View {
     /// `coreCard`/`firmwareCard` pair, since those two only exist to
     /// configure the webview for games with no choice to make about
     /// which player runs them at all.
+    /// Whether there is a real choice of player to offer. Mirrors
+    /// `LaunchChoices.defaultBackend`'s own reasoning rather than
+    /// repeating its slug list: a platform whose default is forced to
+    /// native has nothing to pick between, whether that is because RomM
+    /// maps no webview core for it (Dreamcast, Vectrex, Game & Watch) or
+    /// because the one it maps does not work (Saturn, PSP).
     private var showsPlayerPicker: Bool {
-        NativeCore.core(for: rom, canonicalSlug: canonicalSlug) != nil
-            && canonicalSlug != "saturn" && canonicalSlug != "dc"
-            && canonicalSlug != "vectrex"
+        guard NativeCore.core(for: rom, canonicalSlug: canonicalSlug) != nil else { return false }
+        return !cores.isEmpty
+            && LaunchChoices.defaultBackend(rom: rom, canonicalSlug: canonicalSlug) != .native
     }
 
     /// One visible action, no exceptions: a game with the keep toggle
