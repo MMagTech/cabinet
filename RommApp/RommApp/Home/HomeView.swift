@@ -988,6 +988,7 @@ struct HomeView: View {
                                 CoverImage(path: rom.pathCoverSmall, title: rom.displayName)
                                     .frame(width: TenFoot.shelfCoverWidth, height: TenFoot.shelfCoverHeight)
                                     .clipShape(.rect(cornerRadius: 10))
+                                    .contentShape(Rectangle())
                                     .compatibilityBadge(romId: rom.id, compact: !TenFoot.isTV)
                                     .favoriteBadge(romId: rom.id, compact: !TenFoot.isTV)
                                     .downloadBadge(romId: rom.id, compact: !TenFoot.isTV)

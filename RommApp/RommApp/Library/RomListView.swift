@@ -197,6 +197,7 @@ struct RomListView: View {
                             CoverImage(path: rom.pathCoverSmall, title: rom.displayName)
                                 .aspectRatio(3.0 / 4.0, contentMode: .fit)
                                 .clipShape(.rect(cornerRadius: 10))
+                                    .contentShape(Rectangle())
                                 .compatibilityBadge(romId: rom.id)
                                 .favoriteBadge(romId: rom.id)
                                 .downloadBadge(romId: rom.id)

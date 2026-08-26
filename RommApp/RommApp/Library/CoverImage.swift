@@ -67,6 +67,26 @@ struct CoverImage: View {
                     Image(uiImage: image)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
+                } else if contentMode == .fill {
+                    // The same overlay trick the odd-aspect branch uses,
+                    // and for the same load-bearing reason: a fill-mode
+                    // image REPORTS its enlarged size to layout and to
+                    // HIT TESTING, and clipping only hides the spill,
+                    // it does not stop it taking taps. A near-3:4 cover
+                    // filling a 3:4 cell still overhangs a few points;
+                    // a genuinely wide one overhangs into the next tile,
+                    // which is how tapping one Game & Watch game opened
+                    // its neighbour. Overlay content contributes nothing
+                    // to layout or hit tests, so the view answers
+                    // exactly the proposed cell, every time, for every
+                    // cover shape.
+                    Color.clear
+                        .overlay(
+                            Image(uiImage: image)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        )
+                        .clipped()
                 } else {
                     Image(uiImage: image)
                         .resizable()
