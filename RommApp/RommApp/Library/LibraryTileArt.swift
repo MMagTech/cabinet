@@ -91,7 +91,22 @@ enum LibraryTileArt {
                         platformId: platform.id, limit: coversPerTile,
                         offset: offset, matchedOnly: true
                     )
-                    return (key(platform: platform), page?.items.compactMap(\.pathCoverSmall) ?? [])
+                    var paths = page?.items.compactMap(\.pathCoverSmall) ?? []
+                    if paths.isEmpty {
+                        // matchedOnly guarantees art but demands a
+                        // metadata match, and a custom platform can be
+                        // full of hand-uploaded covers with no match at
+                        // all: Game & Watch's 59 all have art and none
+                        // had a match, so its tile drew bare. Ask again
+                        // without the filter and keep whatever art is
+                        // actually there.
+                        let any = try? await session.roms(
+                            platformId: platform.id, limit: 12,
+                            offset: 0, matchedOnly: false
+                        )
+                        paths = Array((any?.items.compactMap(\.pathCoverSmall) ?? []).prefix(coversPerTile))
+                    }
+                    return (key(platform: platform), paths)
                 }
             }
             for collection in wantCollections {
