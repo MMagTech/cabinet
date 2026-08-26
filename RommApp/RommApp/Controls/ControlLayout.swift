@@ -217,9 +217,13 @@ struct ControlLayout: Decodable {
             name = "psx"
         case "psp":
             name = "psp"
-        // Game & Watch: the picture is the controller (see gw.json's own
-        // note); this layout is the tap surface and a Menu pill.
-        case "game-and-watch", "game & watch", "game and watch", "gameandwatch":
+        // Game & Watch, under whichever name the folder carries: the
+        // platform is custom, so the slug is whatever someone typed, and
+        // "LCD Handhelds" is an honest name for a library that is only
+        // a quarter Nintendo. NativeCore falls back to the .mgw
+        // extension for the same reason.
+        case "game-and-watch", "game & watch", "game and watch", "gameandwatch",
+             "lcd handhelds", "lcd-handhelds", "handheld electronic game":
             name = "gw"
         case "pc-fx":
             name = "pcfx"

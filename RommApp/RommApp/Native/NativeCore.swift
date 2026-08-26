@@ -397,7 +397,23 @@ enum NativePlatform: String, CaseIterable {
     /// them. Found 2026-08-08: a kept TurboGrafx-CD game never showing
     /// in Offline, traced to this exact mismatch.
     static func platform(for rom: Rom, canonicalSlug: String) -> NativePlatform? {
-        platform(bySlug: canonicalSlug, isArcade: rom.isArcade)
+        if let known = platform(bySlug: canonicalSlug, isArcade: rom.isArcade) { return known }
+        // The file can answer when the folder name cannot. A custom
+        // platform keeps whatever name someone typed, and this library
+        // is not really Nintendo-only (16 of 59 are; the rest are VTech,
+        // Gakken, Coleco, Elektronika and friends), so the folder may
+        // fairly be renamed to something like "LCD Handhelds". No
+        // rename should cost the core: .mgw belongs to gw-libretro and
+        // to nothing else in this app, so the extension is a stronger
+        // identifier here than the slug is.
+        if rom.fsName.lowercased().hasSuffix(".mgw") {
+            #if os(tvOS)
+            return nil
+            #else
+            return .gameAndWatch
+            #endif
+        }
+        return nil
     }
 
     /// The platform for an already-resolved slug, matched on the same
