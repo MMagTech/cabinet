@@ -64,6 +64,13 @@ static int g_dump_at[8]; static int g_dump_count = 0;
 // let a run walk itself into an attract demo or past a start prompt.
 #define MAX_PRESSES 32
 static struct { int frame, id, hold; } g_press[MAX_PRESSES];
+/* Scripted taps on the POINTER device, for cores that read a touch
+ * rather than a pad. gw-libretro polls its pointer on port 2, which is
+ * exactly why this exists: whether its simulators react to a tap at all
+ * was an inference until this flag made it an experiment. Coordinates
+ * are the libretro pointer range, -32767..32767 across the frame. */
+static struct { int frame, x, y, hold, port; } g_tap[MAX_PRESSES];
+static int g_tap_count = 0;
 static int g_mouse_dx = 0;
 static int g_mouse_from = 0;
 static int g_press_count = 0;
@@ -309,6 +316,25 @@ static int16_t input_state_cb(unsigned port, unsigned device, unsigned index, un
         if (id == RETRO_DEVICE_ID_MOUSE_Y) return 0;
     }
     if (port != 0 || device != RETRO_DEVICE_JOYPAD) return 0;
+    if (device == RETRO_DEVICE_POINTER) {
+        for (int i = 0; i < g_tap_count; i++) {
+            if ((int)port != g_tap[i].port) continue;
+            int span = g_tap[i].hold < 0 ? -g_tap[i].hold : g_tap[i].hold;
+            if (g_frame_index < g_tap[i].frame ||
+                g_frame_index >= g_tap[i].frame + span) continue;
+            /* A negative hold means HOVER: position without pressing,
+             * the half of a mouse click a scripted tap forgot. */
+            int hover = g_tap[i].hold < 0;
+            switch (id) {
+                case RETRO_DEVICE_ID_POINTER_X: return (int16_t)g_tap[i].x;
+                case RETRO_DEVICE_ID_POINTER_Y: return (int16_t)g_tap[i].y;
+                case RETRO_DEVICE_ID_POINTER_PRESSED: return hover ? 0 : 1;
+                case RETRO_DEVICE_ID_POINTER_COUNT: return hover ? 0 : 1;
+                default: return 0;
+            }
+        }
+        return 0;
+    }
     for (int i = 0; i < g_press_count; i++) {
         if ((int)id == g_press[i].id &&
             g_frame_index >= g_press[i].frame &&
@@ -363,6 +389,14 @@ int main(int argc, char **argv) {
                 g_press[g_press_count].id = bid;
                 g_press[g_press_count].hold = hold;
                 g_press_count++;
+            }
+        } else if (!strcmp(argv[i], "-tap") && i + 1 < argc && g_tap_count < MAX_PRESSES) {
+            // frame,x,y,hold[,port]  (x,y in -32767..32767)
+            int fr = 0, x = 0, y = 0, hold = 30, port = 2;
+            if (sscanf(argv[++i], "%d,%d,%d,%d,%d", &fr, &x, &y, &hold, &port) >= 3) {
+                g_tap[g_tap_count].frame = fr; g_tap[g_tap_count].x = x;
+                g_tap[g_tap_count].y = y; g_tap[g_tap_count].hold = hold;
+                g_tap[g_tap_count].port = port; g_tap_count++;
             }
         } else if (!strcmp(argv[i], "--dump-at") && i + 1 < argc) {
             char *tok = strtok(argv[++i], ",");

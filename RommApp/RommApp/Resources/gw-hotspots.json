@@ -1,0 +1,3712 @@
+{
+ "Armor Battle (Mattel Electronics).mgw": {
+  "buttons": {
+   "b": [
+    24,
+    291,
+    13,
+    55
+   ],
+   "down": [
+    291,
+    608,
+    52,
+    62
+   ],
+   "left": [
+    245,
+    571,
+    60,
+    55
+   ],
+   "right": [
+    328,
+    573,
+    62,
+    58
+   ],
+   "up": [
+    290,
+    527,
+    54,
+    64
+   ]
+  },
+  "height": 759,
+  "menu": [
+   {
+    "label": "On/Off",
+    "rect": [
+     96,
+     528,
+     39,
+     63
+    ],
+    "seq": 1
+   }
+  ],
+  "orientation": "portrait",
+  "ready_hint": 240,
+  "width": 480
+ },
+ "Banana (VTech, Time & Fun).mgw": {
+  "buttons": {
+   "b": [
+    476,
+    283,
+    41,
+    40
+   ],
+   "down": [
+    47,
+    283,
+    42,
+    41
+   ],
+   "up": [
+    47,
+    218,
+    42,
+    41
+   ],
+   "x": [
+    476,
+    219,
+    41,
+    41
+   ]
+  },
+  "height": 374,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     280,
+     305,
+     38,
+     21
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     339,
+     305,
+     38,
+     21
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     399,
+     305,
+     38,
+     21
+    ],
+    "seq": 3
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 562
+ },
+ "Baseball (VTech, Explorer Time & Fun).mgw": {
+  "buttons": {
+   "a": [
+    418,
+    307,
+    37,
+    50
+   ],
+   "left": [
+    105,
+    307,
+    37,
+    51
+   ],
+   "right": [
+    418,
+    307,
+    37,
+    50
+   ]
+  },
+  "height": 377,
+  "menu": [
+   {
+    "label": "Time",
+    "rect": [
+     236,
+     22,
+     38,
+     46
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game A",
+    "rect": [
+     289,
+     22,
+     38,
+     46
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     342,
+     22,
+     38,
+     46
+    ],
+    "seq": 3
+   },
+   {
+    "label": "Light",
+    "rect": [
+     484,
+     58,
+     56,
+     57
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 612
+ },
+ "Bomb Fight (VTech, Mini Time & Fun).mgw": {
+  "buttons": {
+   "a": [
+    407,
+    204,
+    61,
+    33
+   ],
+   "b": [
+    72,
+    150,
+    61,
+    32
+   ],
+   "left": [
+    72,
+    204,
+    61,
+    33
+   ],
+   "right": [
+    407,
+    204,
+    61,
+    33
+   ]
+  },
+  "height": 360,
+  "menu": [
+   {
+    "label": "Time",
+    "rect": [
+     104,
+     66,
+     44,
+     29
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game A",
+    "rect": [
+     393,
+     66,
+     44,
+     29
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     439,
+     66,
+     44,
+     29
+    ],
+    "seq": 3
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 540
+ },
+ "Caccia al Ladro (VTech, Mini Time & Fun).mgw": {
+  "buttons": {
+   "a": [
+    410,
+    202,
+    62,
+    33
+   ],
+   "b": [
+    69,
+    149,
+    62,
+    32
+   ],
+   "left": [
+    66,
+    202,
+    65,
+    34
+   ],
+   "right": [
+    410,
+    202,
+    62,
+    33
+   ]
+  },
+  "height": 359,
+  "menu": [
+   {
+    "label": "Time",
+    "rect": [
+     106,
+     67,
+     37,
+     21
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game A",
+    "rect": [
+     400,
+     67,
+     37,
+     21
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     448,
+     67,
+     37,
+     21
+    ],
+    "seq": 3
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 542
+ },
+ "Cessate il Fuoco (VTech, Mini Time & Fun).mgw": {
+  "buttons": {
+   "a": [
+    410,
+    198,
+    62,
+    34
+   ],
+   "b": [
+    70,
+    144,
+    62,
+    34
+   ],
+   "left": [
+    70,
+    198,
+    62,
+    34
+   ],
+   "right": [
+    410,
+    198,
+    62,
+    34
+   ]
+  },
+  "height": 360,
+  "menu": [
+   {
+    "label": "Time",
+    "rect": [
+     103,
+     61,
+     44,
+     29
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game A",
+    "rect": [
+     396,
+     61,
+     44,
+     29
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     442,
+     61,
+     44,
+     29
+    ],
+    "seq": 3
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 540
+ },
+ "Chicky Woggy (VTech, Arcade Time & Fun).mgw": {
+  "buttons": {
+   "down": [
+    130,
+    446,
+    182,
+    120
+   ],
+   "left": [
+    130,
+    386,
+    121,
+    180
+   ],
+   "right": [
+    191,
+    386,
+    121,
+    180
+   ],
+   "up": [
+    130,
+    386,
+    182,
+    120
+   ]
+  },
+  "height": 664,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     181,
+     305,
+     27,
+     20
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     230,
+     305,
+     28,
+     20
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     281,
+     305,
+     27,
+     20
+    ],
+    "seq": 3
+   }
+  ],
+  "orientation": "portrait",
+  "ready_hint": 240,
+  "width": 440
+ },
+ "Chicky Woggy (VTech, Electronic Tini-Arcade).mgw": {
+  "buttons": {
+   "down": [
+    449,
+    527,
+    115,
+    98
+   ],
+   "left": [
+    449,
+    477,
+    76,
+    148
+   ],
+   "right": [
+    487,
+    477,
+    76,
+    148
+   ],
+   "up": [
+    449,
+    477,
+    115,
+    98
+   ]
+  },
+  "height": 747,
+  "menu": [
+   {
+    "label": "On/Off",
+    "rect": [
+     116,
+     573,
+     47,
+     45
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Select",
+    "rect": [
+     200,
+     568,
+     41,
+     45
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Start",
+    "rect": [
+     283,
+     569,
+     36,
+     43
+    ],
+    "seq": 3
+   }
+  ],
+  "orientation": "portrait",
+  "ready_hint": 240,
+  "width": 671
+ },
+ "Condor (VTech, Time & Fun).mgw": {
+  "buttons": {
+   "a": [
+    476,
+    219,
+    38,
+    38
+   ],
+   "left": [
+    48,
+    219,
+    38,
+    38
+   ],
+   "right": [
+    476,
+    219,
+    38,
+    38
+   ]
+  },
+  "height": 373,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     279,
+     305,
+     38,
+     20
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     337,
+     305,
+     38,
+     20
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     397,
+     305,
+     38,
+     20
+    ],
+    "seq": 3
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 562
+ },
+ "Crazy Chewy (VTech, Electronic Tini-Arcade).mgw": {
+  "buttons": {
+   "down": [
+    456,
+    552,
+    132,
+    104
+   ],
+   "left": [
+    456,
+    500,
+    88,
+    156
+   ],
+   "right": [
+    500,
+    500,
+    88,
+    156
+   ],
+   "up": [
+    456,
+    500,
+    132,
+    104
+   ]
+  },
+  "height": 747,
+  "menu": [
+   {
+    "label": "On/Off",
+    "rect": [
+     113,
+     590,
+     49,
+     57
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Select",
+    "rect": [
+     192,
+     584,
+     58,
+     62
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Start",
+    "rect": [
+     284,
+     583,
+     51,
+     63
+    ],
+    "seq": 3
+   }
+  ],
+  "orientation": "portrait",
+  "ready_hint": 240,
+  "width": 692
+ },
+ "Defendo (VTech, Explorer Time & Fun).mgw": {
+  "buttons": {
+   "a": [
+    421,
+    308,
+    37,
+    51
+   ],
+   "left": [
+    105,
+    309,
+    37,
+    52
+   ],
+   "right": [
+    421,
+    308,
+    37,
+    51
+   ]
+  },
+  "height": 378,
+  "menu": [
+   {
+    "label": "Time",
+    "rect": [
+     236,
+     23,
+     39,
+     46
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game A",
+    "rect": [
+     289,
+     23,
+     39,
+     46
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     342,
+     23,
+     39,
+     46
+    ],
+    "seq": 3
+   },
+   {
+    "label": "Light",
+    "rect": [
+     487,
+     59,
+     56,
+     57
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 614
+ },
+ "Donkey Angler (Gakken, LCD Card Game).mgw": {
+  "buttons": {
+   "a": [
+    491,
+    213,
+    73,
+    53
+   ],
+   "left": [
+    47,
+    213,
+    77,
+    50
+   ],
+   "right": [
+    491,
+    213,
+    73,
+    53
+   ]
+  },
+  "height": 322,
+  "menu": [
+   {
+    "label": "Time",
+    "rect": [
+     47,
+     67,
+     77,
+     50
+    ],
+    "seq": 1
+   },
+   {
+    "label": "ACL",
+    "rect": [
+     67,
+     166,
+     38,
+     36
+    ],
+    "seq": 2
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 611
+ },
+ "Donkey Kong (Coleco).mgw": {
+  "buttons": {
+   "b": [
+    344,
+    522,
+    40,
+    37
+   ]
+  },
+  "height": 745,
+  "menu": [
+   {
+    "label": "Power",
+    "rect": [
+     232,
+     493,
+     34,
+     25
+    ],
+    "seq": 1
+   }
+  ],
+  "orientation": "portrait",
+  "ready_hint": 240,
+  "width": 495
+ },
+ "Donkey Kong (Nintendo, Multi Screen).mgw": {
+  "buttons": {
+   "b": [
+    498,
+    610,
+    53,
+    55
+   ],
+   "down": [
+    36,
+    590,
+    93,
+    91
+   ],
+   "left": [
+    36,
+    590,
+    93,
+    91
+   ],
+   "right": [
+    36,
+    590,
+    93,
+    91
+   ],
+   "up": [
+    36,
+    590,
+    93,
+    91
+   ]
+  },
+  "height": 748,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     500,
+     423,
+     38,
+     33
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     500,
+     462,
+     38,
+     34
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     500,
+     501,
+     38,
+     34
+    ],
+    "seq": 3
+   },
+   {
+    "label": "ACL",
+    "rect": [
+     550,
+     488,
+     15,
+     15
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "portrait",
+  "ready_hint": 240,
+  "width": 606
+ },
+ "Donkey Kong Circus (Nintendo, Panorama Screen).mgw": {
+  "buttons": {
+   "a": [
+    351,
+    519,
+    61,
+    62
+   ],
+   "left": [
+    85,
+    519,
+    60,
+    62
+   ],
+   "right": [
+    351,
+    519,
+    61,
+    62
+   ]
+  },
+  "height": 771,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     271,
+     656,
+     32,
+     22
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     321,
+     656,
+     33,
+     22
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     372,
+     656,
+     33,
+     22
+    ],
+    "seq": 3
+   },
+   {
+    "label": "ACL",
+    "rect": [
+     304,
+     715,
+     18,
+     17
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "portrait",
+  "ready_hint": 240,
+  "width": 498
+ },
+ "Donkey Kong II (Nintendo, Multi Screen).mgw": {
+  "buttons": {
+   "b": [
+    493,
+    609,
+    55,
+    55
+   ],
+   "down": [
+    35,
+    590,
+    92,
+    94
+   ],
+   "left": [
+    35,
+    590,
+    92,
+    94
+   ],
+   "right": [
+    35,
+    590,
+    92,
+    94
+   ],
+   "up": [
+    35,
+    590,
+    92,
+    94
+   ]
+  },
+  "height": 748,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     497,
+     424,
+     38,
+     29
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     496,
+     463,
+     39,
+     30
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     496,
+     503,
+     38,
+     30
+    ],
+    "seq": 3
+   },
+   {
+    "label": "ACL",
+    "rect": [
+     546,
+     488,
+     16,
+     17
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "portrait",
+  "ready_hint": 240,
+  "width": 605
+ },
+ "Donkey Kong Jr. (Coleco).mgw": {
+  "buttons": {
+   "b": [
+    322,
+    578,
+    62,
+    54
+   ]
+  },
+  "height": 746,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     234,
+     536,
+     36,
+     19
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     276,
+     536,
+     34,
+     19
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     318,
+     537,
+     34,
+     18
+    ],
+    "seq": 3
+   },
+   {
+    "label": "ACL",
+    "rect": [
+     219,
+     581,
+     17,
+     15
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "portrait",
+  "ready_hint": 240,
+  "width": 480
+ },
+ "Donkey Kong Jr. (Nintendo, Panorama Screen).mgw": {
+  "buttons": {
+   "b": [
+    352,
+    519,
+    61,
+    62
+   ],
+   "down": [
+    67,
+    501,
+    97,
+    99
+   ],
+   "left": [
+    67,
+    501,
+    97,
+    99
+   ],
+   "right": [
+    67,
+    501,
+    97,
+    99
+   ],
+   "up": [
+    67,
+    501,
+    97,
+    99
+   ]
+  },
+  "height": 771,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     272,
+     656,
+     32,
+     24
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     323,
+     656,
+     32,
+     24
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     374,
+     656,
+     32,
+     24
+    ],
+    "seq": 3
+   },
+   {
+    "label": "ACL",
+    "rect": [
+     307,
+     718,
+     13,
+     14
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "portrait",
+  "ready_hint": 240,
+  "width": 499
+ },
+ "Donkey Kong Jr. (Nintendo, Table Top).mgw": {
+  "buttons": {
+   "b": [
+    325,
+    581,
+    55,
+    47
+   ]
+  },
+  "height": 745,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     233,
+     541,
+     35,
+     21
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     276,
+     541,
+     34,
+     21
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     319,
+     541,
+     32,
+     21
+    ],
+    "seq": 3
+   },
+   {
+    "label": "ACL",
+    "rect": [
+     218,
+     586,
+     18,
+     12
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "portrait",
+  "ready_hint": 240,
+  "width": 480
+ },
+ "Dungeons & Dragons Computer Fantasy Game (Mattel Electronics, Arcade Action Series).mgw": {
+  "buttons": {
+   "b": [
+    27,
+    280,
+    64,
+    44
+   ],
+   "down": [
+    27,
+    280,
+    64,
+    44
+   ],
+   "left": [
+    27,
+    280,
+    64,
+    44
+   ],
+   "right": [
+    27,
+    280,
+    64,
+    44
+   ],
+   "up": [
+    27,
+    280,
+    64,
+    44
+   ],
+   "x": [
+    334,
+    279,
+    64,
+    45
+   ]
+  },
+  "height": 348,
+  "menu": [
+   {
+    "label": "ACL",
+    "rect": [
+     262,
+     287,
+     20,
+     20
+    ],
+    "seq": 1
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 527
+ },
+ "Egg (Nintendo, Wide Screen).mgw": {
+  "buttons": {
+   "b": [
+    551,
+    303,
+    51,
+    51
+   ],
+   "down": [
+    52,
+    303,
+    51,
+    51
+   ],
+   "up": [
+    51,
+    240,
+    52,
+    50
+   ],
+   "x": [
+    551,
+    238,
+    51,
+    51
+   ]
+  },
+  "direct": [
+   {
+    "id": 10,
+    "label": "Game A",
+    "rect": [
+     547,
+     40,
+     42,
+     29
+    ]
+   },
+   {
+    "id": 11,
+    "label": "Game B",
+    "rect": [
+     548,
+     85,
+     41,
+     28
+    ]
+   },
+   {
+    "id": 12,
+    "label": "Time",
+    "rect": [
+     548,
+     130,
+     41,
+     28
+    ]
+   },
+   {
+    "id": 13,
+    "label": "ACL",
+    "rect": [
+     604,
+     114,
+     17,
+     16
+    ]
+   }
+  ],
+  "height": 392,
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 653
+ },
+ "Engine Room (VTech, Explorer Time & Fun).mgw": {
+  "buttons": {
+   "a": [
+    419,
+    309,
+    35,
+    49
+   ],
+   "left": [
+    107,
+    308,
+    36,
+    51
+   ],
+   "right": [
+    419,
+    309,
+    35,
+    49
+   ]
+  },
+  "height": 377,
+  "menu": [
+   {
+    "label": "Time",
+    "rect": [
+     236,
+     22,
+     36,
+     39
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game A",
+    "rect": [
+     289,
+     22,
+     36,
+     39
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     342,
+     22,
+     36,
+     39
+    ],
+    "seq": 3
+   },
+   {
+    "label": "Light",
+    "rect": [
+     485,
+     59,
+     55,
+     51
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 612
+ },
+ "Escape (VTech, Time & Fun).mgw": {
+  "buttons": {
+   "a": [
+    477,
+    219,
+    39,
+    39
+   ],
+   "left": [
+    48,
+    219,
+    38,
+    38
+   ],
+   "right": [
+    477,
+    219,
+    39,
+    39
+   ]
+  },
+  "height": 372,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     281,
+     304,
+     38,
+     20
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     340,
+     304,
+     38,
+     20
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     400,
+     304,
+     38,
+     20
+    ],
+    "seq": 3
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 564
+ },
+ "Explorers of Space (Elektronika).mgw": {
+  "buttons": {
+   "b": [
+    552,
+    314,
+    48,
+    51
+   ],
+   "down": [
+    57,
+    312,
+    47,
+    53
+   ],
+   "up": [
+    53,
+    243,
+    53,
+    52
+   ],
+   "x": [
+    553,
+    245,
+    47,
+    50
+   ]
+  },
+  "height": 394,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     546,
+     49,
+     41,
+     33
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     543,
+     93,
+     44,
+     35
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     544,
+     137,
+     42,
+     34
+    ],
+    "seq": 3
+   },
+   {
+    "label": "Game A+B",
+    "rect": [
+     527,
+     183,
+     82,
+     48
+    ],
+    "seq": 4
+   },
+   {
+    "label": "ACL",
+    "rect": [
+     601,
+     115,
+     20,
+     21
+    ],
+    "seq": 5
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 654
+ },
+ "Fowling (Elektronika).mgw": {
+  "buttons": {
+   "b": [
+    547,
+    306,
+    49,
+    49
+   ],
+   "down": [
+    53,
+    304,
+    48,
+    52
+   ],
+   "up": [
+    52,
+    240,
+    50,
+    51
+   ],
+   "x": [
+    548,
+    240,
+    47,
+    51
+   ]
+  },
+  "height": 393,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     541,
+     39,
+     46,
+     37
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     541,
+     88,
+     46,
+     35
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     541,
+     131,
+     46,
+     36
+    ],
+    "seq": 3
+   },
+   {
+    "label": "ACL",
+    "rect": [
+     600,
+     115,
+     14,
+     14
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 650
+ },
+ "Frog Boaster (Elektronika).mgw": {
+  "buttons": {
+   "b": [
+    565,
+    317,
+    35,
+    34
+   ],
+   "down": [
+    59,
+    316,
+    35,
+    35
+   ],
+   "up": [
+    59,
+    248,
+    35,
+    35
+   ],
+   "x": [
+    565,
+    249,
+    35,
+    35
+   ]
+  },
+  "height": 397,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     557,
+     52,
+     33,
+     20
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     557,
+     96,
+     36,
+     20
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     557,
+     140,
+     33,
+     20
+    ],
+    "seq": 3
+   },
+   {
+    "label": "ACL",
+    "rect": [
+     610,
+     120,
+     16,
+     17
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 660
+ },
+ "Galaxy II (Epoch).mgw": {
+  "buttons": {
+   "b": [
+    381,
+    572,
+    87,
+    86
+   ],
+   "left": [
+    79,
+    587,
+    37,
+    40
+   ],
+   "right": [
+    86,
+    587,
+    40,
+    40
+   ]
+  },
+  "height": 747,
+  "menu": [
+   {
+    "label": "Power",
+    "rect": [
+     225,
+     540,
+     63,
+     28
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Select",
+    "rect": [
+     236,
+     589,
+     58,
+     31
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Start",
+    "rect": [
+     233,
+     649,
+     66,
+     39
+    ],
+    "seq": 3
+   }
+  ],
+  "orientation": "portrait",
+  "ready_hint": 240,
+  "width": 528
+ },
+ "Grab Man (unknown manufacturer, Game & Time).mgw": {
+  "buttons": {
+   "a": [
+    339,
+    185,
+    14,
+    16
+   ],
+   "b": [
+    338,
+    183,
+    17,
+    29
+   ],
+   "x": [
+    339,
+    185,
+    14,
+    16
+   ],
+   "y": [
+    338,
+    183,
+    17,
+    29
+   ]
+  },
+  "height": 777,
+  "menu": [
+   {
+    "label": "Time/Game",
+    "rect": [
+     99,
+     97,
+     53,
+     32
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Amateur",
+    "rect": [
+     173,
+     103,
+     45,
+     28
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Professional",
+    "rect": [
+     230,
+     103,
+     44,
+     29
+    ],
+    "seq": 3
+   },
+   {
+    "label": "Time",
+    "rect": [
+     286,
+     103,
+     45,
+     28
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "portrait",
+  "ready_hint": 240,
+  "width": 480
+ },
+ "Hippo Teeth (VTech, Mini Time & Fun).mgw": {
+  "buttons": {
+   "a": [
+    408,
+    199,
+    70,
+    41
+   ],
+   "b": [
+    69,
+    141,
+    64,
+    45
+   ],
+   "left": [
+    69,
+    195,
+    63,
+    45
+   ],
+   "right": [
+    408,
+    199,
+    70,
+    41
+   ]
+  },
+  "height": 359,
+  "menu": [
+   {
+    "label": "Time",
+    "rect": [
+     97,
+     61,
+     52,
+     38
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game A",
+    "rect": [
+     392,
+     61,
+     49,
+     38
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     441,
+     61,
+     51,
+     38
+    ],
+    "seq": 3
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 542
+ },
+ "Hippo Teeth (VTech, Sporty Time & Fun).mgw": {
+  "buttons": {
+   "a": [
+    287,
+    557,
+    50,
+    39
+   ],
+   "b": [
+    145,
+    559,
+    49,
+    39
+   ],
+   "left": [
+    228,
+    558,
+    49,
+    39
+   ],
+   "right": [
+    287,
+    557,
+    50,
+    39
+   ]
+  },
+  "height": 650,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     113,
+     314,
+     37,
+     18
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     167,
+     314,
+     37,
+     18
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     221,
+     314,
+     37,
+     18
+    ],
+    "seq": 3
+   }
+  ],
+  "orientation": "portrait",
+  "ready_hint": 240,
+  "width": 480
+ },
+ "Hot Line (VTech, Mini Time & Fun).mgw": {
+  "buttons": {
+   "a": [
+    407,
+    198,
+    68,
+    43
+   ],
+   "left": [
+    66,
+    201,
+    69,
+    41
+   ],
+   "right": [
+    407,
+    198,
+    68,
+    43
+   ]
+  },
+  "height": 359,
+  "menu": [
+   {
+    "label": "Time",
+    "rect": [
+     100,
+     64,
+     49,
+     34
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game A",
+    "rect": [
+     392,
+     64,
+     49,
+     34
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     441,
+     64,
+     49,
+     34
+    ],
+    "seq": 3
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 542
+ },
+ "Hot Line (VTech, Sporty Time & Fun).mgw": {
+  "buttons": {
+   "a": [
+    290,
+    565,
+    47,
+    38
+   ],
+   "left": [
+    146,
+    566,
+    48,
+    37
+   ],
+   "right": [
+    290,
+    565,
+    47,
+    38
+   ]
+  },
+  "height": 656,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     113,
+     320,
+     41,
+     24
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     166,
+     320,
+     41,
+     24
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Select",
+    "rect": [
+     220,
+     320,
+     41,
+     24
+    ],
+    "seq": 3
+   }
+  ],
+  "orientation": "portrait",
+  "ready_hint": 240,
+  "width": 480
+ },
+ "Las Vegas (Bandai, LCD Game Digital).mgw": {
+  "buttons": {
+   "a": [
+    441,
+    230,
+    64,
+    32
+   ],
+   "left": [
+    41,
+    230,
+    64,
+    38
+   ],
+   "right": [
+    441,
+    230,
+    64,
+    32
+   ]
+  },
+  "height": 312,
+  "menu": [
+   {
+    "label": "Sound",
+    "rect": [
+     63,
+     72,
+     44,
+     29
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Mode",
+    "rect": [
+     63,
+     122,
+     46,
+     39
+    ],
+    "seq": 2
+   },
+   {
+    "label": "ACL",
+    "rect": [
+     81,
+     185,
+     11,
+     12
+    ],
+    "seq": 3
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 546
+ },
+ "Lifeboat (Nintendo, Multi Screen).mgw": {
+  "buttons": {
+   "a": [
+    749,
+    392,
+    68,
+    58
+   ],
+   "left": [
+    104,
+    393,
+    68,
+    63
+   ],
+   "right": [
+    749,
+    392,
+    68,
+    58
+   ]
+  },
+  "height": 532,
+  "menu": [
+   {
+    "label": "ACL",
+    "rect": [
+     308,
+     365,
+     20,
+     20
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game A",
+    "rect": [
+     569,
+     351,
+     33,
+     47
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     615,
+     351,
+     33,
+     47
+    ],
+    "seq": 3
+   },
+   {
+    "label": "Time",
+    "rect": [
+     662,
+     351,
+     33,
+     47
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 974
+ },
+ "Mario Bros. (Nintendo, Multi Screen).mgw": {
+  "buttons": {
+   "b": [
+    777,
+    374,
+    41,
+    90
+   ],
+   "down": [
+    96,
+    374,
+    41,
+    91
+   ],
+   "up": [
+    96,
+    374,
+    41,
+    91
+   ],
+   "x": [
+    777,
+    374,
+    41,
+    90
+   ]
+  },
+  "height": 532,
+  "menu": [
+   {
+    "label": "ACL",
+    "rect": [
+     309,
+     367,
+     17,
+     16
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game A",
+    "rect": [
+     567,
+     357,
+     36,
+     44
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     613,
+     357,
+     37,
+     44
+    ],
+    "seq": 3
+   },
+   {
+    "label": "Time",
+    "rect": [
+     659,
+     357,
+     37,
+     44
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 973
+ },
+ "Mario's Bombs Away (Nintendo, Panorama Screen).mgw": {
+  "buttons": {
+   "a": [
+    66,
+    532,
+    100,
+    35
+   ],
+   "b": [
+    352,
+    520,
+    61,
+    62
+   ],
+   "left": [
+    66,
+    532,
+    100,
+    35
+   ],
+   "right": [
+    66,
+    532,
+    100,
+    35
+   ]
+  },
+  "height": 770,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     270,
+     655,
+     34,
+     22
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     322,
+     655,
+     33,
+     22
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     372,
+     655,
+     34,
+     22
+    ],
+    "seq": 3
+   },
+   {
+    "label": "ACL",
+    "rect": [
+     305,
+     714,
+     15,
+     16
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "portrait",
+  "ready_hint": 240,
+  "width": 498
+ },
+ "Mickey Mouse (Nintendo, Panorama Screen).mgw": {
+  "buttons": {
+   "a": [
+    347,
+    521,
+    60,
+    62
+   ],
+   "left": [
+    85,
+    521,
+    61,
+    62
+   ],
+   "right": [
+    347,
+    521,
+    60,
+    62
+   ]
+  },
+  "height": 770,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     269,
+     658,
+     32,
+     20
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     319,
+     658,
+     32,
+     20
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     370,
+     658,
+     31,
+     20
+    ],
+    "seq": 3
+   },
+   {
+    "label": "ACL",
+    "rect": [
+     304,
+     716,
+     13,
+     13
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "portrait",
+  "ready_hint": 240,
+  "width": 493
+ },
+ "Mickey Mouse (Nintendo, Wide Screen).mgw": {
+  "buttons": {
+   "b": [
+    552,
+    304,
+    50,
+    57
+   ],
+   "down": [
+    51,
+    306,
+    52,
+    56
+   ],
+   "up": [
+    50,
+    241,
+    53,
+    56
+   ],
+   "x": [
+    551,
+    240,
+    52,
+    56
+   ]
+  },
+  "height": 396,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     548,
+     43,
+     41,
+     30
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     548,
+     87,
+     41,
+     31
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     548,
+     131,
+     41,
+     32
+    ],
+    "seq": 3
+   },
+   {
+    "label": "ACL",
+    "rect": [
+     605,
+     115,
+     16,
+     16
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 654
+ },
+ "Monkey (VTech, Time & Fun).mgw": {
+  "buttons": {
+   "a": [
+    473,
+    218,
+    42,
+    41
+   ],
+   "left": [
+    46,
+    217,
+    42,
+    42
+   ],
+   "right": [
+    473,
+    218,
+    42,
+    41
+   ]
+  },
+  "height": 374,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     279,
+     304,
+     38,
+     21
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     338,
+     304,
+     38,
+     21
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     398,
+     304,
+     38,
+     21
+    ],
+    "seq": 3
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 561
+ },
+ "Monkey Jump (VTech, Arcade Time & Fun).mgw": {
+  "buttons": {
+   "b": [
+    75,
+    305,
+    53,
+    42
+   ]
+  },
+  "height": 664,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     177,
+     303,
+     35,
+     26
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     228,
+     303,
+     35,
+     26
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     278,
+     303,
+     35,
+     26
+    ],
+    "seq": 3
+   }
+  ],
+  "orientation": "portrait",
+  "ready_hint": 240,
+  "width": 480
+ },
+ "Motor Cross (Queentex).mgw": {
+  "buttons": {
+   "down": [
+    49,
+    423,
+    121,
+    81
+   ],
+   "left": [
+    49,
+    382,
+    80,
+    122
+   ],
+   "right": [
+    89,
+    382,
+    80,
+    122
+   ],
+   "up": [
+    49,
+    382,
+    121,
+    81
+   ]
+  },
+  "height": 736,
+  "menu": [
+   {
+    "label": "On/Off",
+    "rect": [
+     191,
+     475,
+     36,
+     45
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Sound",
+    "rect": [
+     238,
+     475,
+     36,
+     45
+    ],
+    "seq": 2
+   },
+   {
+    "label": "ACL",
+    "rect": [
+     284,
+     474,
+     38,
+     47
+    ],
+    "seq": 3
+   },
+   {
+    "label": "Start",
+    "rect": [
+     338,
+     396,
+     78,
+     85
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "portrait",
+  "ready_hint": 240,
+  "width": 454
+ },
+ "Pac Man (Tomytronic).mgw": {
+  "buttons": {
+   "down": [
+    460,
+    556,
+    40,
+    78
+   ],
+   "left": [
+    373,
+    515,
+    74,
+    37
+   ],
+   "right": [
+    510,
+    514,
+    73,
+    37
+   ],
+   "up": [
+    457,
+    438,
+    39,
+    68
+   ]
+  },
+  "height": 740,
+  "menu": [
+   {
+    "label": "Ama/Pro",
+    "rect": [
+     332,
+     397,
+     86,
+     48
+    ],
+    "seq": 1
+   },
+   {
+    "label": "On/Off",
+    "rect": [
+     531,
+     397,
+     87,
+     49
+    ],
+    "seq": 2
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 941
+ },
+ "Pancake (VTech, Time & Fun).mgw": {
+  "buttons": {
+   "a": [
+    473,
+    220,
+    41,
+    39
+   ],
+   "left": [
+    44,
+    220,
+    42,
+    38
+   ],
+   "right": [
+    473,
+    220,
+    41,
+    39
+   ]
+  },
+  "height": 372,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     277,
+     304,
+     40,
+     22
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     336,
+     304,
+     40,
+     22
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     395,
+     304,
+     40,
+     22
+    ],
+    "seq": 3
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 560
+ },
+ "Parachute (Nintendo, Wide Screen).mgw": {
+  "buttons": {
+   "a": [
+    559,
+    256,
+    50,
+    56
+   ],
+   "left": [
+    48,
+    256,
+    51,
+    57
+   ],
+   "right": [
+    559,
+    256,
+    50,
+    56
+   ]
+  },
+  "height": 395,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     554,
+     43,
+     40,
+     29
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     554,
+     88,
+     40,
+     28
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     554,
+     133,
+     39,
+     28
+    ],
+    "seq": 3
+   },
+   {
+    "label": "ACL",
+    "rect": [
+     609,
+     114,
+     19,
+     18
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 658
+ },
+ "Penguin Land (Bandai, LSI Game Double Play).mgw": {
+  "buttons": {
+   "a": [
+    862,
+    471,
+    63,
+    72
+   ],
+   "b": [
+    68,
+    468,
+    60,
+    74
+   ],
+   "left": [
+    327,
+    468,
+    63,
+    74
+   ],
+   "right": [
+    419,
+    468,
+    60,
+    73
+   ],
+   "up": [
+    68,
+    468,
+    60,
+    74
+   ],
+   "x": [
+    957,
+    471,
+    60,
+    73
+   ],
+   "y": [
+    606,
+    466,
+    63,
+    78
+   ]
+  },
+  "height": 580,
+  "menu": [
+   {
+    "label": "Power",
+    "rect": [
+     159,
+     479,
+     40,
+     47
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Select",
+    "rect": [
+     218,
+     479,
+     41,
+     47
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Sound",
+    "rect": [
+     278,
+     479,
+     40,
+     47
+    ],
+    "seq": 3
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 1073
+ },
+ "Pirate (VTech, Time & Fun).mgw": {
+  "buttons": {
+   "a": [
+    476,
+    219,
+    38,
+    38
+   ],
+   "left": [
+    48,
+    218,
+    38,
+    39
+   ],
+   "right": [
+    476,
+    219,
+    38,
+    38
+   ]
+  },
+  "height": 374,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     279,
+     304,
+     38,
+     21
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     338,
+     304,
+     39,
+     21
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     397,
+     304,
+     39,
+     21
+    ],
+    "seq": 3
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 561
+ },
+ "Roller Coaster (VTech, Explorer Time & Fun).mgw": {
+  "buttons": {
+   "a": [
+    418,
+    306,
+    32,
+    42
+   ],
+   "left": [
+    105,
+    308,
+    31,
+    43
+   ],
+   "right": [
+    418,
+    306,
+    32,
+    42
+   ]
+  },
+  "height": 377,
+  "menu": [
+   {
+    "label": "Time",
+    "rect": [
+     238,
+     23,
+     28,
+     34
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game A",
+    "rect": [
+     292,
+     23,
+     25,
+     34
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     342,
+     22,
+     30,
+     35
+    ],
+    "seq": 3
+   },
+   {
+    "label": "Light",
+    "rect": [
+     488,
+     59,
+     44,
+     44
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 609
+ },
+ "Safari (VTech, Time & Fun).mgw": {
+  "buttons": {
+   "a": [
+    476,
+    219,
+    38,
+    37
+   ],
+   "left": [
+    48,
+    219,
+    38,
+    37
+   ],
+   "right": [
+    476,
+    219,
+    38,
+    37
+   ]
+  },
+  "height": 372,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     280,
+     303,
+     37,
+     22
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     339,
+     303,
+     37,
+     22
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     399,
+     303,
+     37,
+     22
+    ],
+    "seq": 3
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 562
+ },
+ "Sleep Walker (VTech, Time & Fun).mgw": {
+  "buttons": {
+   "b": [
+    471,
+    282,
+    43,
+    39
+   ],
+   "down": [
+    45,
+    280,
+    43,
+    40
+   ],
+   "up": [
+    45,
+    216,
+    43,
+    40
+   ],
+   "x": [
+    471,
+    216,
+    43,
+    40
+   ]
+  },
+  "height": 370,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     277,
+     302,
+     38,
+     22
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     336,
+     302,
+     38,
+     22
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Select",
+    "rect": [
+     395,
+     302,
+     38,
+     22
+    ],
+    "seq": 3
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 558
+ },
+ "Snoopy (Nintendo, Panorama Screen).mgw": {
+  "buttons": {
+   "b": [
+    350,
+    519,
+    63,
+    64
+   ],
+   "left": [
+    66,
+    534,
+    99,
+    35
+   ],
+   "right": [
+    66,
+    534,
+    99,
+    35
+   ]
+  },
+  "height": 770,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     271,
+     660,
+     32,
+     20
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     321,
+     660,
+     34,
+     20
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     372,
+     660,
+     33,
+     20
+    ],
+    "seq": 3
+   },
+   {
+    "label": "ACL",
+    "rect": [
+     304,
+     719,
+     17,
+     16
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "portrait",
+  "ready_hint": 240,
+  "width": 498
+ },
+ "Snoopy (Nintendo, Table Top).mgw": {
+  "buttons": {
+   "b": [
+    325,
+    576,
+    56,
+    47
+   ]
+  },
+  "height": 743,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     228,
+     532,
+     34,
+     24
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     271,
+     532,
+     34,
+     24
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     315,
+     532,
+     35,
+     24
+    ],
+    "seq": 3
+   },
+   {
+    "label": "ACL",
+    "rect": [
+     211,
+     579,
+     20,
+     13
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "portrait",
+  "ready_hint": 240,
+  "width": 480
+ },
+ "Snoopy Tennis (Nintendo, Wide Screen).mgw": {
+  "buttons": {
+   "b": [
+    42,
+    253,
+    60,
+    59
+   ],
+   "down": [
+    553,
+    288,
+    49,
+    53
+   ],
+   "up": [
+    552,
+    224,
+    50,
+    51
+   ]
+  },
+  "height": 393,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     547,
+     41,
+     42,
+     34
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     547,
+     87,
+     43,
+     33
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     547,
+     131,
+     43,
+     34
+    ],
+    "seq": 3
+   },
+   {
+    "label": "ACL",
+    "rect": [
+     604,
+     114,
+     17,
+     17
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 654
+ },
+ "Sub Chase (Mattel Electronics).mgw": {
+  "buttons": {
+   "b": [
+    23,
+    289,
+    13,
+    60
+   ],
+   "down": [
+    284,
+    595,
+    47,
+    56
+   ],
+   "left": [
+    242,
+    561,
+    56,
+    47
+   ],
+   "right": [
+    316,
+    562,
+    57,
+    48
+   ],
+   "up": [
+    283,
+    519,
+    47,
+    57
+   ]
+  },
+  "height": 760,
+  "menu": [
+   {
+    "label": "On/Off",
+    "rect": [
+     90,
+     512,
+     49,
+     74
+    ],
+    "seq": 1
+   }
+  ],
+  "orientation": "portrait",
+  "ready_hint": 240,
+  "width": 480
+ },
+ "Tennis Menace (VTech, Sporty Time & Fun).mgw": {
+  "buttons": {
+   "a": [
+    290,
+    566,
+    46,
+    37
+   ],
+   "left": [
+    147,
+    566,
+    46,
+    37
+   ],
+   "right": [
+    290,
+    566,
+    46,
+    37
+   ]
+  },
+  "height": 656,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     114,
+     321,
+     41,
+     24
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     167,
+     321,
+     41,
+     24
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Select",
+    "rect": [
+     221,
+     321,
+     41,
+     24
+    ],
+    "seq": 3
+   }
+  ],
+  "orientation": "portrait",
+  "ready_hint": 240,
+  "width": 480
+ },
+ "Tom & Jerry Popper (Gakken, LCD Card Game).mgw": {
+  "buttons": {
+   "a": [
+    510,
+    339,
+    56,
+    57
+   ],
+   "left": [
+    58,
+    340,
+    56,
+    56
+   ],
+   "right": [
+    510,
+    339,
+    56,
+    57
+   ]
+  },
+  "height": 442,
+  "menu": [
+   {
+    "label": "Time",
+    "rect": [
+     474,
+     71,
+     33,
+     31
+    ],
+    "seq": 1
+   },
+   {
+    "label": "ACL",
+    "rect": [
+     578,
+     103,
+     16,
+     17
+    ],
+    "seq": 2
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 643
+ },
+ "Towering Rescue (Gakken, LCD Card Game).mgw": {
+  "buttons": {
+   "a": [
+    437,
+    301,
+    69,
+    75
+   ],
+   "left": [
+    56,
+    302,
+    69,
+    74
+   ],
+   "right": [
+    437,
+    301,
+    69,
+    75
+   ]
+  },
+  "height": 445,
+  "menu": [
+   {
+    "label": "Time",
+    "rect": [
+     57,
+     82,
+     63,
+     39
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game A",
+    "rect": [
+     437,
+     82,
+     63,
+     39
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     438,
+     156,
+     63,
+     38
+    ],
+    "seq": 3
+   },
+   {
+    "label": "ACL",
+    "rect": [
+     462,
+     227,
+     16,
+     16
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 564
+ },
+ "Tron (Tomytronic).mgw": {
+  "buttons": {
+   "b": [
+    555,
+    455,
+    93,
+    73
+   ]
+  },
+  "height": 700,
+  "menu": [
+   {
+    "label": "On/Off",
+    "rect": [
+     342,
+     480,
+     87,
+     28
+    ],
+    "seq": 1
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 766
+ },
+ "Turtle Bridge (Nintendo, Wide Screen).mgw": {
+  "buttons": {
+   "a": [
+    556,
+    256,
+    56,
+    58
+   ],
+   "left": [
+    45,
+    256,
+    56,
+    58
+   ],
+   "right": [
+    556,
+    256,
+    56,
+    58
+   ]
+  },
+  "height": 395,
+  "menu": [
+   {
+    "label": "Game A",
+    "rect": [
+     553,
+     44,
+     39,
+     24
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Game B",
+    "rect": [
+     553,
+     88,
+     39,
+     26
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Time",
+    "rect": [
+     553,
+     134,
+     39,
+     24
+    ],
+    "seq": 3
+   },
+   {
+    "label": "ACL",
+    "rect": [
+     607,
+     113,
+     20,
+     21
+    ],
+    "seq": 4
+   }
+  ],
+  "orientation": "landscape",
+  "ready_hint": 240,
+  "width": 658
+ },
+ "Wild Man Jump (VTech, Electronic Tini-Arcade).mgw": {
+  "buttons": {
+   "b": [
+    546,
+    578,
+    66,
+    64
+   ]
+  },
+  "height": 746,
+  "menu": [
+   {
+    "label": "On/Off",
+    "rect": [
+     284,
+     588,
+     42,
+     69
+    ],
+    "seq": 1
+   },
+   {
+    "label": "Select",
+    "rect": [
+     362,
+     580,
+     53,
+     75
+    ],
+    "seq": 2
+   },
+   {
+    "label": "Start",
+    "rect": [
+     448,
+     582,
+     54,
+     76
+    ],
+    "seq": 3
+   }
+  ],
+  "orientation": "portrait",
+  "ready_hint": 240,
+  "width": 697
+ }
+}

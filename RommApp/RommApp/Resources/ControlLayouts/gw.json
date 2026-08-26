@@ -1,0 +1,106 @@
+{
+ "system": "gw",
+ "_ergonomics": "Measured, not designed by wish: the simulators ignore the pointer entirely (proven with scripted taps in the bench; only the joypad moves them), and their own help overlay teaches a pad. So the picture is NOT the controller here, and this is the smallest pad that drives one: the handheld's four corner buttons as four corner touch buttons (up/down on the left column, the sims read the dpad for the west pair and X/B for the east pair, matching their own NORTHWEST/SOUTHWEST/NORTHEAST/SOUTHEAST help), Start for Game A / menus, Select for Game B / mode, and Menu. Translucent by design so the drawn machine stays the star.",
+ "items": [
+  {
+   "kind": "pill",
+   "label": "Menu",
+   "input": -1,
+   "frame": {"x": 0.03, "y": 0.075, "w": 0.17, "h": 0.1},
+   "extended": {"x": 0.01, "y": 0.025, "w": 0.23, "h": 0.2}
+  },
+  {
+   "kind": "pill",
+   "label": "Game A",
+   "input": 3,
+   "frame": {"x": 0.36, "y": 0.075, "w": 0.2, "h": 0.1},
+   "extended": {"x": 0.32, "y": 0.025, "w": 0.28, "h": 0.2}
+  },
+  {
+   "kind": "pill",
+   "label": "Game B",
+   "input": 2,
+   "frame": {"x": 0.62, "y": 0.075, "w": 0.2, "h": 0.1},
+   "extended": {"x": 0.58, "y": 0.025, "w": 0.28, "h": 0.2}
+  },
+  {
+   "kind": "button",
+   "label": "NW",
+   "input": 4,
+   "frame": {"x": 0.06, "y": 0.31, "w": 0.18, "h": 0.24},
+   "extended": {"x": 0.02, "y": 0.26, "w": 0.26, "h": 0.34}
+  },
+  {
+   "kind": "button",
+   "label": "SW",
+   "input": 5,
+   "frame": {"x": 0.06, "y": 0.61, "w": 0.18, "h": 0.24},
+   "extended": {"x": 0.02, "y": 0.56, "w": 0.26, "h": 0.34}
+  },
+  {
+   "kind": "button",
+   "label": "NE",
+   "input": 9,
+   "frame": {"x": 0.76, "y": 0.31, "w": 0.18, "h": 0.24},
+   "extended": {"x": 0.72, "y": 0.26, "w": 0.26, "h": 0.34}
+  },
+  {
+   "kind": "button",
+   "label": "SE",
+   "input": 0,
+   "frame": {"x": 0.76, "y": 0.61, "w": 0.18, "h": 0.24},
+   "extended": {"x": 0.72, "y": 0.56, "w": 0.26, "h": 0.34}
+  }
+ ],
+ "landscapeItems": [
+  {
+   "kind": "button",
+   "label": "NW",
+   "input": 4,
+   "frame": {"x": 0.03, "y": 0.28, "w": 0.17, "h": 0.22},
+   "extended": {"x": 0.0, "y": 0.26, "w": 0.22, "h": 0.26}
+  },
+  {
+   "kind": "button",
+   "label": "SW",
+   "input": 5,
+   "frame": {"x": 0.03, "y": 0.58, "w": 0.17, "h": 0.22},
+   "extended": {"x": 0.0, "y": 0.56, "w": 0.22, "h": 0.26}
+  },
+  {
+   "kind": "button",
+   "label": "NE",
+   "input": 9,
+   "frame": {"x": 0.8, "y": 0.28, "w": 0.17, "h": 0.22},
+   "extended": {"x": 0.78, "y": 0.26, "w": 0.22, "h": 0.26}
+  },
+  {
+   "kind": "button",
+   "label": "SE",
+   "input": 0,
+   "frame": {"x": 0.8, "y": 0.58, "w": 0.17, "h": 0.22},
+   "extended": {"x": 0.78, "y": 0.56, "w": 0.22, "h": 0.26}
+  },
+  {
+   "kind": "pill",
+   "label": "Game A",
+   "input": 3,
+   "frame": {"x": 0.74, "y": 0.03, "w": 0.11, "h": 0.08},
+   "extended": {"x": 0.72, "y": 0.01, "w": 0.15, "h": 0.12}
+  },
+  {
+   "kind": "pill",
+   "label": "Game B",
+   "input": 2,
+   "frame": {"x": 0.87, "y": 0.03, "w": 0.11, "h": 0.08},
+   "extended": {"x": 0.85, "y": 0.01, "w": 0.15, "h": 0.12}
+  },
+  {
+   "kind": "pill",
+   "label": "Menu",
+   "input": -1,
+   "frame": {"x": 0.03, "y": 0.03, "w": 0.1, "h": 0.08},
+   "extended": {"x": 0.01, "y": 0.01, "w": 0.14, "h": 0.12}
+  }
+ ]
+}

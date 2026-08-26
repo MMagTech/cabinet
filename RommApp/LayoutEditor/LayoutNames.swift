@@ -101,6 +101,7 @@ struct LayoutName {
         LayoutName(file: "ngpc", title: "Neo Geo Pocket", slugs: "Neo Geo Pocket, Pocket Color"),
         LayoutName(file: "pce", title: "PC Engine / TurboGrafx-16 (2-button)", slugs: "tg16, TurboGrafx-CD, SuperGrafx"),
         LayoutName(file: "pce6", title: "PC Engine / TurboGrafx-16 (Avenue Pad 6)", slugs: "same platforms as pce; picked by the Controller core setting, not by slug"),
+        LayoutName(file: "gw", title: "Game & Watch", slugs: "the picture is the controller: taps press the drawn buttons; this is the surface plus Menu"),
         LayoutName(file: "psp", title: "PlayStation Portable", slugs: "psp"),
         LayoutName(file: "psx", title: "PlayStation", slugs: "psx"),
         LayoutName(file: "saturn", title: "Sega Saturn", slugs: "saturn"),

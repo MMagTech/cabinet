@@ -217,6 +217,10 @@ struct ControlLayout: Decodable {
             name = "psx"
         case "psp":
             name = "psp"
+        // Game & Watch: the picture is the controller (see gw.json's own
+        // note); this layout is the tap surface and a Menu pill.
+        case "game-and-watch", "game & watch", "game and watch", "gameandwatch":
+            name = "gw"
         case "pc-fx":
             name = "pcfx"
         case "tg16", "turbografx-cd", "supergrafx":

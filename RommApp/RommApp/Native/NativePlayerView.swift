@@ -103,7 +103,25 @@ struct NativePlayerView: View {
     }
 
     private func layoutItems(landscape: Bool) -> [ControlLayout.Item] {
-        controlLayout.items(landscape: landscape)
+        // Tap-the-artwork games keep only Menu, synthesized here rather
+        // than filtered from gw.json: that file's portrait items are
+        // strip-normalised and this presentation is full screen, so the
+        // pill needs coordinates in this space, one corner, small.
+        if gwSpec != nil {
+            return [ControlLayout.Item(
+                kind: .pill, label: "Menu", input: -1, inputs: nil,
+                frame: ControlLayout.Rect(x: 0.03, y: 0.015, w: 0.14, h: 0.042),
+                extended: ControlLayout.Rect(x: 0.01, y: 0.005, w: 0.18, h: 0.062),
+                fourWay: nil, sensitivity: nil)]
+        }
+        return controlLayout.items(landscape: landscape)
+    }
+
+    /// The tap-the-artwork map for a Game & Watch game, when the
+    /// extractor mapped this one. Nil means the game fell back to the
+    /// small pad in gw.json, which stays the honest fallback.
+    private var gwSpec: GWHotspots? {
+        platform == .gameAndWatch ? GWHotspots.spec(for: rom.fsName) : nil
     }
 
     /// Matches PlayerView.controlStripHeight exactly: only arcade's vertical
@@ -122,7 +140,11 @@ struct NativePlayerView: View {
     }
 
     private func handlePointer(_ x: Double, _ y: Double, _ down: Bool) {
-        LibretroFrontend.shared.setPointerX(Float(x), y: Float(y), down: down, port: 0)
+        // gw-libretro reads its pointer on port 2, stated in its own
+        // controller_info; everything else that takes a pointer here
+        // (melonDS's touchscreen, the arcade guns) reads port 0.
+        let port = platform == .gameAndWatch ? 2 : 0
+        LibretroFrontend.shared.setPointerX(Float(x), y: Float(y), down: down, port: port)
     }
 
     private func handleInput(_ id: Int, down: Bool) {
@@ -190,7 +212,7 @@ struct NativePlayerView: View {
             let gunPanel = controlLayout.items.contains { $0.kind == .gun }
 
             ZStack {
-                if isLandscape || !showsControls || gunPanel {
+                if isLandscape || !showsControls || gunPanel || gwSpec != nil {
                     // Full screen canvas, pad in the gutters (or hidden with a
                     // controller connected), matching PlayerView's .overlay case.
                     ZStack {
@@ -202,6 +224,13 @@ struct NativePlayerView: View {
                             MetalGameView(renderer: renderer)
                             if core == .melonDS {
                                 DSTouchScreenView(sendPointer: handlePointer)
+                            }
+                            // The artwork's own buttons are the pad; see
+                            // GWHotspots. Under the control pad so the
+                            // Menu pill still wins its corner.
+                            if let spec = gwSpec {
+                                GWTapView(spec: spec, send: handleInput,
+                                          displayAspect: { renderer.displayAspect })
                             }
                         }
                         if showsControls {
@@ -294,6 +323,14 @@ struct NativePlayerView: View {
             // controller nothing ever does. Without this the screen dims
             // and locks mid-game.
             UIApplication.shared.isIdleTimerDisabled = true
+            // A Game & Watch plays in its artwork's own orientation,
+            // Marcus's call: the tap surface needs the picture large,
+            // and a wide unit held tall is neither. The lock releases
+            // with the player, same as the webview's lockToCurrent.
+            if let spec = gwSpec {
+                if spec.isLandscape { OrientationLock.lockToLandscape() }
+                else { OrientationLock.lockToPortrait() }
+            }
             previousControllerSend = GameControllerManager.shared.send
             previousControllerStick = GameControllerManager.shared.sendStick
             previousControllerMenu = GameControllerManager.shared.onMenu
@@ -344,6 +381,8 @@ struct NativePlayerView: View {
         .onDisappear {
             FrameTrace.shared.end()
             UIApplication.shared.isIdleTimerDisabled = false
+            // Release the artwork-orientation lock a Game & Watch took.
+            if gwSpec != nil { OrientationLock.unlock() }
             // Take the picture back off the television. Guarded the same
             // way the platform claim below is, so a second game's view
             // that has already claimed it keeps it.

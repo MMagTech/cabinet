@@ -159,6 +159,7 @@
 				Resources/ControlLayouts/dreamcast.json,
 				Resources/ControlLayouts/gamegear.json,
 				Resources/ControlLayouts/gb.json,
+				Resources/ControlLayouts/gw.json,
 				Resources/ControlLayouts/gba.json,
 				Resources/ControlLayouts/genesis.json,
 				Resources/ControlLayouts/genesis6.json,
