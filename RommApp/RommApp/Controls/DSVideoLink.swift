@@ -315,7 +315,7 @@ final class DSVideoClient: ObservableObject {
         seenFirstFrame = false
         DispatchQueue.main.async { [weak self] in
             self?.receiving = false
-            self?.displayLayer.flushAndRemoveImage()
+            self?.displayLayer.sampleBufferRenderer.flush(removingDisplayedImage: true, completionHandler: nil)
         }
     }
 
