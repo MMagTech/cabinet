@@ -1,0 +1,35 @@
+diff --git a/src/libANGLE/renderer/metal/ContextMtl.h b/src/libANGLE/renderer/metal/ContextMtl.h
+index 4ea4a3c..1b0b010 100644
+--- a/src/libANGLE/renderer/metal/ContextMtl.h
++++ b/src/libANGLE/renderer/metal/ContextMtl.h
+@@ -339,6 +339,7 @@ class ContextMtl : public ContextImpl, public mtl::Context
+     void endEncoding(bool forceSaveRenderPassContent);
+ 
+     void flushCommandBuffer(mtl::CommandBufferFinishOperation operation);
++    mtl::CommandBuffer &getCommandBuffer() { return mCmdBuffer; }
+     void present(const gl::Context *context, id<CAMetalDrawable> presentationDrawable);
+     angle::Result finishCommandBuffer();
+ 
+diff --git a/src/libANGLE/renderer/metal/mtl_buffer_pool.mm b/src/libANGLE/renderer/metal/mtl_buffer_pool.mm
+index ce6d0a3..a902a9d 100644
+--- a/src/libANGLE/renderer/metal/mtl_buffer_pool.mm
++++ b/src/libANGLE/renderer/metal/mtl_buffer_pool.mm
+@@ -303,6 +303,18 @@ void UpdateBufferPoolMetrics(int64_t totalMemoryDelta,
+         // commit() already flushes so no need to flush here.
+         mBuffer->unmapNoFlush(contextMtl);
+ 
++        // Conservatively mark the retiring buffer as used by the current
++        // command buffer. Draws recorded in the open pass may reference
++        // slices of this buffer, but under heavy client-vertex streaming
++        // the buffer can reach the free list reading as idle and be
++        // remapped at offset 0 while those draws are still pending,
++        // which renders as garbage primitives (deterministic repro:
++        // mupen64plus/GLideN64 unbuffered streaming on Apple GPUs).
++        // Stamping with the current serial quarantines it until this
++        // command buffer completes, after which normal reuse resumes.
++        mBuffer->setUsedByCommandBufferWithQueueSerial(
++            contextMtl->getCommandBuffer().getQueueSerial(), false, true);
++
+         mInFlightBuffers.push_back(mBuffer);
+         mBuffer = nullptr;
+     }

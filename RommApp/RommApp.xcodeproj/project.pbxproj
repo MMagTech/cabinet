@@ -333,6 +333,7 @@
 				BB00000000000000000006 /* Sources */,
 				BB00000000000000000008 /* Frameworks */,
 				BB00000000000000000007 /* Resources */,
+				BB0000000000000000003A /* Embed ANGLE Frameworks */,
 			);
 			buildRules = (
 			);
@@ -478,6 +479,24 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		BB0000000000000000003A /* Embed ANGLE Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Embed ANGLE Frameworks";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"$PLATFORM_NAME\" != \"iphoneos\" ]; then exit 0; fi\nDEST=\"$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH\"\nmkdir -p \"$DEST\"\nfor FW in libEGL libGLESv2; do\n  rsync -a --delete \"$PROJECT_DIR/Vendor/ANGLE/ios/$FW.framework\" \"$DEST/\"\n  if [ \"$CODE_SIGNING_ALLOWED\" = \"YES\" ] && [ -n \"$EXPANDED_CODE_SIGN_IDENTITY\" ]; then\n    codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --timestamp=none \"$DEST/$FW.framework\"\n  fi\ndone\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		6F81DB8C48BF90C4E41F051D /* Sources */ = {
@@ -664,6 +683,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/PicoDrive",
 					"$(PROJECT_DIR)/RommApp/Native/PCSXReARMed",
 					"$(PROJECT_DIR)/RommApp/Native/Archive",
+					"$(PROJECT_DIR)/Vendor/ANGLE/include",
 				);
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet Dev";
@@ -716,7 +736,13 @@
 					"-lpcsx_rearmed_ios",
 					"-lc++",
 					"-lz",
+					"-framework",
+					libEGL,
+					"-framework",
+					libGLESv2,
 				);
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = "$(PROJECT_DIR)/Vendor/ANGLE/ios";
+				"GCC_PREPROCESSOR_DEFINITIONS[sdk=iphoneos*]" = "$(inherited) CABINET_ANGLE=1";
 				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = "-lc++";
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev;
 				PRODUCT_NAME = Cabinet;
@@ -756,6 +782,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/PicoDrive",
 					"$(PROJECT_DIR)/RommApp/Native/PCSXReARMed",
 					"$(PROJECT_DIR)/RommApp/Native/Archive",
+					"$(PROJECT_DIR)/Vendor/ANGLE/include",
 				);
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Cabinet;
@@ -808,7 +835,13 @@
 					"-lpcsx_rearmed_ios",
 					"-lc++",
 					"-lz",
+					"-framework",
+					libEGL,
+					"-framework",
+					libGLESv2,
 				);
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = "$(PROJECT_DIR)/Vendor/ANGLE/ios";
+				"GCC_PREPROCESSOR_DEFINITIONS[sdk=iphoneos*]" = "$(inherited) CABINET_ANGLE=1";
 				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = "-lc++";
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet;
 				PRODUCT_NAME = Cabinet;
