@@ -525,16 +525,36 @@ static void GL_APIENTRY cabShimDisablei(GLenum target, GLuint index) {
 static const char *cabBlockedExts[] = {
     "GL_EXT_buffer_storage", "GL_EXT_draw_buffers_indexed",
     "GL_OES_EGL_image", "GL_EXT_texture_storage", nullptr };
+// Scoped to PPSSPP, not added to the list above, because N64 and Dreamcast
+// both render correctly with this extension advertised and must keep seeing
+// the list they see today. PPSSPP turns on dual-source blending whenever
+// GL_EXT_blend_func_extended appears (GLFeatures.cpp), then passes GL_SRC1_*
+// factors to glBlendFuncSeparate. ANGLE advertises the extension and its
+// Metal backend then rejects those factors: GL_INVALID_ENUM at
+// GL_DEBUG_SEVERITY_HIGH, continuously, and the player sprite draws as a
+// flat black cutout (Hammerin' Hero, iPhone Air, 2026-08-26). Hiding it
+// puts PPSSPP on the same fallback path every GLES device without the
+// extension already takes.
+static const char *cabBlockedExtsPPSSPP[] = {
+    "GL_EXT_blend_func_extended", nullptr };
 static bool cabExtBlocked(const char *e, size_t len) {
     for (int i = 0; cabBlockedExts[i]; i++)
         if (strlen(cabBlockedExts[i]) == len && strncmp(e, cabBlockedExts[i], len) == 0) return true;
+    if (gCoreID == LibretroCoreIDPPSSPP)
+        for (int i = 0; cabBlockedExtsPPSSPP[i]; i++)
+            if (strlen(cabBlockedExtsPPSSPP[i]) == len && strncmp(e, cabBlockedExtsPPSSPP[i], len) == 0) return true;
     return false;
 }
+// The filtered answer now depends on which core is asking, so a list built
+// for one core must not be served to the next one this process loads.
+static LibretroCoreID gExtCacheCore = (LibretroCoreID)-1;
 static const GLubyte *GL_APIENTRY cabShimGetString(GLenum name) {
     typedef const GLubyte *(GL_APIENTRY *P)(GLenum);
-    static P real = (P)eglGetProcAddress("glGetString");
+    static P real = (P)dlsym(RTLD_NEXT, "glGetString");
+    if (!real) return nullptr;
     if (name != GL_EXTENSIONS) return real(name);
     static std::string filtered;
+    if (gExtCacheCore != gCoreID) { filtered.clear(); gExtCacheCore = gCoreID; }
     if (filtered.empty()) {
         const char *all = (const char *)real(GL_EXTENSIONS);
         if (!all) return nullptr;
@@ -548,15 +568,13 @@ static const GLubyte *GL_APIENTRY cabShimGetString(GLenum name) {
     }
     return (const GLubyte *)filtered.c_str();
 }
-static const GLubyte *GL_APIENTRY cabShimGetStringi(GLenum name, GLuint index) {
-    typedef const GLubyte *(GL_APIENTRY *P)(GLenum, GLuint);
-    static P real = (P)eglGetProcAddress("glGetStringi");
-    if (name != GL_EXTENSIONS) return real(name, index);
-    // Serve from the filtered list so indices stay dense.
+// Serve from the filtered list so indices stay dense.
+static const std::vector<std::string> &cabFilteredExtList(void) {
     static std::vector<std::string> list;
+    static LibretroCoreID listCore = (LibretroCoreID)-1;
+    if (listCore != gCoreID) { list.clear(); listCore = gCoreID; }
     if (list.empty()) {
-        const char *all = (const char *)cabShimGetString(GL_EXTENSIONS);
-        const char *w = all;
+        const char *w = (const char *)cabShimGetString(GL_EXTENSIONS);
         while (w && *w) {
             const char *end = strchr(w, ' ');
             size_t len = end ? (size_t)(end - w) : strlen(w);
@@ -564,7 +582,38 @@ static const GLubyte *GL_APIENTRY cabShimGetStringi(GLenum name, GLuint index) {
             w += len; while (*w == ' ') w++;
         }
     }
+    return list;
+}
+static const GLubyte *GL_APIENTRY cabShimGetStringi(GLenum name, GLuint index) {
+    typedef const GLubyte *(GL_APIENTRY *P)(GLenum, GLuint);
+    static P real = (P)dlsym(RTLD_NEXT, "glGetStringi");
+    if (!real) return nullptr;
+    if (name != GL_EXTENSIONS) return real(name, index);
+    const std::vector<std::string> &list = cabFilteredExtList();
     return index < list.size() ? (const GLubyte *)list[index].c_str() : nullptr;
+}
+#endif
+
+#ifdef CABINET_ANGLE
+// Flycast and Mupen64Plus ask the frontend for their GL entry points, so
+// handing them the shims above was enough. PPSSPP links glGetString
+// straight to ANGLE's export instead, and so never saw the filtered list
+// at all. Defining the symbols here makes the statically linked cores bind
+// to these rather than ANGLE's, which puts every core on one answer.
+// eglGetProcAddress still reaches ANGLE's real implementation, so the
+// shims below do not recurse into themselves.
+extern "C" void GL_APIENTRY glGetIntegerv(GLenum pname, GLint *data) {
+    typedef void (GL_APIENTRY *P)(GLenum, GLint *);
+    static P real = (P)dlsym(RTLD_NEXT, "glGetIntegerv");
+    if (!real) return;
+    real(pname, data);
+    if (pname == GL_NUM_EXTENSIONS && data) *data = (GLint)cabFilteredExtList().size();
+}
+extern "C" const GLubyte *GL_APIENTRY glGetString(GLenum name) {
+    return cabShimGetString(name);
+}
+extern "C" const GLubyte *GL_APIENTRY glGetStringi(GLenum name, GLuint index) {
+    return cabShimGetStringi(name, index);
 }
 #endif
 
