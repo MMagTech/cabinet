@@ -777,7 +777,6 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         }
         textureIsFlipped = frame.flippedVertically
 
-        let bytesPerRow = width * 4
         frame.pixels.withUnsafeBytes { raw in
             guard let base = raw.baseAddress else { return }
             switch frame.pixelFormat {

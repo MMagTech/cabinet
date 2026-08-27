@@ -127,7 +127,7 @@ struct PairingView: View {
             // two columns balance instead of one carrying everything.
             if landscape { heading }
 
-            if let start {
+            if start != nil {
                 Button {
                     showingApproval = true
                 } label: {
