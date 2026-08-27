@@ -722,19 +722,6 @@
 				);
 				MARKETING_VERSION = 0.3.0;
 				OTHER_LDFLAGS = (
-					"-lfbneo_libretro_ios",
-					"-lbeetle_saturn_ios",
-					"-lgambatte_ios",
-					"-lfceumm_ios",
-					"-lsnes9x_ios",
-					"-lbeetle_ngp_ios",
-					"-lbeetle_pce_fast_ios",
-					"-lgenesis_plus_gx_ios",
-					"-lprosystem_ios",
-					"-lmgba_ios",
-					"-lpicodrive_ios",
-					"-lpcsx_rearmed_ios",
-					"-lc++",
 					"-lz",
 					"-framework",
 					libEGL,
@@ -821,19 +808,6 @@
 				);
 				MARKETING_VERSION = 0.3.0;
 				OTHER_LDFLAGS = (
-					"-lfbneo_libretro_ios",
-					"-lbeetle_saturn_ios",
-					"-lgambatte_ios",
-					"-lfceumm_ios",
-					"-lsnes9x_ios",
-					"-lbeetle_ngp_ios",
-					"-lbeetle_pce_fast_ios",
-					"-lgenesis_plus_gx_ios",
-					"-lprosystem_ios",
-					"-lmgba_ios",
-					"-lpicodrive_ios",
-					"-lpcsx_rearmed_ios",
-					"-lc++",
 					"-lz",
 					"-framework",
 					libEGL,
