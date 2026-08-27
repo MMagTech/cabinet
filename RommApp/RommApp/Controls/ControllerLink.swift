@@ -1265,7 +1265,12 @@ final class ControllerLinkSender: ObservableObject {
         receive(on: c)
     }
 
-    private func receive(on connection: NWConnection) {
+    /// Arms the next read and nothing else. Deliberately nonisolated: the
+    /// only state work in the closure is `handle`, which hops to the main
+    /// actor by itself, and making the re-arm wait for a main actor turn
+    /// would put a scheduling hop in the middle of the controller's input
+    /// path in exchange for nothing.
+    private nonisolated func receive(on connection: NWConnection) {
         connection.receiveMessage { [weak self] data, _, _, error in
             guard let self else { return }
             if let data, let packet = ControllerLink.Packet.decode(data) {
