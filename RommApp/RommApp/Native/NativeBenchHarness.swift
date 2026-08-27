@@ -24,8 +24,15 @@ import SwiftUI
 /// Drive it with:
 ///
 ///     xcrun devicectl device process launch --terminate-existing \
-///       --device <id> com.mmagtech.CabinetDev \
+///       --device <id> com.mmagtech.CabinetDev -- \
 ///       -cabinetBench <romId> -cabinetBenchSeconds 45
+///
+/// The bare `--` is not decoration. Without it devicectl claims
+/// `-cabinetBench` as one of its own options, prints its usage text and
+/// launches nothing, which reads as the harness silently ignoring the
+/// request (cost an hour on 2026-08-26). Note also that the seconds
+/// budget has to cover the download when the rom is not kept: a PSP ISO
+/// will not arrive inside a 40 second window.
 ///
 /// then pull `Library/Caches/frame-trace-<core>.csv` off the device.
 enum NativeBenchHarness {
