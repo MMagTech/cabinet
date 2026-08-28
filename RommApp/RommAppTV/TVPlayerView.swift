@@ -53,6 +53,10 @@ struct TVPlayerView: View {
     /// ControllerLink.swift and ControllerPairing.swift; this view
     /// only wires verbs to the renderer and shows the pairing code.
     @State private var phoneLink: ControllerLinkReceiver?
+    /// Where the next sighting target sits, in the pointer channel's own
+    /// -1...1 screen space, or nil when no gun is being sighted in.
+    @State private var sightingTarget: CGPoint?
+    @State private var sightingPrompt: String?
     @State private var phoneConnected = false
     /// Paused from the phone's own menu, tracked so the idle rule below
     /// can tell a live phone game from one sitting in a pause screen.
@@ -260,6 +264,47 @@ struct TVPlayerView: View {
         }
     }
 
+    /// The target a gun is being sighted in against, drawn over the
+    /// game rather than before it. A phone can join at any moment, and
+    /// somebody who has shifted on the sofa needs to sight in again
+    /// without giving up the run they are in the middle of. The game
+    /// keeps rendering underneath, dimmed, so the target has something
+    /// to sit against and nobody loses their place.
+    ///
+    /// The rings are placed in the same -1...1 space the pointer channel
+    /// speaks, so the geometry the phone solves for is exactly the
+    /// geometry it was shown.
+    private func sightingOverlay(at target: CGPoint, prompt: String?) -> some View {
+        GeometryReader { geo in
+            let point = CGPoint(
+                x: geo.size.width * (target.x + 1) / 2,
+                y: geo.size.height * (target.y + 1) / 2
+            )
+            ZStack {
+                Color.black.opacity(0.55).ignoresSafeArea()
+                ZStack {
+                    Circle().strokeBorder(.white.opacity(0.9), lineWidth: 6)
+                        .frame(width: 120, height: 120)
+                    Circle().strokeBorder(.white.opacity(0.5), lineWidth: 3)
+                        .frame(width: 210, height: 210)
+                    Circle().fill(.white).frame(width: 16, height: 16)
+                }
+                .position(point)
+                if let prompt {
+                    VStack(spacing: 10) {
+                        Text(prompt)
+                            .font(.largeTitle.weight(.bold))
+                        Text("Point the phone at the target and pull the trigger")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.bottom, 90)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                }
+            }
+        }
+    }
+
     var body: some View {
         ZStack {
             TVGameSurface(renderer: renderer, menuVisible: menuVisible)
@@ -267,6 +312,9 @@ struct TVPlayerView: View {
             TVBiasGlow(renderer: renderer, level: glowLevel)
             if let pairingCode {
                 pairingOverlay(code: pairingCode)
+            }
+            if let sightingTarget {
+                sightingOverlay(at: sightingTarget, prompt: sightingPrompt)
             }
             if menuVisible {
                 pauseMenu
@@ -491,6 +539,16 @@ struct TVPlayerView: View {
                         }
                     }
                 )
+                // Sighting in a gun: the phone owns the sequence and
+                // says which target it is waiting for, this screen draws
+                // it. Nil once the gun is sighted, which takes the
+                // overlay away.
+                link.onSighting = { _, step in
+                    Task { @MainActor in
+                        sightingTarget = step.target.map { CGPoint(x: $0.x, y: $0.y) }
+                        sightingPrompt = step == .done ? nil : step.prompt
+                    }
+                }
                 link.start()
                 phoneLink = link
                 // A phone holding a seat is that player's controller,

@@ -134,7 +134,23 @@ final class GunAim {
     /// any reload needs and keeps a wild swing from stranding the aim
     /// somewhere it takes a recentre to escape.
     private var aimX = 0.0, aimY = 0.0
-    private let aimBound = 2.0
+    /// Expressed as an angle, not as a number of screens, because what
+    /// this bound is really answering is how far the gun may physically
+    /// point away before the aim stops following it.
+    ///
+    /// It was 2.0, meaning two screens, and that is where the drift came
+    /// back. A screen is `degreesToEdge` of wrist, so two screens is 24
+    /// degrees on Relaxed, 14 on Fast and 9 on Snap, while sweeping a gun
+    /// off the side of a television is thirty or more. Every reload
+    /// therefore pinned at the bound, and pinned is exactly the state the
+    /// comment above says was the bug: rotation going out is discarded,
+    /// the return is counted in full, and the aim comes back short by
+    /// however far past the bound it went. The clamp had only moved from
+    /// the edge of the picture to two screens out, so it took a bigger
+    /// gesture to hit and compounded once per reload rather than once per
+    /// nudge. Ninety degrees is past anything a reload asks for on every
+    /// sensitivity, and still catches a genuinely wild swing.
+    private var aimBound: Double { 90.0 / max(degreesToEdge, 3) }
     /// What the game is told, the aim clamped onto the picture.
     private var cursorX: Double { min(1, max(-1, aimX)) }
     private var cursorY: Double { min(1, max(-1, aimY)) }
@@ -153,17 +169,119 @@ final class GunAim {
     /// a gun". 7 doubles the speed; the velocity-scaled gain below
     /// already makes fast flicks faster still.
     var degreesToEdge = AimSpeed.current.degreesToEdge
-    /// Continuous aim out, ~60Hz, down = false.
-    var aim: ((Double, Double) -> Void)?
+    /// Whether the trigger is being held right now.
+    ///
+    /// It lives here rather than in the panel because the aim stream has
+    /// to carry it. Position and trigger share one packet and one call
+    /// into the core, so a stream that hardcoded "up" spent its life
+    /// clearing the trigger a pull had just set: a shot only registered
+    /// if the core happened to poll in the sixteen milliseconds before
+    /// the next aim frame overwrote it. That is the whole of the
+    /// unreliable-fire problem, and no amount of holding the trigger
+    /// longer on the panel side could fix it, because the stream was
+    /// undoing it sixty times a second.
+    var triggerDown = false
+    /// Continuous aim out, ~60Hz, carrying the trigger with it.
+    var aim: ((Double, Double, Bool) -> Void)?
+
+    // MARK: Sighted aim
+    //
+    // Everything above is rate control, the Magic Remote model: the gyro's
+    // angular rate moves the aim the way a mouse moves a pointer, and
+    // nothing ever asks where the phone is absolutely pointed. The aim lab
+    // chose it deliberately and its own notes say why drift was acceptable
+    // there: the cursor clamped at the screen edge, which silently
+    // re-anchored it. A light gun has to sweep off the picture to reload,
+    // so Cabinet removed that clamp, and removing it removed the only
+    // thing cancelling the drift. Every reload has been adding a little
+    // error ever since, which is exactly what a player reports as the aim
+    // slowly going wrong.
+    //
+    // Sighted aim has no running total to go wrong. It measures where the
+    // phone points against a reference taken when the gun was sighted in,
+    // and the same physical direction gives the same spot on screen no
+    // matter how many times you have swept away and back.
+    private var attitude: CMAttitude?
+    private var centreAttitude: CMAttitude?
+    /// Per-axis tangent spans, averaged from two opposite corner shots so
+    /// one slightly missed shot skews the map by half as much.
+    private var tanU = 0.0, tanV = 0.0
+    private var farU = 0.0, farV = 0.0
+    private let euroX = OneEuro(), euroY = OneEuro()
+    private(set) var sighting: SightingStep = .centre
+    /// Whether the gun is sighted in and should aim absolutely. Until it
+    /// is, the rate aim above still runs, so the crosshair moves while
+    /// somebody is lining up the first shot.
+    var isSighted: Bool { sighting == .done && tanU != 0 && tanV != 0 }
+    /// Fired when the sighting sequence moves on, so the panel can say
+    /// what to shoot next and the television can draw it.
+    var sightingChanged: ((SightingStep) -> Void)?
+
+    /// Where the phone points relative to the centre shot, as a pair of
+    /// angles. Small in practice: a whole television is a few degrees of
+    /// wrist from where somebody sits.
+    private func sightedUV() -> (Double, Double)? {
+        guard let a = attitude?.copy() as? CMAttitude, let c = centreAttitude else { return nil }
+        a.multiply(byInverseOf: c)
+        return (-a.yaw, a.pitch)
+    }
+
+    /// Consumes a trigger pull as a sighting measurement. Returns true if
+    /// the pull was used for sighting rather than being a shot.
+    func sightingPull() -> Bool {
+        switch sighting {
+        case .centre:
+            guard attitude != nil else { return true }
+            centreAttitude = attitude?.copy() as? CMAttitude
+            advance(to: .farCorner)
+        case .farCorner:
+            // Top right of the picture.
+            guard let (u, v) = sightedUV(), abs(u) > 0.005, abs(v) > 0.005 else { return true }
+            farU = tan(u); farV = tan(v)
+            advance(to: .nearCorner)
+        case .nearCorner:
+            // Bottom left, the mirror measurement, so each axis is the
+            // average of two shots rather than resting on one.
+            guard let (u, v) = sightedUV(), abs(u) > 0.005, abs(v) > 0.005 else { return true }
+            // The targets sit at 0.75 of the way out, not the very edge,
+            // so the span they measure is 0.75 of a screen unit.
+            tanU = (farU - tan(u)) / 2 / 0.75
+            tanV = (farV - tan(v)) / 2 / 0.75
+            guard abs(tanU) > 0.003, abs(tanV) > 0.003 else { return true }
+            advance(to: .done)
+        case .done:
+            return false
+        }
+        return true
+    }
+
+    /// Back to the first target. Used when somebody has moved, which the
+    /// sighting cannot know about and only they can.
+    func resight() {
+        centreAttitude = nil
+        tanU = 0; tanV = 0
+        history.removeAll()
+        advance(to: .centre)
+    }
+
+    private func advance(to step: SightingStep) {
+        sighting = step
+        sightingChanged?(step)
+    }
 
     func start() {
         guard motion.isDeviceMotionAvailable, !motion.isDeviceMotionActive else { return }
+        // Deliberately does not clear the sighting. Where the television
+        // is has not changed because the panel was put away and brought
+        // back, and asking somebody to shoot three targets again for that
+        // would be the kind of ritual that makes people switch it off.
         aimX = 0; aimY = 0
         smoothedRateX = 0; smoothedRateY = 0
         history.removeAll()
         motion.deviceMotionUpdateInterval = 1.0 / 60.0
         motion.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: .main) { [weak self] m, _ in
             guard let self, let m else { return }
+            self.attitude = m.attitude.copy() as? CMAttitude
             let g = m.gravity
             let sweep = m.rotationRate.x * g.x + m.rotationRate.y * g.y + m.rotationRate.z * g.z
             let dt = 1.0 / 60.0
@@ -171,7 +289,17 @@ final class GunAim {
             smoothedRateX += alpha * (sweep - smoothedRateX)
             smoothedRateY += alpha * (-m.rotationRate.x - smoothedRateY)
             let speed = (smoothedRateX * smoothedRateX + smoothedRateY * smoothedRateY).squareRoot()
-            let gain = (9.0 / max(degreesToEdge, 3)) * (1 + min(speed, 6) * 0.45)
+            // The flick boost is for snapping between targets on the
+            // picture. Off it, the boost only inflates the excursion, and
+            // since a reload leaves fast and comes back slower the two
+            // halves are scaled differently and no longer cancel. That is
+            // drift with no clamp involved at all, so it would have
+            // survived the bound above on its own. Off the picture the
+            // gain is the plain one and an out-and-back that cancels in
+            // the wrist cancels in the aim.
+            let base = 9.0 / max(degreesToEdge, 3)
+            let offPicture = max(abs(aimX), abs(aimY)) > 1
+            let gain = offPicture ? base : base * (1 + min(speed, 6) * 0.45)
             let rawX = aimX + smoothedRateX * gain * dt
             aimX = min(aimBound, max(-aimBound, rawX))
             // 1.7x: the screen is half as tall as it is wide, and equal
@@ -187,15 +315,36 @@ final class GunAim {
             // frame because the clamp left nothing else to measure,
             // and that accumulator would fire almost instantly against
             // a real off-picture distance.
-            let off = max(abs(aimX), abs(aimY)) > 1 + offscreenThreshold
+            var outX = cursorX, outY = cursorY
+            var off = max(abs(aimX), abs(aimY)) > 1 + offscreenThreshold
+
+            // Once the gun knows where the television is, where it points
+            // IS the answer, and none of the integration above reaches
+            // the wire. It keeps running underneath so that re-sighting
+            // has something to show a crosshair with in the meantime.
+            //
+            // Tangent projection because a screen is flat: equal angles
+            // do not cover equal inches of it, and mapping them linearly
+            // put edge shots visibly inside where the phone was pointed.
+            // The 1-Euro filter smooths a resting hand without dragging
+            // on a fast one, which a fixed blend cannot do both of.
+            if isSighted, let (u, v) = sightedUV() {
+                let t = Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000
+                let sx = euroX.filter(tan(u) / tanU, at: t)
+                let sy = euroY.filter(-(tan(v) / tanV), at: t)
+                off = max(abs(sx), abs(sy)) > 1 + offscreenThreshold
+                outX = min(1, max(-1, sx))
+                outY = min(1, max(-1, sy))
+            }
+
             if off != isOffscreen {
                 isOffscreen = off
                 offscreenChanged?(off)
             }
             let now = Date.timeIntervalSinceReferenceDate as Double
-            history.append((now, cursorX, cursorY))
+            history.append((now, outX, outY))
             if history.count > 20 { history.removeFirst(history.count - 20) }
-            aim?(cursorX, cursorY)
+            aim?(outX, outY, triggerDown)
         }
     }
 
@@ -210,7 +359,7 @@ final class GunAim {
         smoothedRateX = 0; smoothedRateY = 0
         if isOffscreen { isOffscreen = false; offscreenChanged?(false) }
         history.removeAll()
-        aim?(0, 0)
+        aim?(0, 0, triggerDown)
     }
 
     /// Where the gun was pointed just before the finger landed.
@@ -280,7 +429,17 @@ struct ControllerPadView: View {
     /// for a couch angle the gyro cannot serve.
     @AppStorage("com.mmagtech.RommApp.linkGyroGun") private var gyroGun = true
     @State private var gunAim = GunAim()
-    @State private var triggerHeld = false
+    /// Whether a finger is on the trigger right now, which is NOT the same
+    /// as whether the trigger is reported down: a shot is held open for a
+    /// few frames regardless.
+    @State private var triggerTouched = false
+    /// Shots waiting to be fired, each carrying the aim from the moment
+    /// its pull landed, so a queued shot still goes where it was aimed.
+    @State private var shotQueue: [SIMD2<Double>] = []
+    @State private var firingShots = false
+    /// Mirrors the gun's own sighting step so the panel can say what to
+    /// shoot next without reaching into the aim on every redraw.
+    @State private var sightingStep: SightingStep = .centre
     /// The pairing code being typed. Cleared on submit, so a wrong
     /// answer leaves an empty field rather than the failed guess.
     @State private var codeInput = ""
@@ -660,11 +819,58 @@ struct ControllerPadView: View {
 
     /// Aim streams continuously with the trigger up, so the game's own
     /// crosshair tracks the phone even between shots.
+    /// Fires queued shots one at a time, each held down long enough for a
+    /// 60Hz core to poll it and released long enough for the next one to
+    /// read as a separate press.
+    ///
+    /// The trigger used to talk to the wire straight from the gesture,
+    /// and a second tap arriving while the first shot was still being
+    /// held open closed that first one early. The faster somebody tapped,
+    /// the shorter every shot became, until they were back under a single
+    /// frame and stopped registering at all: unresponsive while mashing,
+    /// fine again the moment you slowed down. Operation Wolf found it,
+    /// which is the game that would.
+    ///
+    /// Holding still holds. The loop keeps the trigger down for as long
+    /// as the finger is down, which is what an automatic weapon in these
+    /// games wants, and only then applies the minimum.
+    private func pumpTrigger() {
+        guard !firingShots else { return }
+        firingShots = true
+        Task { @MainActor in
+            while !shotQueue.isEmpty {
+                let shot = shotQueue.removeFirst()
+                gunAim.triggerDown = true
+                link.pointer(x: shot.x, y: shot.y, down: true)
+                let start = Date.timeIntervalSinceReferenceDate
+                repeat {
+                    try? await Task.sleep(for: .milliseconds(16))
+                } while triggerTouched
+                    || Date.timeIntervalSinceReferenceDate - start < 0.05
+                gunAim.triggerDown = false
+                link.pointer(x: shot.x, y: shot.y, down: false)
+                // A frame of daylight, so two taps cannot arrive as one
+                // long press.
+                try? await Task.sleep(for: .milliseconds(17))
+            }
+            firingShots = false
+        }
+    }
+
     private func startGunAim() {
         gunAim.degreesToEdge = AimSpeed.current.degreesToEdge
-        gunAim.aim = { [weak link] x, y in link?.pointer(x: x, y: y, down: false) }
+        gunAim.aim = { [weak link] x, y, down in link?.pointer(x: x, y: y, down: down) }
         gunAim.offscreenChanged = { [weak link] off in link?.offscreen(off) }
+        gunAim.sightingChanged = { [weak link] step in
+            link?.sighting(step: step)
+            sightingStep = step
+        }
         gunAim.start()
+        // Tell the television where the sighting stands the moment the
+        // panel opens, so a phone that arrives mid-game gets its first
+        // target drawn without waiting for a pull to change anything.
+        sightingStep = gunAim.sighting
+        link.sighting(step: gunAim.sighting)
     }
 
     /// The phone as a Nintendo DS: the system's own buttons around the
@@ -1063,24 +1269,40 @@ struct ControllerPadView: View {
                         .padding(8)
                 )
                 .overlay(
-                    Label("Fire", systemImage: "target")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                    VStack(spacing: 6) {
+                        Label(sightingStep == .done ? "Fire" : sightingStep.prompt,
+                              systemImage: "target")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        if sightingStep != .done {
+                            Text("Sighting the gun in on your television")
+                                .font(.footnote)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
                 )
                 .frame(maxHeight: .infinity)
                 .contentShape(Rectangle())
                 .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { _ in
-                            guard !triggerHeld else { return }
-                            triggerHeld = true
+                            // Movement of a finger already on the trigger,
+                            // not a new shot.
+                            guard !triggerTouched else { return }
+                            triggerTouched = true
+                            // Sighting in spends the pull. Three of them,
+                            // then every pull after is a shot forever.
+                            if gunAim.sightingPull() { return }
                             let (x, y) = gunAim.rewoundAim()
-                            link.pointer(x: x, y: y, down: true)
+                            // Capped on purpose. An unbounded queue under
+                            // mashing is its own bug: the trigger goes
+                            // quiet and then catches up, which is worse
+                            // than dropping the surplus.
+                            if shotQueue.count < 2 { shotQueue.append(SIMD2(x, y)) }
+                            pumpTrigger()
                         }
                         .onEnded { _ in
-                            triggerHeld = false
-                            let (x, y) = gunAim.rewoundAim()
-                            link.pointer(x: x, y: y, down: false)
+                            triggerTouched = false
                         }
                 )
                 .frame(height: UIScreen.main.bounds.height * 0.42)
@@ -1100,14 +1322,18 @@ struct ControllerPadView: View {
             startGunAim()
         }
         .onDisappear {
-            OrientationLock.lockToLandscape()
             gunAim.stop()
-            // Same pin as the panel's own appearance, for the trip back
-            // from air mode.
-            Task {
-                try? await Task.sleep(for: .seconds(1))
-                OrientationLock.pinCurrentLandscape()
-            }
+            // Only when the pad is still there to go back to. This view
+            // also disappears when the whole panel is torn down, and
+            // re-locking on that path is what left the phone stuck in
+            // landscape after quitting the controller: the panel's own
+            // onDisappear unlocks, and this ran alongside it. The pin was
+            // worse, a bare Task nobody owned, so it survived the panel's
+            // cancel and pinned an orientation a second after the panel
+            // had gone. goLandscape owns its task, so the panel's
+            // teardown can cancel it either way round.
+            guard panelIsLive else { return }
+            goLandscape()
         }
     }
 }

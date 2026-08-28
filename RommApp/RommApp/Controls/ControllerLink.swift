@@ -95,6 +95,17 @@ enum ControllerLink {
             /// buzz a stranger's phone. Phones that predate this kind
             /// drop it unread, which is the packet format's own rule.
             case rumble = 19
+            /// Phone to television: which step of sighting in the gun
+            /// the phone is on, in `a`, using SightingStep's raw value.
+            /// The phone owns the sequence because the phone owns the
+            /// measurements; the television only has to draw a target
+            /// where this says to and get out of the way when it says
+            /// done. Deliberately not player input: sighting in is not
+            /// playing and must not claim a seat. Televisions that
+            /// predate this kind drop it unread, which is the packet
+            /// format's own rule, and a phone sighting in against one
+            /// simply gets no targets drawn.
+            case sighting = 20
 
             /// True for the kinds a person generates by playing, which
             /// is what earns a seat. Deliberately excludes the
@@ -252,6 +263,41 @@ enum ControllerLink {
 /// A connection starts as a stranger. Input only counts once it has
 /// joined, which takes a stored pairing; everything else it sends is a
 /// pairing conversation or noise.
+/// Where a gun is in the business of learning where the television is.
+///
+/// Three pulls: the middle of the picture, then two opposite corners, and
+/// the mapping from wrist angle to a spot on screen falls out of them,
+/// including which way round the axes go and how far away the player is
+/// sitting. Exactly how an arcade cabinet's gun was set up, and the same
+/// sequence the aim lab proved out.
+///
+/// The corners are at 0.75 of the way out rather than the very edge, so
+/// the target is comfortably on the picture and nobody is asked to shoot
+/// at a bezel.
+enum SightingStep: Int, Sendable {
+    case centre = 0, farCorner = 1, nearCorner = 2, done = 3
+
+    /// Where the television should draw the target, in the same -1...1
+    /// screen space the pointer channel already speaks.
+    var target: (x: Double, y: Double)? {
+        switch self {
+        case .centre: return (0, 0)
+        case .farCorner: return (0.75, -0.75)
+        case .nearCorner: return (-0.75, 0.75)
+        case .done: return nil
+        }
+    }
+
+    var prompt: String {
+        switch self {
+        case .centre: return "Shoot the middle"
+        case .farCorner: return "Shoot the top right"
+        case .nearCorner: return "Shoot the bottom left"
+        case .done: return "Ready"
+        }
+    }
+}
+
 final class ControllerLinkReceiver {
     /// What is running, sent to a phone the moment it joins so it can
     /// draw the right cabinet.
@@ -271,6 +317,11 @@ final class ControllerLinkReceiver {
     private let onRelative: (Int, Int, Int) -> Void
     private let onPointer: (Int, Double, Double, Bool) -> Void
     private let onOffscreen: (Int, Bool) -> Void
+    /// Set rather than injected, because sighting in is optional: the
+    /// Controllers page runs a receiver too and has no screen to draw a
+    /// target on. Nil simply means nothing is drawn, which is also what
+    /// a television that predates this kind does.
+    var onSighting: ((Int, SightingStep) -> Void)?
     private let onPause: (Bool) -> Void
     private let onSave: () -> Void
     private let onLoad: () -> Void
@@ -796,6 +847,9 @@ final class ControllerLinkReceiver {
         case .offscreen:
             guard let port else { return }
             onOffscreen(port, p.flag)
+        case .sighting:
+            guard let port, let step = SightingStep(rawValue: Int(p.a)) else { return }
+            onSighting?(port, step)
         case .pause:
             onPause(p.flag)
         case .saveState:
@@ -1487,6 +1541,10 @@ final class ControllerLinkSender: ObservableObject {
 
     func offscreen(_ off: Bool) {
         send(.init(kind: .offscreen, flag: off))
+    }
+
+    func sighting(step: SightingStep) {
+        send(.init(kind: .sighting, a: Int16(step.rawValue)))
     }
 
     func pause(_ paused: Bool) {
