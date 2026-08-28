@@ -103,6 +103,13 @@ struct GWHotspots: Decodable {
 final class GWTapSurface: UIView {
     var spec: GWHotspots?
     var send: (Int, Bool) -> Void = { _, _ in }
+    /// Pressing a drawn button should feel like pressing a button. The
+    /// on-screen pad has always done this; the tap surfaces never did,
+    /// so the one presentation that looks most like real hardware was
+    /// the one that felt like nothing. Same generator and the same
+    /// strengths the pad uses, so a Game & Watch feels like the rest of
+    /// the app rather than its own thing.
+    let haptic = UIImpactFeedbackGenerator(style: .light)
     /// The picture's aspect-fitted frame inside this view; recomputed
     /// per touch because rotation and zoom both move it. Zoom changes
     /// the frame's aspect away from the artwork's, and while it does the
@@ -116,6 +123,7 @@ final class GWTapSurface: UIView {
         super.init(frame: frame)
         isMultipleTouchEnabled = true
         backgroundColor = .clear
+        haptic.prepare()
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -174,8 +182,12 @@ final class GWTapSurface: UIView {
             switch hitAt(t.location(in: self)) {
             case .hold(let id)?:
                 held[t] = id
+                haptic.impactOccurred(intensity: 1.0)
+                haptic.prepare()
                 send(id, true)
             case .sequence(let seq)?:
+                haptic.impactOccurred(intensity: 1.0)
+                haptic.prepare()
                 runSequence(seq)
             case nil:
                 break
@@ -189,12 +201,22 @@ final class GWTapSurface: UIView {
         for t in touches {
             let now = buttonAt(t.location(in: self))
             if let was = held[t], was != now { send(was, false); held[t] = nil }
-            if let now, held[t] == nil { held[t] = now; send(now, true) }
+            if let now, held[t] == nil {
+                held[t] = now
+                haptic.impactOccurred(intensity: 1.0)
+                haptic.prepare()
+                send(now, true)
+            }
         }
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        for t in touches { if let id = held.removeValue(forKey: t) { send(id, false) } }
+        for t in touches {
+            if let id = held.removeValue(forKey: t) {
+                haptic.impactOccurred(intensity: 0.6)
+                send(id, false)
+            }
+        }
     }
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
         touchesEnded(touches, with: event)
@@ -222,6 +244,92 @@ struct GWTapView: UIViewRepresentable {
     func updateUIView(_ v: GWTapSurface, context: Context) {
         v.spec = spec
         v.displayAspect = displayAspect
+    }
+}
+
+/// The tap surface for the Lua-scripted simulators, which need no map.
+///
+/// The original Delphi-converted games ignore libretro's pointer, which
+/// is why GWHotspots exists at all: taps had to be turned into button
+/// presses, and finding the buttons meant pressing each input and
+/// watching which pixels changed. The newer Lua games solved that at
+/// source. Each one carries a `tapzones` table naming every button and
+/// its rectangle, and its own code reads pointer_pressed, pointer_x and
+/// pointer_y and matches the tap itself.
+///
+/// So for those there is nothing to extract and nothing to maintain.
+/// Hand the game the pointer and it does the rest, which also means any
+/// Lua game added later works with no tool run and no data file entry.
+struct GWPointerView: UIViewRepresentable {
+    let send: (Double, Double, Bool) -> Void
+    let displayAspect: () -> Double
+
+    func makeUIView(context: Context) -> GWPointerSurface {
+        let v = GWPointerSurface()
+        v.send = send
+        v.displayAspect = displayAspect
+        return v
+    }
+    func updateUIView(_ v: GWPointerSurface, context: Context) {
+        v.displayAspect = displayAspect
+    }
+}
+
+final class GWPointerSurface: UIView {
+    var send: (Double, Double, Bool) -> Void = { _, _, _ in }
+    var displayAspect: () -> Double = { 0 }
+    /// See GWTapSurface: the same feel, for the games that need no map.
+    private let haptic = UIImpactFeedbackGenerator(style: .light)
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isMultipleTouchEnabled = false
+        backgroundColor = .clear
+        haptic.prepare()
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    /// The picture inside this view, aspect-fitted. Taken from the live
+    /// aspect rather than an artwork size, since there is no per-game
+    /// data here and none is wanted.
+    private func pictureFrame() -> CGRect? {
+        let art = displayAspect()
+        let w = bounds.width, h = bounds.height
+        guard art > 0, w > 0, h > 0 else { return nil }
+        if Double(w / h) > art {
+            let pw = CGFloat(art) * h
+            return CGRect(x: (w - pw) / 2, y: 0, width: pw, height: h)
+        }
+        let ph = w / CGFloat(art)
+        return CGRect(x: 0, y: (h - ph) / 2, width: w, height: ph)
+    }
+
+    /// Normalised to the picture, the range the pointer channel speaks.
+    private func point(_ p: CGPoint) -> (Double, Double)? {
+        guard let pic = pictureFrame(), pic.contains(p) else { return nil }
+        let u = Double((p.x - pic.minX) / pic.width)
+        let v = Double((p.y - pic.minY) / pic.height)
+        return (u * 2 - 1, v * 2 - 1)
+    }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let t = touches.first, let (x, y) = point(t.location(in: self)) else { return }
+        haptic.impactOccurred(intensity: 1.0)
+        haptic.prepare()
+        send(x, y, true)
+    }
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let t = touches.first, let (x, y) = point(t.location(in: self)) else { return }
+        send(x, y, true)
+    }
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let t = touches.first else { return }
+        haptic.impactOccurred(intensity: 0.6)
+        let p = point(t.location(in: self)) ?? (0, 0)
+        send(p.0, p.1, false)
+    }
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        touchesEnded(touches, with: event)
     }
 }
 

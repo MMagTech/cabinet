@@ -107,7 +107,7 @@ struct NativePlayerView: View {
         // than filtered from gw.json: that file's portrait items are
         // strip-normalised and this presentation is full screen, so the
         // pill needs coordinates in this space, one corner, small.
-        if gwSpec != nil {
+        if platform == .gameAndWatch {
             return [ControlLayout.Item(
                 kind: .pill, label: "Menu", input: -1, inputs: nil,
                 frame: ControlLayout.Rect(x: 0.03, y: 0.015, w: 0.14, h: 0.042),
@@ -212,7 +212,7 @@ struct NativePlayerView: View {
             let gunPanel = controlLayout.items.contains { $0.kind == .gun }
 
             ZStack {
-                if isLandscape || !showsControls || gunPanel || gwSpec != nil {
+                if isLandscape || !showsControls || gunPanel || platform == .gameAndWatch {
                     // Full screen canvas, pad in the gutters (or hidden with a
                     // controller connected), matching PlayerView's .overlay case.
                     ZStack {
@@ -231,6 +231,15 @@ struct NativePlayerView: View {
                             if let spec = gwSpec {
                                 GWTapView(spec: spec, send: handleInput,
                                           displayAspect: { renderer.displayAspect })
+                            } else if platform == .gameAndWatch {
+                                // The Lua simulators read the pointer and
+                                // match their own declared tap zones, so
+                                // there is nothing to extract and nothing
+                                // to maintain: hand the tap over and the
+                                // game does the rest. Any Lua game added
+                                // later works with no tool run.
+                                GWPointerView(send: handlePointer,
+                                              displayAspect: { renderer.displayAspect })
                             }
                         }
                         if showsControls {
@@ -382,7 +391,7 @@ struct NativePlayerView: View {
             FrameTrace.shared.end()
             UIApplication.shared.isIdleTimerDisabled = false
             // Release the artwork-orientation lock a Game & Watch took.
-            if gwSpec != nil { OrientationLock.unlock() }
+            if platform == .gameAndWatch { OrientationLock.unlock() }
             // Take the picture back off the television. Guarded the same
             // way the platform claim below is, so a second game's view
             // that has already claimed it keeps it.
