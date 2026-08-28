@@ -42,7 +42,7 @@ struct PS1PerfTestView: View {
             status = "Fetching rom \(Self.testRomID)…"
             let rom = try await session.rom(id: Self.testRomID)
 
-            status = "Downloading \(rom.name)…"
+            status = "Downloading \(rom.displayName)…"
             let core = try await NativeLauncher.prepare(rom: rom, session: session)
             precondition(core == .pcsxReARMed, "test rom did not route to PS1's core")
 

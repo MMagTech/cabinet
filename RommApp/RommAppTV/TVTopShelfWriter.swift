@@ -187,7 +187,7 @@ enum TVTopShelfWriter {
         // dimensions of the written file and make the 1x file secretly
         // a 2x one on some hardware. Here the numbers passed in are the
         // pixels that come out, on every device.
-        let format = UIGraphicsImageRendererFormat.default()
+        let format = UIGraphicsImageRendererFormat.preferred()
         format.scale = 1
         format.opaque = true
         let renderer = UIGraphicsImageRenderer(size: size, format: format)

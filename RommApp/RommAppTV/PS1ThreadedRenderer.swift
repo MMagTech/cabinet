@@ -188,7 +188,12 @@ final class PS1ThreadedRenderer: NSObject, ObservableObject, MTKViewDelegate {
         frame.pixels.withUnsafeBytes { raw in
             guard let base = raw.baseAddress else { return }
             switch frame.pixelFormat {
-            case .XRGB8888:
+            // RGBA8888 is the hardware-readback format, which no PS1 frame
+            // ever carries; it shares this branch because both are a straight
+            // 32-bit upload, and listing it keeps the switch exhaustive
+            // against the frontend's enum rather than leaning on the
+            // @unknown default below.
+            case .XRGB8888, .RGBA8888:
                 texture?.replace(
                     region: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0,
                     withBytes: base, bytesPerRow: Int(frame.bytesPerRow)

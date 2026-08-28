@@ -55,7 +55,7 @@ struct PS1PlayTestView: View {
             status = "Fetching rom \(Self.testRomID)…"
             let rom = try await session.rom(id: Self.testRomID)
 
-            status = "Downloading \(rom.name)…"
+            status = "Downloading \(rom.displayName)…"
             _ = try await NativeLauncher.prepare(rom: rom, session: session)
 
             let renderer = PS1ThreadedRenderer()
