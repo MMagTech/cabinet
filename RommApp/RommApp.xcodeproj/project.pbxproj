@@ -561,7 +561,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
 				CODE_SIGN_ENTITLEMENTS = RommAppTV/RommAppTV.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=appletvsimulator*]" = (
@@ -612,7 +612,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/PPSSPP",
 					"$(PROJECT_DIR)/RommApp/Native/GW",
 				);
-				MARKETING_VERSION = 0.2.0;
+				MARKETING_VERSION = 0.3.0;
 				OTHER_LDFLAGS = "-lz";
 				"OTHER_LDFLAGS[sdk=appletvos*]" = (
 					"-lz",
@@ -692,7 +692,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = (
@@ -758,7 +758,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/PPSSPP",
 					"$(PROJECT_DIR)/RommApp/Native/GW",
 				);
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 0.4.0;
 				OTHER_LDFLAGS = (
 					"-lz",
 					"-framework",
@@ -782,7 +782,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = (
@@ -848,7 +848,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/PPSSPP",
 					"$(PROJECT_DIR)/RommApp/Native/GW",
 				);
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 0.4.0;
 				OTHER_LDFLAGS = (
 					"-lz",
 					"-framework",
@@ -929,7 +929,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = RommAppTopShelf/RommAppTopShelf.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RommAppTopShelf/Info.plist;
@@ -939,7 +939,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.2.0;
+				MARKETING_VERSION = 0.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev.tv.topshelf;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -956,7 +956,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = RommAppTopShelf/RommAppTopShelf.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RommAppTopShelf/Info.plist;
@@ -966,7 +966,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.2.0;
+				MARKETING_VERSION = 0.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet.topshelf;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -986,7 +986,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
 				CODE_SIGN_ENTITLEMENTS = RommAppTV/RommAppTV.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=appletvsimulator*]" = (
@@ -1037,7 +1037,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/PPSSPP",
 					"$(PROJECT_DIR)/RommApp/Native/GW",
 				);
-				MARKETING_VERSION = 0.2.0;
+				MARKETING_VERSION = 0.3.0;
 				OTHER_LDFLAGS = "-lz";
 				"OTHER_LDFLAGS[sdk=appletvos*]" = (
 					"-lz",
