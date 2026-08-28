@@ -481,6 +481,17 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
                 frontend.unserializeState(state)
             }
 
+            #if DEBUG
+            // The bench harness's save state round trip, if one was
+            // asked for. It lives here because this is the one place
+            // serializing is safe: on the thread that runs the core,
+            // between frames rather than inside one. Costs a bool test
+            // per draw in Debug builds and does not exist in Release.
+            if ranThisDraw > 0, NativeStateCheck.active {
+                NativeStateCheck.tick(frontend)
+            }
+            #endif
+
             if ranThisDraw > 0, let audioData = frontend.drainAudio() {
                 audio.enqueue(audioData)
             }

@@ -317,6 +317,24 @@ final class MemoryCardSync {
             Task { await self.uploadMemoryCard(data) }
             return
         }
+        // PSP: a tree rather than a file, archived whole. Captured on
+        // the same trigger as everything else, after the core has shut
+        // down and flushed, so what goes up is what the game finished
+        // writing rather than a snapshot taken mid-write.
+        if platform == .psp {
+            let saveDir = NativeLauncher.coreSaveDirectory(romId: rom.id)
+            guard let data = NativeLauncher.archivePSPSaveData(saveDir: saveDir) else { return }
+            let previous = MemoryCardStore.shared.localCard(romId: rom.id, region: .saveRAM)
+            guard data != previous else { return }
+            MemoryCardStore.shared.storeSnapshot(romId: rom.id, data: data, region: .saveRAM)
+            DiagnosticsLog.record(
+                context: "In-game save",
+                message: "Captured PSP savedata, \(data.count) bytes, after core shutdown.",
+                romVersion: session.serverVersion
+            )
+            Task { await self.uploadMemoryCard(data) }
+            return
+        }
         let suffix: String
         switch platform {
         case .segaCD: suffix = ".brm"

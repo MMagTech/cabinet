@@ -55,6 +55,12 @@ enum NativeBenchHarness {
         return id > 0 ? id : nil
     }
 
+    /// `-cabinetBenchStateCheck 1` runs the save state round trip at the
+    /// end of the run, before the app exits.
+    static var stateCheckRequested: Bool {
+        UserDefaults.standard.bool(forKey: "cabinetBenchStateCheck")
+    }
+
     static var seconds: Double {
         let s = UserDefaults.standard.double(forKey: "cabinetBenchSeconds")
         return s > 0 ? s : 40
@@ -193,6 +199,16 @@ struct NativeBenchRunnerView: View {
                 exit(70)
             }
             try? await Task.sleep(nanoseconds: UInt64(plan.seconds * 1_000_000_000))
+            if NativeBenchHarness.stateCheckRequested {
+                NativeStateCheck.begin()
+                // The check runs on the core thread across several
+                // draws, so wait for it rather than racing the exit.
+                for _ in 0..<200 where NativeStateCheck.verdict == nil {
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                }
+                NSLog("[bench] state verdict: %@",
+                      NativeStateCheck.verdict ?? "TIMED OUT, the core thread never ran the check")
+            }
             // What the core is actually emitting. Logged rather than added
             // to FrameTrace: that file is shared with the in-flight
             // Dreamcast investigation and is not this pass's to touch.
@@ -225,3 +241,107 @@ struct NativeBenchRunnerView: View {
     }
 }
 #endif
+
+/// Does a core's save state actually round trip?
+///
+/// Save states are offered for every platform but Game & Watch, and that
+/// is an assumption for eight of the twenty-two cores: the scrub that
+/// checked them covered fourteen, and only melonDS has been proven since.
+/// A state that does not restore is worse than one that is missing,
+/// because a foreign or broken state hangs `retro_unserialize` rather than
+/// refusing, so this is worth knowing before a release rather than after.
+///
+/// The test is deliberately not "does it look the same afterwards", which
+/// needs frame capture and a definition of same. It is: serialize, let the
+/// game run on, restore, and serialize again. If the second serialization
+/// matches the first, the state carried everything the core needed to get
+/// back exactly where it was.
+///
+/// Two controls stop a green result being meaningless. The state is
+/// captured twice in a row with no frames between, because a core whose
+/// serialization embeds a timestamp or uninitialised padding cannot be
+/// compared byte for byte at all and must say so rather than fail. And the
+/// state after running is compared against the first, because if the game
+/// never advanced (a title screen waiting on a coin) then restoring
+/// changes nothing and every core passes.
+///
+/// Runs on the core thread between frames, which is the only safe place to
+/// serialize, and it is a state machine because the middle step is
+/// "let a couple of seconds of game happen".
+enum NativeStateCheck {
+    nonisolated(unsafe) static var active = false
+    nonisolated(unsafe) private static var step = 0
+    nonisolated(unsafe) private static var waited = 0
+    nonisolated(unsafe) private static var first: Data?
+    nonisolated(unsafe) private static var stable = false
+    nonisolated(unsafe) private static var advanced = false
+    nonisolated(unsafe) static var verdict: String?
+
+    static func begin() {
+        step = 0; waited = 0; first = nil
+        stable = false; advanced = false; verdict = nil
+        active = true
+    }
+
+    static func tick(_ frontend: LibretroFrontend) {
+        guard active else { return }
+        switch step {
+        case 0:
+            guard let a = frontend.serializeState() else {
+                finish("NO STATE: the core produced nothing to save")
+                return
+            }
+            stable = (frontend.serializeState() == a)
+            first = a
+            step = 1
+        case 1:
+            waited += 1
+            if waited >= 120 { step = 2 }
+        case 2:
+            advanced = (frontend.serializeState() != first)
+            step = 3
+        case 3:
+            guard let a = first else { finish("NO STATE"); return }
+            guard frontend.unserializeState(a) else {
+                finish("FAIL: the core refused its own state")
+                return
+            }
+            let again = frontend.serializeState()
+            if !stable {
+                finish("INCONCLUSIVE: state bytes differ between two "
+                     + "serializations with no frames between, so this core "
+                     + "cannot be compared byte for byte")
+            } else if !advanced {
+                finish("INCONCLUSIVE: the state did not change while the game "
+                     + "ran, so restoring it proves nothing. Needs a rom that "
+                     + "advances without input, or scripted presses")
+            } else if again == a {
+                finish("PASS: restored state serializes identically "
+                     + "(\(a.count) bytes)")
+            } else {
+                finish("FAIL: restored, but the state afterwards differs from "
+                     + "the one restored, so something was not captured")
+            }
+        default:
+            break
+        }
+    }
+
+    private static func finish(_ text: String) {
+        active = false
+        verdict = text
+        NSLog("[bench] state check %@", text)
+        let dir = NSSearchPathForDirectoriesInDomains(.cachesDirectory, .userDomainMask, true).first
+        if let dir {
+            let path = (dir as NSString).appendingPathComponent("state-check.txt")
+            let line = text + "\n"
+            if let handle = FileHandle(forWritingAtPath: path) {
+                handle.seekToEndOfFile()
+                handle.write(Data(line.utf8))
+                try? handle.close()
+            } else {
+                try? line.write(toFile: path, atomically: true, encoding: .utf8)
+            }
+        }
+    }
+}

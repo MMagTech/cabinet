@@ -201,6 +201,55 @@ enum NativeLauncher {
         return dir
     }
 
+    /// Where PPSSPP keeps a game's saves: PSP/SAVEDATA, one folder per
+    /// save slot, each holding a DATA.BIN, an icon and a PARAM.SFO.
+    ///
+    /// Only this subtree travels. NAND, PPSSPP_STATE and SYSTEM/CACHE sit
+    /// beside it under the same save directory and are this device's own
+    /// machine state, save states and compiled shaders: uploading them
+    /// would put tens of megabytes of nothing on the server and mean
+    /// nothing on the other end.
+    static func pspSaveDataDirectory(saveDir: URL) -> URL {
+        saveDir
+            .appendingPathComponent("PSP", isDirectory: true)
+            .appendingPathComponent("SAVEDATA", isDirectory: true)
+    }
+
+    /// The whole SAVEDATA tree as one blob, so it rides the same upload,
+    /// the same store and the same server row as every other platform's
+    /// single save file. FileWrapper turns a directory into Data and back
+    /// without taking on a zip dependency.
+    static func archivePSPSaveData(saveDir: URL) -> Data? {
+        let dir = pspSaveDataDirectory(saveDir: saveDir)
+        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: dir.path),
+              !entries.isEmpty,
+              let wrapper = try? FileWrapper(url: dir, options: .immediate)
+        else { return nil }
+        return wrapper.serializedRepresentation
+    }
+
+    /// Unpacks an archive over whatever is already on this device.
+    ///
+    /// Deliberately never removes a save folder the archive does not
+    /// contain. Newest-wins is the right rule and matches every other
+    /// platform here, but a save folder is a whole slot rather than a
+    /// newer version of one file, so if that choice is ever wrong the
+    /// cost should be a stale slot sitting beside a good one, not
+    /// somebody's save vanishing. Only folders present in the archive
+    /// are replaced.
+    static func unpackPSPSaveData(_ data: Data, saveDir: URL) {
+        guard let wrapper = FileWrapper(serializedRepresentation: data),
+              let children = wrapper.fileWrappers
+        else { return }
+        let dir = pspSaveDataDirectory(saveDir: saveDir)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        for (name, child) in children {
+            let target = dir.appendingPathComponent(name)
+            try? FileManager.default.removeItem(at: target)
+            try? child.write(to: target, options: [], originalContentsURL: nil)
+        }
+    }
+
     /// Throws away the emulator's own per-game settings, leaving the
     /// game's progress alone.
     ///
@@ -301,6 +350,34 @@ enum NativeLauncher {
         }
     }
 
+    /// PSP's pre-boot restore. The same decision every other platform
+    /// makes, applied to an archive instead of a file: a pending local
+    /// copy wins outright, else the newest own server row when its stamp
+    /// has moved or nothing is local, else what this device already has,
+    /// which needs no action because it is already on disk.
+    private static func restorePSPSaves(
+        rom: Rom, session: Session, platform: NativePlatform, saveDir: URL
+    ) async {
+        let store = MemoryCardStore.shared
+        if store.pendingUpload(romId: rom.id, region: .saveRAM),
+           let local = store.localCard(romId: rom.id, region: .saveRAM) {
+            unpackPSPSaveData(local, saveDir: saveDir)
+            return
+        }
+        let serverRows = try? await session.saves(romId: rom.id)
+        guard let own = serverRows?
+            .filter({ $0.emulator == platform.core.emulatorTag })
+            .sorted(by: { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") })
+            .first
+        else { return }
+        let local = store.localCard(romId: rom.id, region: .saveRAM)
+        guard own.updatedAt != store.serverStamp(romId: rom.id, region: .saveRAM) || local == nil,
+              let bytes = try? await session.saveContent(own)
+        else { return }
+        store.storeDownloaded(romId: rom.id, data: bytes, serverStamp: own.updatedAt, region: .saveRAM)
+        unpackPSPSaveData(bytes, saveDir: saveDir)
+    }
+
     private static func restoreCoreFileSaveIfNeeded(
         rom: Rom, session: Session, platform: NativePlatform, core: NativeCore,
         loadURL: URL, saveDir: URL
@@ -324,6 +401,10 @@ enum NativeLauncher {
         case .arcade:
             await restoreArcadeNVRAM(
                 rom: rom, session: session, core: core, loadURL: loadURL, saveDir: saveDir)
+            return
+        case .psp:
+            await restorePSPSaves(
+                rom: rom, session: session, platform: platform, saveDir: saveDir)
             return
         default: return
         }

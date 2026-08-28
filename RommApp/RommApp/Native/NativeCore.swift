@@ -283,6 +283,17 @@ enum NativePlatform: String, CaseIterable {
         // retro_unload_game instead (opera/shared/nvram.0.srm under the
         // forced options), so it syncs through the segaCD/ngpc file
         // path, not this one.
+        // virtualBoy: the one exclusion the core's own API argues
+        // against, so it is written down rather than left to look like
+        // an oversight. Beetle VB implements RETRO_MEMORY_SAVE_RAM and
+        // reports 64KB of cartridge RAM for every game, because
+        // GPRAM_Mask is set to 0xFFFF unconditionally at load rather
+        // than from the cartridge header. No commercial Virtual Boy
+        // game shipped with battery backup; the machine's games used
+        // passwords or nothing. So that 64KB is scratch the console
+        // wired up and no game ever kept anything in, and syncing it
+        // would upload a buffer of noise per game forever. Checked
+        // against the core's source 2026-08-28, not assumed.
         // nds: melonDS answers RETRO_MEMORY_SAVE_RAM with NULL and
         // manages the cartridge save itself, writing <save dir>/
         // <game>.sav through its own NDSCart_SRAMManager, debounce

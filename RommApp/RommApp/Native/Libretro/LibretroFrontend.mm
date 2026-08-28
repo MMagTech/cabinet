@@ -1931,6 +1931,11 @@ static void cabinetInputTrace(void) {
     }
     NSMutableData *data = [NSMutableData dataWithLength:size];
     if (!gCore->serialize(data.mutableBytes, size)) {
+        // The size the core asked for is the useful half of a refusal.
+        // PPSSPP, for one, reports a placeholder 128MB and then refuses
+        // whenever its GPU pointer is not up, so the number says which
+        // branch the core took rather than leaving a bare nil.
+        NSLog(@"[state] core %ld refused to serialize %zu bytes", (long)gCoreID, size);
         return nil;
     }
     return data;
