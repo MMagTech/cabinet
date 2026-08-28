@@ -111,6 +111,18 @@ worth having in the open.
   carrying.
 - **Settings syncing across your devices via iCloud.** No confirmed real
   need yet, just an idea that comes up alongside the pairing work above.
+- **Finding a game from the phone's own search.** Cabinet could hand iOS
+  an index of the library, so typing three letters into Spotlight brings
+  up the game with its cover art and takes you straight there without
+  opening the app first. With hundreds of games that is a faster way in
+  than any list, and the pieces are mostly already here: the covers are
+  cached on device and the RomM sync is the natural place to keep the
+  index current. Keeping it honest is the actual work, since a search
+  result that opens a game the server no longer has is worse than no
+  result. iPhone only; the Apple TV top shelf is already this idea in the
+  television's own idiom. The open question is what a result should do
+  when the game is not downloaded yet, because silently starting a
+  gigabyte download from a search result is a poor surprise. Low priority.
 
 A few ideas got explored just as seriously and reached a real answer
 instead of an open question. Those live in
