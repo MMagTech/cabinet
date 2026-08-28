@@ -137,52 +137,78 @@ private struct TVNativeCoreOptionsView: View {
     }
 }
 
-/// One option's choices, one per row, with the current one ticked. Picking
-/// writes through and pops, so the row that pushed here is showing the new
-/// answer by the time it is back on screen.
+/// One option's choices, one per row, with the current one ticked.
+/// Picking writes through and pops, so the row that pushed here is
+/// showing the new answer by the time it is back on screen.
+///
+/// Where a choice can be drawn, the drawing is large and sits beside the
+/// list rather than inside each row. At ten feet a thumbnail in a row is
+/// decoration: you cannot tell two anaglyph pairs apart at that size, and
+/// telling them apart is the entire job. It follows focus, so running
+/// down the list with the remote is the same gesture as trying each one,
+/// and there is a picture big enough to hold a pair of glasses up to.
 private struct TVCoreOptionChoicesView: View {
     let option: NativeCoreOption
     let selected: String
     let onPick: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var focused: String?
+
+    /// Focus, or the current answer before anything has taken focus.
+    private var shown: String { focused ?? selected }
+
+    private var drawable: Bool {
+        option.choices.contains { VirtualBoyPreview.canDraw($0.value) }
+    }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text(option.label)
-                    .font(.largeTitle.weight(.bold))
-                Text(option.detail)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .padding(.bottom, 8)
-
-                ForEach(option.choices, id: \.value) { choice in
-                    Button {
-                        onPick(choice.value)
-                        dismiss()
-                    } label: {
-                        HStack(spacing: 20) {
-                            ChoiceSwatch(value: choice.value)
-                            Text(choice.label)
-                                .font(.title3)
-                            Spacer(minLength: 24)
-                            Image(systemName: "checkmark")
-                                .font(.title3.weight(.semibold))
-                                .opacity(choice.value == selected ? 1 : 0)
-                        }
-                        .padding(.horizontal, 32)
-                        .padding(.vertical, 22)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+        HStack(alignment: .top, spacing: 70) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(option.label)
+                        .font(.largeTitle.weight(.bold))
+                    if !option.detail.isEmpty {
+                        Text(option.detail)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .padding(.bottom, 8)
                     }
-                    .buttonStyle(RowFocusStyle())
+                    ForEach(option.choices, id: \.value) { choice in
+                        Button {
+                            onPick(choice.value)
+                            dismiss()
+                        } label: {
+                            HStack(spacing: 20) {
+                                ChoiceSwatch(value: choice.value)
+                                Text(choice.label)
+                                    .font(.title3)
+                                Spacer(minLength: 24)
+                                Image(systemName: "checkmark")
+                                    .font(.title3.weight(.semibold))
+                                    .opacity(choice.value == selected ? 1 : 0)
+                            }
+                            .padding(.horizontal, 32)
+                            .padding(.vertical, 22)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(RowFocusStyle())
+                        .focused($focused, equals: choice.value)
+                    }
                 }
+                .padding(.vertical, 50)
             }
-            .frame(maxWidth: 1100, alignment: .leading)
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 80)
-            .padding(.vertical, 50)
+            .frame(maxWidth: drawable ? 760 : .infinity, alignment: .leading)
+
+            if drawable {
+                VirtualBoyPreview(value: shown)
+                    .frame(width: 620)
+                    .padding(.top, 120)
+                    .animation(.easeOut(duration: 0.15), value: shown)
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 80)
     }
 }
 

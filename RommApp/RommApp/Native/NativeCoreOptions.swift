@@ -12,6 +12,10 @@ struct NativeCoreOption: Identifiable {
 
     let key: String
     let label: String
+    /// One line under the option saying what it does. Empty when the
+    /// choices say it themselves, which is the bar: Virtual Boy's two
+    /// settings name a colour and a pair of lenses and now draw both,
+    /// so a sentence explaining them is words the screen already spent.
     let detail: String
     let choices: [Choice]
     let defaultValue: String
@@ -234,7 +238,7 @@ enum NativeCoreOptions {
         NativeCoreOption(
             key: "vb_anaglyph_preset",
             label: "3D glasses",
-            detail: "Renders in real stereoscopic 3D for coloured glasses. Pick the pair you actually have. Off shows the flat picture.",
+            detail: "",
             choices: [
                 .init(value: "disabled", label: "Off"),
                 .init(value: "red & blue", label: "Red and blue"),
@@ -248,7 +252,7 @@ enum NativeCoreOptions {
         NativeCoreOption(
             key: "vb_color_mode",
             label: "Screen colour",
-            detail: "The Virtual Boy's screens were red. The others are here because hours of red is a lot to ask, and they cost nothing.",
+            detail: "",
             choices: [
                 .init(value: "black & red", label: "Red (original)"),
                 .init(value: "black & white", label: "White"),

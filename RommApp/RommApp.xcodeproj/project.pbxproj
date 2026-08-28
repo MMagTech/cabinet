@@ -49,28 +49,28 @@
 			membershipExceptions = (
 				Controls/TouchControlPad.swift,
 				Native/BeetleNGP/libbeetle_ngp_ios.a,
-				Native/BeetleVB/libbeetle_vb_ios.a,
 				Native/BeetlePCEFast/libbeetle_pce_fast_ios.a,
+				Native/BeetleVB/libbeetle_vb_ios.a,
 				Native/FBNeo/libfbneo_libretro_ios.a,
 				Native/FCEUmm/libfceumm_ios.a,
 				Native/Flycast/libflycast_ios.a,
 				Native/Gambatte/libgambatte_ios.a,
 				Native/GenesisPlusGX/libgenesis_plus_gx_ios.a,
-				Native/MGBA/libmgba_ios.a,
+				Native/GW/GWCore.mm,
+				Native/GW/libgw_ios.a,
 				Native/MAME2003Plus/libmame2003_plus_ios.a,
 				Native/MelonDS/libmelonds_ios.a,
-				Native/PPSSPP/libppsspp_ios.a,
-				Native/GW/libgw_ios.a,
-				Native/GW/GWCore.mm,
+				Native/MGBA/libmgba_ios.a,
 				Native/Mupen64Plus/libmupen64plus_ios.a,
 				Native/NativePlayerView.swift,
 				Native/Opera/libopera_ios.a,
 				Native/PCSXReARMed/libpcsx_rearmed_ios.a,
 				Native/PicoDrive/libpicodrive_ios.a,
+				Native/PPSSPP/libppsspp_ios.a,
 				Native/ProSystem/libprosystem_ios.a,
 				Native/Saturn/libbeetle_saturn_ios.a,
-				Native/Stella2014/libstella2014_ios.a,
 				Native/Snes9x/libsnes9x_ios.a,
+				Native/Stella2014/libstella2014_ios.a,
 				Native/Vecx/libvecx_ios.a,
 				Player/GameLaunchView.swift,
 				Player/PlayerView.swift,
@@ -94,40 +94,12 @@
 				Controls/ControllerBindings.swift,
 				Controls/ControlTheme.swift,
 				Controls/TouchControlPad.swift,
+				"Resources/ControlLayouts/arcade-gun-spinner1p1.json",
+				"Resources/ControlLayouts/arcade-gun-trackball2.json",
 				"Resources/ControlLayouts/arcade-gun1.json",
 				"Resources/ControlLayouts/arcade-gun2.json",
 				"Resources/ControlLayouts/arcade-gun3.json",
 				"Resources/ControlLayouts/arcade-gun6.json",
-				"Resources/ControlLayouts/arcade-rotary1.json",
-				"Resources/ControlLayouts/arcade-rotary2.json",
-				"Resources/ControlLayouts/arcade-rotary3.json",
-				"Resources/ControlLayouts/arcade-spinner3.json",
-				"Resources/ControlLayouts/arcade-spinner4.json",
-				"Resources/ControlLayouts/arcade-spinner5.json",
-				"Resources/ControlLayouts/arcade-spinner6.json",
-				"Resources/ControlLayouts/arcade-trackball3.json",
-				"Resources/ControlLayouts/arcade-trackball5.json",
-				"Resources/ControlLayouts/arcade-trackball6.json",
-				"Resources/ControlLayouts/arcade-spinner0.json",
-				"Resources/ControlLayouts/arcade-spinner1.json",
-				"Resources/ControlLayouts/arcade-spinner2.json",
-				"Resources/ControlLayouts/arcade-stick0.json",
-				"Resources/ControlLayouts/arcade-stick1.json",
-				"Resources/ControlLayouts/arcade-stick2.json",
-				"Resources/ControlLayouts/arcade-stick3.json",
-				"Resources/ControlLayouts/arcade-stick4.json",
-				"Resources/ControlLayouts/arcade-stick5.json",
-				"Resources/ControlLayouts/arcade-stick6.json",
-				"Resources/ControlLayouts/arcade-trackball0.json",
-				"Resources/ControlLayouts/arcade-trackball1.json",
-				"Resources/ControlLayouts/arcade-trackball2.json",
-				"Resources/ControlLayouts/arcade-twin0.json",
-				"Resources/ControlLayouts/arcade-twin1.json",
-				"Resources/ControlLayouts/arcade-twin2.json",
-				"Resources/ControlLayouts/arcade-twin4.json",
-				"Resources/ControlLayouts/arcade-twin6.json",
-				"Resources/ControlLayouts/arcade-gun-spinner1p1.json",
-				"Resources/ControlLayouts/arcade-gun-trackball2.json",
 				"Resources/ControlLayouts/arcade-pedal0p1.json",
 				"Resources/ControlLayouts/arcade-pedal1p1.json",
 				"Resources/ControlLayouts/arcade-pedal2p1.json",
@@ -135,34 +107,62 @@
 				"Resources/ControlLayouts/arcade-pedal4p1.json",
 				"Resources/ControlLayouts/arcade-pedal5p1.json",
 				"Resources/ControlLayouts/arcade-pedal6p1.json",
+				"Resources/ControlLayouts/arcade-rotary1.json",
+				"Resources/ControlLayouts/arcade-rotary2.json",
+				"Resources/ControlLayouts/arcade-rotary3.json",
+				"Resources/ControlLayouts/arcade-spinner0.json",
 				"Resources/ControlLayouts/arcade-spinner0j.json",
 				"Resources/ControlLayouts/arcade-spinner0p1.json",
 				"Resources/ControlLayouts/arcade-spinner0p1j.json",
+				"Resources/ControlLayouts/arcade-spinner1.json",
 				"Resources/ControlLayouts/arcade-spinner1j.json",
 				"Resources/ControlLayouts/arcade-spinner1p1.json",
 				"Resources/ControlLayouts/arcade-spinner1p2.json",
+				"Resources/ControlLayouts/arcade-spinner2.json",
 				"Resources/ControlLayouts/arcade-spinner2j.json",
 				"Resources/ControlLayouts/arcade-spinner2p1.json",
 				"Resources/ControlLayouts/arcade-spinner2p2.json",
+				"Resources/ControlLayouts/arcade-spinner3.json",
 				"Resources/ControlLayouts/arcade-spinner3j.json",
 				"Resources/ControlLayouts/arcade-spinner3p1j.json",
+				"Resources/ControlLayouts/arcade-spinner4.json",
 				"Resources/ControlLayouts/arcade-spinner4j.json",
 				"Resources/ControlLayouts/arcade-spinner4p1.json",
+				"Resources/ControlLayouts/arcade-spinner5.json",
 				"Resources/ControlLayouts/arcade-spinner5p1.json",
+				"Resources/ControlLayouts/arcade-spinner6.json",
 				"Resources/ControlLayouts/arcade-spinner6j.json",
 				"Resources/ControlLayouts/arcade-spinner6p1.json",
 				"Resources/ControlLayouts/arcade-spinner6p1j.json",
+				"Resources/ControlLayouts/arcade-stick0.json",
+				"Resources/ControlLayouts/arcade-stick1.json",
+				"Resources/ControlLayouts/arcade-stick2.json",
+				"Resources/ControlLayouts/arcade-stick3.json",
+				"Resources/ControlLayouts/arcade-stick4.json",
+				"Resources/ControlLayouts/arcade-stick5.json",
+				"Resources/ControlLayouts/arcade-stick6.json",
 				"Resources/ControlLayouts/arcade-trackball-spinner4.json",
-				Resources/ControlLayouts/atari7800.json,
+				"Resources/ControlLayouts/arcade-trackball0.json",
+				"Resources/ControlLayouts/arcade-trackball1.json",
+				"Resources/ControlLayouts/arcade-trackball2.json",
+				"Resources/ControlLayouts/arcade-trackball3.json",
+				"Resources/ControlLayouts/arcade-trackball5.json",
+				"Resources/ControlLayouts/arcade-trackball6.json",
+				"Resources/ControlLayouts/arcade-twin0.json",
+				"Resources/ControlLayouts/arcade-twin1.json",
+				"Resources/ControlLayouts/arcade-twin2.json",
+				"Resources/ControlLayouts/arcade-twin4.json",
+				"Resources/ControlLayouts/arcade-twin6.json",
 				Resources/ControlLayouts/atari2600.json,
+				Resources/ControlLayouts/atari7800.json,
 				Resources/ControlLayouts/default.json,
 				Resources/ControlLayouts/dreamcast.json,
 				Resources/ControlLayouts/gamegear.json,
 				Resources/ControlLayouts/gb.json,
-				Resources/ControlLayouts/gw.json,
 				Resources/ControlLayouts/gba.json,
 				Resources/ControlLayouts/genesis.json,
 				Resources/ControlLayouts/genesis6.json,
+				Resources/ControlLayouts/gw.json,
 				Resources/ControlLayouts/lynx.json,
 				Resources/ControlLayouts/n64.json,
 				Resources/ControlLayouts/nds.json,
@@ -482,21 +482,6 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		BB0000000000000000003B /* Embed ANGLE Frameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-			);
-			name = "Embed ANGLE Frameworks";
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "if [ \"$PLATFORM_NAME\" != \"appletvos\" ]; then exit 0; fi\nDEST=\"$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH\"\nmkdir -p \"$DEST\"\nfor FW in libEGL libGLESv2; do\n  rsync -a --delete \"$PROJECT_DIR/Vendor/ANGLE/tvos/$FW.framework\" \"$DEST/\"\n  if [ \"$CODE_SIGNING_ALLOWED\" = \"YES\" ] && [ -n \"$EXPANDED_CODE_SIGN_IDENTITY\" ]; then\n    codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --timestamp=none \"$DEST/$FW.framework\"\n  fi\ndone\n";
-		};
 		BB0000000000000000003A /* Embed ANGLE Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -511,6 +496,21 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "if [ \"$PLATFORM_NAME\" != \"iphoneos\" ]; then exit 0; fi\nDEST=\"$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH\"\nmkdir -p \"$DEST\"\nfor FW in libEGL libGLESv2; do\n  rsync -a --delete \"$PROJECT_DIR/Vendor/ANGLE/ios/$FW.framework\" \"$DEST/\"\n  if [ \"$CODE_SIGNING_ALLOWED\" = \"YES\" ] && [ -n \"$EXPANDED_CODE_SIGN_IDENTITY\" ]; then\n    codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --timestamp=none \"$DEST/$FW.framework\"\n  fi\ndone\n";
+		};
+		BB0000000000000000003B /* Embed ANGLE Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Embed ANGLE Frameworks";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"$PLATFORM_NAME\" != \"appletvos\" ]; then exit 0; fi\nDEST=\"$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH\"\nmkdir -p \"$DEST\"\nfor FW in libEGL libGLESv2; do\n  rsync -a --delete \"$PROJECT_DIR/Vendor/ANGLE/tvos/$FW.framework\" \"$DEST/\"\n  if [ \"$CODE_SIGNING_ALLOWED\" = \"YES\" ] && [ -n \"$EXPANDED_CODE_SIGN_IDENTITY\" ]; then\n    codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --timestamp=none \"$DEST/$FW.framework\"\n  fi\ndone\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -564,11 +564,14 @@
 				CURRENT_PROJECT_VERSION = 10;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
-				"FRAMEWORK_SEARCH_PATHS[sdk=appletvos*]" = "$(PROJECT_DIR)/Vendor/ANGLE/tvos";
-				"GCC_PREPROCESSOR_DEFINITIONS[sdk=appletvos*]" = "$(inherited) CABINET_ANGLE=1";
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=appletvsimulator*]" = (
 					"*_tvos.a",
 					"*Core.mm",
+				);
+				"FRAMEWORK_SEARCH_PATHS[sdk=appletvos*]" = "$(PROJECT_DIR)/Vendor/ANGLE/tvos";
+				"GCC_PREPROCESSOR_DEFINITIONS[sdk=appletvos*]" = (
+					"$(inherited)",
+					"CABINET_ANGLE=1",
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = (
@@ -607,10 +610,17 @@
 					"$(PROJECT_DIR)/RommApp/Native/BeetleVB",
 					"$(PROJECT_DIR)/RommApp/Native/MelonDS",
 					"$(PROJECT_DIR)/RommApp/Native/PPSSPP",
+					"$(PROJECT_DIR)/RommApp/Native/GW",
 				);
 				MARKETING_VERSION = 0.2.0;
 				OTHER_LDFLAGS = "-lz";
-				"OTHER_LDFLAGS[sdk=appletvos*]" = "-lz -framework libEGL -framework libGLESv2";
+				"OTHER_LDFLAGS[sdk=appletvos*]" = (
+					"-lz",
+					"-framework",
+					libEGL,
+					"-framework",
+					libGLESv2,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet;
 				PRODUCT_NAME = "Cabinet TV";
 				SDKROOT = appletvos;
@@ -689,6 +699,11 @@
 					"*_ios.a",
 					"*Core.mm",
 				);
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = "$(PROJECT_DIR)/Vendor/ANGLE/ios";
+				"GCC_PREPROCESSOR_DEFINITIONS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"CABINET_ANGLE=1",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/RommApp/Native/Libretro",
@@ -741,6 +756,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/BeetleVB",
 					"$(PROJECT_DIR)/RommApp/Native/MelonDS",
 					"$(PROJECT_DIR)/RommApp/Native/PPSSPP",
+					"$(PROJECT_DIR)/RommApp/Native/GW",
 				);
 				MARKETING_VERSION = 0.3.0;
 				OTHER_LDFLAGS = (
@@ -750,8 +766,6 @@
 					"-framework",
 					libGLESv2,
 				);
-				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = "$(PROJECT_DIR)/Vendor/ANGLE/ios";
-				"GCC_PREPROCESSOR_DEFINITIONS[sdk=iphoneos*]" = "$(inherited) CABINET_ANGLE=1";
 				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = "-lc++";
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev;
 				PRODUCT_NAME = Cabinet;
@@ -774,6 +788,11 @@
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = (
 					"*_ios.a",
 					"*Core.mm",
+				);
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = "$(PROJECT_DIR)/Vendor/ANGLE/ios";
+				"GCC_PREPROCESSOR_DEFINITIONS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"CABINET_ANGLE=1",
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = (
@@ -827,6 +846,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/BeetleVB",
 					"$(PROJECT_DIR)/RommApp/Native/MelonDS",
 					"$(PROJECT_DIR)/RommApp/Native/PPSSPP",
+					"$(PROJECT_DIR)/RommApp/Native/GW",
 				);
 				MARKETING_VERSION = 0.3.0;
 				OTHER_LDFLAGS = (
@@ -836,8 +856,6 @@
 					"-framework",
 					libGLESv2,
 				);
-				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = "$(PROJECT_DIR)/Vendor/ANGLE/ios";
-				"GCC_PREPROCESSOR_DEFINITIONS[sdk=iphoneos*]" = "$(inherited) CABINET_ANGLE=1";
 				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = "-lc++";
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet;
 				PRODUCT_NAME = Cabinet;
@@ -971,11 +989,14 @@
 				CURRENT_PROJECT_VERSION = 10;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
-				"FRAMEWORK_SEARCH_PATHS[sdk=appletvos*]" = "$(PROJECT_DIR)/Vendor/ANGLE/tvos";
-				"GCC_PREPROCESSOR_DEFINITIONS[sdk=appletvos*]" = "$(inherited) CABINET_ANGLE=1";
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=appletvsimulator*]" = (
 					"*_tvos.a",
 					"*Core.mm",
+				);
+				"FRAMEWORK_SEARCH_PATHS[sdk=appletvos*]" = "$(PROJECT_DIR)/Vendor/ANGLE/tvos";
+				"GCC_PREPROCESSOR_DEFINITIONS[sdk=appletvos*]" = (
+					"$(inherited)",
+					"CABINET_ANGLE=1",
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = (
@@ -1014,10 +1035,17 @@
 					"$(PROJECT_DIR)/RommApp/Native/BeetleVB",
 					"$(PROJECT_DIR)/RommApp/Native/MelonDS",
 					"$(PROJECT_DIR)/RommApp/Native/PPSSPP",
+					"$(PROJECT_DIR)/RommApp/Native/GW",
 				);
 				MARKETING_VERSION = 0.2.0;
 				OTHER_LDFLAGS = "-lz";
-				"OTHER_LDFLAGS[sdk=appletvos*]" = "-lz -framework libEGL -framework libGLESv2";
+				"OTHER_LDFLAGS[sdk=appletvos*]" = (
+					"-lz",
+					"-framework",
+					libEGL,
+					"-framework",
+					libGLESv2,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev.tv;
 				PRODUCT_NAME = "Cabinet TV";
 				SDKROOT = appletvos;

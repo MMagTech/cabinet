@@ -50,8 +50,26 @@ private struct NativeCoreOptionsView: View {
                             Text(choice.label).tag(choice.value)
                         }
                     }
+                    // Virtual Boy's screen colour, shown rather than
+                    // named. The Virtual Boy drew in black plus three
+                    // brightnesses of one hue, and whether the dark end
+                    // still reads is the whole question; a colour name
+                    // does not answer it and neither does a swatch.
+                    // Sits under the picker so choosing and seeing are
+                    // the same screen.
+                    if VirtualBoyPreview.canDraw(
+                        values[option.key] ?? option.defaultValue
+                    ) {
+                        VirtualBoyPreview(
+                            value: values[option.key] ?? option.defaultValue
+                        )
+                        .frame(maxWidth: 260)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 6)
+                        .listRowBackground(Color.clear)
+                    }
                 } footer: {
-                    Text(option.detail)
+                    if !option.detail.isEmpty { Text(option.detail) }
                 }
             }
         }
