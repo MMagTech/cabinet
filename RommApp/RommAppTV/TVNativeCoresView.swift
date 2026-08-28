@@ -3,19 +3,24 @@ import SwiftUI
 
 /// tvOS's sibling of iOS's `NativeCoresView`: one row per platform with a
 /// native implementation and at least one option worth exposing, each
-/// pushing to that platform's own options page. Same data source
-/// (`NativeCoreOptions`, `NativeCoreOptionsStore`) and the same one-for-one
-/// intent iOS has, laid out as cards instead of a `List` for the reasons
-/// `TVSettingsView` already gives, and each option as a row of glass
-/// choice pills instead of a `Picker`, the same pattern the library's own
-/// Platforms/Collections switcher already established, since most options
-/// here are a handful of mutually exclusive choices, not an open list.
+/// pushing to that platform's own options page, and each option in turn a
+/// row carrying its current value that pushes to its own choices. Same
+/// data source (`NativeCoreOptions`, `NativeCoreOptionsStore`) and the
+/// same one-for-one intent iOS has.
 ///
-/// Starting as a one-for-one match with iOS on purpose: same platforms,
-/// same options, same defaults. What tvOS actually needs may diverge from
-/// this over time (see the roadmap memory this was built against), but
-/// there is no reason to guess at a difference before real use turns one
-/// up.
+/// The options were a wrapping row of choice pills until 2026-08-28. That
+/// matched the library's Platforms switcher and read fine for two or three
+/// short choices, but Virtual Boy has six glasses names as long as "Red
+/// and electric cyan" and eight colours, and once a row wraps there is no
+/// longer an obvious answer to what pressing right does. Wrapped pills
+/// also put every choice on screen at equal weight, so the current one had
+/// to be found rather than read.
+///
+/// A row carrying its value is what `TVSettingsView` already chose one
+/// level up, for the reason it gives there: on a television every row of
+/// scroll is focus travel, so a short list answered at a glance beats a
+/// tall one. This page is now the same shape as the page that pushes to
+/// it.
 struct TVNativeCoresView: View {
     private var platforms: [NativePlatform] {
         NativePlatform.allCases.filter { !NativeCoreOptions.options(for: $0).isEmpty }
@@ -73,29 +78,24 @@ private struct TVNativeCoreOptionsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 40) {
+            VStack(alignment: .leading, spacing: 16) {
                 Text(platform.displayName)
                     .font(.largeTitle.weight(.bold))
+                    .padding(.bottom, 8)
+
                 ForEach(options) { option in
-                    VStack(alignment: .leading, spacing: 16) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(option.label)
-                                .font(.title3.weight(.semibold))
-                            Text(option.detail)
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
+                    NavigationLink {
+                        TVCoreOptionChoicesView(
+                            option: option,
+                            selected: values[option.key] ?? option.defaultValue
+                        ) { picked in
+                            values[option.key] = picked
+                            NativeCoreOptionsStore.setValue(picked, for: option, platform: platform)
                         }
-                        // A wrapping row, not an HStack: Virtual Boy's
-                        // five glasses names overflow any single row at
-                        // this type size, and an overflowing HStack
-                        // compresses each Text into a one-letter column,
-                        // which is how the pills came to read vertically.
-                        WrapRow(spacing: 16) {
-                            ForEach(option.choices, id: \.value) { choice in
-                                choicePill(choice, for: option)
-                            }
-                        }
+                    } label: {
+                        row(for: option)
                     }
+                    .buttonStyle(RowFocusStyle())
                 }
             }
             .frame(maxWidth: 1100, alignment: .leading)
@@ -110,67 +110,125 @@ private struct TVNativeCoreOptionsView: View {
         }
     }
 
-    private func choicePill(_ choice: NativeCoreOption.Choice, for option: NativeCoreOption) -> some View {
-        let selected = (values[option.key] ?? option.defaultValue) == choice.value
-        return Button {
-            values[option.key] = choice.value
-            NativeCoreOptionsStore.setValue(choice.value, for: option, platform: platform)
-        } label: {
-            Text(choice.label)
+    /// The option's name, and the answer to it, on one line. The detail
+    /// paragraph moves to the choices page: it is what someone wants while
+    /// deciding, and only clutter once they have decided.
+    private func row(for option: NativeCoreOption) -> some View {
+        let current = values[option.key] ?? option.defaultValue
+        let choice = option.choices.first { $0.value == current }
+        return HStack(spacing: 20) {
+            Text(option.label)
+                .font(.title3)
+            Spacer(minLength: 24)
+            if let choice {
+                ChoiceSwatch(value: choice.value)
+                Text(choice.label)
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Image(systemName: "chevron.right")
                 .font(.title3.weight(.semibold))
-                .lineLimit(1)
-                .fixedSize()
-                .padding(.horizontal, 30)
-                .padding(.vertical, 14)
-                .background {
-                    if #available(tvOS 26.0, *) {
-                        Capsule()
-                            .fill(.clear)
-                            .glassEffect(
-                                selected ? .regular.tint(.white.opacity(0.35)) : .regular,
-                                in: Capsule()
-                            )
-                    } else {
-                        Capsule().fill(
-                            selected
-                                ? AnyShapeStyle(.white.opacity(0.18))
-                                : AnyShapeStyle(.clear)
-                        )
-                    }
-                }
+                .foregroundStyle(.tertiary)
         }
-        .buttonStyle(TextFocusStyle())
+        .padding(.horizontal, 32)
+        .padding(.vertical, 22)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-/// Lays children left to right, wrapping to a new line when the width
-/// runs out, the flow every platform toolkit has and SwiftUI still does
-/// not ship. Only what this screen needs: uniform spacing both ways.
-private struct WrapRow: Layout {
-    var spacing: CGFloat
+/// One option's choices, one per row, with the current one ticked. Picking
+/// writes through and pops, so the row that pushed here is showing the new
+/// answer by the time it is back on screen.
+private struct TVCoreOptionChoicesView: View {
+    let option: NativeCoreOption
+    let selected: String
+    let onPick: (String) -> Void
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? .infinity
-        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0
-        for v in subviews {
-            let size = v.sizeThatFits(.unspecified)
-            if x > 0, x + size.width > width { x = 0; y += rowHeight + spacing; rowHeight = 0 }
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text(option.label)
+                    .font(.largeTitle.weight(.bold))
+                Text(option.detail)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .padding(.bottom, 8)
+
+                ForEach(option.choices, id: \.value) { choice in
+                    Button {
+                        onPick(choice.value)
+                        dismiss()
+                    } label: {
+                        HStack(spacing: 20) {
+                            ChoiceSwatch(value: choice.value)
+                            Text(choice.label)
+                                .font(.title3)
+                            Spacer(minLength: 24)
+                            Image(systemName: "checkmark")
+                                .font(.title3.weight(.semibold))
+                                .opacity(choice.value == selected ? 1 : 0)
+                        }
+                        .padding(.horizontal, 32)
+                        .padding(.vertical, 22)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(RowFocusStyle())
+                }
+            }
+            .frame(maxWidth: 1100, alignment: .leading)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 80)
+            .padding(.vertical, 50)
         }
-        return CGSize(width: width == .infinity ? x : width, height: y + rowHeight)
+    }
+}
+
+/// Virtual Boy's option values are literally colour pairs, "black & red"
+/// for a screen colour and "red & cyan" for a pair of glasses, so the dot
+/// is read out of the data rather than from a table this file would have
+/// to keep in step with the options. A screen colour is drawn as what it
+/// is, the lit colour against the black the rest of the screen stays.
+/// Anything that does not parse as a pair of known colours draws nothing,
+/// which is every option on every other platform.
+private struct ChoiceSwatch: View {
+    let value: String
+
+    private static let named: [String: Color] = [
+        "black": .black,
+        "white": .white,
+        "red": .red,
+        "blue": .blue,
+        "cyan": .cyan,
+        "electric cyan": Color(red: 0.45, green: 1.0, blue: 1.0),
+        "green": .green,
+        "magenta": Color(red: 1.0, green: 0.0, blue: 1.0),
+        "yellow": .yellow,
+    ]
+
+    private var pair: (Color, Color)? {
+        let parts = value.split(separator: "&").map {
+            $0.trimmingCharacters(in: .whitespaces).lowercased()
+        }
+        guard parts.count == 2,
+              let first = Self.named[parts[0]],
+              let second = Self.named[parts[1]] else { return nil }
+        return (first, second)
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX, y = bounds.minY, rowHeight: CGFloat = 0
-        for v in subviews {
-            let size = v.sizeThatFits(.unspecified)
-            if x > bounds.minX, x + size.width > bounds.maxX {
-                x = bounds.minX; y += rowHeight + spacing; rowHeight = 0
+    var body: some View {
+        if let pair {
+            HStack(spacing: 0) {
+                Rectangle().fill(pair.0)
+                Rectangle().fill(pair.1)
             }
-            v.place(at: CGPoint(x: x, y: y), proposal: .unspecified)
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
+            .frame(width: 36, height: 36)
+            .clipShape(Circle())
+            // Black is half of every screen colour, so the dot needs an
+            // edge of its own or it reads as a gap on a dark background.
+            .overlay(Circle().strokeBorder(.white.opacity(0.3), lineWidth: 1))
         }
     }
 }
