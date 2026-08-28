@@ -1008,7 +1008,9 @@ struct ControllerPadView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + remaining) {
                 guard dsVideo.receiving else { return }
                 warp.land()
-                withAnimation(.easeOut(duration: 0.18)) { dsRevealed = true }
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.55)) {
+                    dsRevealed = true
+                }
             }
         }
         .onAppear {
@@ -1376,6 +1378,16 @@ private struct DSPanelTouchSurface: View {
                     // until then the quiet plate is the promise of it.
                     if video.receiving && revealed {
                         DSVideoLayerView(layer: video.displayLayer)
+                            // Lands with weight rather than appearing.
+                            // The picture arrives slightly small and
+                            // overshoots into the plate, which is the
+                            // visual half of the double hit the warp
+                            // already puts through your hands. Without
+                            // it the haptics promise an impact and the
+                            // screen just fades up, which is the exact
+                            // mismatch that made the first version feel
+                            // weak.
+                            .transition(.scale(scale: 0.86).combined(with: .opacity))
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                             .transition(.opacity)
                     }

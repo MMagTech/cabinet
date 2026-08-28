@@ -107,6 +107,31 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
     /// Only read when dsDualScreen is already true, so it cannot touch
     /// any other core's path even by accident.
     var dsTopOnly = false
+    /// How far through the handover the picture is: 0 is both screens on
+    /// the television, 1 is the top screen alone with the phone holding
+    /// the other. Advanced by the renderer itself rather than by the
+    /// view, so the motion is tied to frames actually drawn.
+    ///
+    /// Both ends run the code they always ran. Only the values between
+    /// take the transition path below, which is the 1.4 seconds a phone
+    /// is joining or leaving, on melonDS, and nowhere else.
+    private var dsSplitProgress: Double = 0
+    private var dsSplitLastTime: CFTimeInterval = 0
+    /// The same 1.4 seconds the phone's warp haptics run to. The two are
+    /// one performance on two screens and must not drift apart; see
+    /// DSWarpHaptics in ControllerPadView.
+    private static let dsSplitSeconds: Double = 1.4
+
+    /// Eases progress toward whichever end dsTopOnly is asking for.
+    private func advanceDSSplit() {
+        let now = CACurrentMediaTime()
+        let dt = dsSplitLastTime == 0 ? 0 : min(now - dsSplitLastTime, 0.1)
+        dsSplitLastTime = now
+        let step = dt / Self.dsSplitSeconds
+        dsSplitProgress = dsTopOnly
+            ? min(1, dsSplitProgress + step)
+            : max(0, dsSplitProgress - step)
+    }
     /// Hands each finished DS frame's bottom half to the video
     /// encoder, bytes exactly as the core rendered them (BGRA rows).
     /// Nil for everyone and everything except a DS game with a phone
@@ -579,7 +604,8 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         // Shareplay: the phone is showing the bottom screen, so the
         // television spends everything on the top one, a single 4:3
         // quad over the frame's upper half.
-        if dsTopOnly {
+        advanceDSSplit()
+        if dsSplitProgress >= 1 {
             let topAspect = Double(DSScreenLayout.screenWidth / DSScreenLayout.screenHeight)
             let viewAspect = Double(viewSize.width / viewSize.height)
             if displayAspect != topAspect {
@@ -640,18 +666,60 @@ final class NativePlayerRenderer: NSObject, ObservableObject, MTKViewDelegate {
         // top-right, the same corner order every other quad here uses.
         // Texture v: 0 is the frame's top row, the top screen is
         // v in [0, 0.5], the bottom screen v in [0.5, 1].
-        let topQuad: [Vertex] = [
+        var topQuad: [Vertex] = [
             Vertex(position: [-scaleX, topLow], texCoord: [0, 0.5]),
             Vertex(position: [scaleX, topLow], texCoord: [1, 0.5]),
             Vertex(position: [-scaleX, scaleY], texCoord: [0, 0]),
             Vertex(position: [scaleX, scaleY], texCoord: [1, 0]),
         ]
-        let bottomQuad: [Vertex] = [
+        var bottomQuad: [Vertex] = [
             Vertex(position: [-scaleX, -scaleY], texCoord: [0, 1]),
             Vertex(position: [scaleX, -scaleY], texCoord: [1, 1]),
             Vertex(position: [-scaleX, botHigh], texCoord: [0, 0.5]),
             Vertex(position: [scaleX, botHigh], texCoord: [1, 0.5]),
         ]
+
+        // The handover, mid-flight. The bottom screen is drawn out
+        // through a point on the bottom edge, narrowing faster than it
+        // falls so it reads as being pulled through something rather
+        // than shrinking politely into the distance, and the top screen
+        // grows into the room it leaves. The stagger is deliberate: the
+        // bottom goes first and the top follows about a sixth of a
+        // second later, so it looks like a consequence rather than a
+        // pair of things resizing together.
+        //
+        // The phone is running the same 1.4 seconds as rumble and lands
+        // the picture at the end of it. One performance, two screens.
+        if dsSplitProgress > 0 {
+            let p = dsSplitProgress
+            let suck = Float(min(1, p / 0.78))
+            // Narrowing outruns the fall, which is the whole look: at
+            // matched rates it reads as a shrink, not a suction.
+            let xs = pow(suck, 0.55)
+            let ys = pow(suck, 1.7)
+            func drawn(_ v: Vertex) -> Vertex {
+                Vertex(
+                    position: [v.position.x * (1 - xs),
+                               v.position.y + (-scaleY - v.position.y) * ys],
+                    texCoord: v.texCoord)
+            }
+            bottomQuad = bottomQuad.map(drawn)
+
+            // 150ms of the 1.4s, so the top starts once the bottom is
+            // visibly on its way.
+            let lead = Float(0.15 / Self.dsSplitSeconds)
+            let raw = max(0, (Float(p) - lead) / (1 - lead))
+            // Ease out: the growth arrives rather than ramping linearly
+            // into its stop.
+            let grow = 1 - pow(1 - raw, 2)
+            let low = topLow + (-scaleY - topLow) * grow
+            topQuad = [
+                Vertex(position: [-scaleX, low], texCoord: [0, 0.5]),
+                Vertex(position: [scaleX, low], texCoord: [1, 0.5]),
+                Vertex(position: [-scaleX, scaleY], texCoord: [0, 0]),
+                Vertex(position: [scaleX, scaleY], texCoord: [1, 0]),
+            ]
+        }
 
         guard let commandBuffer = commandQueue.makeCommandBuffer(),
               let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: passDescriptor)
