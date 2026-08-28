@@ -392,6 +392,7 @@
 				6F81DB8C48BF90C4E41F051D /* Sources */,
 				2DBA6A79D663E9C7A0BAC597 /* Frameworks */,
 				8A3DCBF3E2B8311EC493B403 /* Resources */,
+				BB0000000000000000003B /* Embed ANGLE Frameworks */,
 				BB00000000000000000026 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
@@ -481,6 +482,21 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		BB0000000000000000003B /* Embed ANGLE Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Embed ANGLE Frameworks";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"$PLATFORM_NAME\" != \"appletvos\" ]; then exit 0; fi\nDEST=\"$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH\"\nmkdir -p \"$DEST\"\nfor FW in libEGL libGLESv2; do\n  rsync -a --delete \"$PROJECT_DIR/Vendor/ANGLE/tvos/$FW.framework\" \"$DEST/\"\n  if [ \"$CODE_SIGNING_ALLOWED\" = \"YES\" ] && [ -n \"$EXPANDED_CODE_SIGN_IDENTITY\" ]; then\n    codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --timestamp=none \"$DEST/$FW.framework\"\n  fi\ndone\n";
+		};
 		BB0000000000000000003A /* Embed ANGLE Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -542,18 +558,23 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
 				CODE_SIGN_ENTITLEMENTS = RommAppTV/RommAppTV.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 10;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
+				"FRAMEWORK_SEARCH_PATHS[sdk=appletvos*]" = "$(PROJECT_DIR)/Vendor/ANGLE/tvos";
+				"GCC_PREPROCESSOR_DEFINITIONS[sdk=appletvos*]" = "$(inherited) CABINET_ANGLE=1";
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=appletvsimulator*]" = (
 					"*_tvos.a",
 					"*Core.mm",
 				);
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Vendor/ANGLE/include",
+				);
 				INFOPLIST_FILE = RommAppTV/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet TV";
 				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
@@ -589,6 +610,7 @@
 				);
 				MARKETING_VERSION = 0.2.0;
 				OTHER_LDFLAGS = "-lz";
+				"OTHER_LDFLAGS[sdk=appletvos*]" = "-lz -framework libEGL -framework libGLESv2";
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet;
 				PRODUCT_NAME = "Cabinet TV";
 				SDKROOT = appletvos;
@@ -943,18 +965,23 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
 				CODE_SIGN_ENTITLEMENTS = RommAppTV/RommAppTV.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 10;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
+				"FRAMEWORK_SEARCH_PATHS[sdk=appletvos*]" = "$(PROJECT_DIR)/Vendor/ANGLE/tvos";
+				"GCC_PREPROCESSOR_DEFINITIONS[sdk=appletvos*]" = "$(inherited) CABINET_ANGLE=1";
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=appletvsimulator*]" = (
 					"*_tvos.a",
 					"*Core.mm",
 				);
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Vendor/ANGLE/include",
+				);
 				INFOPLIST_FILE = RommAppTV/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet TV Dev";
 				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
@@ -990,6 +1017,7 @@
 				);
 				MARKETING_VERSION = 0.2.0;
 				OTHER_LDFLAGS = "-lz";
+				"OTHER_LDFLAGS[sdk=appletvos*]" = "-lz -framework libEGL -framework libGLESv2";
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev.tv;
 				PRODUCT_NAME = "Cabinet TV";
 				SDKROOT = appletvos;
