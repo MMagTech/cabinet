@@ -14,8 +14,8 @@ to open the link on, that's an Apple TestFlight requirement, not this app.
 See [Get it](#get-it) below, including the option for Apple-TV-only setups.
 
 **Latest GitHub Releases:**
-[iOS 0.3.0-alpha](https://github.com/MMagTech/cabinet/releases/tag/ios-v0.3.0-alpha) ·
-[tvOS 0.2.0-alpha](https://github.com/MMagTech/cabinet/releases/tag/tvos-v0.2.0-alpha)
+[iOS 0.4.0-alpha](https://github.com/MMagTech/cabinet/releases/tag/ios-v0.4.0-alpha) ·
+[tvOS 0.3.0-alpha](https://github.com/MMagTech/cabinet/releases/tag/tvos-v0.3.0-alpha)
 
 | | | |
 |:---:|:---:|:---:|
@@ -63,14 +63,35 @@ colored overlay that shipped in the box with them. The handful of Game Boy
 Advance cartridges with sensors soldered inside, WarioWare Twisted among
 them, read your phone's own motion.
 
+**Your phone is a controller for your Apple TV.** Pair it once with a code
+shown on screen. Two people with two phones are two players, and phones share
+seats with any controllers you already have. A friend who turns up with no
+RomM server of their own can install Cabinet, skip setup entirely, and be a
+controller and nothing else.
+
+**A Nintendo DS uses both screens.** The television shows the top screen and
+your phone becomes the bottom one, in your hands, as the touchscreen it always
+was.
+
+**A light gun you sight in.** Shoot the middle of the picture and two corners,
+the way an arcade cabinet was set up, and the gun knows where your television
+is.
+
+**Game & Watch plays like a Game & Watch.** No on-screen controls at all. The
+machine fills the screen and you press its buttons by pressing them.
+
 ## What you can play
 
-**Natively, on both iPhone and Apple TV**, through eighteen emulators built
-into the app: Arcade, PlayStation, Saturn, Dreamcast, Nintendo 64, 3DO, SNES,
-NES, Game Boy, Game Boy Color, Game Boy Advance, Genesis, Sega CD, 32X, Master
-System, Game Gear, TurboGrafx-16, TurboGrafx-CD, Neo Geo Pocket Color, Atari
-7800, Atari 2600 and Vectrex. On iPhone these work offline once a game is kept
-on your phone. Dreamcast is the one to set expectations on, see
+**Natively, on both iPhone and Apple TV**, through twenty-two emulators built
+into the app: Arcade, PlayStation, PSP, Saturn, Dreamcast, Nintendo 64,
+Nintendo DS, 3DO, SNES, NES, Game Boy, Game Boy Color, Game Boy Advance,
+Virtual Boy, Genesis, Sega CD, 32X, Master System, Game Gear, TurboGrafx-16,
+TurboGrafx-CD, Neo Geo Pocket Color, Atari 7800, Atari 2600 and Vectrex. On
+iPhone these work offline once a game is kept on your phone.
+
+**Game & Watch, on iPhone.** The one system that is not on both: the
+television has no way to touch a machine, and touching it is the whole
+point. Dreamcast is the one to set expectations on, see
 [what doesn't work yet](#what-doesnt-work-yet) below.
 
 **Beyond that list, on iPhone:** whatever your RomM server plays through its
@@ -83,6 +104,8 @@ web player, with a connection. On Apple TV, the native list is the list.
 - Native play only resumes from an explicit save state, not automatically
   on quit or backgrounding, unlike the web player.
 - PlayStation and Saturn multi-disc games aren't supported.
+- Light gun support covers the arcade cabinets. The console light gun
+  systems are on the roadmap.
 - Dreamcast holds 60fps with clean audio in normal play, but heavy 3D
   titles still drop frames in their busiest moments, because Apple's
   platforms don't allow the kind of just-in-time compilation that console's
