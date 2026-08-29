@@ -194,7 +194,7 @@ struct SettingsView: View {
                     Label("Experimental cores", systemImage: "testtube.2")
                 }
             } footer: {
-                Text("Speed and accuracy options for the cores that run natively instead of in the webview.\n\nExperimental cores, Dreamcast and Nintendo 64, want a recompiler this app can't carry, so speed varies by game. Off, those platforms use the web player.")
+                Text("Speed and accuracy options for the cores that run natively instead of in the webview.\n\nExperimental cores are Dreamcast and Nintendo 64. Speed varies by game. Off, Nintendo 64 uses the web player and Dreamcast is unavailable.")
             }
 
             Section {

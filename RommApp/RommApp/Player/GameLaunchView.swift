@@ -471,7 +471,7 @@ struct GameLaunchView: View {
 
     private var experimentalCard: some View {
         LaunchCard(title: "Experimental", systemImage: "testtube.2") {
-            Text("This platform runs without the recompiler it was built for, so speed varies by game. Turn on Experimental cores in Settings to play it.")
+            Text("Speed varies by game on this platform. Turn on Experimental cores in Settings to play it.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -986,13 +986,13 @@ struct GameLaunchView: View {
                 if gatedExperimental { experimentalCard }
                 downloadStatusCard
                 if interruptedAt != nil { continueCard }
-                if !showsPlayerPicker, selectedBackend == .webview, cores.count > 1 { coreCard }
-                if !showsPlayerPicker, selectedBackend == .webview, showsFirmwareCard { firmwareCard }
+                if !gatedExperimental, !showsPlayerPicker, selectedBackend == .webview, cores.count > 1 { coreCard }
+                if !gatedExperimental, !showsPlayerPicker, selectedBackend == .webview, showsFirmwareCard { firmwareCard }
                 if showsPlayerPicker, !networkMonitor.isOffline { playerCard }
-                if showsKeepCard { keepCard }
+                if showsKeepCard, !gatedExperimental { keepCard }
                 if arcadeBase != nil { arcadeControlsCard }
                 resetSettingsCard
-                if !states.isEmpty || !saves.isEmpty { resumeCard }
+                if !gatedExperimental, !states.isEmpty || !saves.isEmpty { resumeCard }
             }
         }
     }
@@ -1011,13 +1011,13 @@ struct GameLaunchView: View {
                 if gatedExperimental { experimentalCard }
                 downloadStatusCard
                 if interruptedAt != nil { continueCard }
-                if !showsPlayerPicker, selectedBackend == .webview, cores.count > 1 { coreCard }
-                if !showsPlayerPicker, selectedBackend == .webview, showsFirmwareCard { firmwareCard }
+                if !gatedExperimental, !showsPlayerPicker, selectedBackend == .webview, cores.count > 1 { coreCard }
+                if !gatedExperimental, !showsPlayerPicker, selectedBackend == .webview, showsFirmwareCard { firmwareCard }
                 if showsPlayerPicker, !networkMonitor.isOffline { playerCard }
-                if showsKeepCard { keepCard }
+                if showsKeepCard, !gatedExperimental { keepCard }
                 if arcadeBase != nil { arcadeControlsCard }
                 resetSettingsCard
-                if !states.isEmpty || !saves.isEmpty { resumeCard }
+                if !gatedExperimental, !states.isEmpty || !saves.isEmpty { resumeCard }
             }
         }
     }
