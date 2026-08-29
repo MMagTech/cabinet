@@ -1,6 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import UIKit
+import WidgetKit
 
 /// Keeps the home screen widget's data current.
 ///
@@ -24,7 +25,34 @@ enum WidgetWriter {
         reloadTimelines()
     }
 
+    /// Whether anybody has actually put one on a home screen.
+    ///
+    /// Without this the app fetches recents and writes eight cover images
+    /// on every sync for everyone, including the majority who will never
+    /// add a widget. That is a request they did not ask for and a few
+    /// megabytes of pictures nobody will see.
+    ///
+    /// The cost of asking is one cheap call into WidgetKit. The cost of
+    /// being wrong is small in the other direction too: a widget added
+    /// while the app is closed shows its empty state until the next
+    /// launch, which is one launch away and what its empty state is for.
+    private static func anyWidgetInstalled() async -> Bool {
+        await withCheckedContinuation { continuation in
+            WidgetCenter.shared.getCurrentConfigurations { result in
+                switch result {
+                case .success(let widgets): continuation.resume(returning: !widgets.isEmpty)
+                // Not "no", because failing to ask is not an answer. Erring
+                // towards writing keeps a widget somebody does have from
+                // going stale over a transient error.
+                case .failure: continuation.resume(returning: true)
+                }
+            }
+        }
+    }
+
     private static func write(session: Session) async {
+        guard await anyWidgetInstalled() else { return }
+
         // A session that just ended has to reach the server before
         // recents are asked for, or the game played a moment ago sorts
         // under the one before it. The same ordering fix Home and the top
@@ -118,9 +146,7 @@ enum WidgetWriter {
     }
 
     private static func reloadTimelines() {
-        // Deliberately not importing WidgetKit here yet: the extension
-        // does not exist, and calling reload for a widget that is not
-        // installed is a no-op anyway. Wired when the target lands.
+        WidgetCenter.shared.reloadAllTimelines()
     }
 }
 #endif
