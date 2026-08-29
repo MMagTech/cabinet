@@ -121,6 +121,23 @@ struct GameLaunchView: View {
         case failed
     }
 
+    /// The VMU row's state, Dreamcast only: a GAME-type file on this
+    /// game's memory card is a minigame the game downloaded there, and
+    /// the row is the one door to playing it (the VMU is never a
+    /// platform, never in the library). Detection parses the same card
+    /// the boot would open, prefetched so a card saved on another
+    /// device counts.
+    @State private var vmuMinigame: String?
+    @State private var vmuPreparing = false
+    @State private var playingVMU = false
+    @State private var vmuCardURL: URL?
+    /// The two-writer rule's eyes: while a television is running a DC
+    /// session for THIS game, the card is that session's to write, so
+    /// the row declines rather than letting two machines edit one card.
+    /// Non-arcade televisions advertise "<layout>.<rom id>", which is
+    /// exactly enough to recognise this game.
+    @StateObject private var vmuScout = ControllerLinkScout()
+
     /// Whether the scroll content is resting at its top, the only moment a
     /// downward drag should be read as "dismiss" rather than "scroll".
     @State private var isScrolledToTop = true
@@ -200,6 +217,7 @@ struct GameLaunchView: View {
                             if isComputerPlatform { computerPlatformCard }
                             downloadStatusCard
                             if interruptedAt != nil { continueCard }
+                            vmuCard
                             compatibilityCard
                             resetSettingsCard
                             if arcadeBase != nil { arcadeControlsCard }
@@ -271,6 +289,7 @@ struct GameLaunchView: View {
         }
         .task { await load() }
         .onAppear { refreshCoreSettings() }
+        .onDisappear { vmuScout.stop() }
         .fullScreenCover(isPresented: $playing) {
             PlayerView(
                 rom: rom, launch: launchChoices, resumeFromAutosave: continueRun, stateToLoad: stateToLoad
@@ -279,6 +298,11 @@ struct GameLaunchView: View {
         .fullScreenCover(isPresented: $playingNative) {
             if let core = NativeCore.core(for: rom, canonicalSlug: canonicalSlug) {
                 NativePlayerView(rom: rom, core: core, initialState: nativeInitialState)
+            }
+        }
+        .fullScreenCover(isPresented: $playingVMU) {
+            if let vmuCardURL {
+                VMUPlayerView(rom: rom, cardURL: vmuCardURL)
             }
         }
         // One alert serves every way a launch can fail, so its title must
@@ -995,6 +1019,7 @@ struct GameLaunchView: View {
                 // another emulator, and Keep is that way here, the game
                 // and its BIOS land in the Files app's Games folder.
                 if showsKeepCard { keepCard }
+                vmuCard
                 if arcadeBase != nil { arcadeControlsCard }
                 resetSettingsCard
                 if !gatedExperimental, !states.isEmpty || !saves.isEmpty { resumeCard }
@@ -1025,6 +1050,7 @@ struct GameLaunchView: View {
                 // another emulator, and Keep is that way here, the game
                 // and its BIOS land in the Files app's Games folder.
                 if showsKeepCard { keepCard }
+                vmuCard
                 if arcadeBase != nil { arcadeControlsCard }
                 resetSettingsCard
                 if !gatedExperimental, !states.isEmpty || !saves.isEmpty { resumeCard }
@@ -1155,6 +1181,58 @@ struct GameLaunchView: View {
             return
         }
         hasCoreSettings = NativeLauncher.hasCoreSettings(romId: rom.id, core: core)
+    }
+
+    /// Whether a live TV session for this game holds the card right now.
+    private var vmuDeclined: Bool {
+        vmuScout.playing == "dreamcast.\(rom.id)"
+    }
+
+    /// The way into the minigame this game downloaded onto its memory
+    /// card. Boots the card itself in the VMU player; progress writes
+    /// straight back into the same save the Dreamcast session uses, so
+    /// there is nothing to pick and nothing to manage. Deliberately not
+    /// behind the experimental-cores gate: the VMU core is not the
+    /// gated Dreamcast core, and the card is real whether or not DC
+    /// itself may launch here today.
+    @ViewBuilder
+    private var vmuCard: some View {
+        if let name = vmuMinigame {
+            LaunchCard(title: "VMU", systemImage: "memorychip") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Button {
+                        startVMUPlay()
+                    } label: {
+                        if vmuPreparing {
+                            ProgressView()
+                        } else {
+                            Text("Play \(name)")
+                        }
+                    }
+                    .font(.callout)
+                    .disabled(vmuDeclined || vmuPreparing)
+                    Text(vmuDeclined
+                        ? "The TV is playing this game, so its memory card is in use."
+                        : "A minigame on this game's memory card.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func startVMUPlay() {
+        vmuPreparing = true
+        Task {
+            let url = await VMULauncher.prepare(rom: rom, session: session)
+            vmuPreparing = false
+            guard let url else {
+                playError = "The memory card couldn't be placed for the VMU."
+                return
+            }
+            vmuCardURL = url
+            playingVMU = true
+        }
     }
 
     /// Says what is known about this game running here, and never more
@@ -1875,6 +1953,22 @@ struct GameLaunchView: View {
                 )
             }
             states.sort { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
+        }
+
+        // The VMU row. Prefetch keeps the local card current when a
+        // connection exists (a no-op when the server stamp has not
+        // moved), then detection parses whatever card would actually
+        // boot. The scout only starts when a minigame is aboard, so
+        // this screen browses for televisions exactly as long as the
+        // two-writer rule has something to guard.
+        if NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug) == .dreamcast {
+            if !NetworkMonitor.shared.isOffline {
+                await MemoryCardStore.shared.prefetchFromServer(rom: rom, platform: .dreamcast, session: session)
+            }
+            if let card = VMULauncher.currentCard(romId: rom.id) {
+                vmuMinigame = VMUCard.minigameName(card)
+            }
+            if vmuMinigame != nil { vmuScout.start() }
         }
 
         // Deliberately no BIOS by default on arcade. Every arcade game

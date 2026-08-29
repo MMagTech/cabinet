@@ -438,6 +438,22 @@ final class MemoryCardSync {
     }
 
     private func uploadMemoryCard(_ data: Data, region: MemoryCardStore.Region = .saveRAM) async {
+        await Self.uploadCard(
+            data, romId: rom.id, fileNameStem: rom.fsNameNoExt,
+            emulatorTag: core.emulatorTag, region: region, session: session
+        )
+    }
+
+    /// The upload every card region rides, callable without a play
+    /// session: the VMU minigame player writes the same DC card row this
+    /// engine owns, from its own screen, so the row convention has to
+    /// live in exactly one place. Extracted from the instance method
+    /// above 2026-08-29 with identical behavior; the instance method now
+    /// just fills in its session's values.
+    static func uploadCard(
+        _ data: Data, romId: Int, fileNameStem: String, emulatorTag: String,
+        region: MemoryCardStore.Region = .saveRAM, session: Session
+    ) async {
         do {
             // The Cabinet marker keeps this row's filename distinct from
             // anything the web player made: RomM's overwrite matches rows
@@ -446,18 +462,18 @@ final class MemoryCardSync {
             // would silently take over and rewrite an existing EmulatorJS
             // card of the same name.
             try await session.uploadSave(
-                romId: rom.id, emulator: core.emulatorTag,
-                fileName: "\(rom.fsNameNoExt) (Cabinet).\(region.rawValue)", saveData: data
+                romId: romId, emulator: emulatorTag,
+                fileName: "\(fileNameStem) (Cabinet).\(region.rawValue)", saveData: data
             )
             // Re-list to learn the stamp the server just minted, so the
             // next launch recognises its own upload instead of pulling
             // it back down.
-            let saves = (try? await session.saves(romId: rom.id)) ?? []
+            let saves = (try? await session.saves(romId: romId)) ?? []
             let stamp = saves
-                .filter { $0.emulator == core.emulatorTag && MemoryCardStore.region(ofFileName: $0.fileName) == region }
+                .filter { $0.emulator == emulatorTag && MemoryCardStore.region(ofFileName: $0.fileName) == region }
                 .sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
                 .first?.updatedAt
-            MemoryCardStore.shared.markUploaded(romId: rom.id, serverStamp: stamp, region: region)
+            MemoryCardStore.shared.markUploaded(romId: romId, serverStamp: stamp, region: region)
         } catch {
             // The disk copy and its pending flag survive; the next launch
             // retries. Same soft failure as the state queue.

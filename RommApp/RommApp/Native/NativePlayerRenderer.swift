@@ -9,6 +9,11 @@ import AVFoundation
 
 struct MetalGameView: UIViewRepresentable {
     let renderer: NativePlayerRenderer
+    /// The letterbox color. Black for every game screen, which is the
+    /// default so no existing call site changes; the VMU player passes
+    /// its LCD's paper color so any rounding sliver around the picture
+    /// is face, not void.
+    var clearColor: MTLClearColor = MTLClearColorMake(0, 0, 0, 1)
 
     func makeUIView(context: Context) -> MTKView {
         let view = MTKView(frame: .zero, device: MTLCreateSystemDefaultDevice())
@@ -16,7 +21,7 @@ struct MetalGameView: UIViewRepresentable {
         view.preferredFramesPerSecond = 60
         view.enableSetNeedsDisplay = false
         view.isPaused = false
-        view.clearColor = MTLClearColorMake(0, 0, 0, 1)
+        view.clearColor = clearColor
         // Deliberately the default three drawables. A two-drawable
         // low-latency configuration was tried and measured on the Apple
         // TV (2026-08-20, FrameTrace): both hardware-rendered cores

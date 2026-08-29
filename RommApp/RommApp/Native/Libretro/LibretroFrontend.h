@@ -94,6 +94,19 @@ typedef NS_ENUM(NSInteger, LibretroCoreID) {
     // frontend case; every frame carries its own size through
     // videoRefresh and the renderer refits per frame.
     LibretroCoreIDGW NS_SWIFT_NAME(gw) = 21,
+    // The Dreamcast VMU as a standalone machine: an LC86K interpreter
+    // with a 48x32 LCD, playing the minigames DC games download onto
+    // their save card, booted straight from the same 128KB card image
+    // the DC save sync stores. HLE boot, no BIOS, and with
+    // enable_flash_write on the core commits every flash write into the
+    // card file in real time, so the file on disk is always current.
+    // iOS-only by decision, like GW (docs/building.md). Two hard rules,
+    // both grounded in the core's own source: never send
+    // RETRO_DEVICE_ID_JOYPAD_START (the core's MODE handling is
+    // commented out upstream because clicking MODE without a BIOS
+    // hangs), and no save states (serialize_size is zero); Cabinet's
+    // MENU and SLEEP are frontend-side.
+    LibretroCoreIDVeMUlator NS_SWIFT_NAME(vemulator) = 22,
 };
 
 @interface LibretroFrame : NSObject

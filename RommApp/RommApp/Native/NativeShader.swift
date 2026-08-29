@@ -25,6 +25,12 @@ enum NativeShader: String, CaseIterable, Identifiable {
     case crtGeom
     case lcd
     case gameBoy
+    /// The VMU minigame player's screen, set by VMUPlayerView directly
+    /// and offered in NO platform's menu: the skin is the whole
+    /// presentation there and a shader picker is exactly the kind of
+    /// setting the player deliberately does not have. available(for:)
+    /// filters it out everywhere, which is load-bearing, not tidiness.
+    case vmuLCD
 
     var id: String { rawValue }
 
@@ -40,6 +46,7 @@ enum NativeShader: String, CaseIterable, Identifiable {
         case .crtGeom: return "CRT (curved)"
         case .lcd: return "LCD"
         case .gameBoy: return "Game Boy"
+        case .vmuLCD: return "VMU"
         }
     }
 
@@ -58,6 +65,7 @@ enum NativeShader: String, CaseIterable, Identifiable {
         case .crtGeom: return "shader_crt_geom_fragment"
         case .lcd: return "shader_lcd_fragment"
         case .gameBoy: return "shader_gameboy_fragment"
+        case .vmuLCD: return "shader_vmu_lcd_fragment"
         }
     }
 
@@ -78,7 +86,7 @@ enum NativeShader: String, CaseIterable, Identifiable {
     /// dot-matrix was the same mismatch in the other direction.
     static func available(for platform: NativePlatform) -> [NativeShader] {
         guard handheldPlatforms.contains(platform) else {
-            return allCases.filter { $0 != .lcd && $0 != .gameBoy }
+            return allCases.filter { $0 != .lcd && $0 != .gameBoy && $0 != .vmuLCD }
         }
         let handheldSpecific: [NativeShader] = (platform == .gb || platform == .gbc) ? [.gameBoy] : [.lcd]
         return [.sharp, .sabr] + handheldSpecific

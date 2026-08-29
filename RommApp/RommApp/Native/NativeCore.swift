@@ -29,6 +29,15 @@ enum NativeCore {
     /// build is gated out at the frontend and this case never resolves
     /// there because the platform below never exists on tvOS.
     case gw
+    /// The Dreamcast VMU as a standalone machine, playing the minigames
+    /// DC games download onto their save card. iOS-only by decision,
+    /// like GW. Deliberately NO NativePlatform case anywhere: the VMU
+    /// is not a platform and never appears in RomM or the library. The
+    /// minigame is cargo inside a DC game's save, and the only door to
+    /// it is the VMU row on that game's launch screen (GameLaunchView),
+    /// which boots this core on the card file directly through
+    /// VMULauncher, never through NativeLauncher.prepare.
+    case vemulator
 
     /// The frontend's identifier for the statically linked core.
     var coreID: LibretroCoreID {
@@ -55,6 +64,7 @@ enum NativeCore {
         case .melonDS: return .melonDS
         case .ppsspp: return .ppsspp
         case .gw: return .gw
+        case .vemulator: return .vemulator
         }
     }
 
@@ -91,6 +101,12 @@ enum NativeCore {
         // No states exist for this core, so the tag never labels one;
         // it is here because the switch is exhaustive on purpose.
         case .gw: return "gw-native"
+        // Also never labels a state (the core cannot serialize). The
+        // VMU player's card uploads deliberately do NOT use this tag
+        // either: the card is the DC game's own save, one row shared
+        // with Flycast, so they carry NativeCore.flycast.emulatorTag.
+        // See VMULauncher.
+        case .vemulator: return "vemulator-native"
         }
     }
 
@@ -120,6 +136,7 @@ enum NativeCore {
         case .melonDS: return "melonDS"
         case .ppsspp: return "ppsspp"
         case .gw: return "gw"
+        case .vemulator: return "vemulator"
         }
     }
 
@@ -151,6 +168,7 @@ enum NativeCore {
         case .melonDS: return "melonDS"
         case .ppsspp: return "PPSSPP"
         case .gw: return "GW"
+        case .vemulator: return "VeMUlator"
         }
     }
 

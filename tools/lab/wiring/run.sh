@@ -66,10 +66,17 @@ fi
 # 3. Both platforms present for every core.
 #
 # A core built for iOS and forgotten for tvOS is invisible until someone
-# opens that platform on the Apple TV and finds nothing there.
+# opens that platform on the Apple TV and finds nothing there. Forgotten
+# is the failure; decided is not: cores that are iOS-only on purpose are
+# listed here with the decision recorded in docs/building.md, so this
+# check keeps distinguishing the two instead of failing forever on
+# choices it cannot see.
+IOS_ONLY="libgw_ios.a libvemulator_ios.a"
 for ios in RommApp/RommApp/Native/*/lib*_ios.a; do
+    base=$(basename "$ios")
+    case " $IOS_ONLY " in *" $base "*) continue ;; esac
     tv=$(echo "$ios" | sed 's/_ios\.a$/_tvos.a/')
-    [ -f "$tv" ] || bad "$(basename "$ios") has no tvOS counterpart"
+    [ -f "$tv" ] || bad "$base has no tvOS counterpart"
 done
 
 # 4. Every native platform resolves to a control layout.
@@ -80,6 +87,9 @@ done
 # be a surprise.
 missing_layouts=""
 for slug in $(grep -oE '^    case [a-z0-9]+$' RommApp/RommApp/Native/NativeCore.swift | awk '{print $2}' | sort -u); do
+    # The VMU player never reads a layout file: its stamped skin IS the
+    # touch surface (VMUPlayerView), so listing it here would be false.
+    [ "$slug" = vemulator ] && continue
     [ -f "RommApp/RommApp/Resources/ControlLayouts/${slug}.json" ] || missing_layouts="$missing_layouts $slug"
 done
 [ -n "$missing_layouts" ] && note "platforms using the fallback pad:$missing_layouts"

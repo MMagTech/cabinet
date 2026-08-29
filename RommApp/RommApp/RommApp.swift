@@ -16,6 +16,26 @@ struct RommApp: App {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-cabinetLink") {
                 ControllerPadView()
+            } else if ProcessInfo.processInfo.arguments.contains("-cabinetVMUSkin") {
+                // The stamped-skin bench: the VMU player straight at the
+                // root, for eyeballing the shell against the approved
+                // mock in a simulator, where no core can run. The boot
+                // alert is dismissed by hand (dismiss on a root view is
+                // a no-op) and every frontend-side behavior stays live:
+                // the tilting cross, the depressing buttons, SLEEP's
+                // fade and z animation, MENU and the LED rules.
+                VMUPlayerView(
+                    rom: Rom(
+                        id: 0, name: "Skin bench", fsName: "skin-bench.chd",
+                        fsNameNoTags: "skin-bench", fsNameNoExt: "skin-bench",
+                        platformId: 0, platformSlug: "dc", platformFsSlug: "dc",
+                        platformDisplayName: "Dreamcast", summary: nil,
+                        pathCoverSmall: nil, pathCoverLarge: nil,
+                        fsSizeBytes: 0, hasMultipleFiles: false, md5Hash: nil
+                    ),
+                    cardURL: FileManager.default.temporaryDirectory.appendingPathComponent("skin-bench-card.bin")
+                )
+                .environmentObject(session)
             } else if let aim = AimLab.launchRole, case .send = aim {
                 AimSenderView()
             } else if let role = NetProbe.launchRole {

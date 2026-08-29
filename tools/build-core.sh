@@ -114,6 +114,20 @@ gw)
     # tvos-arm64 case if it ever reverses.
     PREFIX=gw; REPO=https://github.com/libretro/gw-libretro.git
     MAKEDIR=.; MAKEFILE=Makefile.libretro; OUT=GW; LIB=libgw_ios.a ;;
+vemulator)
+    # The Dreamcast VMU itself, as a machine: an LC86K interpreter with a
+    # 48x32 LCD, the smallest core here by two orders of magnitude. Plays
+    # the minigames Dreamcast games download onto their save card (Chao
+    # Adventure and friends), booting them straight out of the same
+    # 128KB card image the DC save sync already stores; with
+    # enable_flash_write on it commits every flash write back into that
+    # file in real time, so the round-trip is the core's own behavior.
+    # HLE boot, no BIOS file ever. iOS-ONLY by decision, recorded in
+    # docs/building.md 2026-08-29: the minigame's identity is the thing
+    # you take away from the TV, and 48x32 is absurd on a living room
+    # screen. Spike notes: spikes/vmu/notes-SPIKE.md.
+    PREFIX=vmu; REPO=https://github.com/libretro/vemulator-libretro.git
+    MAKEDIR=.; MAKEFILE=Makefile; OUT=VeMUlator; LIB=libvemulator_ios.a ;;
 melonds)
     # Nintendo DS. The libretro melonDS fork builds interpreter-only for
     # ios-arm64/tvos-arm64 out of the box (no JIT_ARCH set for either),
@@ -184,6 +198,19 @@ if [ "$NAME" = melonds ]; then
         "$SRC/src/libretro/libretro.cpp"
     grep -q 'FlushSecondaryBuffer();' "$SRC/src/libretro/libretro.cpp" || {
         echo "melonds unload-flush patch did not apply" >&2; exit 1; }
+fi
+
+# VeMUlator finds the loaded file's extension with strchr, the FIRST dot
+# in the whole path, so any dot in a parent directory name makes every
+# extension check miss and the card silently loads as nothing: no flash
+# image, no write-through, a blank VMU with no error. Cabinet's own card
+# path is kept dot-free on top of this, but the load must not hinge on a
+# path convention a future directory rename could break. strrchr is the
+# last dot, which is what "the extension" means.
+if [ "$NAME" = vemulator ]; then
+    sed -i '' 's/char \*ext = strchr(path/char *ext = strrchr(path/' "$SRC/main.cpp"
+    grep -q 'strrchr(path' "$SRC/main.cpp" || {
+        echo "vemulator strrchr patch did not apply" >&2; exit 1; }
 fi
 
 if [ "$MAKEFILE" = cmake ]; then

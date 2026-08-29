@@ -32,6 +32,7 @@
 #import "PPSSPPCore.h"
 #if !TARGET_OS_TV
 #import "GWCore.h"
+#import "VeMUlatorCore.h"
 #endif
 #endif
 
@@ -1280,6 +1281,8 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
 #if !TARGET_OS_TV
         case LibretroCoreIDGW:
             return GWCoreAPI();
+        case LibretroCoreIDVeMUlator:
+            return VeMUlatorCoreAPI();
 #endif
         default:
             // This used to fall through to the PlayStation core, so a
