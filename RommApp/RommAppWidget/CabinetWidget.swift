@@ -86,9 +86,12 @@ struct CabinetWidgetProvider: AppIntentTimelineProvider {
         let payload = WidgetSnapshot.read()
         let games: [WidgetSnapshot.Game]
         switch configuration.shows {
-        case .lastPlayed: games = Array((payload?.games ?? []).prefix(1))
-        case .recents: games = payload?.games ?? []
-        case .favorites: games = payload?.favorites ?? []
+        // Last played draws from the same list as recents: the first
+        // entry is the hero and the rest ride beside it on the sizes
+        // with room.
+        case .lastPlayed: games = dedupe(payload?.games ?? [])
+        case .recents: games = dedupe(payload?.games ?? [])
+        case .favorites: games = dedupe(payload?.favorites ?? [])
         }
         return CabinetWidgetEntry(
             date: Date(),
@@ -97,6 +100,19 @@ struct CabinetWidgetProvider: AppIntentTimelineProvider {
             fullColour: configuration.fullColourCovers,
             hasSnapshot: payload != nil
         )
+    }
+
+    /// The server's recents can hold what reads as the same game twice,
+    /// either literally or as two library entries sharing one name and
+    /// one cover, and while Home's shelf faithfully shows that, a widget
+    /// repeating a cover reads as a rendering bug rather than a fact
+    /// about the play history. Deduped by what the widget can say about
+    /// a game, title plus platform, not by id: RomM stores a cover per
+    /// rom, so two entries of the same game do not even share a cover
+    /// file, and nothing shallower than the name collapses them.
+    private func dedupe(_ games: [WidgetSnapshot.Game]) -> [WidgetSnapshot.Game] {
+        var seen = Set<String>()
+        return games.filter { seen.insert("\($0.title)|\($0.platform)").inserted }
     }
 }
 
@@ -123,8 +139,8 @@ struct CabinetWidgetView: View {
     var body: some View {
         if entry.games.isEmpty {
             empty
-        } else if entry.mode == .lastPlayed, let game = entry.games.first {
-            lastPlayed(game)
+        } else if entry.mode == .lastPlayed {
+            lastPlayed(entry.games)
         } else {
             grid
         }
@@ -132,16 +148,32 @@ struct CabinetWidgetView: View {
 
     // MARK: Last played
 
-    /// The hero treatment, scaled down: art fitted over a blurred copy of
-    /// itself, never cropped to fill. Box art is tall and two of the
-    /// three widget shapes are not, so filling would slice the art to a
-    /// strip of its middle; fitting shows all of it and the blur fills
-    /// the leftovers with the art's own colours. Tapping anywhere opens
-    /// the game's launch screen, not the game itself: the launch screen
-    /// is where the save states are, and it is one more press for
-    /// somebody who did mean to boot straight in.
+    /// The hero treatment, scaled down: the last game fitted over a
+    /// blurred copy of itself, never cropped to fill. Box art is tall
+    /// and two of the three widget shapes are not, so filling would
+    /// slice the art to a strip of its middle; fitting shows all of it
+    /// and the blur fills the leftovers with the art's own colours.
+    ///
+    /// The sizes with room say more than one thing: the next recents
+    /// ride beside the hero as their own small tap targets, resume
+    /// this, and here is what else is around, which is Home's thesis
+    /// on a smaller card. It also keeps a tinted home screen honest,
+    /// where the system strips the blurred backdrop and a lone cover
+    /// was leaving the card mostly empty glass.
+    ///
+    /// Tapping the hero or the empty space opens its launch screen,
+    /// not the game itself: the launch screen is where the save states
+    /// are, and it is one more press for somebody who did mean to boot
+    /// straight in.
     @ViewBuilder
-    private func lastPlayed(_ game: WidgetSnapshot.Game) -> some View {
+    private func lastPlayed(_ games: [WidgetSnapshot.Game]) -> some View {
+        if let game = games.first {
+            lastPlayed(game, others: Array(games.dropFirst()))
+        }
+    }
+
+    @ViewBuilder
+    private func lastPlayed(_ game: WidgetSnapshot.Game, others: [WidgetSnapshot.Game]) -> some View {
         let art = coverImage(game)
         Group {
             switch family {
@@ -152,14 +184,16 @@ struct CabinetWidgetView: View {
                     fitted(art, title: game.title)
                     titleBand(game)
                     Spacer(minLength: 0)
+                    recentsStrip(others.prefix(2), tileHeight: 84)
                 }
             default:
                 VStack(spacing: 10) {
                     fitted(art, title: game.title)
                         .frame(maxHeight: .infinity)
-                    HStack {
+                    HStack(alignment: .center, spacing: 10) {
                         titleBand(game)
                         Spacer(minLength: 0)
+                        recentsStrip(others.prefix(3), tileHeight: 74)
                     }
                 }
             }
@@ -213,6 +247,24 @@ struct CabinetWidgetView: View {
             if renderingMode == .fullColor {
                 RoundedRectangle(cornerRadius: 12).fill(.regularMaterial)
             }
+        }
+    }
+
+    /// The next few recents as small covers beside or under the hero.
+    /// Fewer than asked for simply draws fewer; a placeholder here
+    /// would be claiming there is more to resume than there is.
+    @ViewBuilder
+    private func recentsStrip(_ games: ArraySlice<WidgetSnapshot.Game>, tileHeight: CGFloat) -> some View {
+        if !games.isEmpty {
+            HStack(spacing: 6) {
+                ForEach(Array(games)) { game in
+                    linked(game) {
+                        tile(game)
+                            .aspectRatio(2.0 / 3.0, contentMode: .fit)
+                    }
+                }
+            }
+            .frame(height: tileHeight)
         }
     }
 
@@ -314,9 +366,14 @@ struct CabinetWidgetView: View {
 
     /// Box art keeps its colour on a tinted home screen unless the
     /// configuration says otherwise, which is what Music does for album
-    /// art: a cover drained to the accent colour is barely a cover. On an
-    /// untinted home screen this changes nothing either way.
+    /// art: a cover drained to the accent colour is barely a cover.
+    /// Colour off means greyscale, the Photos widget's tinted treatment,
+    /// and explicitly not the system default: left unmarked, an accented
+    /// render flattens a cover to a solid white silhouette, which is a
+    /// blank rectangle wearing rounded corners (found on a real phone
+    /// running the glass look). On an untinted home screen none of this
+    /// applies and covers are simply covers.
     private func colourManaged(_ image: Image) -> some View {
-        image.widgetAccentedRenderingMode(entry.fullColour ? .fullColor : nil)
+        image.widgetAccentedRenderingMode(entry.fullColour ? .fullColor : .desaturated)
     }
 }
