@@ -14,6 +14,7 @@ struct SettingsView: View {
     @AppStorage(RaisedControls.key) private var raisedControls = true
     @AppStorage(ControlTheme.key) private var controlTheme = ControlTheme.system.rawValue
     @AppStorage(PlayerAutosave.key) private var autosaveEnabled = true
+    @AppStorage(ExperimentalCores.key) private var experimentalCores = false
     @AppStorage(PlatformLabelSource.key) private var platformLabelSourceRaw = PlatformLabelSource.platformName.rawValue
     @AppStorage(AimSpeed.key) private var aimSpeedRaw = AimSpeed.snap.rawValue
     @ObservedObject private var controllers = GameControllerManager.shared
@@ -189,8 +190,11 @@ struct SettingsView: View {
                 } label: {
                     Label("Native cores", systemImage: "cpu")
                 }
+                Toggle(isOn: $experimentalCores) {
+                    Label("Experimental cores", systemImage: "testtube.2")
+                }
             } footer: {
-                Text("Speed and accuracy options for the cores that run natively instead of in the webview.")
+                Text("Speed and accuracy options for the cores that run natively instead of in the webview.\n\nExperimental cores, Dreamcast and Nintendo 64, want a recompiler this app can't carry, so speed varies by game. Off, those platforms use the web player.")
             }
 
             Section {

@@ -350,6 +350,7 @@ private struct TVControllersSettingsView: View {
 
 private struct TVEmulationSettingsView: View {
     @AppStorage(BiasGlowLevel.storageKey) private var glowStored = BiasGlowLevel.subtle.rawValue
+    @AppStorage(ExperimentalCores.key) private var experimentalCores = false
 
     var body: some View {
         SettingsUI.page("Emulation") {
@@ -367,6 +368,18 @@ private struct TVEmulationSettingsView: View {
                 )
             }
             .buttonStyle(RowFocusStyle())
+            // The detail is blunter than the phone's because the stakes
+            // are: iOS falls back to the web player when this is off,
+            // while this platform has no other player, so off means
+            // those libraries are not playable on this Apple TV at all.
+            Toggle(isOn: $experimentalCores) {
+                SettingsUI.actionRow(
+                    title: "Experimental cores",
+                    detail: "Dreamcast and Nintendo 64. Speed varies by game; off, this Apple TV can't play them.",
+                    chevron: false
+                )
+            }
+            .toggleStyle(.switch)
             // Mirror of the pause menu's Glow row, the primary home;
             // now that Off/Subtle/Strong are settled values rather
             // than something to tune live, a plain picker here is

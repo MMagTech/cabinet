@@ -54,6 +54,16 @@ struct TVGameLaunchView: View {
         NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug)
     }
 
+    /// The platform this device is actually willing to boot: nil for a
+    /// platform behind the experimental switch while the switch is off.
+    /// Kept separate from `platform` above so the screen can tell "not
+    /// supported here at all" apart from "supported, but you have to
+    /// choose it", which get different sentences below.
+    private var offeredPlatform: NativePlatform? {
+        guard let platform, !platform.isExperimental || ExperimentalCores.enabled else { return nil }
+        return platform
+    }
+
     private var coverPath: String? {
         rom.pathCoverLarge ?? rom.pathCoverSmall
     }
@@ -99,7 +109,7 @@ struct TVGameLaunchView: View {
                         .font(.largeTitle.bold())
                         .lineLimit(3)
 
-                    if let platform {
+                    if let platform = offeredPlatform {
                         playButton(platform: platform)
                         statesSection
                         // Side by side as equal capsules, not stacked
@@ -115,6 +125,14 @@ struct TVGameLaunchView: View {
                             }
                             troubleRow
                         }
+                    } else if platform != nil {
+                        // Supported but gated: the core exists, the
+                        // person just has not opted into it. Named
+                        // rather than generic so the fix is one
+                        // sentence away.
+                        Text("This platform is experimental. Turn on Experimental cores in Settings > Emulation to play it.")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
                     } else {
                         // Every platform tvOS can't run lands here: no
                         // native core exists for it, and unlike iOS there
@@ -142,7 +160,7 @@ struct TVGameLaunchView: View {
         // platform being playable here so an unsupported one still gets
         // the explanation rather than a silent nothing.
         .task {
-            guard autoStart, platform != nil else { return }
+            guard autoStart, offeredPlatform != nil else { return }
             await play(stateData: nil)
         }
         .onAppear { refreshCoreSettings() }
@@ -315,7 +333,7 @@ struct TVGameLaunchView: View {
 
     /// The core a Play press will actually run, for filtering below.
     private var runningCore: NativeCore? {
-        guard let platform else { return nil }
+        guard let platform = offeredPlatform else { return nil }
         return chosenCore ?? NativeCoreChoice.resolved(for: rom, platform: platform)
     }
 

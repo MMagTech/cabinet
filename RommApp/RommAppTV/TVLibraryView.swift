@@ -386,8 +386,13 @@ struct TVLibraryView: View {
     private func isSupported(_ platform: Platform) -> Bool {
         let canonicalSlug = (session.platformsVersions[platform.fsSlug] ?? platform.fsSlug).lowercased()
         let isArcade = PlatformSupport.arcadeSlugs.contains(platform.slug)
-        return PlatformSupport.isSupported(canonicalSlug: canonicalSlug, isArcade: isArcade)
-            && NativePlatform.platform(bySlug: canonicalSlug, isArcade: isArcade) != nil
+        guard PlatformSupport.isSupported(canonicalSlug: canonicalSlug, isArcade: isArcade),
+              let native = NativePlatform.platform(bySlug: canonicalSlug, isArcade: isArcade)
+        else { return false }
+        // The experimental gate: with the switch off, a gated platform's
+        // shelf disappears rather than offering games whose launch
+        // screen would refuse them.
+        return !native.isExperimental || ExperimentalCores.enabled
     }
 }
 

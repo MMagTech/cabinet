@@ -171,13 +171,24 @@ enum NativeCore {
     /// for why matching against the raw metadata slug is wrong.
     static func core(for rom: Rom, canonicalSlug: String) -> NativeCore? {
         guard let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug) else { return nil }
+        // The experimental gate. Nil here is exactly the state these
+        // platforms had before their cores graduated, so every caller,
+        // the launch screen's picker, Home's resume, keep offers, the
+        // offline library, falls back to its pre-graduation behavior
+        // without knowing the gate exists. Deliberately not applied to
+        // NativePlatform.platform() lookups: bookkeeping for already
+        // kept files must keep resolving while availability is off.
+        guard !platform.isExperimental || ExperimentalCores.enabled else { return nil }
         return NativeCoreChoice.resolved(for: rom, platform: platform)
     }
 
     /// The native core for an already-resolved slug, for callers with no
     /// rom or live session in hand, only what was persisted at keep time.
     static func core(bySlug slug: String, isArcade: Bool) -> NativeCore? {
-        NativePlatform.platform(bySlug: slug, isArcade: isArcade)?.core
+        guard let platform = NativePlatform.platform(bySlug: slug, isArcade: isArcade) else { return nil }
+        // Same gate as above, same reasoning.
+        guard !platform.isExperimental || ExperimentalCores.enabled else { return nil }
+        return platform.core
     }
 }
 

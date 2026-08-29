@@ -457,6 +457,26 @@ struct GameLaunchView: View {
         PlatformSupport.isSupported(canonicalSlug: canonicalSlug, isArcade: rom.isArcade)
     }
 
+    /// A platform this device could play but is not offering: behind the
+    /// experimental switch, switch off, and with no webview core to fall
+    /// back to (Dreamcast; N64 has a webview core and simply plays
+    /// there). Distinguished from plain unsupported so the screen can
+    /// name the one-sentence fix instead of shrugging.
+    private var gatedExperimental: Bool {
+        guard !isPlatformSupported,
+              let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug)
+        else { return false }
+        return platform.isExperimental && !ExperimentalCores.enabled
+    }
+
+    private var experimentalCard: some View {
+        LaunchCard(title: "Experimental", systemImage: "testtube.2") {
+            Text("This platform runs without the recompiler it was built for, so speed varies by game. Turn on Experimental cores in Settings to play it.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
     /// Whether a real Web player / Native picker is offered, matching
     /// `LaunchChoices.defaultBackend`'s own rule: any platform with a
     /// native core except Saturn, whose webview core is confirmed broken,
@@ -963,6 +983,7 @@ struct GameLaunchView: View {
                 spacing: 12
             ) {
                 if isComputerPlatform { computerPlatformCard }
+                if gatedExperimental { experimentalCard }
                 downloadStatusCard
                 if interruptedAt != nil { continueCard }
                 if !showsPlayerPicker, selectedBackend == .webview, cores.count > 1 { coreCard }
@@ -987,6 +1008,7 @@ struct GameLaunchView: View {
         } else {
             VStack(spacing: 14) {
                 if isComputerPlatform { computerPlatformCard }
+                if gatedExperimental { experimentalCard }
                 downloadStatusCard
                 if interruptedAt != nil { continueCard }
                 if !showsPlayerPicker, selectedBackend == .webview, cores.count > 1 { coreCard }
