@@ -120,6 +120,33 @@ grep -q 'first_run = true;' "$SRC/shell/libretro/libretro.cpp" \
     && grep -A 2 'emu.unloadGame();' "$SRC/shell/libretro/libretro.cpp" | grep -q 'first_run = true;' \
     || { echo "first_run patch did not apply; upstream shape changed" >&2; exit 1; }
 
+# Third upstream patch: hand each raw VMU LCD write to the frontend.
+#
+# Flycast already receives every maple LCD write in push_vmu_screen
+# (core/rend/osd.cpp), where it recolors the 48x32 buffer into its own
+# on-screen overlay. Cabinet's companion display needs the same moment:
+# the Apple TV forwards the frame to the phone-as-controller screen,
+# where it sits in the Dreamcast pad exactly where the real controller's
+# VMU window sat. The callback is installed through an exported setter
+# the app resolves with dlsym at runtime, the cabinetPvrQueueDepth
+# pattern, so an app built against a core without the patch finds
+# nothing and simply streams nothing; the iOS core deliberately stays
+# unrebuilt (only the television sends this stream) and resolves to
+# nothing the same way. Anchored on the vmuLastChanged declaration and
+# push_vmu_screen's bounds check, both unique in the file; no-ops when
+# already applied.
+perl -0pi -e '
+    s/(u64 vmuLastChanged\[8\];\n)/$1\nextern "C" {\nvoid (*cabinetVMUScreenCallback)(int vmu_id, const u8 *buffer);\nvoid cabinetSetVMUScreenCallback(void (*cb)(int vmu_id, const u8 *buffer))\n{\n\tcabinetVMUScreenCallback = cb;\n}\n}\n/
+    unless /cabinetVMUScreenCallback/;
+' "$SRC/core/rend/osd.cpp"
+perl -0pi -e '
+    s/(\tif \(vmu_id < 0 \|\| vmu_id >= \(int\)std::size\(vmu_lcd_data\)\)\n\t\treturn;\n)/$1\tif (cabinetVMUScreenCallback)\n\t\tcabinetVMUScreenCallback(vmu_id, buffer);\n/
+    unless /cabinetVMUScreenCallback\(vmu_id, buffer\);/;
+' "$SRC/core/rend/osd.cpp"
+grep -q 'void cabinetSetVMUScreenCallback' "$SRC/core/rend/osd.cpp" \
+    && grep -q 'cabinetVMUScreenCallback(vmu_id, buffer);' "$SRC/core/rend/osd.cpp" \
+    || { echo "vmu screen callback patch did not apply; upstream shape changed" >&2; exit 1; }
+
 FLAGS="-fno-common -DTARGET_NO_REC -DIOS"
 
 # tvOS masquerades as iOS to Flycast's own build, via -DIOS=ON below.
@@ -204,6 +231,9 @@ nm -g "$BUILD/flycast_libretro.dylib" 2>/dev/null \
 # depth gauge the app reads via dlsym. Remove with the instrumentation
 # in Renderer_if.cpp.
 echo "_cabinetPvrQueueDepth" >> "$SPIKE/exports-$PLATFORM.txt"
+# The VMU LCD callback setter, resolved the same dlsym way; see the
+# patch above. Permanent, unlike the gauge.
+echo "_cabinetSetVMUScreenCallback" >> "$SPIKE/exports-$PLATFORM.txt"
 
 # Swept from the whole build tree, not just flycast_libretro.dir:
 # CMake pulls in its own static-lib subtargets (libzip, at last check)

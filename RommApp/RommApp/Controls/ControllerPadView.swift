@@ -934,6 +934,19 @@ struct ControllerPadView: View {
             }
         }
         .overlay(alignment: .top) { playerBadge.padding(.top, 10) }
+        // The VMU window, Dreamcast alone, sitting where the real
+        // controller's window sat: top centre of the pad, showing
+        // whatever the game on the television draws on player one's
+        // VMU. Display only by settled design; the minigame player is
+        // the launch screen's door, never this one. Blank face until a
+        // game writes, exactly like the hardware.
+        .overlay(alignment: .top) {
+            if system == "dreamcast" {
+                VMUCompanionWindow(frame: link.vmuLCD)
+                    .padding(.top, 40)
+                    .allowsHitTesting(false)
+            }
+        }
     }
 
     private func dsPad() -> some View {
@@ -1616,6 +1629,63 @@ private struct DSVideoLayerView: UIViewRepresentable {
 
     func updateUIView(_ uiView: HostView, context: Context) {
         if uiView.hosted !== layer { uiView.hosted = layer }
+    }
+}
+
+/// The Dreamcast pad's VMU window: player one's 48x32 LCD as the
+/// television streams it (ControllerLink's vmuLCD kind, 192 packed
+/// bytes), drawn in the same slate bezel and sage face the VMU player's
+/// full skin uses so the two read as one device. Sized as a window into
+/// the controller, not a screen to play on; the phone-becomes-the-VMU
+/// treatment belongs to the launch screen's minigame player alone.
+private struct VMUCompanionWindow: View {
+    /// 192 packed bytes, row-major, 8 pixels per byte, bit 7 leftmost;
+    /// nil draws the blank face a VMU shows before a game writes.
+    let frame: Data?
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(LinearGradient(
+                    colors: [Color(red: 0.365, green: 0.416, blue: 0.486), Color(red: 0.275, green: 0.322, blue: 0.373)],
+                    startPoint: .top, endPoint: .bottom
+                ))
+                .shadow(color: .black.opacity(0.35), radius: 5, y: 3)
+
+            ZStack {
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(LinearGradient(
+                        colors: [Color(red: 0.765, green: 0.804, blue: 0.706), Color(red: 0.702, green: 0.749, blue: 0.651)],
+                        startPoint: .top, endPoint: .bottom
+                    ))
+                if let frame {
+                    Canvas { context, size in
+                        let bytes = [UInt8](frame)
+                        guard bytes.count == 192 else { return }
+                        let px = size.width / 48
+                        let py = size.height / 32
+                        let ink = Color(red: 0.11, green: 0.115, blue: 0.1)
+                        for y in 0..<32 {
+                            for x in 0..<48 where bytes[y * 6 + x / 8] & UInt8(0x80 >> (x % 8)) != 0 {
+                                context.fill(
+                                    Path(CGRect(x: CGFloat(x) * px, y: CGFloat(y) * py, width: px + 0.4, height: py + 0.4)),
+                                    with: .color(ink)
+                                )
+                            }
+                        }
+                    }
+                    .padding(3)
+                }
+                // The sunken glass, in miniature.
+                RoundedRectangle(cornerRadius: 5)
+                    .stroke(Color(red: 0.157, green: 0.196, blue: 0.137).opacity(0.45), lineWidth: 3)
+                    .blur(radius: 2.5)
+                    .offset(y: 1)
+                    .mask(RoundedRectangle(cornerRadius: 5))
+            }
+            .frame(width: 120, height: 84)
+        }
+        .frame(width: 138, height: 102)
     }
 }
 #endif

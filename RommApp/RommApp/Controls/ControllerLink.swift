@@ -106,6 +106,18 @@ enum ControllerLink {
             /// format's own rule, and a phone sighting in against one
             /// simply gets no targets drawn.
             case sighting = 20
+            /// Television to phone: the running game drew on player
+            /// one's VMU LCD. Payload is an 8-byte tag over the body
+            /// (session key, context "t2p-vmulcd"), then 192 bytes:
+            /// the 48x32 1-bit frame, row-major, 8 pixels per byte,
+            /// bit 7 leftmost. Sent when the picture changes, which is
+            /// how often a real game wrote its VMU, plus once at join
+            /// so a late phone starts current. The display half of the
+            /// companion design: the phone-as-controller screen shows
+            /// this in the Dreamcast pad where the real controller's
+            /// VMU window sat. Phones that predate this kind drop it
+            /// unread, which is the packet format's own rule.
+            case vmuLCD = 21
 
             /// True for the kinds a person generates by playing, which
             /// is what earns a seat. Deliberately excludes the
@@ -544,6 +556,31 @@ final class ControllerLinkReceiver {
         }
     }
 
+    /// The last VMU LCD frame sent, kept so a phone that joins with a
+    /// game already mid-play starts from the current picture instead of
+    /// a blank window: the videoOffer's standing-offer pattern.
+    private var vmuFrame: Data?
+
+    /// Player one's VMU screen changed. 192 packed bytes as Kind.vmuLCD
+    /// documents; anything else is refused rather than trimmed. Safe to
+    /// call from any thread: the send happens on the receive queue, the
+    /// same discipline sendRumble follows.
+    func sendVMULCD(_ packed: Data) {
+        guard packed.count == 192 else { return }
+        queue.async {
+            self.vmuFrame = packed
+            for peer in self.peers.values where peer.joined {
+                self.sendVMULCDFrame(packed, to: peer)
+            }
+        }
+    }
+
+    private func sendVMULCDFrame(_ packed: Data, to peer: Peer) {
+        guard let key = peer.sessionKey, let connection = peer.connection else { return }
+        let tag = ControllerPairing.tag(key: key, context: "t2p-vmulcd", bytes: packed)
+        reply(.vmuLCD, payload: tag + packed, on: connection)
+    }
+
     /// Tell a phone which player it just became. Tagged under the
     /// session key, the same standard the hello and the video offer
     /// meet, so a seat cannot be forged.
@@ -581,6 +618,7 @@ final class ControllerLinkReceiver {
 
     func stop() {
         videoOffer = nil
+        vmuFrame = nil
         liveness?.cancel()
         liveness = nil
         listener?.cancel()
@@ -797,6 +835,9 @@ final class ControllerLinkReceiver {
             onPhone(true)
             if let offer = videoOffer, let fresh = peers[key] {
                 sendVideoOffer(port: offer.port, token: offer.token, to: fresh)
+            }
+            if let frame = vmuFrame, let fresh = peers[key] {
+                sendVMULCDFrame(frame, to: fresh)
             }
         }
 
@@ -1042,6 +1083,10 @@ final class ControllerLinkSender: ObservableObject {
     /// until a proven offer arrives and back to nil when one is
     /// revoked. The DS panel watches this and dials in.
     @Published private(set) var videoOffer: VideoOffer?
+    /// Player one's VMU screen as the television last sent it, 192
+    /// packed bytes (Kind.vmuLCD), nil until a Dreamcast game draws
+    /// one. The DC panel's little window watches this.
+    @Published private(set) var vmuLCD: Data?
 
     struct VideoOffer: Equatable {
         let port: Int
@@ -1219,6 +1264,7 @@ final class ControllerLinkSender: ObservableObject {
         pendingProof = nil
         sessionKey = nil
         videoOffer = nil
+        vmuLCD = nil
         playerIndex = nil
     }
 
@@ -1232,6 +1278,7 @@ final class ControllerLinkSender: ObservableObject {
         pendingProof = nil
         sessionKey = nil
         videoOffer = nil
+        vmuLCD = nil
         playerIndex = nil
         start()
     }
@@ -1266,6 +1313,7 @@ final class ControllerLinkSender: ObservableObject {
         phoneNonce = ControllerPairing.randomBytes(16)
         sessionKey = nil
         videoOffer = nil
+        vmuLCD = nil
         playerIndex = nil
         badHelloCount = 0
         currentEndpoint = endpoint
@@ -1297,6 +1345,7 @@ final class ControllerLinkSender: ObservableObject {
                     self.pendingProof = nil
                     self.sessionKey = nil
                     self.videoOffer = nil
+                    self.vmuLCD = nil
                     self.playerIndex = nil
                     // A failure with nobody having called stop() means
                     // the flow died under us, suspension being the
@@ -1423,6 +1472,17 @@ final class ControllerLinkSender: ObservableObject {
             let strong = bytes[0] != 0
             let strength = UInt16(bytes[1]) << 8 | UInt16(bytes[2])
             DispatchQueue.main.async { self.onRumble?(strong, strength) }
+
+        case .vmuLCD:
+            // Believed only under the session key's proof, like every
+            // television-to-phone kind.
+            guard let key = sessionKey,
+                  payload.count >= ControllerPairing.tagLength + 192 else { return }
+            let tag = Data(payload.prefix(ControllerPairing.tagLength))
+            let body = Data(payload.dropFirst(ControllerPairing.tagLength).prefix(192))
+            guard ControllerPairing.validTag(tag, key: key, context: "t2p-vmulcd", bytes: body)
+            else { return }
+            vmuLCD = body
 
         case .videoOffer:
             // Believed only under the session key's own proof, the same

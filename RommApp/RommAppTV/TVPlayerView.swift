@@ -558,6 +558,17 @@ struct TVPlayerView: View {
                 GameControllerManager.companionRumble = { [weak link] port, strong, strength in
                     link?.sendRumble(port: port, strong: strong, strength: strength)
                 }
+                // Dreamcast alone: mirror player one's VMU LCD to the
+                // phone's controller screen, the display half of the
+                // phone-as-VMU design. The relay resolves the core's
+                // callback hook at runtime and does nothing when the
+                // linked core predates it, so no other platform and no
+                // older build changes behavior by this line existing.
+                if platform == .dreamcast {
+                    VMULCDRelay.shared.install { [weak link] packed in
+                        link?.sendVMULCD(packed)
+                    }
+                }
                 // The settings screen may still be alive underneath
                 // this cover with its own pairing listener up (a top
                 // shelf launch does exactly that); one advertisement
@@ -584,6 +595,7 @@ struct TVPlayerView: View {
             renderer.dsBottomFrameTap = nil
             videoServer?.stop()
             videoServer = nil
+            VMULCDRelay.shared.uninstall()
             phoneLink?.stop()
             phoneLink = nil
             GameControllerManager.companionRumble = nil
