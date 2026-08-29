@@ -117,6 +117,7 @@ struct CabinetWidget: Widget {
 
 struct CabinetWidgetView: View {
     @Environment(\.widgetFamily) private var family
+    @Environment(\.widgetRenderingMode) private var renderingMode
     let entry: CabinetWidgetEntry
 
     var body: some View {
@@ -200,7 +201,19 @@ struct CabinetWidgetView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        // The frosted band exists only in full colour, where it sits on
+        // the blurred art and needs a surface to be read against. On a
+        // tinted home screen the system strips that backdrop, flattens a
+        // material to a solid light block, and renders the text white,
+        // which added up to an unreadable white rectangle: white text on
+        // a white slab on glass. There the text stands directly on the
+        // glass instead, which is what Music's tinted widget does with
+        // its own labels.
+        .background {
+            if renderingMode == .fullColor {
+                RoundedRectangle(cornerRadius: 12).fill(.regularMaterial)
+            }
+        }
     }
 
     // MARK: Recents and favourites
