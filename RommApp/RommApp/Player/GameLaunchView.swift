@@ -989,7 +989,12 @@ struct GameLaunchView: View {
                 if !gatedExperimental, !showsPlayerPicker, selectedBackend == .webview, cores.count > 1 { coreCard }
                 if !gatedExperimental, !showsPlayerPicker, selectedBackend == .webview, showsFirmwareCard { firmwareCard }
                 if showsPlayerPicker, !networkMonitor.isOffline { playerCard }
-                if showsKeepCard, !gatedExperimental { keepCard }
+                // Deliberately NOT hidden while gated, unlike the BIOS
+                // picker and resume list: unsupported platforms have
+                // always left a way to the file so it can be played in
+                // another emulator, and Keep is that way here, the game
+                // and its BIOS land in the Files app's Games folder.
+                if showsKeepCard { keepCard }
                 if arcadeBase != nil { arcadeControlsCard }
                 resetSettingsCard
                 if !gatedExperimental, !states.isEmpty || !saves.isEmpty { resumeCard }
@@ -1014,7 +1019,12 @@ struct GameLaunchView: View {
                 if !gatedExperimental, !showsPlayerPicker, selectedBackend == .webview, cores.count > 1 { coreCard }
                 if !gatedExperimental, !showsPlayerPicker, selectedBackend == .webview, showsFirmwareCard { firmwareCard }
                 if showsPlayerPicker, !networkMonitor.isOffline { playerCard }
-                if showsKeepCard, !gatedExperimental { keepCard }
+                // Deliberately NOT hidden while gated, unlike the BIOS
+                // picker and resume list: unsupported platforms have
+                // always left a way to the file so it can be played in
+                // another emulator, and Keep is that way here, the game
+                // and its BIOS land in the Files app's Games folder.
+                if showsKeepCard { keepCard }
                 if arcadeBase != nil { arcadeControlsCard }
                 resetSettingsCard
                 if !gatedExperimental, !states.isEmpty || !saves.isEmpty { resumeCard }
