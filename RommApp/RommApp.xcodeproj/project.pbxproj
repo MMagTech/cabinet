@@ -10,6 +10,9 @@
 		10C5183AB7ADB61F260D8031 /* CoreImage.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 085D59256C4DAA9CDEBB4573 /* CoreImage.framework */; };
 		BB00000000000000000022 /* CabinetTopShelf.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = BB00000000000000000021 /* CabinetTopShelf.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		BB0000000000000000004B /* CabinetLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000004A /* CabinetLink.swift */; };
+		BB00000000000000000059 /* CabinetWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = BB00000000000000000050 /* CabinetWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		BB0000000000000000005B /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000005A /* WidgetSnapshot.swift */; };
+		BB0000000000000000005C /* CabinetLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000004A /* CabinetLink.swift */; };
 		F50297785940689BEBC3D8A3 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E4B2AC95B1AB0E374EB9378B /* Foundation.framework */; };
 /* End PBXBuildFile section */
 
@@ -20,6 +23,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = BB00000000000000000020;
 			remoteInfo = CabinetTopShelf;
+		};
+		BB00000000000000000056 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BB00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BB00000000000000000052;
+			remoteInfo = CabinetWidget;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -35,6 +45,17 @@
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BB00000000000000000058 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				BB00000000000000000059 /* CabinetWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -42,6 +63,8 @@
 		22568825F8A2B0F5F517C40C /* Cabinet TV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Cabinet TV.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000021 /* CabinetTopShelf.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CabinetTopShelf.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB0000000000000000004A /* CabinetLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CabinetLink.swift; path = RommApp/UI/CabinetLink.swift; sourceTree = "<group>"; };
+		BB00000000000000000050 /* CabinetWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CabinetWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB0000000000000000005A /* WidgetSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WidgetSnapshot.swift; path = RommApp/UI/WidgetSnapshot.swift; sourceTree = "<group>"; };
 		E4B2AC95B1AB0E374EB9378B /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
@@ -199,6 +222,13 @@
 			);
 			target = BB00000000000000000020 /* CabinetTopShelf */;
 		};
+		BB00000000000000000060 /* Exceptions for "RommAppWidget" folder in "CabinetWidget" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = BB00000000000000000052 /* CabinetWidget */;
+		};
 		C6626E28D50263B9632B46B6 /* Exceptions for "RommAppTV" folder in "RommAppTV" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -233,6 +263,14 @@
 				BB00000000000000000025 /* Exceptions for "RommAppTopShelf" folder in "CabinetTopShelf" target */,
 			);
 			path = RommAppTopShelf;
+			sourceTree = "<group>";
+		};
+		BB00000000000000000051 /* RommAppWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				BB00000000000000000060 /* Exceptions for "RommAppWidget" folder in "CabinetWidget" target */,
+			);
+			path = RommAppWidget;
 			sourceTree = "<group>";
 		};
 		C16DDCA1D4B951A394B9FA7D /* RommAppTV */ = {
@@ -276,6 +314,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BB00000000000000000054 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -284,6 +329,7 @@
 			children = (
 				BB00000000000000000023 /* RommAppTopShelf */,
 				BB0000000000000000004A /* CabinetLink.swift */,
+				BB0000000000000000005A /* WidgetSnapshot.swift */,
 			);
 			name = "Recovered References";
 			sourceTree = "<group>";
@@ -311,6 +357,7 @@
 				BB0000000000000000000F /* RommApp */,
 				BB00000000000000000017 /* LayoutEditor */,
 				C16DDCA1D4B951A394B9FA7D /* RommAppTV */,
+				BB00000000000000000051 /* RommAppWidget */,
 				BB00000000000000000003 /* Products */,
 				4AE25F905859E16D5B246FD0 /* Frameworks */,
 				0F2C9EB8303235A40049E308 /* Recovered References */,
@@ -322,6 +369,7 @@
 			children = (
 				22568825F8A2B0F5F517C40C /* Cabinet TV.app */,
 				BB00000000000000000021 /* CabinetTopShelf.appex */,
+				BB00000000000000000050 /* CabinetWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -337,10 +385,12 @@
 				BB00000000000000000008 /* Frameworks */,
 				BB00000000000000000007 /* Resources */,
 				BB0000000000000000003A /* Embed ANGLE Frameworks */,
+				BB00000000000000000058 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				BB00000000000000000057 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				BB0000000000000000000F /* RommApp */,
@@ -386,6 +436,26 @@
 			name = CabinetTopShelf;
 			productName = CabinetTopShelf;
 			productReference = BB00000000000000000021 /* CabinetTopShelf.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		BB00000000000000000052 /* CabinetWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BB0000000000000000005F /* Build configuration list for PBXNativeTarget "CabinetWidget" */;
+			buildPhases = (
+				BB00000000000000000053 /* Sources */,
+				BB00000000000000000054 /* Frameworks */,
+				BB00000000000000000055 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				BB00000000000000000051 /* RommAppWidget */,
+			);
+			name = CabinetWidget;
+			productName = CabinetWidget;
+			productReference = BB00000000000000000050 /* CabinetWidget.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 		FB4792A61D4A9C6E7864DCEB /* RommAppTV */ = {
@@ -449,6 +519,7 @@
 				BB00000000000000000010 /* LayoutEditor */,
 				FB4792A61D4A9C6E7864DCEB /* RommAppTV */,
 				BB00000000000000000020 /* CabinetTopShelf */,
+				BB00000000000000000052 /* CabinetWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -476,6 +547,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		BB0000000000000000002C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BB00000000000000000055 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -547,6 +625,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BB00000000000000000053 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BB0000000000000000005B /* WidgetSnapshot.swift in Sources */,
+				BB0000000000000000005C /* CabinetLink.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -554,6 +641,11 @@
 			isa = PBXTargetDependency;
 			target = BB00000000000000000020 /* CabinetTopShelf */;
 			targetProxy = BB00000000000000000027 /* PBXContainerItemProxy */;
+		};
+		BB00000000000000000057 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BB00000000000000000052 /* CabinetWidget */;
+			targetProxy = BB00000000000000000056 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -985,6 +1077,61 @@
 			};
 			name = Release;
 		};
+		BB00000000000000000061 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = RommAppWidget/RommAppWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 11;
+				DEVELOPMENT_TEAM = ZMUB88RZ5D;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RommAppWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Cabinet;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.4.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		BB00000000000000000062 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = RommAppWidget/RommAppWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 11;
+				DEVELOPMENT_TEAM = ZMUB88RZ5D;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RommAppWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Cabinet;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.4.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		F79B1708F32E796D92796E0D /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1098,6 +1245,15 @@
 			buildConfigurations = (
 				BB00000000000000000015 /* Debug */,
 				BB00000000000000000016 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BB0000000000000000005F /* Build configuration list for PBXNativeTarget "CabinetWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BB00000000000000000062 /* Release */,
+				BB00000000000000000061 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

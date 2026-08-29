@@ -100,6 +100,32 @@ enum WidgetWriter {
             ))
         }
 
+        // Favourites too, for widgets configured to show them. A failed
+        // fetch carries the previous list forward rather than writing nil
+        // over it, the same reasoning as the early return above:
+        // yesterday's favourites beat none, and favourites change even
+        // more rarely than recents do.
+        var favorites: [WidgetSnapshot.Game]?
+        if let favoriteRoms = try? await session.favoriteRoms(limit: limit) {
+            var list: [WidgetSnapshot.Game] = []
+            for rom in favoriteRoms {
+                let file = await cover(for: rom, in: directory, session: session)
+                if let file { kept.insert(file) }
+                list.append(WidgetSnapshot.Game(
+                    romId: rom.id,
+                    title: rom.displayName,
+                    platform: rom.platformLabel(source: labelSource, platformNames: names),
+                    coverFile: file
+                ))
+            }
+            favorites = list
+        } else {
+            favorites = WidgetSnapshot.read()?.favorites
+            for game in favorites ?? [] {
+                if let file = game.coverFile { kept.insert(file) }
+            }
+        }
+
         // Covers for games that have fallen off the end of recents, which
         // would otherwise accumulate forever in a container nobody looks
         // at.
@@ -109,7 +135,7 @@ enum WidgetWriter {
             }
         }
 
-        WidgetSnapshot.write(.init(games: games, writtenAt: Date()))
+        WidgetSnapshot.write(.init(games: games, favorites: favorites, writtenAt: Date()))
         reloadTimelines()
     }
 

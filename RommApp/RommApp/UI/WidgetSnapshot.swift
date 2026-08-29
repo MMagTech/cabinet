@@ -48,6 +48,12 @@ enum WidgetSnapshot {
 
     struct Payload: Codable, Equatable {
         let games: [Game]
+        /// Favourites ride along for widgets configured to show them.
+        /// Optional because it arrived after the first snapshots were
+        /// written: an old snapshot without it still decodes, and the
+        /// migration is to show nothing until the app writes a fresh one,
+        /// never to throw the recents away with it.
+        var favorites: [Game]?
         let writtenAt: Date
     }
 
