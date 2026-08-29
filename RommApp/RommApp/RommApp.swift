@@ -65,6 +65,11 @@ struct RommApp: App {
     private var appContent: some View {
         RootView()
             .environmentObject(session)
+            #if os(iOS)
+            // A widget press or a Spotlight result arrives here as a
+            // cabinet:// URL. See DeepLink.swift.
+            .handlesGameDeepLinks(session: session)
+            #endif
             .task {
                 // A native core crash takes the whole app, so the only
                 // moment it can be counted is the next launch.

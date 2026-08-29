@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		10C5183AB7ADB61F260D8031 /* CoreImage.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 085D59256C4DAA9CDEBB4573 /* CoreImage.framework */; };
 		BB00000000000000000022 /* CabinetTopShelf.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = BB00000000000000000021 /* CabinetTopShelf.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		BB0000000000000000004B /* CabinetLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000004A /* CabinetLink.swift */; };
 		F50297785940689BEBC3D8A3 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E4B2AC95B1AB0E374EB9378B /* Foundation.framework */; };
 /* End PBXBuildFile section */
 
@@ -40,6 +41,7 @@
 		085D59256C4DAA9CDEBB4573 /* CoreImage.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreImage.framework; path = System/Library/Frameworks/CoreImage.framework; sourceTree = SDKROOT; };
 		22568825F8A2B0F5F517C40C /* Cabinet TV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Cabinet TV.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000021 /* CabinetTopShelf.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CabinetTopShelf.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB0000000000000000004A /* CabinetLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CabinetLink.swift; path = RommApp/UI/CabinetLink.swift; sourceTree = "<group>"; };
 		E4B2AC95B1AB0E374EB9378B /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
@@ -281,6 +283,7 @@
 			isa = PBXGroup;
 			children = (
 				BB00000000000000000023 /* RommAppTopShelf */,
+				BB0000000000000000004A /* CabinetLink.swift */,
 			);
 			name = "Recovered References";
 			sourceTree = "<group>";
@@ -540,6 +543,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BB0000000000000000004B /* CabinetLink.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

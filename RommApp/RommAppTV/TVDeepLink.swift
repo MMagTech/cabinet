@@ -45,7 +45,7 @@ struct TVDeepLinkHandler: ViewModifier {
     }
 
     private func open(_ url: URL) {
-        guard let link = TopShelfSnapshot.Link.parse(url) else { return }
+        guard let link = CabinetLink.parse(url) else { return }
 
         // Not paired, or signed out since the shelf was written. The
         // link is dropped rather than queued for after setup: by the
