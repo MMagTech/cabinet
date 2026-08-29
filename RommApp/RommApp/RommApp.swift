@@ -31,6 +31,11 @@ struct RommApp: App {
         // and the moment it can look again is exactly here. Without
         // this, a game deleted in Files kept showing its toggle on
         // until its screen happened to reload.
+        .onChange(of: session.stage) { _, stage in
+            // A fresh pairing has nothing written at all, and somebody
+            // may add the widget before they open the app a second time.
+            if stage == .ready { WidgetWriter.refresh(session: session) }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 KeptGameStore.shared.reconcileFilesFolder()
@@ -79,6 +84,10 @@ struct RommApp: App {
 
     private func syncIfOnline() {
         guard !networkMonitor.isOffline else { return }
+        // The widget cannot fetch anything itself, so the app has to
+        // leave it something current whenever it has a connection. Cheap
+        // when nothing changed: unchanged covers are not rewritten.
+        WidgetWriter.refresh(session: session)
         Task {
             let savesUploaded = await KeptGameStore.shared.syncPendingStates(session: session)
             let sessionsUploaded = await session.syncPendingPlaySessions()
