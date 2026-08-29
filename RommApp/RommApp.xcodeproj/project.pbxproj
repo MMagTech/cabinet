@@ -1249,20 +1249,20 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		BB0000000000000000005F /* Build configuration list for PBXNativeTarget "CabinetWidget" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				BB00000000000000000062 /* Release */,
-				BB00000000000000000061 /* Debug */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		BB0000000000000000002B /* Build configuration list for PBXNativeTarget "CabinetTopShelf" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				BB0000000000000000002E /* Release */,
 				BB0000000000000000002D /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BB0000000000000000005F /* Build configuration list for PBXNativeTarget "CabinetWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BB00000000000000000062 /* Release */,
+				BB00000000000000000061 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
