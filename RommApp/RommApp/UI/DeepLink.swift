@@ -1,4 +1,5 @@
 #if os(iOS)
+import CoreSpotlight
 import SwiftUI
 
 /// Opens Cabinet at a particular game, from anywhere outside the app.
@@ -42,6 +43,18 @@ struct DeepLinkHandler: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onOpenURL { open($0) }
+            // A Spotlight result arrives as a continued activity rather
+            // than a URL, carrying the identifier the indexer wrote.
+            // From here it is the same road as a widget press: hold it
+            // if the session is still restoring, then open the launch
+            // screen, never the game itself.
+            .onContinueUserActivity(CSSearchableItemActionType) { activity in
+                guard let raw = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String,
+                      raw.hasPrefix("rom-"),
+                      let romId = Int(raw.dropFirst("rom-".count))
+                else { return }
+                open(romId: romId)
+            }
             .onChange(of: session.stage) { _, stage in
                 if stage == .ready, let romId = pending {
                     pending = nil
@@ -70,11 +83,15 @@ struct DeepLinkHandler: ViewModifier {
     /// screen is one more press for somebody who did mean it.
     private func open(_ url: URL) {
         guard let link = CabinetLink.parse(url) else { return }
+        open(romId: link.romId)
+    }
+
+    private func open(romId: Int) {
         guard session.stage == .ready else {
-            pending = link.romId
+            pending = romId
             return
         }
-        resolve(romId: link.romId)
+        resolve(romId: romId)
     }
 
     private func resolve(romId: Int) {

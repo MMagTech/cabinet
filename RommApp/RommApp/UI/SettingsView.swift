@@ -260,7 +260,14 @@ struct SettingsView: View {
             isPresented: $confirmingUnpair,
             titleVisibility: .visible
         ) {
-            Button("Unpair", role: .destructive) { session.signOut() }
+            Button("Unpair", role: .destructive) {
+                // Both outlive the pairing they describe if left alone: a
+                // widget still showing the last account's games on a
+                // shared home screen, and Spotlight results naming them.
+                WidgetWriter.wipe()
+                SpotlightIndexer.wipe()
+                session.signOut()
+            }
         } message: {
             Text("You will need to approve this device again to reconnect.")
         }
@@ -269,7 +276,12 @@ struct SettingsView: View {
             isPresented: $confirmingForget,
             titleVisibility: .visible
         ) {
-            Button("Forget server", role: .destructive) { session.forgetServer() }
+            Button("Forget server", role: .destructive) {
+                // Same hygiene as Unpair above.
+                WidgetWriter.wipe()
+                SpotlightIndexer.wipe()
+                session.forgetServer()
+            }
         } message: {
             Text("The saved address and pairing are removed.")
         }

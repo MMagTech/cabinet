@@ -34,7 +34,10 @@ struct RommApp: App {
         .onChange(of: session.stage) { _, stage in
             // A fresh pairing has nothing written at all, and somebody
             // may add the widget before they open the app a second time.
-            if stage == .ready { WidgetWriter.refresh(session: session) }
+            if stage == .ready {
+                WidgetWriter.refresh(session: session)
+                SpotlightIndexer.refresh(session: session)
+            }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
@@ -88,6 +91,10 @@ struct RommApp: App {
         // leave it something current whenever it has a connection. Cheap
         // when nothing changed: unchanged covers are not rewritten.
         WidgetWriter.refresh(session: session)
+        // Spotlight likewise, though it gates itself to a daily walk:
+        // fourteen hundred games do not change between breakfast and
+        // lunch, and the widget's recents do.
+        SpotlightIndexer.refresh(session: session)
         Task {
             let savesUploaded = await KeptGameStore.shared.syncPendingStates(session: session)
             let sessionsUploaded = await session.syncPendingPlaySessions()
