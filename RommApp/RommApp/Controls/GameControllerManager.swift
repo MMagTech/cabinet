@@ -563,7 +563,22 @@ final class GameControllerManager: ObservableObject {
                 setDirection(id, source: .stick, down: false, player: player)
             }
         }
-        sendStick?(player, x, y)
+        // The y flip is the convention seam, and this is the one place it
+        // belongs: GameController reports the stick up-positive (the
+        // digitizing above depends on that and stays raw), while
+        // everything downstream of sendStick speaks libretro's
+        // down-positive, the convention the touch stick already sends and
+        // the frontend's analog channel documents. Unflipped, every core
+        // that reads the true analog value saw a pad's vertical axis
+        // mirrored: Dreamcast, N64 and PSP, hidden for weeks because the
+        // verified games steered or strafed on x, and found the first
+        // evening a 3D platformer was walked with a Bluetooth pad
+        // (Sonic Adventure, 2026-08-29). The FBNeo refusal in
+        // LibretroFrontend.inputState already documented the mismatch
+        // ("GameController y is up-positive, opposite libretro's
+        // convention on this path") without fixing the path for the
+        // cores that legitimately read it.
+        sendStick?(player, x, -y)
     }
 
     /// Same digitizing as the left stick, ids 23/22/21/20 (up/down/left/
