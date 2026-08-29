@@ -80,9 +80,17 @@ is.
 **Game & Watch plays like a Game & Watch.** No on-screen controls at all. The
 machine fills the screen and you press its buttons by pressing them.
 
+**Your phone is the VMU.** While your Apple TV plays a Dreamcast game, the
+controller screen on your phone shows the game's live VMU display, sitting
+where the real controller's window sat. And when a game downloads a minigame
+onto its memory card, Sonic Adventure's Chao Adventure being the classic,
+the game's launch screen on your phone grows a VMU row: tap it and the phone
+becomes the VMU, shell and all, playing the minigame off the same card your
+save syncs through. Take it on the bus; your creature comes home changed.
+
 ## What you can play
 
-**Natively, on both iPhone and Apple TV**, through twenty-two emulators built
+**Natively, on both iPhone and Apple TV**, through twenty-three emulators built
 into the app: Arcade, PlayStation, PSP, Saturn, Dreamcast, Nintendo 64,
 Nintendo DS, 3DO, SNES, NES, Game Boy, Game Boy Color, Game Boy Advance,
 Virtual Boy, Genesis, Sega CD, 32X, Master System, Game Gear, TurboGrafx-16,

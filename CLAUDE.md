@@ -57,7 +57,7 @@ design and the reasoning behind it, and most decisions in it are already settled
 
 ## Project shape
 
-Native SwiftUI shell, with two ways to run a game: eighteen libretro cores
+Native SwiftUI shell, with two ways to run a game: twenty-three libretro cores
 compiled into the app, and a `WKWebView` player running RomM's EmulatorJS page
 for everything else.
 

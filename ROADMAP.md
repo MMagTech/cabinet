@@ -15,7 +15,7 @@ any code gets written.
 Not committed, not scoped, real conversations that happened and are
 worth having in the open.
 
-- **More systems, running natively.** Cabinet compiles twenty-two
+- **More systems, running natively.** Cabinet compiles twenty-three
   emulators into the app, and each new one is a core to build plus a
   control layout to draw. Everything originally listed here is done:
   Atari 2600, Vectrex, 3DO, Virtual Boy, Nintendo DS and Game & Watch,
