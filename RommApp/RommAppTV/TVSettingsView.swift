@@ -142,14 +142,17 @@ private struct TVAccountsSettingsView: View {
                 SettingsUI.actionRow(title: "Switch or add a profile", detail: nil, chevron: true)
             }
             .buttonStyle(RowFocusStyle())
-            Toggle(isOn: $requirePIN) {
+            Button {
+                requirePIN.toggle()
+            } label: {
                 SettingsUI.actionRow(
                     title: "Require a PIN to switch",
                     detail: storedPIN.isEmpty ? "Set a PIN below first" : nil,
-                    chevron: false
+                    chevron: false,
+                    value: requirePIN ? "On" : "Off"
                 )
             }
-            .toggleStyle(.switch)
+            .buttonStyle(RowFocusStyle())
             .disabled(storedPIN.isEmpty)
             Button {
                 settingPIN = true
@@ -211,10 +214,20 @@ private struct TVControllersSettingsView: View {
             // iOS there is nothing to fall back to when a pad has no
             // motors of its own: the rumble is simply dropped rather
             // than coming out of the device.
-            Toggle(isOn: $rumbleEnabled) {
-                SettingsUI.actionRow(title: "Rumble", detail: nil, chevron: false)
+            // The same fix as the Experimental cores row, applied to
+            // the whole class: a bare .switch Toggle ignores this
+            // page's glass and paints its focused state as a plain
+            // white slab. Press flips it, the trailing value says
+            // where it stands.
+            Button {
+                rumbleEnabled.toggle()
+            } label: {
+                SettingsUI.actionRow(
+                    title: "Rumble", detail: nil, chevron: false,
+                    value: rumbleEnabled ? "On" : "Off"
+                )
             }
-            .toggleStyle(.switch)
+            .buttonStyle(RowFocusStyle())
             NavigationLink {
                 ControllerRemapView()
             } label: {
@@ -229,14 +242,17 @@ private struct TVControllersSettingsView: View {
             // below, which answers where and when better than a
             // sentence could. The title must not be reworded casually:
             // the phone's Settings footer quotes it verbatim.
-            Toggle(isOn: $allowPhoneController) {
+            Button {
+                allowPhoneController.toggle()
+            } label: {
                 SettingsUI.actionRow(
                     title: "Allow a phone as a controller",
                     detail: nil,
-                    chevron: false
+                    chevron: false,
+                    value: allowPhoneController ? "On" : "Off"
                 )
             }
-            .toggleStyle(.switch)
+            .buttonStyle(RowFocusStyle())
             if allowPhoneController {
                 if let phonePairingCode {
                     VStack(alignment: .leading, spacing: 8) {
@@ -354,36 +370,11 @@ private struct TVEmulationSettingsView: View {
 
     var body: some View {
         SettingsUI.page("Emulation") {
-            NavigationLink {
-                TVNativeCoresView()
-            } label: {
-                SettingsUI.actionRow(
-                    title: "Cores",
-                    // "run natively" contrasted with the webview
-                    // player, which exists on iOS and not here: on this
-                    // platform every core is native, so the qualifier
-                    // only raised the question it answered.
-                    detail: "Speed and accuracy options for each emulator",
-                    chevron: true
-                )
-            }
-            .buttonStyle(RowFocusStyle())
-            // The detail is blunter than the phone's because the stakes
-            // are: iOS falls back to the web player when this is off,
-            // while this platform has no other player, so off means
-            // those libraries are not playable on this Apple TV at all.
-            Toggle(isOn: $experimentalCores) {
-                SettingsUI.actionRow(
-                    title: "Experimental cores",
-                    detail: "Dreamcast and Nintendo 64. Speed varies by game; off, this Apple TV can't play them.",
-                    chevron: false
-                )
-            }
-            .toggleStyle(.switch)
             // Mirror of the pause menu's Glow row, the primary home;
             // now that Off/Subtle/Strong are settled values rather
             // than something to tune live, a plain picker here is
-            // enough.
+            // enough. First on the page: it is the row people actually
+            // revisit, while the two below are set once.
             Menu {
                 ForEach(BiasGlowLevel.allCases) { candidate in
                     Button {
@@ -401,6 +392,39 @@ private struct TVEmulationSettingsView: View {
                     title: "Glow",
                     detail: "A soft light around the game picture. Currently \((BiasGlowLevel.level(fromStored: glowStored)).label.lowercased()).",
                     chevron: false
+                )
+            }
+            .buttonStyle(RowFocusStyle())
+            NavigationLink {
+                TVNativeCoresView()
+            } label: {
+                SettingsUI.actionRow(
+                    title: "Cores",
+                    // "run natively" contrasted with the webview
+                    // player, which exists on iOS and not here: on this
+                    // platform every core is native, so the qualifier
+                    // only raised the question it answered.
+                    detail: "Speed and accuracy options for each emulator",
+                    chevron: true
+                )
+            }
+            .buttonStyle(RowFocusStyle())
+            // A row in this page's own focus style, not a system
+            // Toggle: the switch treatment ignored RowFocusStyle's
+            // glass and painted its focused state as a bare white slab
+            // between two rows that focus properly (seen on the real
+            // television the day it shipped). Press flips it; the
+            // trailing value says where it stands. What off means for
+            // each platform is the launch screen's job, at the moment
+            // it matters, not this row's.
+            Button {
+                experimentalCores.toggle()
+            } label: {
+                SettingsUI.actionRow(
+                    title: "Experimental cores",
+                    detail: "Dreamcast and Nintendo 64. Speed varies by game.",
+                    chevron: false,
+                    value: experimentalCores ? "On" : "Off"
                 )
             }
             .buttonStyle(RowFocusStyle())
@@ -534,7 +558,8 @@ private enum SettingsUI {
     }
 
     static func actionRow(
-        title: String, detail: String?, chevron: Bool, destructive: Bool = false
+        title: String, detail: String?, chevron: Bool, destructive: Bool = false,
+        value: String? = nil
     ) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
@@ -548,6 +573,11 @@ private enum SettingsUI {
                 }
             }
             Spacer(minLength: 24)
+            if let value {
+                Text(value)
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+            }
             if chevron {
                 Image(systemName: "chevron.right")
                     .font(.title3.weight(.semibold))
