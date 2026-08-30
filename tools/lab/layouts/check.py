@@ -55,6 +55,14 @@ HAND_PLACED = {
     # 2026-08-24 at his request, after I had restructured it uninvited.
     # Menu sits left of centre there, and it stays there.
     ("psx", "landscapeItems", "Menu"),
+    # Dreamcast's companion panel is the one place the centre is not
+    # free: the phone pins player one's VMU window there, a fixed
+    # 120x84 overlay at top centre that no layout can move
+    # (ControllerPadView, and VMUGuide draws it in the editor). Menu
+    # sits off centre to clear it. Marcus, 2026-08-30: "the menu is
+    # fine on Dreamcast where I placed it because of the vmu, it's the
+    # one exception."
+    ("dreamcast", "companionItems", "Menu"),
 }
 
 fails = []
