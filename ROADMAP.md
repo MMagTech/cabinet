@@ -42,6 +42,26 @@ worth having in the open.
 - **A native touch control restyle.** The current on-screen controls are
   functional but read a little flat next to the rest of the app. A
   restyle direction has been discussed, not built.
+- **Light appearance on the screens that carry ambient art.** Cabinet TV
+  and Cabinet for Mac both draw a single backdrop behind everything, the
+  cover of whatever you played last, blurred past recognition and
+  darkened so text and glass always have a floor. That canvas stays dark
+  no matter what the system appearance is set to, so switching macOS or
+  tvOS to Light turns the chrome dark against a dark background and the
+  text becomes hard to read. The Mac already avoids this by pinning
+  itself to dark; the Apple TV does not, and follows the system today,
+  which is where the problem is visible. There are two honest ways out
+  and they lead to different apps. One is to commit to dark on both, the
+  position the Apple TV app and Music's Now Playing already take, and
+  accept that Cabinet ignores a system preference on purpose. The other
+  is to give the backdrop a real light treatment, a bright washed
+  version of the art rather than a darkened one, so both platforms can
+  honour the setting. The first is a line of code and a decision, the
+  second is a design piece that has to look right on a television and on
+  a desk. Undecided. iPhone is not affected either way: its ambient
+  backdrop is deliberately confined to the game launch screen, and the
+  rest of its shell is ordinary iOS chrome that already follows the
+  system.
 - **A real loading screen on tvOS for large downloads.** Right now the
   Play button's own label just turns into a percentage while a native
   game downloads, on a short game that can flash by in under a second.
