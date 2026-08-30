@@ -70,6 +70,17 @@ struct SettingsView: View {
                 } label: {
                     Label("Change buttons", systemImage: "arrow.triangle.swap")
                 }
+                #if targetEnvironment(macCatalyst)
+                // The Mac's own front door to the phone controller. The
+                // television reaches the same feature from its own
+                // settings; iOS is the phone side of it and has no host
+                // screen to offer.
+                NavigationLink {
+                    MacPhonePairingView()
+                } label: {
+                    Label("Phone controller", systemImage: "iphone.gen3")
+                }
+                #endif
             } header: {
                 Text("Physical controller")
             } footer: {

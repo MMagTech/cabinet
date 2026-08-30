@@ -1,14 +1,6 @@
 #if os(tvOS)
 import SwiftUI
 
-/// The pairing listener and the player's game receiver must never
-/// advertise at once; the player posts these so the Controllers page
-/// can yield even when a fullScreenCover launch leaves it alive
-/// underneath.
-extension Notification.Name {
-    static let cabinetGameLinkStarted = Notification.Name("com.mmagtech.RommAppTV.gameLinkStarted")
-    static let cabinetGameLinkEnded = Notification.Name("com.mmagtech.RommAppTV.gameLinkEnded")
-}
 
 /// tvOS's settings, the scoped-down sibling of iOS's `SettingsView`.
 ///

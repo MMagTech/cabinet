@@ -33,7 +33,11 @@ enum DSVideoWire {
 
 // MARK: - Television side
 
-#if os(tvOS)
+// The server half is the machine hosting the game: the Apple TV, and
+// now the Mac, which hands a joined phone the DS bottom screen exactly
+// the same way. The client half below stays iOS: the phone is the only
+// thing that ever receives it.
+#if os(tvOS) || targetEnvironment(macCatalyst)
 /// Encodes bottom-screen frames and serves them to the one phone that
 /// presents the right token. Lives exactly as long as the DS game and
 /// the phone connection that wants it; TVPlayerView owns that.

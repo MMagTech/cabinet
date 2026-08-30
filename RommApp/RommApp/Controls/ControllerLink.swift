@@ -29,6 +29,18 @@ import Network
 /// anything to and does nothing. An older plan gated discovery through
 /// RomM presence instead; the design doc replaced it, see "What was
 /// originally planned, and why it changed" there.
+/// One advertisement at a time. A pairing screen can still be alive
+/// underneath a game launched over it, so the player posts these and
+/// the pairing screen yields its listener while a game holds one.
+///
+/// Shared rather than tvOS-only since 2026-08-30, when the Mac started
+/// hosting phones too. The string keeps its original tvOS name so a
+/// phone and a host that predate the move still agree.
+extension Notification.Name {
+    static let cabinetGameLinkStarted = Notification.Name("com.mmagtech.RommAppTV.gameLinkStarted")
+    static let cabinetGameLinkEnded = Notification.Name("com.mmagtech.RommAppTV.gameLinkEnded")
+}
+
 enum ControllerLink {
     static let bonjourType = "_cabinet-probe._udp"
     static let serviceName = "CabinetLink"
