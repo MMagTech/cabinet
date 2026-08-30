@@ -28,6 +28,25 @@ struct NativePlayerView: View {
     @State private var menuVisible = false
     #if targetEnvironment(macCatalyst)
     @AppStorage(BiasGlowLevel.storageKey) private var macGlowStored = BiasGlowLevel.subtle.rawValue
+    /// The phone-as-controller receiver, the Mac's half of the same
+    /// feature the television has. Bounded by this view's lifetime, so
+    /// the socket exists exactly while a game does.
+    @AppStorage(ControllerPairing.allowKey) private var macAllowPhoneController = false
+    @State private var macPhoneLink: ControllerLinkReceiver?
+    /// The code a phone asking to join has to be told. Shown over the
+    /// game the way the television shows it, because whoever is asking
+    /// is holding the phone and cannot go and look in Settings.
+    @State private var macPairingCode: String?
+    /// Which row of the Mac pause panel a pad or a phone is pointing at.
+    /// The panel is mouse-and-keyboard everywhere else; this is what
+    /// makes it usable by whoever is actually holding the controller.
+    @State private var macMenuSelection = 0
+    /// Whether the panel is being driven by a pad or a phone rather than
+    /// the pointer, which is what decides if a selection ring is drawn.
+    @State private var macMenuUsingController = false
+    /// The DS bottom screen served to a joined phone, exactly as the
+    /// television serves it.
+    @State private var macVideoServer: DSVideoServer?
     #endif
     @State private var menuStatus: String?
     @State private var menuBusy = false
@@ -314,8 +333,17 @@ struct NativePlayerView: View {
                 }
 
                 if menuVisible {
+                    #if targetEnvironment(macCatalyst)
+                    macPauseMenu
+                    #else
                     pauseMenu
+                    #endif
                 }
+                #if targetEnvironment(macCatalyst)
+                if let macPairingCode {
+                    macPairingOverlay(code: macPairingCode)
+                }
+                #endif
             }
             #if targetEnvironment(macCatalyst)
             // Escape is the Mac's pause affordance with no pad in
@@ -343,7 +371,14 @@ struct NativePlayerView: View {
                 try? await Task.sleep(for: .seconds(60))
             }
         }
+        .macGameCursor()
         .onAppear {
+            #if targetEnvironment(macCatalyst)
+            // The pointer gets out of the way once it stops moving, and
+            // returns the moment it moves again. See MacWindow.
+            MacWindow.setGameMode(true)
+            startMacPhoneLink()
+            #endif
             // The manager is started here, not assumed started: before this
             // call the only screens that started it were the webview player,
             // Settings and the remap screen, so a fresh launch straight into
@@ -374,6 +409,16 @@ struct NativePlayerView: View {
             previousControllerMenu = GameControllerManager.shared.onMenu
             previousControllerDisconnect = GameControllerManager.shared.onDisconnect
             GameControllerManager.shared.send = { [weak renderer] player, id, down in
+                #if targetEnvironment(macCatalyst)
+                // While the Mac's pause panel is up, the pad drives the
+                // panel instead of the game. Presses only, so a button
+                // still held from before the pause cannot fire a row on
+                // its way up.
+                if menuVisible {
+                    if down { macMenuButton(id) }
+                    return
+                }
+                #endif
                 renderer?.setButton(id, down: down, port: player)
             }
             // The continuous form, alongside the digitized d-pad bits
@@ -417,6 +462,10 @@ struct NativePlayerView: View {
             FrameTrace.shared.begin(core: "\(core)")
         }
         .onDisappear {
+            #if targetEnvironment(macCatalyst)
+            MacWindow.setGameMode(false)
+            stopMacPhoneLink()
+            #endif
             FrameTrace.shared.end()
             UIApplication.shared.isIdleTimerDisabled = false
             // Release the artwork-orientation lock a Game & Watch took.
@@ -482,6 +531,405 @@ struct NativePlayerView: View {
     /// spot a stray tap is cheapest; Resume trails, in the spot a reaching
     /// thumb naturally lands. The two players used to disagree on both the
     /// look and the order, which read as two different apps mid-session.
+    #if targetEnvironment(macCatalyst)
+    /// The rows of the Mac pause panel, in the order they are drawn, so
+    /// a pad walks them in the order they appear rather than in whatever
+    /// order the view happens to build them.
+    private var macMenuRows: [String] {
+        platform.supportsSaveStates
+            ? ["quit", "save", "load", "resume"]
+            : ["quit", "resume"]
+    }
+
+    /// One row of the panel. Split out of the body because the style
+    /// and tint vary per row, and expressing that inline defeated the
+    /// type checker.
+    @ViewBuilder
+    private func macMenuRowButton(row: String, index: Int) -> some View {
+        let selected = macMenuUsingController && index == macMenuSelection
+        // The ring is drawn only once a pad or a phone has actually
+        // moved the selection. With a mouse in hand it would be a second
+        // cursor arguing with the real one.
+        let ring = RoundedRectangle(cornerRadius: 7)
+            .stroke(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.clear), lineWidth: 2)
+            .padding(-2)
+        let action = {
+            macMenuSelection = index
+            macActivateMenuRow()
+        }
+        if row == "resume" {
+            Button(action: action) {
+                Text(macMenuRowTitle(row)).frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .overlay(ring)
+            // Return resumes, the way the default button of a Mac panel
+            // does. Escape already closes it.
+            .keyboardShortcut(.defaultAction)
+        } else {
+            Button(role: row == "quit" ? .destructive : nil, action: action) {
+                Text(macMenuRowTitle(row)).frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .overlay(ring)
+        }
+    }
+
+    private func macMenuRowTitle(_ row: String) -> String {
+        switch row {
+        case "quit": return "Quit"
+        case "save": return "Save"
+        case "load": return "Load"
+        default: return "Resume"
+        }
+    }
+
+    /// A pad or phone press while the panel is open.
+    private func macMenuButton(_ id: Int) {
+        macMenuUsingController = true
+        switch id {
+        case RetroPad.left, RetroPad.up:
+            macMenuSelection = max(0, macMenuSelection - 1)
+        case RetroPad.right, RetroPad.down:
+            macMenuSelection = min(macMenuRows.count - 1, macMenuSelection + 1)
+        case RetroPad.a, RetroPad.start:
+            macActivateMenuRow()
+        case RetroPad.b:
+            // The way out, matching every other cancel in the app.
+            closeMenu()
+        default:
+            break
+        }
+    }
+
+    private func macActivateMenuRow() {
+        guard macMenuSelection < macMenuRows.count else { return }
+        switch macMenuRows[macMenuSelection] {
+        case "quit": dismiss()
+        case "save": saveState()
+        case "load": loadLatestState()
+        default: closeMenu()
+        }
+    }
+    #endif
+
+    #if targetEnvironment(macCatalyst)
+    /// The pairing code, over the game, in the corner.
+    ///
+    /// Same shape and reasoning as the television's: large enough to
+    /// read at a glance and monospaced, on a card small enough to read
+    /// as an offer rather than a dialog demanding attention. No caption
+    /// telling you to type it on the phone, since the person reading it
+    /// is holding the phone that just asked.
+    private func macPairingOverlay(code: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Phone controller")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(ControllerPairing.displayCode(code))
+                .font(.system(size: 30, weight: .semibold, design: .monospaced))
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.08), lineWidth: 1)
+        )
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .transition(.opacity)
+    }
+    #endif
+
+    #if targetEnvironment(macCatalyst)
+    /// Starts the phone receiver for this game.
+    ///
+    /// The verbs are wired to the same places the television wires
+    /// them, because they are the same functions: buttons and sticks
+    /// into the renderer, pointer and mouse deltas into the frontend,
+    /// and pause, save and load into this view's own menu actions, so a
+    /// state saved from the phone lands in the same slot with the same
+    /// upload path as one saved here.
+    ///
+    /// The advertised name follows the television's rule exactly, since
+    /// the phone matches on it to pick its control layout: an arcade
+    /// game advertises its rom's filename, everything else its layout
+    /// and rom id.
+    private func startMacPhoneLink() {
+        guard macAllowPhoneController, macPhoneLink == nil else { return }
+        let layoutName = ControlLayout.forPlatform(slug: canonicalSlug)?.system ?? "default"
+        let advertised = platform == .arcade
+            ? rom.fsNameNoExt.lowercased()
+            : "\(layoutName).\(rom.id)"
+        let link = ControllerLinkReceiver(
+            shortname: advertised,
+            assignPort: { phoneID in
+                DispatchQueue.main.sync {
+                    MainActor.assumeIsolated {
+                        GameControllerManager.shared.claimPhoneSlot(for: phoneID)
+                    }
+                }
+            },
+            releasePort: { phoneID in
+                Task { @MainActor in
+                    GameControllerManager.shared.releasePhoneSlot(for: phoneID)
+                }
+            },
+            onButton: { [weak renderer] port, id, down in
+                // The same rule the physical pad follows: while the
+                // panel is up, presses drive the panel rather than the
+                // game. This callback is the phone's own path into the
+                // renderer and does not pass through
+                // GameControllerManager, so the check has to be repeated
+                // here or a phone could never work the panel a pad can.
+                Task { @MainActor in
+                    if menuVisible {
+                        if down { macMenuButton(id) }
+                        return
+                    }
+                    renderer?.setButton(id, down: down, port: port)
+                }
+            },
+            onStick: { [weak renderer] port, x, y in
+                renderer?.setStick(x: x, y: y, port: port)
+            },
+            onRelative: { port, dx, dy in
+                LibretroFrontend.shared.addMouseDeltaX(dx, y: dy, port: port)
+            },
+            onPointer: { port, x, y, down in
+                // melonDS reads the touchscreen on port 0 only, the same
+                // exception the television makes: pad on the buttons and
+                // phone as the stylus is a real two-hands setup.
+                let target = platform == .nds ? 0 : port
+                LibretroFrontend.shared.setPointerX(Float(x), y: Float(y), down: down, port: target)
+            },
+            onOffscreen: { port, off in
+                LibretroFrontend.shared.setLightgunOffscreen(off, port: port)
+            },
+            // The Mac diverges from the television here, deliberately.
+            // A Mac has no remote, and the phone's own menu has no Quit
+            // by design, so the phone's menu button raises this screen's
+            // panel: Quit, the shader and the glow, all on the screen
+            // the game is on.
+            //
+            // The phone still shows its own dialog at the same time, and
+            // that dialog is modal, so it covers the d-pad that would
+            // otherwise drive this panel. Marcus's call, 2026-08-30: the
+            // mouse is fine for pressing it, and having the menu appear
+            // on screen at all is the part that matters. Making the
+            // phone defer to this panel instead would mean the host
+            // telling the phone what kind of machine it is, which is a
+            // wire-format change shipping on both apps at once.
+            //
+            // Nothing on the phone or on tvOS changes; this is the Mac
+            // host's own reaction to a pause it already receives.
+            onPause: { paused in
+                Task { @MainActor in
+                    if paused {
+                        macMenuSelection = 0
+                        openMenu()
+                    } else {
+                        closeMenu()
+                    }
+                }
+            },
+            onSave: { Task { @MainActor in saveState() } },
+            onLoad: { Task { @MainActor in loadLatestState() } },
+            onPhone: { joined in
+                Task { @MainActor in
+                    if platform == .nds {
+                        // The tvOS forced option keeps melonDS in
+                        // Joystick mode; a phone IS a touchscreen, so
+                        // its presence flips the core to Touch mid-game
+                        // and its leaving flips back.
+                        var opts = NativeCoreOptionsStore.dictionary(for: .nds)
+                        if joined { opts["melonds_touch_mode"] = "Touch" }
+                        LibretroFrontend.shared.updateCoreOptions(opts)
+                        // The shareplay split: a joined phone gets the
+                        // bottom screen as video and this window gives
+                        // everything to the top one. Leaving reverts
+                        // both. Identical to the television, because a
+                        // phone should not behave differently depending
+                        // on which of your machines it joined.
+                        if joined {
+                            if macVideoServer == nil, let server = DSVideoServer() {
+                                macVideoServer = server
+                                renderer.dsBottomFrameTap = { [weak server] pixels, stride in
+                                    server?.submit(bottomHalf: pixels, bytesPerRow: stride)
+                                }
+                                macPhoneLink?.offerVideo(port: server.port, token: server.token)
+                            }
+                            renderer.dsTopOnly = true
+                        } else {
+                            macPhoneLink?.revokeVideo()
+                            renderer.dsTopOnly = false
+                            renderer.dsBottomFrameTap = nil
+                            macVideoServer?.stop()
+                            macVideoServer = nil
+                        }
+                    }
+                }
+            },
+            onPairingCode: { code in
+                Task { @MainActor in
+                    withAnimation(.easeInOut(duration: 0.25)) { macPairingCode = code }
+                }
+            },
+            onDrop: {}
+        )
+        link.start()
+        macPhoneLink = link
+        // A phone holding a seat is that player's controller, so the
+        // game's rumble has to reach it over the wire. A Mac has no
+        // Taptic Engine of its own either.
+        GameControllerManager.companionRumble = { [weak link] port, strong, strength in
+            link?.sendRumble(port: port, strong: strong, strength: strength)
+        }
+        // Dreamcast alone: mirror player one's VMU LCD to the phone's
+        // controller screen, the display half of the phone-as-VMU
+        // design.
+        if platform == .dreamcast {
+            VMULCDRelay.shared.install { [weak link] packed in
+                link?.sendVMULCD(packed)
+            }
+        }
+        // The pairing screen may still be alive underneath this cover
+        // with its own listener up; one advertisement at a time.
+        NotificationCenter.default.post(name: .cabinetGameLinkStarted, object: nil)
+    }
+
+    /// Everything the link owns, released together, mirroring the
+    /// television's own teardown.
+    private func stopMacPhoneLink() {
+        if macPhoneLink != nil {
+            NotificationCenter.default.post(name: .cabinetGameLinkEnded, object: nil)
+        }
+        renderer.dsBottomFrameTap = nil
+        renderer.dsTopOnly = false
+        macVideoServer?.stop()
+        macVideoServer = nil
+        VMULCDRelay.shared.uninstall()
+        GameControllerManager.companionRumble = nil
+        macPhoneLink?.stop()
+        macPhoneLink = nil
+    }
+    #endif
+
+    #if targetEnvironment(macCatalyst)
+    /// The Mac's pause panel.
+    ///
+    /// The shared menu is a phone card: 280pt wide, every control a
+    /// full-width bordered button stacked in a column, which on a desk
+    /// reads as a phone screenshot dropped into a window. A Mac panel is
+    /// wider, states the game once at a real size, and puts a setting's
+    /// current value on the row that changes it instead of hiding it
+    /// behind a press.
+    ///
+    /// Letterbox glow lives here as well as in Settings. It is the one
+    /// setting whose effect is only visible while a game is on screen,
+    /// so changing it anywhere else means guessing, and quitting to
+    /// Settings to judge a picture you can no longer see is the wrong
+    /// shape for it.
+    private var macPauseMenu: some View {
+        ZStack {
+            Color.black.opacity(0.55).ignoresSafeArea()
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(rom.displayName)
+                        .font(.title2.weight(.semibold))
+                        .lineLimit(1)
+                    Text(menuStatus ?? "Paused")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.bottom, 20)
+
+                VStack(spacing: 8) {
+                    macSettingRow("Shader", systemImage: "camera.filters", value: renderer.shader.label) {
+                        ForEach(NativeShader.available(for: platform)) { candidate in
+                            Button {
+                                renderer.shader = candidate
+                                NativeShader.setCurrent(candidate, for: platform)
+                            } label: {
+                                if candidate == renderer.shader {
+                                    Label(candidate.label, systemImage: "checkmark")
+                                } else {
+                                    Text(candidate.label)
+                                }
+                            }
+                        }
+                    }
+                    macSettingRow("Letterbox glow", systemImage: "light.max",
+                                  value: BiasGlowLevel.level(fromStored: macGlowStored).label) {
+                        ForEach(BiasGlowLevel.allCases) { level in
+                            Button {
+                                macGlowStored = level.rawValue
+                            } label: {
+                                if level.rawValue == macGlowStored {
+                                    Label(level.label, systemImage: "checkmark")
+                                } else {
+                                    Text(level.label)
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.bottom, 20)
+
+                // Built from the same list a pad walks, so the ring
+                // showing what is selected can never point at a
+                // different row than the one a press would activate.
+                HStack(spacing: 10) {
+                    ForEach(Array(macMenuRows.enumerated()), id: \.offset) { index, row in
+                        macMenuRowButton(row: row, index: index)
+                    }
+                }
+            }
+            .frame(width: 460, alignment: .leading)
+            .padding(28)
+            .background(.regularMaterial, in: .rect(cornerRadius: 16))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(.white.opacity(0.08), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.45), radius: 30, y: 12)
+            .disabled(menuBusy)
+        }
+    }
+
+    /// A label, its current value, and a menu to change it: the shape a
+    /// Mac uses for a setting, rather than a button that says only what
+    /// it would open.
+    private func macSettingRow<Content: View>(
+        _ title: String,
+        systemImage: String,
+        value: String,
+        @ViewBuilder menu: () -> Content
+    ) -> some View {
+        HStack {
+            Label(title, systemImage: systemImage)
+            Spacer()
+            Menu {
+                menu()
+            } label: {
+                HStack(spacing: 4) {
+                    Text(value).foregroundStyle(.secondary)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.white.opacity(0.06), in: .rect(cornerRadius: 8))
+    }
+    #endif
+
     private var pauseMenu: some View {
         ZStack {
             Color.black.opacity(0.55)

@@ -290,9 +290,15 @@ struct GameLaunchView: View {
                 // "Close" as text read as one crowded pill of mismatched
                 // shapes. Two symbols read as two buttons.
                 #if targetEnvironment(macCatalyst)
+                // Escape, because closing a modal is what Escape does on
+                // a Mac. The swipe-to-dismiss below this screen's scroll
+                // content is a touch gesture and never fires here: a
+                // two-finger trackpad swipe is a scroll event, not a
+                // drag, so SwiftUI hands it to the scroll view instead.
                 Button { dismiss() } label: {
                     Image(systemName: "xmark.circle.fill")
                 }
+                .keyboardShortcut(.escape, modifiers: [])
                 #else
                 Button("Close") { dismiss() }
                 #endif

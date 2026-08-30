@@ -30,6 +30,20 @@ extension View {
         #endif
     }
 
+    /// Feeds pointer movement to the Mac's idle-cursor clock while a
+    /// game is on screen, so the pointer reappears as soon as it moves
+    /// and disappears again once it settles. Nothing on iOS or tvOS.
+    @ViewBuilder
+    func macGameCursor() -> some View {
+        #if targetEnvironment(macCatalyst)
+        self.onContinuousHover { phase in
+            if case .active = phase { MacWindow.noteCursorMoved() }
+        }
+        #else
+        self
+        #endif
+    }
+
     /// The TV settings row treatment on the Mac: glass behind list
     /// rows instead of the iOS grouped-list slab. A no-op on iOS and
     /// tvOS, where each platform's own list chrome is already right.
