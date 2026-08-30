@@ -39,7 +39,11 @@ struct MainTabView: View {
         // compiles this branch.
         ZStack {
             MacAmbientBackground()
-            tabs
+            // Not `tabs`: this platform navigates from a source list, and
+            // having no tab controller in the window is what keeps
+            // Catalyst from hoisting a tab bar into the titlebar. See
+            // MacSidebarShell.
+            MacSidebarShell()
         }
         .environment(\.colorScheme, .dark)
         // The app menu's Settings… (Cmd+comma) lands here, the same

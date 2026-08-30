@@ -474,6 +474,13 @@ struct LibraryScreen: View {
                 .sorted { platformLabel(for: $0) < platformLabel(for: $1) }
             await loadTileArt()
         } catch {
+            // A cancelled fetch leaves whatever is already on screen
+            // alone, and is not worth a diagnostics entry either. See
+            // isCancellation.
+            guard !isCancellation(error) else {
+                loadingPlatforms = false
+                return
+            }
             platformsError = LoadFailure(error)
             DiagnosticsLog.record(
                 context: "Library load", message: error.localizedDescription, romVersion: session.serverVersion

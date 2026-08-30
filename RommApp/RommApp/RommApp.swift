@@ -97,9 +97,14 @@ struct RommApp: App {
             .onAppear { MacWindow.styleAll() }
             // The whole app's type, one dial: a desk sits further from
             // the glass than a hand does, so the Mac reads every
-            // semantic font one dynamic-type notch up. Set here so it
+            // semantic font two dynamic-type notches up. Set here so it
             // cascades through every screen and presentation.
-            .dynamicTypeSize(.xLarge)
+            //
+            // Two rather than one because Catalyst has already mapped
+            // every iOS text style down to Mac metrics before this
+            // applies, putting body at 13pt against the phone's 17, so
+            // the first notch only undoes part of that.
+            .dynamicTypeSize(.xxLarge)
             #endif
             #if os(iOS)
             // A widget press or a Spotlight result arrives here as a

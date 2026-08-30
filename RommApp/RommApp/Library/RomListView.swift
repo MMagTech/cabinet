@@ -352,11 +352,58 @@ struct RomListView: View {
     }
 
     private func reload() async {
+        #if targetEnvironment(macCatalyst)
+        // Paint what this source had last time, then check the server
+        // rather than trust it. The Mac rebuilds this view every time
+        // the sidebar comes back to a platform, so without the cache
+        // every visit is a cold fetch, and without the check behind it
+        // a visit would show yesterday's library with no way to
+        // refresh: this screen has no pull-to-refresh.
+        if let cached = MacRomListCache.shared.entry(for: source.modeKey) {
+            roms = cached.roms
+            total = cached.total
+            error = nil
+            await revalidate()
+            return
+        }
+        #endif
         roms = []
         total = 0
         error = nil
         await loadNextPage()
     }
+
+    #if targetEnvironment(macCatalyst)
+    /// Asks the server for this source's first page and, if the count no
+    /// longer matches what was cached, throws the cache away and loads
+    /// again from the top.
+    ///
+    /// The total is the cheap signal: a game added, removed or moved on
+    /// the server changes it, and one page is a far smaller ask than
+    /// refetching a platform with hundreds of roms just to find out
+    /// nothing moved. A failure here is silent on purpose, since there
+    /// are already games on screen and this is a check, not a load.
+    private func revalidate() async {
+        let latest: Int?
+        switch source {
+        case .platform(let platform):
+            latest = try? await session.roms(platformId: platform.id, offset: 0).total
+        case .collection(let collection):
+            latest = try? await session.roms(collectionId: collection.id, offset: 0).total
+        case .recentlyPlayed, .keptPlatform:
+            // Recents reorder without changing count, and a kept list is
+            // read from the device rather than the server. Neither is
+            // reachable from the Mac sidebar today; both are left alone
+            // rather than given a check that would not mean anything.
+            return
+        }
+        guard let latest, latest != total else { return }
+        MacRomListCache.shared.drop(source.modeKey)
+        roms = []
+        total = 0
+        await loadNextPage()
+    }
+    #endif
 
     private func loadMoreIfNeeded(current rom: Rom) async {
         guard rom.id == roms.last?.id, roms.count < total else { return }
@@ -389,8 +436,13 @@ struct RomListView: View {
                 roms.append(contentsOf: page.items)
                 total = page.total
             }
+            #if targetEnvironment(macCatalyst)
+            MacRomListCache.shared.store(roms, total: total, for: source.modeKey)
+            #endif
         } catch {
-            self.error = LoadFailure(error)
+            // A cancelled fetch leaves whatever is already on screen
+            // alone. See isCancellation.
+            if !isCancellation(error) { self.error = LoadFailure(error) }
         }
         loading = false
     }
