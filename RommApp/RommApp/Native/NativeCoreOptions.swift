@@ -519,6 +519,34 @@ enum NativeCoreOptionsStore {
     ///
     /// The pad type is excluded: it is not a core variable, it reaches the
     /// core through `padDevice(for:)` instead.
+    /// The N64 CPU core. The Mac carries the JIT entitlement, so it
+    /// gets the real recompiler; iOS and tvOS stay on the cached
+    /// interpreter, which is as far as a process without that
+    /// entitlement can go. `dynamic_recompiler` reaches malloc_exec and
+    /// PROT_EXEC pages (r4300_core.c under EMUMODE_DYNAREC), which is
+    /// exactly what they cannot do.
+    private static var n64CpuCore: String {
+        #if targetEnvironment(macCatalyst)
+        "dynamic_recompiler"
+        #else
+        "cached_interpreter"
+        #endif
+    }
+
+    /// The PSP CPU core. "IR JIT" resolves to the IR INTERPRETER
+    /// wherever SYSPROP_CAN_JIT is false, which is every platform but
+    /// this one, so the Mac asks for the ARM64 recompiler that has been
+    /// compiled in all along and never allowed to run. Both strings are
+    /// upstream's own (libretro.cpp maps them to CPUCore::JIT and
+    /// CPUCore::IR_INTERPRETER).
+    private static var pspCpuCore: String {
+        #if targetEnvironment(macCatalyst)
+        "JIT"
+        #else
+        "IR JIT"
+        #endif
+    }
+
     static func dictionary(for platform: NativePlatform) -> [String: String] {
         var result: [String: String] = [:]
         let alwaysSendResolved = platform != .n64 && platform != .dreamcast
@@ -636,7 +664,7 @@ enum NativeCoreOptionsStore {
             // hardware rendering (ppsspp_software_rendering defaults
             // disabled), no frameskip.
             return [
-                "ppsspp_cpu_core": "IR JIT",
+                "ppsspp_cpu_core": pspCpuCore,
                 "ppsspp_internal_resolution": "480x272",
             ]
         case .nds:
@@ -851,17 +879,29 @@ enum NativeCoreOptionsStore {
             // ordinary RetroPad ids the way the rest of this app already
             // reads input, matching n64.json's own ids exactly.
             return [
-                "mupen64plus-cpucore": "cached_interpreter",
+                "mupen64plus-cpucore": n64CpuCore,
                 "mupen64plus-rdp-plugin": "gliden64",
                 "mupen64plus-MaxTxCacheSize": "8000",
-                // Framebuffer emulation stays OFF, which is what this
-                // frontend has always run (the globals initialise to 0 and
-                // the keys were never answered), and it is not an
-                // oversight to correct. Turning it and the two buffer
-                // copies on to their documented defaults was tried on
-                // 2026-08-17 to explain missing scenery in Hydro Thunder,
-                // and it made that game strictly worse: the boat and the
-                // water stopped drawing at all.
+                // Framebuffer emulation is OFF here and ON for the Mac
+                // (n64MacFramebufferTrial below), and 2026-08-30 is when
+                // that stopped being an open question.
+                //
+                // The history: turning it on together with both RDRAM
+                // copies was tried on 2026-08-17 to explain missing
+                // scenery in Hydro Thunder, made that game strictly
+                // worse, the boat and water stopped drawing at all, and
+                // was reverted without learning which of the three did
+                // it. Running the experiment this comment asked for,
+                // EnableFBEmulation alone with both copies explicitly
+                // Off, FIXED Hydro Thunder's missing walls and ramps on
+                // the Mac (Marcus, 2026-08-30). So framebuffer emulation
+                // was never the problem; one or both of the copies was,
+                // and the August result was the copies' fault.
+                //
+                // It stays off on iOS and tvOS only because those two
+                // have not been tested with it. That is a device pass
+                // waiting to happen, not a decision that they should
+                // differ.
                 //
                 // The cause is NOT established, and the obvious theory was
                 // checked and rejected: GLideN64 does treat framebuffer 0
@@ -930,10 +970,38 @@ enum NativeCoreOptionsStore {
                 // gap-class as the missing pak1 default above.
                 "mupen64plus-astick-sensitivity": "100",
                 "mupen64plus-astick-deadzone": "15",
-            ]
+            ].merging(n64MacFramebufferTrial) { _, trial in trial }
         default:
             return [:]
         }
+    }
+
+    /// Framebuffer emulation, on for the Mac, with both RDRAM copies
+    /// explicitly off.
+    ///
+    /// That note records turning EnableFBEmulation on together with both
+    /// RDRAM copies on 2026-08-17, which made Hydro Thunder strictly
+    /// worse, and says plainly that anyone retrying it should set
+    /// EnableFBEmulation alone with both copies explicitly Off and
+    /// change one thing at a time. This is that, and it worked: Hydro
+    /// Thunder's walls and ramps came back, and Mario Kart 64 was
+    /// unaffected. The copies were what broke that game in August.
+    ///
+    /// Catalyst only, so the iPhone and the Apple TV keep running the
+    /// configuration they were verified on while this is evaluated. If
+    /// it holds up, promoting it to every platform is a separate
+    /// decision with its own device pass, not a side effect of a Mac
+    /// investigation.
+    private static var n64MacFramebufferTrial: [String: String] {
+        #if targetEnvironment(macCatalyst)
+        return [
+            "mupen64plus-EnableFBEmulation": "True",
+            "mupen64plus-EnableCopyColorToRDRAM": "Off",
+            "mupen64plus-EnableCopyDepthToRDRAM": "Off",
+        ]
+        #else
+        return [:]
+        #endif
     }
 
     /// Core defaults this app was silently not applying, restored

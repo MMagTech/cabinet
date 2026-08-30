@@ -16,10 +16,11 @@
 # CMAKE_CXX_FLAGS, no ld PATH-shim trick needed the way the make-based
 # builds require.
 #
-# -DTARGET_NO_REC forces the interpreter (no dynamic recompiler): this
-# app's native cores run in the app process, which carries no JIT
-# entitlement, the same constraint PCSX ReARMed and Beetle Saturn build
-# under. -DUSE_VULKAN=ON is required for the CMake config to succeed
+# -DTARGET_NO_REC forces the interpreter (no dynamic recompiler) on iOS
+# and tvOS: the app process there carries no JIT entitlement, the same
+# constraint PCSX ReARMed and Beetle Saturn build under. The mac build
+# omits it and gets the real SH4 dynarec, because macOS grants that
+# entitlement to a signed app. -DUSE_VULKAN=ON is required for the CMake config to succeed
 # even though this app only drives Flycast's GLES3 path; it costs
 # nothing at runtime since GLES3 is what LibretroFrontend actually
 # requests via RETRO_ENVIRONMENT_SET_HW_RENDER.
@@ -158,7 +159,17 @@ grep -q 'void cabinetSetVMUScreenCallback' "$SRC/core/rend/osd.cpp" \
     && grep -q 'cabinetVMUScreenCallback(vmu_id, buffer);' "$SRC/core/rend/osd.cpp" \
     || { echo "vmu screen callback patch did not apply; upstream shape changed" >&2; exit 1; }
 
-FLAGS="-fno-common -DTARGET_NO_REC -DIOS"
+# The Mac is the one platform that gets the recompiler. macOS grants a
+# signed app the JIT entitlement (CabinetMac.entitlements), so Flycast's
+# SH4 dynarec can map executable pages and actually run, which is the
+# whole reason the Mac target exists. iOS and tvOS keep TARGET_NO_REC
+# because the app process there carries no such entitlement, the same
+# constraint PCSX ReARMed and Beetle Saturn build under.
+if [ "$PLATFORM" = mac ]; then
+    FLAGS="-fno-common -DIOS"
+else
+    FLAGS="-fno-common -DTARGET_NO_REC -DIOS"
+fi
 if [ "$PLATFORM" = mac ]; then
     FLAGS="$FLAGS -target arm64-apple-ios18.0-macabi -I$(pwd)/RommApp/Vendor/ANGLE/include -I$(pwd)/tools/mac-support/gles-compat"
     LINKER_FLAGS="-target arm64-apple-ios18.0-macabi"
