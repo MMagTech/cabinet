@@ -35,8 +35,16 @@ tvos)
     MINVERSION_FLAG=-mappletvos-version-min=18.0
     MAKE_PLATFORM=tvos-arm64
     XCRUN_SDK=appletvos ;;
+mac)
+    # Mac Catalyst, riding the ios-arm64 Makefile case with the shim
+    # below rewriting the platform flags to the macabi triple. Same
+    # approach as tools/build-core.sh's mac case.
+    SDK=$(xcrun -sdk macosx --show-sdk-path)
+    MINVERSION_FLAG="-target arm64-apple-ios18.0-macabi"
+    MAKE_PLATFORM=ios-arm64
+    XCRUN_SDK=macosx ;;
 *)
-    echo "unknown platform: $PLATFORM (expected ios or tvos)" >&2; exit 1 ;;
+    echo "unknown platform: $PLATFORM (expected ios, tvos or mac)" >&2; exit 1 ;;
 esac
 
 # bsat_wrapper.c is hand-written, not part of the cloned repo, and lives
@@ -71,10 +79,22 @@ WRAP="$(pwd)/$SPIKE/ccwrap"
 mkdir -p "$WRAP"
 real_cc=$(xcrun -sdk "$XCRUN_SDK" -find clang)
 real_cxx=$(xcrun -sdk "$XCRUN_SDK" -find clang++)
-printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cc" > "$WRAP/cc"
-printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cc" > "$WRAP/clang"
-printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cxx" > "$WRAP/c++"
-printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cxx" > "$WRAP/clang++"
+if [ "$PLATFORM" = mac ]; then
+    # The Catalyst rewrite on top of -fno-common: strip the Makefile's
+    # iOS minimum-version and sysroot flags, substitute the macabi
+    # target and the macOS SDK. See tools/build-core.sh's mac shim.
+    for tool in cc clang; do
+        printf '#!/bin/bash\nout=(); skip=0\nfor a in "$@"; do\n  if [[ $skip == 1 ]]; then skip=0; continue; fi\n  case "$a" in\n    -miphoneos-version-min=*) continue ;;\n    -isysroot) skip=1; continue ;;\n  esac\n  out+=("$a")\ndone\nexec "%s" -fno-common -target arm64-apple-ios18.0-macabi -isysroot "%s" "${out[@]}"\n' "$real_cc" "$SDK" > "$WRAP/$tool"
+    done
+    for tool in c++ clang++; do
+        printf '#!/bin/bash\nout=(); skip=0\nfor a in "$@"; do\n  if [[ $skip == 1 ]]; then skip=0; continue; fi\n  case "$a" in\n    -miphoneos-version-min=*) continue ;;\n    -isysroot) skip=1; continue ;;\n  esac\n  out+=("$a")\ndone\nexec "%s" -fno-common -target arm64-apple-ios18.0-macabi -isysroot "%s" "${out[@]}"\n' "$real_cxx" "$SDK" > "$WRAP/$tool"
+    done
+else
+    printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cc" > "$WRAP/cc"
+    printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cc" > "$WRAP/clang"
+    printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cxx" > "$WRAP/c++"
+    printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cxx" > "$WRAP/clang++"
+fi
 chmod +x "$WRAP"/*
 
 PATH="$WRAP:$PATH" make -C "$SRC" platform=$MAKE_PLATFORM -j"$(sysctl -n hw.ncpu)"
@@ -82,7 +102,8 @@ PATH="$WRAP:$PATH" make -C "$SRC" platform=$MAKE_PLATFORM -j"$(sysctl -n hw.ncpu
 DYLIB=$(find "$SRC" -maxdepth 1 -name '*.dylib' | head -1)
 [ -n "$DYLIB" ] || { echo "no dylib produced" >&2; exit 1; }
 
-cc -arch arm64 -isysroot "$SDK" "$MINVERSION_FLAG" -O2 \
+# MINVERSION_FLAG unquoted on purpose: the mac value is two words.
+cc -arch arm64 -isysroot "$SDK" $MINVERSION_FLAG -O2 \
     -I"$SRC" -c "$WRAPPER_SRC" -o "$SPIKE/bsat_wrapper.o"
 
 nm -g "$DYLIB" 2>/dev/null \

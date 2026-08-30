@@ -58,8 +58,19 @@ tvos)
     MINVERSION_FLAG=-mappletvos-version-min=18.0
     DEPLOYMENT_TARGET=18.0
     SYSTEM_NAME=tvOS ;;
+mac)
+    # Mac Catalyst. CMake has no Catalyst system name, so this is a
+    # Darwin build whose every compile and link carries the macabi
+    # triple via the FLAGS below, the same rewrite the Makefile cores
+    # get from build-core.sh's shim. GLES headers come from the
+    # vendored ANGLE include tree: the macOS SDK ships none.
+    SDK=$(xcrun -sdk macosx --show-sdk-path)
+    OSX_SYSROOT=macosx
+    MINVERSION_FLAG="-target arm64-apple-ios18.0-macabi"
+    DEPLOYMENT_TARGET=""
+    SYSTEM_NAME=Darwin ;;
 *)
-    echo "unknown platform: $PLATFORM (expected ios or tvos)" >&2; exit 1 ;;
+    echo "unknown platform: $PLATFORM (expected ios, tvos or mac)" >&2; exit 1 ;;
 esac
 
 if [ ! -d "$SRC" ]; then
@@ -148,6 +159,18 @@ grep -q 'void cabinetSetVMUScreenCallback' "$SRC/core/rend/osd.cpp" \
     || { echo "vmu screen callback patch did not apply; upstream shape changed" >&2; exit 1; }
 
 FLAGS="-fno-common -DTARGET_NO_REC -DIOS"
+if [ "$PLATFORM" = mac ]; then
+    FLAGS="$FLAGS -target arm64-apple-ios18.0-macabi -I$(pwd)/RommApp/Vendor/ANGLE/include -I$(pwd)/tools/mac-support/gles-compat"
+    LINKER_FLAGS="-target arm64-apple-ios18.0-macabi"
+    # The IOS masquerade makes CMake link OpenGLES.framework, which the
+    # macOS SDK does not have; the vendored ANGLE GLES library stands in
+    # so the intermediate dylib link resolves. Only the objects survive
+    # into the merged archive either way.
+    OPENGLES_OVERRIDE="-DOPENGLES=$(pwd)/RommApp/Vendor/ANGLE/mac/libGLESv2.framework/libGLESv2"
+else
+    LINKER_FLAGS=""
+    OPENGLES_OVERRIDE=""
+fi
 
 # tvOS masquerades as iOS to Flycast's own build, via -DIOS=ON below.
 # Flycast keys every GLES decision off CMake's `IOS` variable, which CMake
@@ -167,16 +190,23 @@ FLAGS="-fno-common -DTARGET_NO_REC -DIOS"
 # (-DTARGET_NO_REC), so nothing ever asks to make JIT pages writable.
 IOS_FLAG=OFF
 [ "$PLATFORM" = tvos ] && IOS_FLAG=ON
+# The mac build masquerades for the same reason tvOS does: CMake only
+# sets its IOS variable for CMAKE_SYSTEM_NAME=iOS, and without it
+# Flycast falls through to the desktop-GL branch and dies in typedef
+# redefinitions. TARGET_IPHONE rides along harmlessly, interpreter-only.
+[ "$PLATFORM" = mac ] && IOS_FLAG=ON
 cmake -S "$SRC" -B "$BUILD" -G "Unix Makefiles" \
     -DCMAKE_SYSTEM_NAME=$SYSTEM_NAME \
     -DCMAKE_OSX_SYSROOT=$OSX_SYSROOT \
     -DCMAKE_OSX_ARCHITECTURES=arm64 \
-    -DCMAKE_OSX_DEPLOYMENT_TARGET=$DEPLOYMENT_TARGET \
+    ${DEPLOYMENT_TARGET:+-DCMAKE_OSX_DEPLOYMENT_TARGET=$DEPLOYMENT_TARGET} \
+    ${LINKER_FLAGS:+-DCMAKE_SHARED_LINKER_FLAGS="$LINKER_FLAGS"} \
     -DCMAKE_BUILD_TYPE=Release \
     -DLIBRETRO=ON \
     -DUSE_OPENGL=ON \
     -DUSE_VULKAN=ON \
     ${IOS_FLAG:+-DIOS=$IOS_FLAG} \
+    $OPENGLES_OVERRIDE \
     -DCMAKE_C_FLAGS="$FLAGS" \
     -DCMAKE_CXX_FLAGS="$FLAGS"
 

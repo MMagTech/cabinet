@@ -32,8 +32,17 @@ tvos)
     SDK=$(xcrun -sdk appletvos --show-sdk-path)
     XCRUN_SDK=appletvos
     MAKE_PLATFORM=tvos-arm64 ;;
+mac)
+    # Mac Catalyst. Not the ios9 case: that is FBNeo's 32-bit-era iOS
+    # case and hardcodes -arch armv7, which Catalyst refuses outright.
+    # tvos-arm64 is the modern arm64 Apple case; the shim below strips
+    # its arch, sysroot and min-version flags and substitutes the
+    # macabi triple, same approach as tools/build-core.sh's mac case.
+    SDK=$(xcrun -sdk macosx --show-sdk-path)
+    XCRUN_SDK=macosx
+    MAKE_PLATFORM=tvos-arm64 ;;
 *)
-    echo "unknown platform: $PLATFORM (expected ios or tvos)" >&2; exit 1 ;;
+    echo "unknown platform: $PLATFORM (expected ios, tvos or mac)" >&2; exit 1 ;;
 esac
 
 SPIKE=spikes/FBNeoStatic
@@ -61,10 +70,22 @@ CCWRAP="$(pwd)/$SPIKE/ccwrap-$PLATFORM"
 mkdir -p "$CCWRAP"
 real_cc=$(xcrun -sdk "$XCRUN_SDK" -find clang)
 real_cxx=$(xcrun -sdk "$XCRUN_SDK" -find clang++)
-printf '#!/bin/sh\nexec "%s" -fno-common "$@" -fno-common\n' "$real_cc" > "$CCWRAP/cc"
-printf '#!/bin/sh\nexec "%s" -fno-common "$@" -fno-common\n' "$real_cc" > "$CCWRAP/clang"
-printf '#!/bin/sh\nexec "%s" -fno-common "$@" -fno-common\n' "$real_cxx" > "$CCWRAP/c++"
-printf '#!/bin/sh\nexec "%s" -fno-common "$@" -fno-common\n' "$real_cxx" > "$CCWRAP/clang++"
+if [ "$PLATFORM" = mac ]; then
+    # The Catalyst rewrite on top of -fno-common: strip the Makefile's
+    # iOS minimum-version and sysroot flags, substitute the macabi
+    # target and the macOS SDK. See tools/build-core.sh's mac shim.
+    for tool in cc clang; do
+        printf '#!/bin/bash\nout=(); skip=0\nfor a in "$@"; do\n  if [[ $skip == 1 ]]; then skip=0; continue; fi\n  case "$a" in\n    -miphoneos-version-min=*) continue ;;\n    -mappletvos-version-min=*) continue ;;\n    -arch) skip=1; continue ;;\n    -isysroot) skip=1; continue ;;\n  esac\n  out+=("$a")\ndone\nexec "%s" -fno-common -target arm64-apple-ios18.0-macabi -isysroot "%s" "${out[@]}" -fno-common\n' "$real_cc" "$SDK" > "$CCWRAP/$tool"
+    done
+    for tool in c++ clang++; do
+        printf '#!/bin/bash\nout=(); skip=0\nfor a in "$@"; do\n  if [[ $skip == 1 ]]; then skip=0; continue; fi\n  case "$a" in\n    -miphoneos-version-min=*) continue ;;\n    -mappletvos-version-min=*) continue ;;\n    -arch) skip=1; continue ;;\n    -isysroot) skip=1; continue ;;\n  esac\n  out+=("$a")\ndone\nexec "%s" -fno-common -target arm64-apple-ios18.0-macabi -isysroot "%s" "${out[@]}" -fno-common\n' "$real_cxx" "$SDK" > "$CCWRAP/$tool"
+    done
+else
+    printf '#!/bin/sh\nexec "%s" -fno-common "$@" -fno-common\n' "$real_cc" > "$CCWRAP/cc"
+    printf '#!/bin/sh\nexec "%s" -fno-common "$@" -fno-common\n' "$real_cc" > "$CCWRAP/clang"
+    printf '#!/bin/sh\nexec "%s" -fno-common "$@" -fno-common\n' "$real_cxx" > "$CCWRAP/c++"
+    printf '#!/bin/sh\nexec "%s" -fno-common "$@" -fno-common\n' "$real_cxx" > "$CCWRAP/clang++"
+fi
 chmod +x "$CCWRAP"/*
 
 PATH="$CCWRAP:$PATH" make -C "$LIBRETRO_DIR" clean

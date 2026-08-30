@@ -27,8 +27,20 @@ tvos)
     SDK=$(xcrun -sdk appletvos --show-sdk-path)
     MINVERSION_FLAG=-mappletvos-version-min=18.0
     MAKE_PLATFORM=tvos-arm64 ;;
+mac)
+    # Mac Catalyst. No libretro Makefile knows the macabi triple, so
+    # this rides each core's ios-arm64 case, which picks the right
+    # sources and Apple defines, and the compiler shim below rewrites
+    # the platform flags: the iOS minimum-version and sysroot flags are
+    # stripped and the Catalyst target plus the macOS SDK take their
+    # place. The objects come out arm64-apple-ios-macabi, which is what
+    # the RommAppMac target links; plain macOS objects would be
+    # rejected by its linker.
+    SDK=$(xcrun -sdk macosx --show-sdk-path)
+    MINVERSION_FLAG="-target arm64-apple-ios18.0-macabi"
+    MAKE_PLATFORM=ios-arm64 ;;
 *)
-    echo "unknown platform: $PLATFORM (expected ios or tvos)" >&2; exit 1 ;;
+    echo "unknown platform: $PLATFORM (expected ios, tvos or mac)" >&2; exit 1 ;;
 esac
 
 case "$NAME" in
@@ -153,6 +165,9 @@ esac
 if [ "$PLATFORM" = tvos ]; then
     LIB=$(echo "$LIB" | sed 's/_ios\.a$/_tvos.a/')
 fi
+if [ "$PLATFORM" = mac ]; then
+    LIB=$(echo "$LIB" | sed 's/_ios\.a$/_mac.a/')
+fi
 
 # A separate spike/source checkout per platform: these Makefiles drop .o
 # files next to the .c files they came from rather than into a
@@ -225,15 +240,26 @@ if [ "$MAKEFILE" = cmake ]; then
     # tvos-arm64 Makefile case.
     CMAKE_SYSTEM_NAME=iOS
     [ "$PLATFORM" = tvos ] && CMAKE_SYSTEM_NAME=tvOS
+    CMAKE_FLAGS="-fno-common"
+    if [ "$PLATFORM" = mac ]; then
+        # Catalyst via CMake: a Darwin build against the macOS SDK whose
+        # every compile carries the macabi target, the same rewrite the
+        # Makefile cores get from the compiler shim.
+        CMAKE_SYSTEM_NAME=Darwin
+        CMAKE_FLAGS="-fno-common -target arm64-apple-ios18.0-macabi"
+        CMAKE_EXTRA="-DCMAKE_OSX_SYSROOT=macosx"
+    else
+        CMAKE_EXTRA="-DCMAKE_OSX_DEPLOYMENT_TARGET=18.0"
+    fi
     cmake -S "$SRC" -B "$SPIKE/build" \
         -DCMAKE_SYSTEM_NAME=$CMAKE_SYSTEM_NAME \
         -DCMAKE_OSX_ARCHITECTURES=arm64 \
-        -DCMAKE_OSX_DEPLOYMENT_TARGET=18.0 \
+        $CMAKE_EXTRA \
         -DBUILD_LIBRETRO=ON -DBUILD_QT=OFF -DBUILD_SDL=OFF \
         -DUSE_FFMPEG=OFF -DUSE_SQLITE3=OFF -DUSE_DISCORD_RPC=OFF \
         -DUSE_EDITLINE=OFF -DUSE_ELF=OFF -DBUILD_GLES2=OFF \
         -DBUILD_GLES3=OFF -DBUILD_GL=OFF \
-        -DCMAKE_C_FLAGS=-fno-common -DCMAKE_CXX_FLAGS=-fno-common \
+        -DCMAKE_C_FLAGS="$CMAKE_FLAGS" -DCMAKE_CXX_FLAGS="$CMAKE_FLAGS" \
         > "$SPIKE/cmake.log" 2>&1
     cmake --build "$SPIKE/build" --target mgba_libretro -j"$JOBS"
     SRC=$SPIKE/build
@@ -271,12 +297,28 @@ else
     mkdir -p "$WRAP"
     XCRUN_SDK=iphoneos
     [ "$PLATFORM" = tvos ] && XCRUN_SDK=appletvos
+    [ "$PLATFORM" = mac ] && XCRUN_SDK=macosx
     real_cc=$(xcrun -sdk "$XCRUN_SDK" -find clang)
     real_cxx=$(xcrun -sdk "$XCRUN_SDK" -find clang++)
-    printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cc" > "$WRAP/cc"
-    printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cc" > "$WRAP/clang"
-    printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cxx" > "$WRAP/c++"
-    printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cxx" > "$WRAP/clang++"
+    if [ "$PLATFORM" = mac ]; then
+        # The Catalyst rewrite, on top of -fno-common: the Makefiles'
+        # ios-arm64 cases bake -miphoneos-version-min and the iPhone
+        # sysroot into their compile and link lines, and both must give
+        # way to the macabi target and the macOS SDK. Everything else
+        # passes through untouched. Bash rather than sh for the argv
+        # array.
+        for tool in cc clang; do
+            printf '#!/bin/bash\nout=(); skip=0\nfor a in "$@"; do\n  if [[ $skip == 1 ]]; then skip=0; continue; fi\n  case "$a" in\n    -miphoneos-version-min=*) continue ;;\n    -isysroot) skip=1; continue ;;\n  esac\n  out+=("$a")\ndone\nexec "%s" -fno-common -target arm64-apple-ios18.0-macabi -isysroot "%s" "${out[@]}"\n' "$real_cc" "$SDK" > "$WRAP/$tool"
+        done
+        for tool in c++ clang++; do
+            printf '#!/bin/bash\nout=(); skip=0\nfor a in "$@"; do\n  if [[ $skip == 1 ]]; then skip=0; continue; fi\n  case "$a" in\n    -miphoneos-version-min=*) continue ;;\n    -isysroot) skip=1; continue ;;\n  esac\n  out+=("$a")\ndone\nexec "%s" -fno-common -target arm64-apple-ios18.0-macabi -isysroot "%s" "${out[@]}"\n' "$real_cxx" "$SDK" > "$WRAP/$tool"
+        done
+    else
+        printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cc" > "$WRAP/cc"
+        printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cc" > "$WRAP/clang"
+        printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cxx" > "$WRAP/c++"
+        printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cxx" > "$WRAP/clang++"
+    fi
     chmod +x "$WRAP"/*
     # MAKEARGS: extra per-core make variables from the case table above.
     # Unset for every core that predates it, so those builds are invoked
@@ -297,7 +339,10 @@ sed "s/bsat_/${PREFIX}_/g" spikes/BeetleSaturnStatic/bsat_wrapper.c \
     | sed 's|#include "libretro-common/include/libretro.h"|#include "libretro.h"|' \
     > "$WRAP"
 
-cc -arch arm64 -isysroot "$SDK" "$MINVERSION_FLAG" -O2 \
+# MINVERSION_FLAG is deliberately unquoted: the mac case's value is
+# two words ("-target <triple>") that must split; the ios and tvos
+# values are single words either way.
+cc -arch arm64 -isysroot "$SDK" $MINVERSION_FLAG -O2 \
     -I"RommApp/RommApp/Native/Libretro" -c "$WRAP" -o "$SPIKE/wrapper.o"
 
 # Export exactly what the wrapper defines, nothing else. Deriving the
