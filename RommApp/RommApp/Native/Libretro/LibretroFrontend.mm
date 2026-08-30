@@ -1492,8 +1492,37 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     gReadbackPBOValid[1] = false;
     gReadbackPBOCursor = 0;
     gForceSyncReadback = false;
+#if TARGET_OS_MACCATALYST
+    // The async pixel-buffer readback loses draws on this platform. With
+    // it on, N64 rendered skies and backgrounds while the depth-tested
+    // geometry went missing: Mario Kart 64 came back correct the moment
+    // the synchronous path was forced, Hydro Thunder came most of the
+    // way back (Marcus, 2026-08-30, on both an M4 and an A18 Pro).
+    // Whatever ANGLE's Metal backend does with a mapped pixel buffer
+    // here, it is not the finished frame the iPhone and Apple TV hand
+    // back, and correctness is worth more than the readback time.
+    //
+    // Deliberately Catalyst only. iOS and tvOS keep the async ladder,
+    // where it was measured taking readback from 3.5ms to 0.08ms, and
+    // compile this branch out entirely.
+    gForceSyncReadback = true;
+#endif
 #if DEBUG
-    gForceSyncReadback = [[NSProcessInfo processInfo].arguments containsObject:@"-cabinetSyncReadback"];
+    // Either a launch argument or a stored default. The argument alone
+    // was untestable on the Mac: a Catalyst app relaunched through
+    // LaunchServices never sees the arguments `open --args` was given,
+    // so the lever could not be thrown on a machine being driven
+    // remotely. `defaults write <bundle id> cabinetSyncReadback -bool
+    // YES` reaches it either way.
+    gForceSyncReadback = gForceSyncReadback
+        || [[NSProcessInfo processInfo].arguments containsObject:@"-cabinetSyncReadback"]
+        || [[NSUserDefaults standardUserDefaults] boolForKey:@"cabinetSyncReadback"];
+    // The other direction, so the async path stays reachable on the
+    // platform that now defaults away from it and the next person can
+    // retest it rather than take the comment above on faith.
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"cabinetAsyncReadback"]) {
+        gForceSyncReadback = false;
+    }
 #endif
 }
 

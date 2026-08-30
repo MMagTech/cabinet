@@ -53,8 +53,17 @@ tvos)
     MINVERSION_FLAG=-mappletvos-version-min=13.0
     IOS_PLATFORM=TVOS
     FFMPEG_ARCH=tvos/arm64 ;;
+mac)
+    # Mac Catalyst. Upstream's ios.cmake knows OS and TVOS and nothing
+    # about macabi, so this platform does not use it: the configure
+    # below drives CMake directly against the macOS SDK with every
+    # compile carrying the Catalyst target, the same rewrite
+    # build-core.sh performs for every other core.
+    SDK=$(xcrun -sdk macosx --show-sdk-path)
+    MINVERSION_FLAG="-target arm64-apple-ios18.0-macabi"
+    FFMPEG_ARCH=macabi/arm64 ;;
 *)
-    echo "unknown platform: $PLATFORM (expected ios or tvos)" >&2; exit 1 ;;
+    echo "unknown platform: $PLATFORM (expected ios, tvos or mac)" >&2; exit 1 ;;
 esac
 
 if [ ! -d "$SRC" ]; then
@@ -62,6 +71,45 @@ if [ ! -d "$SRC" ]; then
     git clone --recurse-submodules --depth 1 https://github.com/hrydgard/ppsspp.git "$SRC"
 fi
 
+if [ "$PLATFORM" = mac ]; then
+    # CMAKE_SYSTEM_PROCESSOR is set by hand because naming
+    # CMAKE_SYSTEM_NAME puts CMake into cross-compiling mode, where it
+    # stops inferring the processor from the host and leaves it empty.
+    # ext/cpu_features matches that string to pick its architecture and
+    # fails the configure outright on an empty one.
+    #
+    # The same IOS masquerade tvOS and Flycast already rely on: PPSSPP
+    # keys its mobile GLES path off CMake's IOS variable, and without it
+    # a Darwin build falls through to desktop GL, which Catalyst has no
+    # library for. GLES headers come from the vendored ANGLE tree since
+    # the macOS SDK ships none, and OPENGL_LIBRARIES is pointed at the
+    # ANGLE library by hand because the masquerade would otherwise make
+    # CMake look for OpenGLES.framework.
+    #
+    # FFMPEG_DIR is set outright rather than left to upstream's platform
+    # table, which knows ios/universal, tvos/arm64 and macosx/universal
+    # and has no macabi entry. tools/build-ppsspp-ffmpeg-mac.sh builds
+    # what it points at; a macosx archive cannot stand in, since an
+    # arm64-apple-macos object will not link into a Catalyst binary.
+    ANGLE="$PWD/RommApp/Vendor/ANGLE"
+    MACFLAGS="-fno-common $MINVERSION_FLAG -I$ANGLE/include -I$PWD/tools/mac-support/gles-compat"
+    cmake -S "$SRC" -B "$BUILD" -G "Unix Makefiles" \
+        -DCMAKE_SYSTEM_NAME=Darwin \
+        -DCMAKE_SYSTEM_PROCESSOR=arm64 \
+        -DCMAKE_OSX_SYSROOT=macosx \
+        -DCMAKE_OSX_ARCHITECTURES=arm64 \
+        -DIOS=ON \
+        -DUSING_GLES2=ON \
+        -DMOBILE_DEVICE=ON \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DLIBRETRO=ON \
+        -DUSE_SYSTEM_FFMPEG=OFF \
+        -DUSE_DISCORD=OFF \
+        -DFFMPEG_DIR="ffmpeg/$FFMPEG_ARCH" \
+        -DOPENGL_LIBRARIES="$ANGLE/mac/libGLESv2.framework/libGLESv2" \
+        -DCMAKE_C_FLAGS="$MACFLAGS" \
+        -DCMAKE_CXX_FLAGS="$MACFLAGS"
+else
 cmake -S "$SRC" -B "$BUILD" -G "Unix Makefiles" \
     -DCMAKE_TOOLCHAIN_FILE="$PWD/$SRC/cmake/Toolchains/ios.cmake" \
     -DIOS_PLATFORM=$IOS_PLATFORM \
@@ -71,6 +119,7 @@ cmake -S "$SRC" -B "$BUILD" -G "Unix Makefiles" \
     -DUSE_DISCORD=OFF \
     -DCMAKE_C_FLAGS=-fno-common \
     -DCMAKE_CXX_FLAGS=-fno-common
+fi
 
 cmake --build "$BUILD" -j"$JOBS" --target ppsspp_libretro
 

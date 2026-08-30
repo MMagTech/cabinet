@@ -77,11 +77,14 @@ enum PlatformSupport {
 
     #if targetEnvironment(macCatalyst)
     /// Platforms whose Mac core is still a link placeholder
-    /// (tools/build-mac-core-stub.sh). Dreamcast and N64 left this set
-    /// 2026-08-30 the day ANGLE-for-Mac landed; PSP remains because its
-    /// build leans on iOS-stamped prebuilt ffmpeg and gets its own
-    /// pass. Listing a pending platform unsupported keeps the library
-    /// honest instead of failing at load.
-    static let macPendingPlatforms: Set<NativePlatform> = [.psp]
+    /// (tools/build-mac-core-stub.sh). Listing one here keeps the
+    /// library honest, filing it under Unsupported rather than offering
+    /// a Play button that fails at load.
+    ///
+    /// Empty since 2026-08-30: Dreamcast and N64 left the day
+    /// ANGLE-for-Mac landed, and PSP left once its ffmpeg was built for
+    /// the Catalyst target (tools/build-ppsspp-ffmpeg-mac.sh), which was
+    /// the whole of what kept it a stub.
+    static let macPendingPlatforms: Set<NativePlatform> = []
     #endif
 }

@@ -651,7 +651,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if [ \"$PLATFORM_NAME\" != \"macosx\" ]; then exit 0; fi\nDEST=\"$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH\"\nmkdir -p \"$DEST\"\nfor FW in libEGL libGLESv2; do\n  rsync -a --delete \"$PROJECT_DIR/Vendor/ANGLE/mac/$FW.framework\" \"$DEST/\"\n  if [ \"$CODE_SIGNING_ALLOWED\" = \"YES\" ] && [ -n \"$EXPANDED_CODE_SIGN_IDENTITY\" ]; then\n    codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --timestamp=none \"$DEST/$FW.framework\"\n  fi\ndone\n";
+			shellScript = "if [ \"$PLATFORM_NAME\" != \"macosx\" ]; then exit 0; fi\nDEST=\"$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH\"\nmkdir -p \"$DEST\"\nfor FW in libEGL libGLESv2; do\n  rsync -a --delete \"$PROJECT_DIR/Vendor/ANGLE/mac/$FW.framework\" \"$DEST/\"\n  if [ \"$CODE_SIGNING_ALLOWED\" = \"YES\" ] && [ -n \"$EXPANDED_CODE_SIGN_IDENTITY\" ]; then\n    codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --timestamp=none \"$DEST/$FW.framework\"\n  fi\ndone\n\n# ANGLE's libEGL does not carry the EGL implementation. The first\n# eglGetDisplay dlopens libGLESv2 by a path built from the EXECUTABLE'S\n# own directory: <exec dir>/Frameworks/libGLESv2.framework/libGLESv2.\n# iOS and tvOS bundles are flat, so that resolves. A Mac bundle puts the\n# executable in Contents/MacOS and frameworks in Contents/Frameworks, so\n# the dlopen fails and ANGLE then calls through a null pointer. Every\n# hardware-rendered core (Dreamcast, N64, PSP) segfaulted at exactly that\n# call. The symlink gives the loader the layout it expects without\n# duplicating 12MB of framework.\nEXEC_DIR=\"$BUILT_PRODUCTS_DIR/$EXECUTABLE_FOLDER_PATH\"\nif [ \"$EXEC_DIR\" != \"$DEST\" ]; then\n  ln -sfn ../Frameworks \"$EXEC_DIR/Frameworks\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -1246,7 +1246,7 @@
 					"$(PROJECT_DIR)/Vendor/ANGLE/include",
 				);
 				INFOPLIST_FILE = Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet Mac Dev";
+				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet Dev";
 				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -1341,7 +1341,7 @@
 					"$(PROJECT_DIR)/Vendor/ANGLE/include",
 				);
 				INFOPLIST_FILE = Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet Mac";
+				INFOPLIST_KEY_CFBundleDisplayName = Cabinet;
 				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
