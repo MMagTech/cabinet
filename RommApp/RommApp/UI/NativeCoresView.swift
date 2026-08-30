@@ -36,6 +36,7 @@ struct NativeCoresView: View {
                 Text("Options apply to every game on this platform, not just the one you're currently playing.")
             }
         }
+        .macTransparentList()
         .navigationTitle("Native cores")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -81,6 +82,7 @@ private struct NativeCoreOptionsView: View {
                 }
             }
         }
+        .macTransparentList()
         .navigationTitle(platform.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {

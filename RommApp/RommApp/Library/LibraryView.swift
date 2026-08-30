@@ -222,7 +222,7 @@ struct LibraryScreen: View {
                     // This was the one screen in the app with no artwork
                     // at all.
                     LazyVGrid(
-                        columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible())],
+                        columns: Self.tileColumns,
                         spacing: 10
                     ) {
                         if !supportedPlatforms.isEmpty {
@@ -300,6 +300,49 @@ struct LibraryScreen: View {
         )
     }
 
+    /// The tile art's label-zone fraction and cover slices were designed
+    /// around a phone's half-width tile. Two flexible columns keep that
+    /// true on every phone and pad; a Mac window is wide enough that two
+    /// columns stretched each tile to five times its designed width,
+    /// which turned the label panel into a dead expanse and the cover
+    /// slices into seamed landscape crops. Adaptive columns hand the
+    /// tile its intended proportions back, five or six to a row.
+    private static var tileColumns: [GridItem] {
+        #if targetEnvironment(macCatalyst)
+        // Four across at any window width, Marcus's call: tiles stay
+        // small and even rather than adapting into five or six slivers
+        // at fullscreen.
+        Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
+        #else
+        [GridItem(.flexible(), spacing: 10), GridItem(.flexible())]
+        #endif
+    }
+
+    private static var tileHeight: CGFloat {
+        #if targetEnvironment(macCatalyst)
+        110
+        #else
+        96
+        #endif
+    }
+
+    /// Desk-distance type on the Mac tile, phone sizes elsewhere.
+    private static var tileTitleFont: Font {
+        #if targetEnvironment(macCatalyst)
+        .title3.weight(.semibold)
+        #else
+        .subheadline.weight(.semibold)
+        #endif
+    }
+
+    private static var tileCountFont: Font {
+        #if targetEnvironment(macCatalyst)
+        .footnote
+        #else
+        .caption2
+        #endif
+    }
+
     private func tile(
         title: String, count: Int, coverKey: String, source: RomListView.Source
     ) -> some View {
@@ -311,20 +354,20 @@ struct LibraryScreen: View {
                 tileBackdrop(covers: covers)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.subheadline.weight(.semibold))
+                        .font(Self.tileTitleFont)
                         .foregroundStyle(.white)
                         .lineLimit(2)
                         .minimumScaleFactor(0.7)
                         .multilineTextAlignment(.leading)
                         .shadow(color: .black.opacity(0.5), radius: 4, y: 1)
                     Text("\(count) games")
-                        .font(.caption2)
+                        .font(Self.tileCountFont)
                         .foregroundStyle(.white.opacity(0.65))
                         .shadow(color: .black.opacity(0.5), radius: 3, y: 1)
                 }
                 .padding(11)
             }
-            .frame(height: 96)
+            .frame(height: Self.tileHeight)
             .frame(maxWidth: .infinity)
             .clipShape(.rect(cornerRadius: 12))
             .animation(.easeOut(duration: 0.35), value: covers)
@@ -505,7 +548,7 @@ struct LibraryScreen: View {
                         .padding(.horizontal)
                 } else {
                     LazyVGrid(
-                        columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible())],
+                        columns: Self.tileColumns,
                         spacing: 10
                     ) {
                         ForEach(collections) { collection in

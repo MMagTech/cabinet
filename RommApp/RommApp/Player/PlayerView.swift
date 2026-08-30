@@ -998,6 +998,37 @@ struct PlayerWebView: UIViewRepresentable {
             )
         )
 
+        #if targetEnvironment(macCatalyst) && DEBUG
+        // The Mac player's first boot died inside EmulatorJS showing
+        // nothing but its on-page "Failed to start game", and WebKit
+        // redacts page console output from the unified log. Forward
+        // page errors into the debug network ring, where they read
+        // back out alongside the requests that preceded them.
+        config.userContentController.addUserScript(
+            WKUserScript(
+                source: """
+                (function () {
+                  function send(kind, msg) {
+                    try { window.webkit.messageHandlers.playerNetwork.postMessage("[js-" + kind + "] " + msg); } catch (e) {}
+                  }
+                  window.addEventListener("error", function (e) {
+                    send("error", (e.message || "?") + " @ " + (e.filename || "?") + ":" + (e.lineno || 0));
+                  });
+                  window.addEventListener("unhandledrejection", function (e) {
+                    send("rejection", String((e.reason && (e.reason.stack || e.reason.message)) || e.reason));
+                  });
+                  var err = console.error;
+                  console.error = function () {
+                    send("console", Array.prototype.slice.call(arguments).join(" "));
+                    return err.apply(console, arguments);
+                  };
+                })();
+                """,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            )
+        )
+        #endif
         config.userContentController.add(context.coordinator, name: "overlay")
         config.userContentController.add(context.coordinator, name: "loadingStatus")
         config.userContentController.add(context.coordinator, name: "gameState")

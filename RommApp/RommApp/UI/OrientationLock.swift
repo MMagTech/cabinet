@@ -78,13 +78,27 @@ enum OrientationLock {
 
 /// Exists solely to answer UIKit's orientation question with the mask
 /// above. SwiftUI has no view level equivalent of this delegate call.
-final class AppDelegate: NSObject, UIApplicationDelegate {
+// UIResponder rather than NSObject, the standard app-delegate shape:
+// the Mac menu-bar hook (buildMenu) is a UIResponder method, and an
+// NSObject delegate has nothing to override. Identical behavior
+// everywhere else; UIResponder is what the Xcode template uses.
+final class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(
         _ application: UIApplication,
         supportedInterfaceOrientationsFor window: UIWindow?
     ) -> UIInterfaceOrientationMask {
         OrientationLock.mask
     }
+
+    #if targetEnvironment(macCatalyst)
+    // In the class rather than MacMenus.swift because Swift does not
+    // allow overriding an inherited method from an extension; the menu
+    // content itself lives with the rest of the Mac shell there.
+    override func buildMenu(with builder: UIMenuBuilder) {
+        super.buildMenu(with: builder)
+        MacMenus.apply(builder)
+    }
+    #endif
 
     func application(
         _ application: UIApplication,

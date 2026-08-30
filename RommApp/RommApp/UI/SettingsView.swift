@@ -22,6 +22,9 @@ struct SettingsView: View {
     /// discovered; Home only grows its shortcut row once a pairing
     /// exists, so nobody without an Apple TV ever sees it there.
     @State private var showingControllerPad = false
+    #if targetEnvironment(macCatalyst)
+    @AppStorage(BiasGlowLevel.storageKey) private var glowStored = BiasGlowLevel.subtle.rawValue
+    #endif
 
     var body: some View {
         List {
@@ -70,10 +73,16 @@ struct SettingsView: View {
             } header: {
                 Text("Physical controller")
             } footer: {
+                #if targetEnvironment(macCatalyst)
+                Text("Games are played with a controller. Pair one to this Mac over Bluetooth.")
+                #else
                 Text("On screen controls hide while one is connected.")
+                #endif
             }
+            .tvRow()
 
             Section {
+                #if !targetEnvironment(macCatalyst)
                 Picker("Button colours", selection: $controlTheme) {
                     ForEach(ControlTheme.allCases, id: \.self) { theme in
                         Text(theme.label).tag(theme.rawValue)
@@ -100,12 +109,33 @@ struct SettingsView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
+                #endif
 
                 Toggle("Rumble", isOn: $rumbleEnabled)
             } header: {
                 Text("Controls")
             }
+            .tvRow()
 
+            #if targetEnvironment(macCatalyst)
+            // The TV's letterbox glow, same setting and same stored
+            // key, because a desk monitor is the same dead-space
+            // situation at arm's length (Marcus, 2026-08-30).
+            Section {
+                Picker("Letterbox glow", selection: $glowStored) {
+                    ForEach(BiasGlowLevel.allCases) { level in
+                        Text(level.label).tag(level.rawValue)
+                    }
+                }
+            } header: {
+                Text("Display")
+            } footer: {
+                Text("A soft light in the dead space around the picture, the way a bias light sits behind a television.")
+            }
+            .tvRow()
+            #endif
+
+            #if !targetEnvironment(macCatalyst)
             Section {
                 Button {
                     showingControllerPad = true
@@ -116,6 +146,7 @@ struct SettingsView: View {
             } footer: {
                 Text("Requires \u{201C}Allow a phone as a controller\u{201D} in Cabinet\u{2019}s settings on the TV.")
             }
+            .tvRow()
 
             Section {
                 Picker("Aim speed", selection: $aimSpeedRaw) {
@@ -128,6 +159,7 @@ struct SettingsView: View {
             } footer: {
                 Text("How far a flick of the wrist moves the aim. Recenter lives on the controller itself.")
             }
+            .tvRow()
 
             Section {
                 Toggle("Autosave while playing", isOn: $autosaveEnabled)
@@ -136,6 +168,8 @@ struct SettingsView: View {
             } footer: {
                 Text("Web player only. Save states in the native player are manual.")
             }
+            .tvRow()
+            #endif
 
             Section {
                 Picker("Platform names", selection: $platformLabelSourceRaw) {
@@ -148,6 +182,7 @@ struct SettingsView: View {
             } footer: {
                 Text("If a platform's name looks wrong, switching the source here usually fixes it.")
             }
+            .tvRow()
 
             Section {
                 LabeledContent("Server", value: session.serverURL?.host ?? "unknown")
@@ -173,6 +208,7 @@ struct SettingsView: View {
             } footer: {
                 Text("If your server has a second address, Cabinet uses whichever one is on this network, and the other when you're away.")
             }
+            .tvRow()
 
             Section {
                 NavigationLink {
@@ -181,8 +217,13 @@ struct SettingsView: View {
                     Label("Storage", systemImage: "internaldrive")
                 }
             } footer: {
+                #if targetEnvironment(macCatalyst)
+                Text("Games kept on this Mac, in Documents/Cabinet.")
+                #else
                 Text("Games kept on this phone, and the web player's own cache.")
+                #endif
             }
+            .tvRow()
 
             Section {
                 NavigationLink {
@@ -190,12 +231,19 @@ struct SettingsView: View {
                 } label: {
                     Label("Native cores", systemImage: "cpu")
                 }
+                #if !targetEnvironment(macCatalyst)
                 Toggle(isOn: $experimentalCores) {
                     Label("Experimental cores", systemImage: "testtube.2")
                 }
+                #endif
             } footer: {
+                #if targetEnvironment(macCatalyst)
+                Text("Speed and accuracy options for the native cores.")
+                #else
                 Text("Speed and accuracy options for the cores that run natively instead of in the webview.\n\nExperimental cores are Dreamcast and Nintendo 64. Speed varies by game. Off, Nintendo 64 uses the web player and Dreamcast is unavailable.")
+                #endif
             }
+            .tvRow()
 
             Section {
                 NavigationLink {
@@ -206,6 +254,7 @@ struct SettingsView: View {
             } footer: {
                 Text("The software this app is built from, and the terms it ships under.")
             }
+            .tvRow()
 
             Section {
                 NavigationLink {
@@ -216,6 +265,7 @@ struct SettingsView: View {
             } footer: {
                 Text("Diagnostics for reporting a problem.")
             }
+            .tvRow()
 
             Section {
                 Link(destination: URL(string: "https://github.com/rommapp/romm")!) {
@@ -241,6 +291,7 @@ struct SettingsView: View {
             } footer: {
                 Text("Cabinet talks to your RomM server, built by the RomM project and team. It was inspired by romm-ios-app, an earlier native client for RomM.")
             }
+            .tvRow()
 
             Section {
                 Button("Unpair this device", role: .destructive) {
@@ -252,7 +303,15 @@ struct SettingsView: View {
             } footer: {
                 Text("Unpairing signs this device out but remembers the server. Switching servers forgets everything.")
             }
+            .tvRow()
         }
+        #if targetEnvironment(macCatalyst)
+        // The TV settings screen's read at a desk: rows as glass over
+        // the ambient shell, no opaque grouped-list slab, every
+        // section carrying the same material the TV's RowFocusStyle
+        // paints. tvRow() below is what each Section wears.
+        .scrollContentBackground(.hidden)
+        #endif
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .task { controllers.start() }
@@ -291,3 +350,4 @@ struct SettingsView: View {
         }
     }
 }
+

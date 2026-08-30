@@ -273,7 +273,11 @@ struct HomeView: View {
             #endif
             .fullScreenCover(item: $nativeDirectLaunch) { launch in
                 #if os(iOS)
+                // Explicit for the same Catalyst reason as
+                // GameLaunchView's covers: inheritance of environment
+                // objects into a fullScreenCover is not reliable there.
                 NativePlayerView(rom: launch.rom, core: launch.core, initialState: launch.initialState)
+                    .environmentObject(session)
                 #else
                 TVPlayerView(rom: launch.rom, core: launch.core, initialState: launch.initialState)
                 #endif
@@ -445,10 +449,45 @@ struct HomeView: View {
             .ignoresSafeArea(edges: .top)
         }
         .focusScope(homeFocus)
+        #elseif targetEnvironment(macCatalyst)
+        return macContent(height: height)
         #else
         return legacyWideLayout(height: height)
         #endif
     }
+
+    #if targetEnvironment(macCatalyst)
+    /// The TV's Home composition read at a desk instead of a sofa: the
+    /// same hero band leading the same rows, with `TenFoot`'s Mac tier
+    /// carrying the scale change. `tvContent` is this layout's model;
+    /// keep the two structurally in step when either changes. The
+    /// phone-as-controller offer is deliberately absent, a Mac is the
+    /// screen end of that arrangement.
+    private func macContent(height: CGFloat) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                if let hero = recent.first {
+                    heroCard(for: hero, height: min(height * 0.34, 320), wide: true)
+                        .padding(.bottom, 12)
+                }
+                if recent.count > 1 {
+                    rotationRow("Recent", Array(recent.dropFirst()), seeAll: .recentlyPlayed)
+                } else if loaded, recent.isEmpty {
+                    emptyState.padding(.horizontal, 20)
+                }
+                if !favorites.isEmpty {
+                    rotationRow(
+                        "Favorites", favorites, seeAll: session.favoriteCollection.map { .collection($0) }
+                    )
+                }
+            }
+            .padding(.horizontal, TenFoot.contentInset)
+            .padding(.top, 24)
+        }
+        .contentMargins(.bottom, 60, for: .scrollContent)
+        .withoutScrollEdgeEffect()
+    }
+    #endif
 
     #if os(tvOS)
     private func tvContent(height: CGFloat) -> some View {
@@ -998,6 +1037,7 @@ struct HomeView: View {
                             .focused($focusedShelfCard, equals: "\(title)-\(rom.id)")
                             #else
                             .buttonStyle(.plain)
+                            .macHoverLift()
                             #endif
                             .gameContextMenu(rom: rom)
 
@@ -1097,8 +1137,17 @@ struct HomeView: View {
         // dead connection paid the timeout twice before this screen could
         // say anything, which doubled the wait for the answer that matters
         // least.
+        #if targetEnvironment(macCatalyst)
+        // Desk-width shelves: a Mac window fits far more than the
+        // phone-tuned eight, so fetch enough that both rows run past the
+        // window edge and scroll, the way the TV's rotation rows read.
+        // iOS and tvOS compile the untouched calls in the other branch.
+        async let recentTask = session.recentlyPlayed(limit: 16)
+        async let favoritesTask = session.favoriteRoms(limit: 24)
+        #else
         async let recentTask = session.recentlyPlayed()
         async let favoritesTask = session.favoriteRoms()
+        #endif
 
         do {
             recent = try await recentTask.items

@@ -151,10 +151,15 @@ enum VMULauncher {
     /// rather than defaulted.
     @MainActor
     static func boot(cardURL: URL) -> String? {
-        #if targetEnvironment(simulator)
+        #if targetEnvironment(simulator) || CABINET_NO_NATIVE_CORES
         // Same reasoning as NativeLauncher.activate: no cores link in a
-        // simulator build.
+        // simulator build, nor in a Mac build until Mac core libraries
+        // land.
+        #if targetEnvironment(macCatalyst)
+        return "The VMU core isn't in the Mac build yet."
+        #else
         return "Games can't run in the Simulator. Use a real iPhone."
+        #endif
         #else
         LibretroFrontend.shared.activateCore(.vemulator)
         LibretroFrontend.shared.setCoreOptions(["enable_flash_write": "enabled"])

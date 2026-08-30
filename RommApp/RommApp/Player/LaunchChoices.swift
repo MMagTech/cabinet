@@ -95,6 +95,15 @@ struct LaunchChoices {
     /// general preference for the familiar player.
     @MainActor
     static func defaultBackend(rom: Rom, canonicalSlug: String) -> PlayerBackend {
+        #if targetEnvironment(macCatalyst)
+        // The Mac has one player: native cores. The webview backend is
+        // dropped from this target (2026-08-30, revisitable), so no
+        // stored choice, crash count or webview-core mapping can route
+        // a Mac launch there. This also hides the launch screen's
+        // Web/Native picker, whose visibility asks whether this
+        // function already answers .native.
+        return .native
+        #else
         // Static, not evidence based, unlike everything below: there is
         // no picker for Saturn to record a stored choice or a crash
         // count against, since GameLaunchView never shows one. This is
@@ -133,6 +142,7 @@ struct LaunchChoices {
             return .native
         }
         return .webview
+        #endif
     }
 
     static func remember(backend: PlayerBackend, for rom: Rom) {

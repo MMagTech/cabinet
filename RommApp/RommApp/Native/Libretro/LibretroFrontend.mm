@@ -8,7 +8,10 @@
 // cores at all and exists purely for UI work, which is most of what
 // anyone iterates on anyway. Everything above this line, the frontend
 // itself, still compiles, so nothing else in the app needs to know.
-#if !TARGET_OS_SIMULATOR
+// CABINET_NO_NATIVE_CORES is the same idea for a real platform: the Mac
+// target defines it while no Mac core libraries exist yet, and drops the
+// definition, not this guard, when they land.
+#if !TARGET_OS_SIMULATOR && !CABINET_NO_NATIVE_CORES
 #import "FBNeoCore.h"
 #import "SaturnCore.h"
 #import "GambatteCore.h"
@@ -1321,9 +1324,10 @@ bool environmentCallback(unsigned cmd, void *data) {
 // The one place a core id becomes a function table. Adding a core means
 // one wiring file and one line here.
 const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
-#if TARGET_OS_SIMULATOR
-    // No cores in a simulator build; every launch path fails cleanly
-    // before it gets here (see NativePlatform.platform(bySlug:)).
+#if TARGET_OS_SIMULATOR || CABINET_NO_NATIVE_CORES
+    // No cores in a simulator build, nor in a Mac build until the Mac
+    // core libraries exist; every launch path fails cleanly before it
+    // gets here (see NativePlatform.platform(bySlug:)).
     (void)coreID;
     return nullptr;
 #else

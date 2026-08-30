@@ -59,7 +59,29 @@ enum PlatformSupport {
         // RomM's own metadata slug already says it is arcade; believe it.
         if isArcade { return true }
         guard !ComputerPlatforms.contains(canonicalSlug) else { return false }
+        #if targetEnvironment(macCatalyst)
+        // The Mac plays native cores only, the same shape as the TV
+        // app: the webview player is dropped from this target for now
+        // (Marcus's call, 2026-08-30, revisitable), so a platform whose
+        // only cores are EmulatorJS's is not playable here and belongs
+        // in Unsupported rather than behind a broken Play button.
+        guard let platform = NativePlatform.platform(bySlug: canonicalSlug, isArcade: false) else {
+            return false
+        }
+        return !macPendingPlatforms.contains(platform)
+        #else
         if !CoreCatalog.cores(for: canonicalSlug).isEmpty { return true }
         return NativeCore.core(bySlug: canonicalSlug, isArcade: false) != nil
+        #endif
     }
+
+    #if targetEnvironment(macCatalyst)
+    /// Platforms whose Mac core is still a link placeholder
+    /// (tools/build-mac-core-stub.sh). Dreamcast and N64 left this set
+    /// 2026-08-30 the day ANGLE-for-Mac landed; PSP remains because its
+    /// build leans on iOS-stamped prebuilt ffmpeg and gets its own
+    /// pass. Listing a pending platform unsupported keeps the library
+    /// honest instead of failing at load.
+    static let macPendingPlatforms: Set<NativePlatform> = [.psp]
+    #endif
 }

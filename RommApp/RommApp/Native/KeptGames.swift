@@ -135,7 +135,17 @@ final class KeptGameStore: ObservableObject {
         root = support.appendingPathComponent("KeptGames", isDirectory: true)
         try? fm.createDirectory(at: root, withIntermediateDirectories: true)
         Self.excludeFromBackup(root)
+        #if targetEnvironment(macCatalyst)
+        // The Mac build is unsandboxed, so .documentDirectory is the
+        // person's real ~/Documents. iOS scatters platform folders at
+        // the top of the app's own scoped Documents, which is right
+        // there and rude here: on the Mac everything gathers under one
+        // Cabinet folder, browsable in Finder like any library.
         documentsRoot = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Cabinet", isDirectory: true)
+        #else
+        documentsRoot = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        #endif
         // Two builds shipped the mirror under earlier names before the
         // layout settled; anything inside was only ever hard links, so
         // deleting them loses no bytes. Platform folders are created

@@ -100,6 +100,7 @@ struct SearchScreen: View {
                 .gameContextMenu(rom: rom)
             }
         }
+        .macTransparentList()
         .listStyle(.plain)
     }
 

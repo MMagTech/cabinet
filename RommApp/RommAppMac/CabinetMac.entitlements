@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Catalyst SecItem calls always use the iOS-style data protection
+	     keychain, which refuses writes from a binary carrying no
+	     application identifier. Requesting the app's own keychain group
+	     forces profile-based signing, which is what actually embeds
+	     that identifier. Without this the very first pairing fails at
+	     "Could not save to the keychain." -->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	</array>
+</dict>
+</plist>

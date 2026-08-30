@@ -93,6 +93,14 @@ struct RommApp: App {
     private var appContent: some View {
         RootView()
             .environmentObject(session)
+            #if targetEnvironment(macCatalyst)
+            .onAppear { MacWindow.styleAll() }
+            // The whole app's type, one dial: a desk sits further from
+            // the glass than a hand does, so the Mac reads every
+            // semantic font one dynamic-type notch up. Set here so it
+            // cascades through every screen and presentation.
+            .dynamicTypeSize(.xLarge)
+            #endif
             #if os(iOS)
             // A widget press or a Spotlight result arrives here as a
             // cabinet:// URL. See DeepLink.swift.

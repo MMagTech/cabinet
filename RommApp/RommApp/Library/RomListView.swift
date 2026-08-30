@@ -122,17 +122,30 @@ struct RomListView: View {
                     Button("Try again") { Task { await reload() } }
                 }
             } else {
+                #if targetEnvironment(macCatalyst)
+                // Grid only, like the television; the list mode and its
+                // letter scrubber are thumb furniture.
+                grid
+                #else
                 switch viewMode {
                 case .grid: grid
                 case .list: list
                 }
+                #endif
             }
         }
+        #if targetEnvironment(macCatalyst)
+        // The name is drawn as content inside the grid, TV-style; the
+        // bar keeps only its back affordance.
+        .navigationTitle("")
+        #else
         .navigationTitle(navigationLabel)
+        #endif
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
+            #if !targetEnvironment(macCatalyst)
             ToolbarItem(placement: .topBarTrailing) {
                 // A menu, not a segmented picker. iOS 26 wraps every
                 // toolbar item in its own glass container, and a segmented
@@ -151,6 +164,7 @@ struct RomListView: View {
                     Image(systemName: viewMode == .grid ? "square.grid.3x3" : "list.bullet")
                 }
             }
+            #endif
         }
         .onChange(of: viewMode) { _, mode in
             UserDefaults.standard.set(mode.rawValue, forKey: Self.modeKey(for: source.modeKey))
@@ -185,6 +199,15 @@ struct RomListView: View {
 
     private var grid: some View {
         ScrollView {
+            #if targetEnvironment(macCatalyst)
+            HStack {
+                Text(navigationLabel)
+                    .font(.title2.bold())
+                Spacer()
+            }
+            .padding(.horizontal, TenFoot.contentInset)
+            .padding(.top, 16)
+            #endif
             LazyVGrid(
                 columns: [GridItem(.adaptive(minimum: TenFoot.gridCoverMinimum), spacing: TenFoot.gridSpacing)],
                 spacing: TenFoot.gridSpacing
@@ -212,6 +235,7 @@ struct RomListView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .macHoverLift()
                     .gameContextMenu(rom: rom)
                     .onAppear { Task { await loadMoreIfNeeded(current: rom) } }
                 }
@@ -260,6 +284,7 @@ struct RomListView: View {
                         .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
+                    .macHoverLift()
                     .gameContextMenu(rom: rom)
                     .onAppear { Task { await loadMoreIfNeeded(current: rom) } }
                 }

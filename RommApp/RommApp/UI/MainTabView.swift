@@ -24,9 +24,40 @@ struct MainTabView: View {
     @State private var selection: AppTab = .home
     @ObservedObject private var quickActions = QuickActionRouter.shared
     @ObservedObject private var networkMonitor = NetworkMonitor.shared
+    #if targetEnvironment(macCatalyst)
+    @EnvironmentObject private var session: Session
+    @State private var showingMacSettings = false
+    #endif
 
     var body: some View {
+        #if targetEnvironment(macCatalyst)
+        // The Mac is the desk-sized member of the tvOS side of the
+        // family: one shared ambient backdrop from game art behind the
+        // whole shell, always dark, content floating over it. The same
+        // Tab structure runs on top unchanged; iOS keeps its own
+        // contained-ambient rule (GameLaunchView only) and never
+        // compiles this branch.
+        ZStack {
+            MacAmbientBackground()
+            tabs
+        }
+        .environment(\.colorScheme, .dark)
+        // The app menu's Settings… (Cmd+comma) lands here, the same
+        // screen Home's gear reaches. Session injected explicitly, the
+        // Catalyst presentation-inheritance lesson from the player
+        // covers.
+        .onReceive(NotificationCenter.default.publisher(for: .cabinetShowSettings)) { _ in
+            showingMacSettings = true
+        }
+        .sheet(isPresented: $showingMacSettings) {
+            NavigationStack { SettingsView() }
+                .environmentObject(session)
+                .environment(\.colorScheme, .dark)
+                .presentationBackground(.ultraThinMaterial)
+        }
+        #else
         tabs
+        #endif
     }
     // Tried drawing the tvOS account chip as a `ZStack` overlay here so it
     // stayed visible across every tab instead of only Home. Reverted: the

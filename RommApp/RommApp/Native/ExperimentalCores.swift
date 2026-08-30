@@ -35,9 +35,18 @@ extension NativePlatform {
     /// recompilers they cannot use in this process, and both have known
     /// rough edges an interpreter cannot buy back.
     var isExperimental: Bool {
+        #if targetEnvironment(macCatalyst)
+        // The Mac process is allowed the recompilers these cores were
+        // built around, the exact wall this switch exists to flag on
+        // iOS and tvOS. Platforms above the phone's JIT boundary are
+        // the Mac's headline, not its experiment, so nothing here is
+        // gated and the switch has nothing to govern on this target.
+        return false
+        #else
         switch self {
         case .dreamcast, .n64: return true
         default: return false
         }
+        #endif
     }
 }

@@ -159,6 +159,14 @@ struct GameLaunchView: View {
                 }
                 .frame(height: 0)
 
+                #if targetEnvironment(macCatalyst)
+                // The TV's launch composition read at a desk: cover
+                // left, identity and the action right, the option cards
+                // the Mac actually uses below the action. The phone's
+                // landscape/portrait split never applies here.
+                let _ = landscape
+                macLayout(height: geometry.size.height)
+                #else
                 if landscape {
                     // A short wide screen has width to spare and almost no
                     // height, so the option cards sit side by side rather
@@ -235,6 +243,7 @@ struct GameLaunchView: View {
                     }
                     .padding(20)
                 }
+                #endif
             }
             .coordinateSpace(name: "gameLaunchScroll")
             .onPreferenceChange(ScrollOffsetKey.self) { isScrolledToTop = $0 >= -1 }
@@ -277,7 +286,16 @@ struct GameLaunchView: View {
                 favoriteButton
             }
             ToolbarItem(placement: .topBarTrailing) {
+                // A glyph on the Mac, not the word: beside the star,
+                // "Close" as text read as one crowded pill of mismatched
+                // shapes. Two symbols read as two buttons.
+                #if targetEnvironment(macCatalyst)
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark.circle.fill")
+                }
+                #else
                 Button("Close") { dismiss() }
+                #endif
             }
         }
         .sheet(isPresented: Binding(
@@ -294,15 +312,24 @@ struct GameLaunchView: View {
             PlayerView(
                 rom: rom, launch: launchChoices, resumeFromAutosave: continueRun, stateToLoad: stateToLoad
             )
+            .environmentObject(session)
         }
         .fullScreenCover(isPresented: $playingNative) {
+            // The explicit injection matters: on Mac Catalyst a
+            // fullScreenCover does not reliably inherit environment
+            // objects from its presenter, and the first native launch on
+            // the Mac died exactly there, NativePlayerView reading
+            // Session out of an environment that never got it. Explicit
+            // is a no-op on iOS, where inheritance already worked.
             if let core = NativeCore.core(for: rom, canonicalSlug: canonicalSlug) {
                 NativePlayerView(rom: rom, core: core, initialState: nativeInitialState)
+                    .environmentObject(session)
             }
         }
         .fullScreenCover(isPresented: $playingVMU) {
             if let vmuCardURL {
                 VMUPlayerView(rom: rom, cardURL: vmuCardURL)
+                    .environmentObject(session)
             }
         }
         // One alert serves every way a launch can fail, so its title must
@@ -1308,6 +1335,199 @@ struct GameLaunchView: View {
     /// restructure the page. One card changes height, everything else
     /// holds still, and the choices that only configure the web player
     /// now visibly belong to it.
+    #if targetEnvironment(macCatalyst)
+    /// TVGameLaunchView's screen, on the Mac. Not a Mac arrangement of
+    /// iOS's cards: the same composition and the same contents as the
+    /// television's launcher, platform label over title, the play pill,
+    /// the Continue-from row, the emulator and troubleshoot capsules,
+    /// and nothing else, per Marcus (2026-08-30). The one deliberate
+    /// divergence is downloads: the Mac keeps the Keep toggle, because
+    /// offline storage is a real Mac feature and the TV never had it.
+    /// Keep this structurally in step with TVGameLaunchView when either
+    /// changes.
+    private func macLayout(height: CGFloat) -> some View {
+        HStack(alignment: .center, spacing: 48) {
+            cover(maxWidth: 300)
+                .frame(width: 300)
+                .shadow(radius: 24, y: 12)
+
+            VStack(alignment: .leading, spacing: 18) {
+                Text(rom.platformLabel(source: .platformName, platformNames: session.platformNames))
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                Text(rom.displayName)
+                    .font(.largeTitle.bold())
+                    .lineLimit(3)
+
+                if loading {
+                    ProgressView()
+                } else if isPlatformSupported {
+                    playButton
+                        .frame(maxWidth: 420)
+                    macStatesSection
+                    HStack(spacing: 14) {
+                        macEmulatorCapsule
+                        macDownloadCapsule
+                        macTroubleCapsule
+                    }
+                } else {
+                    // Every platform the Mac can't run lands here, the
+                    // same sentence shape the TV uses. The GL trio is
+                    // pending rather than absent, and saying so saves
+                    // asking.
+                    Text(macPendingHere
+                        ? "This platform's core isn't in the Mac build yet. It arrives with the ANGLE work."
+                        : "This platform isn't supported on the Mac yet.")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let playError {
+                    Text(playError)
+                        .font(.callout)
+                        .foregroundStyle(.red)
+                }
+            }
+            .frame(maxWidth: 640, alignment: .leading)
+        }
+        .padding(.horizontal, 56)
+        .padding(.vertical, 48)
+        // Centered as a composition, the way the television centers it:
+        // capped so an ultrawide window doesn't stretch the two halves
+        // apart, and given the viewport's height so the block sits in
+        // the middle of the window rather than hanging from its top.
+        .frame(maxWidth: 1200)
+        .frame(maxWidth: .infinity, minHeight: height, alignment: .center)
+    }
+
+    /// The Mac's one deliberate divergence from the TV launcher,
+    /// dressed in this screen's own language: downloads as a capsule in
+    /// the action row, not iOS's Storage card. Same binding and rules
+    /// as the keep toggle everywhere else, including offline: a kept
+    /// game offline hides the only (destructive) action, an unkept one
+    /// shows Download disabled.
+    @ViewBuilder
+    private var macDownloadCapsule: some View {
+        if showsKeepCard {
+            let isKept = keptStore.kept(romId: rom.id) != nil
+            if let progress = keptStore.downloading[rom.id] {
+                Button {} label: {
+                    Text(progress.totalBytes > 0
+                        ? "Downloading \(Int(min(progress.fraction, 1) * 100))%"
+                        : "Downloading")
+                        .font(.callout)
+                }
+                .buttonStyle(.bordered)
+                .disabled(true)
+            } else if isKept {
+                if !networkMonitor.isOffline {
+                    Menu {
+                        Button(role: .destructive) {
+                            keepBinding.wrappedValue = false
+                        } label: {
+                            Label("Remove download", systemImage: "trash")
+                        }
+                    } label: {
+                        Label("Downloaded", systemImage: "checkmark.circle")
+                            .font(.callout)
+                    }
+                    .buttonStyle(.bordered)
+                }
+            } else {
+                Button {
+                    keepBinding.wrappedValue = true
+                } label: {
+                    Label("Download", systemImage: "arrow.down.circle")
+                        .font(.callout)
+                }
+                .buttonStyle(.bordered)
+                .disabled(networkMonitor.isOffline)
+            }
+        }
+    }
+
+    private var macPendingHere: Bool {
+        guard let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug) else {
+            return false
+        }
+        return PlatformSupport.macPendingPlatforms.contains(platform)
+    }
+
+    /// The TV's "Continue from" row: newest first, relative labels,
+    /// one press boots into the state. Same `states` the resume card
+    /// lists on iOS; in-game saves are absent on purpose, exactly as on
+    /// the TV, since native play loads the newest one automatically.
+    @ViewBuilder
+    private var macStatesSection: some View {
+        if !states.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Continue from")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+                ScrollView(.horizontal) {
+                    HStack(spacing: 12) {
+                        ForEach(states.sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }) { state in
+                            Button {
+                                selectedState = state
+                                Task { await beginPlay() }
+                            } label: {
+                                Text(RommDate.relativeLabel(state.updatedAt))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 4)
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(preparingPlay)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        }
+    }
+
+    /// The TV's emulator row: a click cycles between the real choices
+    /// (arcade's FinalBurn Neo or MAME 2003-Plus), same store as every
+    /// other launcher so they always agree.
+    @ViewBuilder
+    private var macEmulatorCapsule: some View {
+        if let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug),
+           platform.cores.count > 1 {
+            Button {
+                let cores = platform.cores
+                let current = selectedNativeCore ?? cores[0]
+                let next = cores[((cores.firstIndex(of: current) ?? 0) + 1) % cores.count]
+                selectedNativeCore = next
+            } label: {
+                Label(
+                    (selectedNativeCore ?? platform.core).displayName,
+                    systemImage: "cpu"
+                )
+                .font(.callout)
+            }
+            .buttonStyle(.bordered)
+        }
+    }
+
+    /// The TV's troubleshoot capsule, per-device like everywhere else:
+    /// marking a game here says nothing about the phone or the TV.
+    private var macTroubleCapsule: some View {
+        let marked = compatibility.isMarked(rom.id)
+        return Menu {
+            Button {
+                compatibility.setMarked(!marked, romId: rom.id)
+            } label: {
+                Label(marked ? "Mark as compatible" : "Mark as incompatible",
+                      systemImage: marked ? "checkmark.circle" : "exclamationmark.triangle")
+            }
+        } label: {
+            Label(marked ? "Marked incompatible" : "Troubleshoot",
+                  systemImage: marked ? "exclamationmark.triangle" : "wrench.and.screwdriver")
+                .font(.callout)
+        }
+        .buttonStyle(.bordered)
+    }
+    #endif
+
     private var playerCard: some View {
         LaunchCard(title: "Player", systemImage: "play.rectangle.on.rectangle") {
             Picker("Player", selection: $selectedBackend) {

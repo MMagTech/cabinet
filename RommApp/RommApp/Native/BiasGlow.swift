@@ -1,4 +1,8 @@
-#if os(tvOS)
+// Shared by the television and the Mac since 2026-08-30: a desk
+// monitor is the TV situation at arm's length, so the letterbox glow
+// and its setting travel with it. iOS compiles none of this; the
+// phone's screen has no dead space worth lighting.
+#if os(tvOS) || targetEnvironment(macCatalyst)
 import SwiftUI
 
 /// The letterbox glow's one setting. Landed here 2026-08-13 after tuning

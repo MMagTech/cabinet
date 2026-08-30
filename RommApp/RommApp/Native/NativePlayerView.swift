@@ -26,6 +26,9 @@ struct NativePlayerView: View {
     @State private var previousControllerMenu: (() -> Void)?
     @State private var previousControllerDisconnect: ((Int) -> Void)?
     @State private var menuVisible = false
+    #if targetEnvironment(macCatalyst)
+    @AppStorage(BiasGlowLevel.storageKey) private var macGlowStored = BiasGlowLevel.subtle.rawValue
+    #endif
     @State private var menuStatus: String?
     @State private var menuBusy = false
     /// The same visibility slider the webview player honors.
@@ -204,7 +207,16 @@ struct NativePlayerView: View {
     var body: some View {
         GeometryReader { geometry in
             let isLandscape = geometry.size.width > geometry.size.height
+            #if targetEnvironment(macCatalyst)
+            // The Mac never draws the touch overlay: pads are the way
+            // games are played here, the pointer serves DS, Game &
+            // Watch and the tap games through their own views below,
+            // and Escape opens the pause menu. Settled input model,
+            // Marcus 2026-08-30.
+            let showsControls = false
+            #else
             let showsControls = !controllers.isConnected
+            #endif
             // A gun cabinet aims at the picture, so its pad has to reach
             // the picture. In portrait the pad is normally a bottom strip
             // that cannot, which left gun games with no aim at all there.
@@ -222,6 +234,14 @@ struct NativePlayerView: View {
                         // has the picture the phone draws none.
                         if !external.showsGameExternally {
                             MetalGameView(renderer: renderer)
+                            #if targetEnvironment(macCatalyst)
+                            // The TV's letterbox glow, kept on the Mac
+                            // for the same reason it exists at all: a
+                            // big panel's dead space around a 4:3
+                            // picture. Same setting, same key, so the
+                            // TV and the Mac agree.
+                            TVBiasGlow(renderer: renderer, level: BiasGlowLevel.level(fromStored: macGlowStored))
+                            #endif
                             if core == .melonDS {
                                 DSTouchScreenView(sendPointer: handlePointer)
                             }
@@ -297,6 +317,15 @@ struct NativePlayerView: View {
                     pauseMenu
                 }
             }
+            #if targetEnvironment(macCatalyst)
+            // Escape is the Mac's pause affordance with no pad in
+            // hand: app control, not game input, so it lives outside
+            // the keyboard-never-plays rule.
+            .onKeyPress(.escape) {
+                if !menuVisible { openMenu() }
+                return .handled
+            }
+            #endif
         }
         .background(Color.black.ignoresSafeArea())
         // Tell the server this game is being played, exactly as the webview

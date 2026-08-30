@@ -129,7 +129,17 @@ struct PairingView: View {
 
             if start != nil {
                 Button {
+                    #if targetEnvironment(macCatalyst)
+                    // SFSafariViewController does not survive Catalyst: it
+                    // flashes a remote view and dismisses itself. The Mac's
+                    // own browser is the right place anyway, and the poll
+                    // picks the approval up the moment it happens there.
+                    if let start, let url = session.approvalURL(for: start) {
+                        UIApplication.shared.open(url)
+                    }
+                    #else
                     showingApproval = true
+                    #endif
                 } label: {
                     Text("Open RomM to approve")
                         .fontWeight(.semibold)
