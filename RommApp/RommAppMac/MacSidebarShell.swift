@@ -46,7 +46,7 @@ struct MacSidebarShell: View {
 
     var body: some View {
         NavigationSplitView {
-            sidebar
+            SidebarColumn { sidebar }
         } detail: {
             detail
         }

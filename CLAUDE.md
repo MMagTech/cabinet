@@ -196,6 +196,29 @@ did not change something Cabinet depends on.
   generated.
 - Commit `tools/*.xml` or `tools/profiles.json`. Derived data, regenerate it.
 
+## Mac Catalyst conventions
+
+Read Apple's documentation for the exact class or modifier before
+changing Catalyst UI, and say what it says. Catalyst behaviour is rarely
+guessable from the running app: the window's title bar, its toolbar and
+its safe area are owned by AppKit and rebuilt by Catalyst on every
+window shape change, so probing shows what happens without ever
+revealing the property that governs it. Two examples that cost a night
+between them: the title bar strip over a full screen game is solved by
+`UITitlebar.autoHidesToolbarInFullScreen`, and removing the title bar
+belongs in the scene delegate rather than a view's `onAppear`.
+
+Apple's documentation pages are JavaScript rendered and fetch as an
+empty shell. The content is served as JSON at
+`https://developer.apple.com/tutorials/data/documentation/<path>.json`;
+`primaryContentSections` carries the prose and code, `topicSections`
+lists every property on a class.
+
+Never publish state that re-renders the view currently presenting
+something. It tears the presentation down: a shared flag flipped from a
+launch screen's `onAppear`, observed by the shell, made that screen open
+and immediately close.
+
 ## tvOS conventions
 
 This applies to tvOS work only; none of it changes anything about iOS.

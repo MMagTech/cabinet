@@ -419,6 +419,15 @@ struct GameLaunchView: View {
         // in the corner. This screen fills the window instead.
         #if targetEnvironment(macCatalyst)
         .ignoresSafeArea()
+        // Tells the shell to drop its sidebar toggle while this covers
+        // it. Set asynchronously so the write never lands inside the
+        // presentation's own update pass. See MacChrome.
+        .onAppear {
+            DispatchQueue.main.async { MacChrome.shared.coveringScreenUp = true }
+        }
+        .onDisappear {
+            DispatchQueue.main.async { MacChrome.shared.coveringScreenUp = false }
+        }
         #endif
     }
 
