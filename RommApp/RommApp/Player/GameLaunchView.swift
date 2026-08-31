@@ -130,6 +130,10 @@ struct GameLaunchView: View {
     @State private var vmuMinigame: String?
     @State private var vmuPreparing = false
     @State private var playingVMU = false
+    #if targetEnvironment(macCatalyst)
+    @State private var favoriteFill: CGFloat = 0
+    @State private var favoriteScale: CGFloat = 1
+    #endif
     @State private var vmuCardURL: URL?
     /// The two-writer rule's eyes: while a television is running a DC
     /// session for THIS game, the card is that session's to write, so
@@ -282,9 +286,14 @@ struct GameLaunchView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 exportButton
             }
+            // The Mac shows this beside the title instead, where it sits
+            // with the game rather than in the window's chrome. See
+            // macFavoriteStar.
+            #if !targetEnvironment(macCatalyst)
             ToolbarItem(placement: .topBarTrailing) {
                 favoriteButton
             }
+            #endif
             ToolbarItem(placement: .topBarTrailing) {
                 // A glyph on the Mac, not the word: beside the star,
                 // "Close" as text read as one crowded pill of mismatched
@@ -1351,6 +1360,100 @@ struct GameLaunchView: View {
     /// offline storage is a real Mac feature and the TV never had it.
     /// Keep this structurally in step with TVGameLaunchView when either
     /// changes.
+    /// Favouriting, beside the name of the thing being favourited.
+    ///
+    /// On the Mac this used to be a toolbar item, which Catalyst hoists
+    /// into the window's title bar. That put a control that acts on the
+    /// game into the app's own furniture, at the far edge of the screen
+    /// from the game it applies to, and full screen hides it until the
+    /// pointer is thrown at the top of the display. The close button
+    /// belongs up there because it acts on the window. This does not.
+    ///
+    /// The star keeps the tiles' vocabulary, same symbol and same
+    /// yellow, so the filled state means what it already means
+    /// everywhere else in the app. iOS and the television are untouched
+    /// and keep their toolbar item.
+    private var macFavoriteStar: some View {
+        let isOn = session.isFavorite(romId: rom.id)
+        return Button {
+            let romId = rom.id
+            let turningOn = !session.isFavorite(romId: romId)
+            playFavoriteMoment(turningOn: turningOn)
+            togglingFavorite = true
+            Task {
+                do {
+                    try await session.toggleFavorite(romId: romId)
+                } catch {
+                    favoriteError = error.localizedDescription
+                }
+                togglingFavorite = false
+            }
+        } label: {
+            ZStack {
+                Image(systemName: "star")
+                    .foregroundStyle(.secondary)
+                Image(systemName: "star.fill")
+                    .foregroundStyle(.yellow)
+                    // The colour arrives rather than cross-fades: the
+                    // fill rises from the bottom of the star, so there
+                    // is a moment where it is half full. A fade between
+                    // two symbols is mush and reads as a checkbox.
+                    .mask(alignment: .bottom) {
+                        Rectangle().scaleEffect(y: favoriteFill, anchor: .bottom)
+                    }
+            }
+            .font(.title2)
+            .scaleEffect(favoriteScale)
+            // Sat on the title's baseline by its own bottom edge rather
+            // than by the symbol's baseline. SF Symbols carry descender
+            // room a star never uses, so baseline alignment floats it
+            // above the line; this puts the star's two lower points on
+            // the same line the title sits on.
+            .alignmentGuide(.firstTextBaseline) { $0[.bottom] }
+        }
+        .buttonStyle(.plain)
+        .disabled(togglingFavorite)
+        .help(isOn ? "Remove from favourites" : "Add to favourites")
+        .accessibilityLabel(isOn ? "Remove from favourites" : "Add to favourites")
+        .onAppear { favoriteFill = isOn ? 1 : 0 }
+        .onChange(of: isOn) { _, now in
+            // Keeps the star honest if the state changes from somewhere
+            // else, without replaying the animation.
+            if favoriteFill != (now ? 1 : 0) { favoriteFill = now ? 1 : 0 }
+        }
+    }
+
+    /// Adding is an event. Removing is an acknowledgement.
+    ///
+    /// Turning it on overshoots to 1.28 and settles on a loose spring,
+    /// which is where the satisfaction lives, while the fill climbs a
+    /// little faster so the star is full before it stops moving. Turning
+    /// it off is quicker, quieter, and does not bounce: nothing about
+    /// un-favouriting deserves a celebration.
+    ///
+    /// The moment runs on its own clock. The write is fired separately
+    /// and does not shorten it, so a fast server cannot cut the
+    /// animation off halfway.
+    private func playFavoriteMoment(turningOn: Bool) {
+        if turningOn {
+            favoriteScale = 1.28
+            withAnimation(.spring(response: 0.40, dampingFraction: 0.42)) {
+                favoriteScale = 1
+            }
+            withAnimation(.easeOut(duration: 0.28)) {
+                favoriteFill = 1
+            }
+        } else {
+            withAnimation(.easeOut(duration: 0.16)) {
+                favoriteFill = 0
+                favoriteScale = 0.94
+            }
+            withAnimation(.easeOut(duration: 0.16).delay(0.16)) {
+                favoriteScale = 1
+            }
+        }
+    }
+
     private func macLayout(height: CGFloat) -> some View {
         HStack(alignment: .center, spacing: 48) {
             cover(maxWidth: 300)
@@ -1361,9 +1464,12 @@ struct GameLaunchView: View {
                 Text(rom.platformLabel(source: .platformName, platformNames: session.platformNames))
                     .font(.title3)
                     .foregroundStyle(.secondary)
-                Text(rom.displayName)
-                    .font(.largeTitle.bold())
-                    .lineLimit(3)
+                HStack(alignment: .firstTextBaseline, spacing: 14) {
+                    Text(rom.displayName)
+                        .font(.largeTitle.bold())
+                        .lineLimit(3)
+                    macFavoriteStar
+                }
 
                 if loading {
                     ProgressView()
