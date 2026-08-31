@@ -412,6 +412,14 @@ struct GameLaunchView: View {
             // promise the boot cannot keep.
             selectedState = nil
         }
+        // The Mac's window carries its content full size under a
+        // transparent title bar, so a presentation that stops below
+        // the bar leaves a strip of the shell showing through above
+        // it, the sidebar's darker material making a hard-edged block
+        // in the corner. This screen fills the window instead.
+        #if targetEnvironment(macCatalyst)
+        .ignoresSafeArea()
+        #endif
     }
 
     // MARK: Pieces
