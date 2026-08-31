@@ -42,7 +42,105 @@ enum MacWindow {
         // The tab container mounts a beat after the scene reports in,
         // and its planes come back after backgrounding, so clear on a
         // short delay rather than once.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { clearDefaultPlanes() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            clearDefaultPlanes()
+            holdChromeless()
+        }
+        holdChromeless()
+    }
+
+    /// Take the titlebar strip out of the window for good.
+    ///
+    /// Catalyst gives this window a titlebar because it contains a split
+    /// view, and hangs an AppKit `NSToolbar` on it carrying the sidebar
+    /// toggle and whatever the current screen publishes. Windowed that
+    /// strip pushes the content down and shows as a band across the top;
+    /// fullscreen, or with a game up, AppKit draws the same thing over
+    /// the picture. It cannot be removed by clearing it, because
+    /// Catalyst re-attaches a replacement within half a second.
+    ///
+    /// So instead of emptying it, this stops it occupying anything:
+    ///
+    /// - `fullSizeContentView` in the style mask lets the content view
+    ///   run the whole height of the window, under the titlebar rather
+    ///   than below it, which is what makes the ambient backdrop reach
+    ///   the top edge.
+    /// - `titlebarAppearsTransparent` stops the titlebar painting its
+    ///   own background over that content.
+    /// - the toolbar comes off, so there is nothing drawn in the strip.
+    ///
+    /// The traffic lights stay, floating over the content, which is what
+    /// Music and TV do and is why they have no band either.
+    ///
+    /// Everything goes through the runtime because Catalyst cannot import
+    /// AppKit. The style mask and the transparency flag are set with KVC,
+    /// which this window subclass does support for those two; the toolbar
+    /// is set through `perform`, because KVC on the toolbar-related keys
+    /// is what crashed the app when it was tried.
+    private static let fullSizeContentViewBit: UInt = 1 << 15
+
+    /// Held, not set once.
+    ///
+    /// Catalyst rebuilds this window's titlebar whenever the window
+    /// changes shape: entering or leaving fullscreen, and presenting a
+    /// game over the shell. Each rebuild restores the toolbar and can
+    /// drop the style bits, which is why applying this at launch left
+    /// the bar back in exactly the two states that matter. The probe
+    /// measured the toolbar returning within half a second.
+    ///
+    /// So this runs on a slow timer for the life of the app. Every pass
+    /// checks before it writes, so once the window is in the right shape
+    /// the cost is two property reads a second and nothing else.
+    private static var chromeTimer: Timer?
+
+    private static func perform0(_ object: NSObject, _ name: String) -> Any? {
+        let selector = NSSelectorFromString(name)
+        guard object.responds(to: selector) else { return nil }
+        return object.perform(selector)?.takeUnretainedValue()
+    }
+
+    static func holdChromeless() {
+        makeChromeless()
+        guard chromeTimer == nil else { return }
+        let timer = Timer(timeInterval: 0.5, repeats: true) { _ in makeChromeless() }
+        RunLoop.main.add(timer, forMode: .common)
+        chromeTimer = timer
+    }
+
+    static func makeChromeless() {
+        guard let window = appKitWindow() else { return }
+
+        if let mask = (window.value(forKey: "styleMask") as? NSNumber)?.uintValue,
+           mask & fullSizeContentViewBit == 0 {
+            window.setValue(NSNumber(value: mask | fullSizeContentViewBit), forKey: "styleMask")
+        }
+        if window.responds(to: NSSelectorFromString("setTitlebarAppearsTransparent:")) {
+            window.setValue(NSNumber(value: true), forKey: "titlebarAppearsTransparent")
+        }
+        let setToolbar = NSSelectorFromString("setToolbar:")
+        if window.responds(to: setToolbar), window.value(forKey: "toolbar") != nil {
+            window.perform(setToolbar, with: nil)
+        }
+
+        // Fullscreen is the case where the titlebar has no business
+        // existing: AppKit still paints its background across the top of
+        // the content, which is the 33 point band over a running game.
+        // Making the titlebar transparent is ignored on Catalyst's
+        // window subclass, and the UIKit views underneath are not what
+        // draws it, so the view that does is hidden directly.
+        //
+        // Only while fullscreen. Windowed, this same view carries the
+        // traffic lights, and windowed has no band to begin with.
+        for scene in UIApplication.shared.connectedScenes {
+            guard let windowScene = scene as? UIWindowScene else { continue }
+            windowScene.titlebar?.titleVisibility = .hidden
+            windowScene.titlebar?.toolbar = nil
+            windowScene.titlebar?.separatorStyle = .none
+            // Held alongside the rest: Catalyst rebuilds the titlebar on
+            // every window shape change, and this is the property that
+            // governs fullscreen.
+            windowScene.titlebar?.autoHidesToolbarInFullScreen = true
+        }
     }
 
     private static var idleTimer: Timer?

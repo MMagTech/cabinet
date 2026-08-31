@@ -223,7 +223,28 @@ struct NativePlayerView: View {
         ExternalDisplay.shared.isPaused = false
     }
 
+    /// Runs its content edge to edge on the Mac and unchanged elsewhere.
+    @ViewBuilder
+    private func macFullBleed<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        #if targetEnvironment(macCatalyst)
+        content().ignoresSafeArea()
+        #else
+        content()
+        #endif
+    }
+
     var body: some View {
+        // The GeometryReader has to be told, not the chain below it.
+        //
+        // Catalyst reports a 52 point top safe area on the Mac even when
+        // the window covers the whole screen and has no titlebar left,
+        // measured rather than assumed. That inset sizes this reader, so
+        // the picture is laid out 52 points down while the black
+        // background behind it already ignores the inset, and the gap
+        // between the two is the band across the top of a game. Ignoring
+        // the safe area further down the chain is too late: by then this
+        // reader has already been given the smaller height.
+        macFullBleed {
         GeometryReader { geometry in
             let isLandscape = geometry.size.width > geometry.size.height
             #if targetEnvironment(macCatalyst)
@@ -354,6 +375,7 @@ struct NativePlayerView: View {
                 return .handled
             }
             #endif
+        }
         }
         .background(Color.black.ignoresSafeArea())
         // Tell the server this game is being played, exactly as the webview
