@@ -90,8 +90,12 @@ final class QuickActionSceneDelegate: NSObject, UIWindowSceneDelegate {
         #if targetEnvironment(macCatalyst)
         if let titlebar = (scene as? UIWindowScene)?.titlebar {
             titlebar.titleVisibility = .hidden
-            titlebar.toolbar = nil
             titlebar.separatorStyle = .none
+            // The toolbar STAYS. It carries the sidebar toggle and the
+            // settings button, and taking it away took them with it.
+            // With the title bar transparent and the content full size
+            // they float over the artwork the way Music's do, and the
+            // property below gets them out of the way in full screen.
             // The fullscreen half, and Apple's own answer to it. Their
             // words: set this to true "to automatically hide the toolbar
             // when the window enters full-screen mode. While hidden, the

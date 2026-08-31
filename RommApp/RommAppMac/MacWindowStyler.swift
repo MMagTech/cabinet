@@ -117,10 +117,10 @@ enum MacWindow {
         if window.responds(to: NSSelectorFromString("setTitlebarAppearsTransparent:")) {
             window.setValue(NSNumber(value: true), forKey: "titlebarAppearsTransparent")
         }
-        let setToolbar = NSSelectorFromString("setToolbar:")
-        if window.responds(to: setToolbar), window.value(forKey: "toolbar") != nil {
-            window.perform(setToolbar, with: nil)
-        }
+        // The window's AppKit toolbar is deliberately left alone. It is
+        // what draws the sidebar toggle and the settings button, and
+        // UITitlebar.autoHidesToolbarInFullScreen is what takes it out
+        // of the way when it would otherwise cover a game.
 
         // Fullscreen is the case where the titlebar has no business
         // existing: AppKit still paints its background across the top of
@@ -134,7 +134,6 @@ enum MacWindow {
         for scene in UIApplication.shared.connectedScenes {
             guard let windowScene = scene as? UIWindowScene else { continue }
             windowScene.titlebar?.titleVisibility = .hidden
-            windowScene.titlebar?.toolbar = nil
             windowScene.titlebar?.separatorStyle = .none
             // Held alongside the rest: Catalyst rebuilds the titlebar on
             // every window shape change, and this is the property that
