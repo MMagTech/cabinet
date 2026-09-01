@@ -91,6 +91,20 @@ struct RommApp: App {
     }
 
     private var appContent: some View {
+        #if targetEnvironment(macCatalyst)
+        // The PS2 picture cannot be verified by building, and the
+        // headless smoke test deliberately draws nothing, so this is
+        // the one way to exercise the real render path without a
+        // person clicking through sign-in and the library. Inert
+        // without its launch argument.
+        if let disc = PS2BenchHarness.discPath, !disc.isEmpty {
+            return AnyView(PS2BenchView(discPath: disc))
+        }
+        #endif
+        return AnyView(appShell)
+    }
+
+    private var appShell: some View {
         RootView()
             .environmentObject(session)
             #if targetEnvironment(macCatalyst)

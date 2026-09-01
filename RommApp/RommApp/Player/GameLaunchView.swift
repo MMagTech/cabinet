@@ -34,6 +34,13 @@ struct GameLaunchView: View {
     @State private var selectedNativeCore: NativeCore?
     @State private var selectedBackend: LaunchChoices.PlayerBackend = .webview
     @State private var playingNative = false
+    #if targetEnvironment(macCatalyst)
+    // PS2 is Mac only and does not go through the native player, so it
+    // carries its own presentation state rather than overloading
+    // playingNative with a second meaning.
+    @State private var playingPS2 = false
+    @State private var ps2DiscPath: String?
+    #endif
     @State private var nativeInitialState: Data?
     @State private var firmware: [Firmware] = []
     /// Firmware the server knows about but cannot actually serve: the entry
@@ -341,6 +348,15 @@ struct GameLaunchView: View {
                     .environmentObject(session)
             }
         }
+        #if targetEnvironment(macCatalyst)
+        .fullScreenCover(isPresented: $playingPS2) {
+            if let ps2DiscPath {
+                PS2PlayerView(
+                    discPath: ps2DiscPath, title: rom.displayName, rom: rom, session: session
+                )
+            }
+        }
+        #endif
         .fullScreenCover(isPresented: $playingVMU) {
             if let vmuCardURL {
                 VMUPlayerView(rom: rom, cardURL: vmuCardURL)
@@ -891,6 +907,12 @@ struct GameLaunchView: View {
     /// run's own local recovery is untouched: that path never goes near
     /// the server at all, by design, see `PlayerView.resumeFromAutosave`.
     private func beginPlay() async {
+        #if targetEnvironment(macCatalyst)
+        if PS2Launcher.isPS2(canonicalSlug: canonicalSlug) {
+            await beginPS2Play()
+            return
+        }
+        #endif
         if selectedBackend == .native {
             await beginNativePlay()
             return
@@ -909,6 +931,28 @@ struct GameLaunchView: View {
         stateToLoad = .remote(bytes)
         playing = true
     }
+
+    #if targetEnvironment(macCatalyst)
+    /// Same shape as the native path below, and for the same reason: the
+    /// download happens before the player is presented so a failure is
+    /// an alert rather than a black screen.
+    private func beginPS2Play() async {
+        preparingPlay = true
+        downloadProgress = 0
+        defer { preparingPlay = false }
+        do {
+            ps2DiscPath = try await PS2Launcher.prepare(rom: rom, session: session) { fraction in
+                downloadProgress = fraction
+            }
+            // Before the player exists, so the card is on disk by the
+            // time PCSX2 opens it.
+            await PS2MemoryCard.restore(rom: rom, session: session)
+            playingPS2 = true
+        } catch {
+            playError = error.localizedDescription
+        }
+    }
+    #endif
 
     /// The native path downloads before presenting rather than behind a
     /// boot curtain, so a failure surfaces here as an alert instead of a

@@ -278,6 +278,9 @@
 		};
 		BB000000000000000000A7 /* RommAppMac */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			explicitFolders = (
+				PCSX2Resources,
+			);
 			path = RommAppMac;
 			sourceTree = "<group>";
 		};
@@ -1288,6 +1291,20 @@
 					libEGL,
 					"-framework",
 					libGLESv2,
+					"-framework",
+					Metal,
+					"-framework",
+					QuartzCore,
+					"-framework",
+					AVFoundation,
+					"-framework",
+					CoreMedia,
+					"-framework",
+					IOKit,
+					"-framework",
+					MetalFX,
+					"-lcurl",
+					"-lpcap",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev.mac;
 				PRODUCT_NAME = "Cabinet Mac";
@@ -1383,6 +1400,20 @@
 					libEGL,
 					"-framework",
 					libGLESv2,
+					"-framework",
+					Metal,
+					"-framework",
+					QuartzCore,
+					"-framework",
+					AVFoundation,
+					"-framework",
+					CoreMedia,
+					"-framework",
+					IOKit,
+					"-framework",
+					MetalFX,
+					"-lcurl",
+					"-lpcap",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet.mac;
 				PRODUCT_NAME = "Cabinet Mac";

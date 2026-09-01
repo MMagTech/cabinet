@@ -65,6 +65,11 @@ enum PlatformSupport {
         // (Marcus's call, 2026-08-30, revisitable), so a platform whose
         // only cores are EmulatorJS's is not playable here and belongs
         // in Unsupported rather than behind a broken Play button.
+        // PS2 before the NativePlatform lookup, because it has no case
+        // there and never will: PCSX2 is not a libretro core. It is
+        // still playable on this target, so the lookup failing must not
+        // be read as unsupported.
+        if PS2Launcher.isPS2(canonicalSlug: canonicalSlug) { return true }
         guard let platform = NativePlatform.platform(bySlug: canonicalSlug, isArcade: false) else {
             return false
         }
