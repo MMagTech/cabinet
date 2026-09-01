@@ -138,53 +138,12 @@ enum MacWindow {
             // Held alongside the rest: Catalyst rebuilds the titlebar on
             // every window shape change, and this is the property that
             // governs fullscreen.
-            //
-            // FOLLOWS GAME MODE rather than being on always. Apple's
-            // documentation for autoHidesToolbarInFullScreen is explicit
-            // that when it is true the toolbar is revealed only by
-            // moving the pointer to the top of the screen, and its
-            // default is false. Over a running game that is exactly what
-            // is wanted, and setGameMode's own `toolbar = nil` is not
-            // enough on its own: entering fullscreen rebuilds the
-            // titlebar and the toolbar comes back within half a second.
-            //
-            // In the shell it is wrong. The toolbar is where `.searchable`
-            // puts the search field, so a fullscreen window sent the
-            // caret into a field nobody could see until they went
-            // looking for it at the top of the screen. Reported
-            // 2026-09-01: "in full screen it does go straight to it but
-            // the top bar has to have the mouse over it to show".
-            windowScene.titlebar?.autoHidesToolbarInFullScreen = toolbarAutoHides
+            windowScene.titlebar?.autoHidesToolbarInFullScreen = true
         }
     }
 
     private static var idleTimer: Timer?
     private static var gameModeActive = false
-
-    /// Whether the toolbar should get out of the way in fullscreen.
-    ///
-    /// Separate from `gameModeActive` on purpose. Game mode is the
-    /// libretro player's whole treatment, cursor and fullscreen and
-    /// chrome together, and PS2 and GameCube do not use it: they own
-    /// their own window and hide their own pointer. But they are still
-    /// games, and a toolbar across the top of one is just as wrong
-    /// there. So this is the one narrow thing all three agree on.
-    private static var toolbarAutoHides = false
-
-    /// Keeps the toolbar out of the way in fullscreen, or lets it stay.
-    ///
-    /// True while a game is on screen: Apple's documentation is explicit
-    /// that with this on the toolbar is revealed only by moving the
-    /// pointer to the top of the screen, which is exactly right over a
-    /// game and exactly wrong in the shell, where the toolbar is what
-    /// holds the search field.
-    static func setToolbarAutoHide(_ autoHides: Bool) {
-        toolbarAutoHides = autoHides
-        for scene in UIApplication.shared.connectedScenes {
-            guard let windowScene = scene as? UIWindowScene else { continue }
-            windowScene.titlebar?.autoHidesToolbarInFullScreen = autoHides
-        }
-    }
 
     /// How long the pointer sits still before it gets out of the way.
     private static let cursorIdleDelay: TimeInterval = 3
@@ -209,13 +168,8 @@ enum MacWindow {
             windowScene.titlebar?.titleVisibility = .hidden
             windowScene.titlebar?.toolbar = nil
             windowScene.titlebar?.separatorStyle = active ? .none : .automatic
-            // Set here as well as in makeChromeless, because entering or
-            // leaving a game is exactly the moment it changes and the
-            // half-second timer should not be what a person waits on.
-            windowScene.titlebar?.autoHidesToolbarInFullScreen = active
         }
         gameModeActive = active
-        setToolbarAutoHide(active)
         idleTimer?.invalidate()
         idleTimer = nil
         setFullScreen(active)
