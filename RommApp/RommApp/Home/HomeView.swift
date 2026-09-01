@@ -1150,7 +1150,7 @@ struct HomeView: View {
         #endif
 
         do {
-            recent = try await recentTask.items
+            recent = playableHere(try await recentTask.items)
             offline = false
         } catch RommError.offline {
             offline = true
@@ -1161,6 +1161,43 @@ struct HomeView: View {
             favorites = favs
         }
         loaded = true
+    }
+
+    /// Drops games this device cannot actually play.
+    ///
+    /// Resume is a promise. The hero says "carry on with this", and a
+    /// platform that has been taken off this device cannot carry on with
+    /// anything: tapping it reaches a launch screen with a greyed-out
+    /// Play button, which reads as the app being broken rather than as a
+    /// system it no longer runs. Dreamcast became Mac only on
+    /// 2026-09-01 and is the first platform this has applied to.
+    ///
+    /// Favourites are deliberately left alone. A favourite is a thing
+    /// you marked, not a thing the app is offering to continue, and a
+    /// library you keep on a server should still show you what is in it.
+    ///
+    /// THE EXCEPTION, iPhone only: a Dreamcast game whose VMU card
+    /// carries a minigame is still playable here, in the VMU core, and
+    /// that is the whole point of the phone-as-VMU design. Taking those
+    /// off Home would hide the one thing about that game the phone can
+    /// still do, and it is the thing most worth having on the way out of
+    /// the house. tvOS gets no exception because the VMU core is iOS
+    /// only, so there is nothing there to play.
+    private func playableHere(_ roms: [Rom]) -> [Rom] {
+        roms.filter { rom in
+            let slug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
+            if PlatformSupport.isSupported(canonicalSlug: slug, isArcade: rom.isArcade) {
+                return true
+            }
+            #if os(iOS) && !targetEnvironment(macCatalyst)
+            if NativePlatform.platform(for: rom, canonicalSlug: slug) == .dreamcast,
+               let card = VMULauncher.currentCard(romId: rom.id),
+               VMUCard.minigameName(card) != nil {
+                return true
+            }
+            #endif
+            return false
+        }
     }
 }
 
