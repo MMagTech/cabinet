@@ -1255,6 +1255,30 @@ struct GameLaunchView: View {
     /// the config it offered to delete is gone.
     @ViewBuilder
     private var resetSettingsCard: some View {
+        #if targetEnvironment(macCatalyst)
+        // PS2 has no libretro core, so the card below never appears for
+        // it, and its one real remedy is otherwise reachable only from
+        // inside a game that may be showing nothing at all. Some PS2
+        // titles draw nothing on the hardware renderer and are perfect
+        // on the software one, which reads as a broken app rather than
+        // a setting to change. Offering it here means the fix is in
+        // front of someone BEFORE they hit the black screen, not
+        // buried behind it.
+        if PS2Launcher.isPS2(canonicalSlug: canonicalSlug) {
+            LaunchCard(title: "Troubleshoot", systemImage: "wrench.and.screwdriver") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Toggle("Software renderer", isOn: Binding(
+                        get: { PS2Graphics.renderer(romId: rom.id) == 13 },
+                        set: { PS2Graphics.setRenderer($0 ? 13 : 17, romId: rom.id) }
+                    ))
+                    .font(.callout)
+                    Text("Turn on if the picture is black or flickers. Slower, and this Mac has the headroom.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        #endif
         if hasCoreSettings, let core = NativeCore.core(for: rom, canonicalSlug: canonicalSlug) {
             // Named for the tvOS capsule that does the same job, so
             // one idea carries one name across both platforms. Not
