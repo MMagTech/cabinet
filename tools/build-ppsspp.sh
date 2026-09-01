@@ -71,6 +71,26 @@ if [ ! -d "$SRC" ]; then
     git clone --recurse-submodules --depth 1 https://github.com/hrydgard/ppsspp.git "$SRC"
 fi
 
+# Mac only. PPSSPP picks its CPU engine silently: MIPSState::Init turns
+# PSP_CoreParameter().cpuCore into one of three very different objects
+# and says nothing, and the libretro layer will quietly rewrite a
+# request for the recompiler into the IR interpreter when the frontend
+# does not answer RETRO_ENVIRONMENT_GET_JIT_CAPABLE. So "PPSSPP runs and
+# renders" has never been evidence of which engine is running, and the
+# question sat unresolved for days because there was nothing to read.
+# This makes the core state its own answer once per boot, through
+# PPSSPP's own log, which the libretro frontend already receives.
+# Applied for the mac build alone, so the iOS and tvOS libraries are
+# untouched.
+if [ "$PLATFORM" = mac ]; then
+    perl -0pi -e '
+        s/(\tif \(PSP_CoreParameter\(\)\.cpuCore == CPUCore::JIT \|\| PSP_CoreParameter\(\)\.cpuCore == CPUCore::JIT_IR\) \{\n)/\tINFO_LOG(Log::CPU, "cabinet: CPU engine = %d (0 interpreter, 1 native JIT, 2 IR interpreter, 3 JIT+IR)", (int)PSP_CoreParameter().cpuCore);\n$1/
+        unless /cabinet: CPU engine/;
+    ' "$SRC/Core/MIPS/MIPS.cpp"
+    grep -q 'cabinet: CPU engine' "$SRC/Core/MIPS/MIPS.cpp" || {
+        echo "ppsspp cpu-core probe patch did not apply" >&2; exit 1; }
+fi
+
 if [ "$PLATFORM" = mac ]; then
     # CMAKE_SYSTEM_PROCESSOR is set by hand because naming
     # CMAKE_SYSTEM_NAME puts CMake into cross-compiling mode, where it

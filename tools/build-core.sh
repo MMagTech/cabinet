@@ -148,16 +148,34 @@ melonds)
     # FreeBIOS is compiled in, so direct boot needs no user firmware.
     # Chosen over desmume2015, whose no-JIT arm64 build does not even
     # link (MMU.cpp calls JIT hooks with DESMUME_JIT=0).
+    #
+    # On Mac only, JIT_ARCH=aarch64 is added below. melonDS's own ARM64
+    # recompiler already knows Apple Silicon: it allocates its code
+    # buffer with MAP_JIT and toggles W^X through
+    # pthread_jit_write_protect_np, so this is the flag the Mac was
+    # missing rather than a port. iOS and tvOS pass no MAKEARGS at all
+    # and build byte-identically to before.
     PREFIX=mds; REPO=https://github.com/libretro/melonDS.git
-    MAKEDIR=.; MAKEFILE=Makefile; OUT=MelonDS; LIB=libmelonds_ios.a ;;
+    MAKEDIR=.; MAKEFILE=Makefile; OUT=MelonDS; LIB=libmelonds_ios.a
+    if [ "$PLATFORM" = mac ]; then MAKEARGS="JIT_ARCH=aarch64"; fi ;;
 pcsx_rearmed)
     # platform=ios-arm64 (or tvos-arm64) forces DYNAREC=0 in this core's
     # own Makefile, a pure interpreter build, the same no-JIT exception
     # Beetle Saturn already proved out for its SH-2 core. Confirm on-device
     # speed before treating PS1 as shipped on either platform; this is a
     # go/no-go, not a batch build like the other nine cores.
+    #
+    # On Mac only, DYNAREC=ari64 is added below, overriding that forced
+    # 0 from the command line. Unlike N64's, this recompiler is already
+    # ported to Apple: linkage_arm64.S goes through ESYM() for the
+    # Mach-O underscore prefix and guards its ELF-only directives, and
+    # new_dynarec_config.h turns on NO_WRITE_EXEC for __MACH__ so the
+    # code cache is toggled between writable and executable rather than
+    # mapped as both. iOS and tvOS pass no MAKEARGS and keep the
+    # interpreter.
     PREFIX=psx; REPO=https://github.com/libretro/pcsx_rearmed.git
-    MAKEDIR=.; MAKEFILE=Makefile.libretro; OUT=PCSXReARMed; LIB=libpcsx_rearmed_ios.a ;;
+    MAKEDIR=.; MAKEFILE=Makefile.libretro; OUT=PCSXReARMed; LIB=libpcsx_rearmed_ios.a
+    if [ "$PLATFORM" = mac ]; then MAKEARGS="DYNAREC=ari64"; fi ;;
 *)
     echo "unknown core: $NAME" >&2; exit 1 ;;
 esac
@@ -213,6 +231,89 @@ if [ "$NAME" = melonds ]; then
         "$SRC/src/libretro/libretro.cpp"
     grep -q 'FlushSecondaryBuffer();' "$SRC/src/libretro/libretro.cpp" || {
         echo "melonds unload-flush patch did not apply" >&2; exit 1; }
+fi
+
+# Mac only, and only reached when JIT_ARCH=aarch64 above put melonDS's
+# ARM64 recompiler into the build. Two edits, neither of which iOS or
+# tvOS ever compiles: those platforms set no JIT_ARCH, so ARMJIT.cpp and
+# the whole ARMJIT_A64 directory are not in their source list at all.
+if [ "$PLATFORM" = mac ] && [ "$NAME" = melonds ]; then
+    # Catalyst marks pthread_jit_write_protect_np __API_UNAVAILABLE even
+    # though the symbol is live in libsystem on any Apple Silicon Mac,
+    # so melonDS's direct call is a hard compile error. Resolve it
+    # through dlsym past the annotation, the same bypass
+    # tools/build-flycast.sh uses for Flycast's three recompilers.
+    perl -0pi -e '
+        s/void JitEnableWrite\(\)/#if defined(__APPLE__) \&\& defined(__aarch64__)\n#include <dlfcn.h>\nstatic void cabinet_jit_write_protect(int enabled)\n{\n    typedef void (*cabinet_jitwp_t)(int);\n    static cabinet_jitwp_t fn = (cabinet_jitwp_t)dlsym(RTLD_DEFAULT, "pthread_jit_write_protect_np");\n    if (fn) fn(enabled);\n}\n#endif\n\nvoid JitEnableWrite()/
+        unless /cabinet_jit_write_protect/;
+        s/if \(__builtin_available\(macOS 11\.0, \*\)\)\n            pthread_jit_write_protect_np\(/cabinet_jit_write_protect(/g;
+    ' "$SRC/src/ARMJIT.cpp"
+    grep -q 'cabinet_jit_write_protect(false)' "$SRC/src/ARMJIT.cpp" || {
+        echo "melonds W^X dlsym patch did not apply" >&2; exit 1; }
+
+    # melonDS never says which CPU engine it chose, so a recompiler that
+    # silently failed to get executable memory is indistinguishable from
+    # one that is running. This is the core's own runtime proof, printed
+    # once at JIT init: it names the buffer it actually got, or the
+    # errno it failed with. Do not remove it and then claim the Mac has
+    # a DS recompiler; that claim has been wrong before.
+    perl -0pi -e '
+        s/#include <stdlib\.h>/#include <stdlib.h>\n#include <stdio.h>\n#include <string.h>\n#include <errno.h>/
+        unless /cabinet: ARM64 recompiler/;
+        s/(pageAligned = \(u8\*\)mmap\(NULL, 1024\*1024\*16.*?\n)/$1        fprintf(stderr, pageAligned == MAP_FAILED\n            ? "[melonDS] cabinet: ARM64 recompiler FAILED to map JIT memory (%s)\\n"\n            : "[melonDS] cabinet: ARM64 recompiler live, 16MB MAP_JIT buffer\\n",\n            strerror(errno));\n/
+        unless /cabinet: ARM64 recompiler/;
+    ' "$SRC/src/ARMJIT_A64/ARMJIT_Compiler.cpp"
+    grep -q 'cabinet: ARM64 recompiler live' "$SRC/src/ARMJIT_A64/ARMJIT_Compiler.cpp" || {
+        echo "melonds JIT probe patch did not apply" >&2; exit 1; }
+
+    # Fastmem's fault handler PATCHES THE JIT'S OWN CODE and never asks
+    # for write permission first. That is correct where the code cache
+    # is plain RWX, which is every platform melonDS's ARM64 JIT has
+    # shipped on; under MAP_JIT the same pages are execute-only until
+    # pthread_jit_write_protect_np says otherwise, so the first
+    # unmapped-address access inside recompiled code kills the process.
+    # It presents as a bus error a fraction of a second into the game,
+    # with the recompiler visibly working right up to that instant:
+    # SIGBUS in ARM64XEmitter::BL, called from RewriteMemAccess, called
+    # from the SIGSEGV handler, called from ARMv5::ExecuteJIT.
+    # Bracketing the rewrite is the whole fix, and JitEnableWrite and
+    # JitEnableExecute compile to nothing off Apple, so this stays
+    # correct if it is ever sent upstream.
+    perl -0pi -e '
+        s/        if \(rewriteToSlowPath\)\n            faultDesc\.FaultPC = ARMJIT::JITCompiler->RewriteMemAccess\(faultDesc\.FaultPC\);/        if (rewriteToSlowPath)\n        {\n            ARMJIT::JitEnableWrite();\n            faultDesc.FaultPC = ARMJIT::JITCompiler->RewriteMemAccess(faultDesc.FaultPC);\n            ARMJIT::JitEnableExecute();\n        }/
+        unless /ARMJIT::JitEnableWrite\(\);/;
+    ' "$SRC/src/ARMJIT_Memory.cpp"
+    grep -q 'ARMJIT::JitEnableWrite();' "$SRC/src/ARMJIT_Memory.cpp" || {
+        echo "melonds fastmem W^X patch did not apply" >&2; exit 1; }
+fi
+
+# Mac only, and only reached because DYNAREC=ari64 above put PCSX
+# ReARMed's ARM64 recompiler into the build; iOS and tvOS compile
+# new_dynarec.c not at all (no ari64, so the Makefile adds -DDRC_DISABLE
+# and leaves the object out entirely).
+if [ "$PLATFORM" = mac ] && [ "$NAME" = pcsx_rearmed ]; then
+    # mprotect_w_x rounds the start of the range it is about to reprotect
+    # down to a 4096-byte boundary. Apple Silicon pages are 16384 bytes,
+    # which this same file already knows: new_dynarec_init prints
+    # "pgsize 16384" three lines before the first call. mprotect demands
+    # a page-aligned address, so any range starting on a 4K boundary that
+    # is not also a 16K one fails with EINVAL, the code cache is left
+    # execute-only, and the recompiler wedges on its next write.
+    #
+    # It is intermittent by nature, which makes it worse than a hard
+    # failure: PCSX ReARMed logs one "mprotect(w) failed: Invalid
+    # argument" and then hangs with a running emulator, a healthy log and
+    # a passed dynarec self-test behind it. Seen exactly once per launch,
+    # a few seconds into the BIOS.
+    #
+    # The end of the range is rounded up for the same reason, so the
+    # length stays a whole number of real pages.
+    perl -0pi -e '
+        s/  u_long mstart = \(u_long\)start & ~4095ul;\n  u_long mend = \(u_long\)end;/  u_long mpsize = (u_long)sysconf(_SC_PAGESIZE);\n  if ((long)mpsize < 1) mpsize = 4096;\n  u_long mstart = (u_long)start & ~(mpsize - 1);\n  u_long mend = ((u_long)end + mpsize - 1) & ~(mpsize - 1);/
+        unless /mpsize/;
+    ' "$SRC/libpcsxcore/new_dynarec/new_dynarec.c"
+    grep -q 'u_long mpsize = (u_long)sysconf(_SC_PAGESIZE);' "$SRC/libpcsxcore/new_dynarec/new_dynarec.c" || {
+        echo "pcsx_rearmed page-size patch did not apply" >&2; exit 1; }
 fi
 
 # VeMUlator finds the loaded file's extension with strchr, the FIRST dot

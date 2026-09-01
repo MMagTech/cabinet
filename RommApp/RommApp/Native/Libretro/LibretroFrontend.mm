@@ -1,5 +1,9 @@
 #import "LibretroFrontend.h"
 #include "LibretroCoreAPI.h"
+// Explicit, not inherited: TARGET_OS_MACCATALYST is used in an #if below,
+// and an undefined macro there evaluates to 0 in silence rather than
+// failing the build.
+#include <TargetConditionals.h>
 // The fourteen per-core static libraries are built for real tvOS/iOS
 // hardware (arm64-apple-tvos), not for a simulator, and rebuilding
 // emulator cores for a simulator target buys nothing: performance there
@@ -1119,6 +1123,17 @@ void logCallback(enum retro_log_level level, const char *fmt, ...) {
     static const char *names[] = {"debug", "info", "warn", "error"};
     unsigned idx = level <= RETRO_LOG_ERROR ? level : RETRO_LOG_ERROR;
     NSLog(@"[core %s] %s", names[idx], buffer);
+#if TARGET_OS_MACCATALYST
+    // Mac only. NSLog is not a usable channel for reading what a core
+    // says: os_log redacts every %s as <private> unless the device has a
+    // logging profile installed, and its duplicate-to-stderr throttles
+    // itself off the moment a core logs in bulk, which is exactly when
+    // there is something to read. Between them, a core that is
+    // announcing its CPU engine, its memory map and its self-test can
+    // look completely silent. On a desktop app stderr is the console a
+    // developer already has, so send it there as well.
+    fprintf(stderr, "[core %s] %s\n", names[idx], buffer);
+#endif
 }
 
 // The two halves of libretro's sensor interface.
@@ -1249,6 +1264,36 @@ bool environmentCallback(unsigned cmd, void *data) {
             // 90-degree counter-clockwise steps.
             gRotation.store(*(const unsigned *)data, std::memory_order_relaxed);
             return true;
+#if TARGET_OS_MACCATALYST
+        case RETRO_ENVIRONMENT_GET_JIT_CAPABLE:
+            // Mac only, and compiled out everywhere else on purpose, so
+            // iOS and tvOS keep running this switch byte-identically.
+            //
+            // Three of the cores ask this: PPSSPP, Flycast and
+            // mupen64plus. It is here for PPSSPP, whose Catalyst build
+            // defines PPSSPP_PLATFORM_IOS (TARGET_OS_IPHONE is 1 under
+            // macabi) and therefore takes the iOS branch of
+            // System_GetPropertyBool(SYSPROP_CAN_JIT). Unanswered, that
+            // call fails and libretro.cpp quietly rewrites a request
+            // for CPUCore::JIT into CPUCore::IR_INTERPRETER, so the Mac
+            // asking for "JIT" in NativeCoreOptions had no effect at
+            // all: the option was set and then overruled.
+            //
+            // The other two are unaffected. Flycast only refuses to
+            // load when this call SUCCEEDS and says no, so it has been
+            // loading on the strength of the call failing; a yes is the
+            // same outcome by a better route. mupen64plus only consults
+            // it to demote the ParaLLEl RSP, and this app leaves that
+            // core on its own "hle" default, so that branch is
+            // unreachable here.
+            //
+            // Answering yes is a claim about the process, not the
+            // hardware: it is true because CabinetMac.entitlements
+            // carries com.apple.security.cs.allow-jit. If that
+            // entitlement is ever dropped, this must go with it.
+            *(bool *)data = true;
+            return true;
+#endif
         case RETRO_ENVIRONMENT_GET_LOG_INTERFACE:
             ((struct retro_log_callback *)data)->log = logCallback;
             return true;

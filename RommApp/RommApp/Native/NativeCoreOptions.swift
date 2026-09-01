@@ -533,19 +533,43 @@ enum NativeCoreOptionsStore {
         #endif
     }
 
-    /// The PSP CPU core. "IR JIT" resolves to the IR INTERPRETER
-    /// wherever SYSPROP_CAN_JIT is false, which is every platform but
-    /// this one, so the Mac asks for the ARM64 recompiler that has been
-    /// compiled in all along and never allowed to run. Both strings are
-    /// upstream's own (libretro.cpp maps them to CPUCore::JIT and
+    /// The PSP CPU core, now the same on every platform, and on the Mac
+    /// that is a measured choice rather than the accident it used to be.
+    ///
+    /// This asked for "JIT" on the Mac and did not get it. PPSSPP's
+    /// Catalyst build defines PPSSPP_PLATFORM_IOS, so it gated the
+    /// recompiler on RETRO_ENVIRONMENT_GET_JIT_CAPABLE, which this
+    /// frontend did not answer, and libretro.cpp quietly rewrote the
+    /// request to CPUCore::IR_INTERPRETER. The core never said so; that
+    /// is why the engine PSP was running sat unresolved for days. It
+    /// prints it now (tools/build-ppsspp.sh adds the line), and the
+    /// frontend answers the capability call, so this value is finally
+    /// the one that takes effect.
+    ///
+    /// Measured 2026-09-01 on the M4, both engines, from the core's own
+    /// reported engine number, mean and p99 emulation cost per frame:
+    ///
+    ///   Lumines          native JIT 3.051 / 4.993 ms   IR 1.929 / 3.031
+    ///   Hammerin' Hero   native JIT 4.501 / 6.312 ms   IR 4.242 / 6.051
+    ///
+    /// The recompiler is not faster here, and its worst frame is far
+    /// worse (248 ms against 94 ms) because compilation stalls land
+    /// inside frames. That matches upstream's own position that the IR
+    /// interpreter is close to full speed. It also costs an entitlement:
+    /// PPSSPP takes executable memory with mmap plus mprotect rather
+    /// than MAP_JIT, which hardened runtime kills outright
+    /// ("CODESIGNING Invalid Page", SIGKILL inside Core_RunLoopUntil on
+    /// the emu thread), so the native JIT only runs at all with
+    /// com.apple.security.cs.allow-unsigned-executable-memory added to
+    /// CabinetMac.entitlements. Paying a broader entitlement for a
+    /// slower engine is the wrong trade, so it is not paid.
+    ///
+    /// To revisit: add that entitlement and return "JIT" here, or teach
+    /// PPSSPP's Common/MemoryUtil.cpp the MAP_JIT path the other three
+    /// recompilers in this app already use. Both strings are upstream's
+    /// own (libretro.cpp maps them to CPUCore::JIT and
     /// CPUCore::IR_INTERPRETER).
-    private static var pspCpuCore: String {
-        #if targetEnvironment(macCatalyst)
-        "JIT"
-        #else
-        "IR JIT"
-        #endif
-    }
+    private static var pspCpuCore: String { "IR JIT" }
 
     static func dictionary(for platform: NativePlatform) -> [String: String] {
         var result: [String: String] = [:]
@@ -698,7 +722,17 @@ enum NativeCoreOptionsStore {
             #else
             let touchMode = "Touch"
             #endif
-            return [
+            //
+            // The five jit keys are Mac-only, matching the one platform
+            // whose melonDS is built with JIT_ARCH=aarch64; iOS and tvOS
+            // compile no recompiler at all, so the keys are not declared
+            // there. All five values are upstream's own declared
+            // defaults, restated rather than inherited: the core's
+            // libretro layer only assigns Config::JIT_* when the
+            // variable is answered, and Config.cpp starts JIT_Enable at
+            // false, so an unanswered melonds_jit_enable silently keeps
+            // the interpreter no matter what was compiled in.
+            var ds = [
                 "melonds_console_mode": "DS",
                 "melonds_boot_directly": "enabled",
                 "melonds_screen_layout": "Top/Bottom",
@@ -706,6 +740,14 @@ enum NativeCoreOptionsStore {
                 "melonds_touch_mode": touchMode,
                 "melonds_threaded_renderer": "enabled",
             ]
+            #if targetEnvironment(macCatalyst)
+            ds["melonds_jit_enable"] = "enabled"
+            ds["melonds_jit_block_size"] = "32"
+            ds["melonds_jit_branch_optimisations"] = "enabled"
+            ds["melonds_jit_literal_optimisations"] = "enabled"
+            ds["melonds_jit_fast_memory"] = "enabled"
+            #endif
+            return ds
         case .threeDO:
             // opera_bios is the defaults trap at its purest: the option's
             // declared default is NULL, its value must be a BIOS filename,
@@ -748,10 +790,23 @@ enum NativeCoreOptionsStore {
             // card sync; card 2 stays explicitly off rather than
             // "shared", which would write a .mcd into the per-launch
             // temp directory the next launch deletes.
-            return [
+            //
+            // drc is answered only on the Mac, and only because that is
+            // the one platform whose core has a recompiler compiled in:
+            // build-core.sh passes DYNAREC=ari64 there and nowhere else,
+            // so on iOS and tvOS the key is not even a declared option.
+            // The core would pick the recompiler unprompted (it treats
+            // an unanswered variable as "enabled"), but leaving the
+            // engine to a default is how the Mac ended up on
+            // interpreters without anyone noticing.
+            var psx = [
                 "pcsx_rearmed_memcard1": "libretro",
                 "pcsx_rearmed_memcard2": "none",
             ]
+            #if targetEnvironment(macCatalyst)
+            psx["pcsx_rearmed_drc"] = "enabled"
+            #endif
+            return psx
         case .dreamcast:
             // Threaded rendering back ON, reversing the override this
             // returned between d49008d and 2026-08-16. That override was
