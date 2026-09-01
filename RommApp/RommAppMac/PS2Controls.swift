@@ -13,10 +13,10 @@
 //  the phone-as-controller wire, so doing the mapping here means PS2
 //  inherits all of those for free rather than only Bluetooth pads.
 //
-//  KNOWN GAP: the right stick. GameControllerManager digitises it into
-//  arcade-specific bits rather than publishing it as an axis, so PS2's
-//  right stick is unwired. Twin-stick PS2 games will not play properly
-//  until that is addressed, and a shmup or a platformer will not care.
+//  The right stick reaches the game through GameControllerManager's
+//  sendStick2, added for this and for the GameCube's C stick. The
+//  manager's digitized twin-stick bits are untouched and still fire, so
+//  nothing about FBNeo's arcade path changed.
 
 import Foundation
 import UIKit
@@ -104,10 +104,33 @@ enum PS2Controls {
             let pad = UInt32(player)
             CabinetPS2SetButton(pad, CabinetPS2LeftStickRight.rawValue, max(0, x))
             CabinetPS2SetButton(pad, CabinetPS2LeftStickLeft.rawValue, max(0, -x))
-            // Cabinet's y is positive up, matching libretro. The pad's
-            // is positive down.
-            CabinetPS2SetButton(pad, CabinetPS2LeftStickUp.rawValue, max(0, y))
-            CabinetPS2SetButton(pad, CabinetPS2LeftStickDown.rawValue, max(0, -y))
+            // sendStick's y is DOWN-positive. GameControllerManager flips
+            // GameController's up-positive value at the publish point so
+            // that everything downstream speaks libretro's convention,
+            // and this is downstream.
+            //
+            // This used to be the other way round, under a comment
+            // asserting that Cabinet's y was up-positive, which was true
+            // of the pad but not of this closure. It was never caught
+            // because nobody had played PS2 with a stick: the y flip and
+            // this file were written two days apart and never met. The
+            // same mistake, on the same axis, is written up twice in
+            // CLAUDE.md.
+            CabinetPS2SetButton(pad, CabinetPS2LeftStickUp.rawValue, max(0, -y))
+            CabinetPS2SetButton(pad, CabinetPS2LeftStickDown.rawValue, max(0, y))
+        }
+
+        // The right stick, which had no path in at all: the manager only
+        // digitized it into the arcade twin-stick bits, so a PS2 game
+        // that aims with it saw four on/off directions at full
+        // deflection. Twin-stick shooters and anything with a camera
+        // need the real axis.
+        manager.sendStick2 = { player, x, y in
+            let pad = UInt32(player)
+            CabinetPS2SetButton(pad, CabinetPS2RightStickRight.rawValue, max(0, x))
+            CabinetPS2SetButton(pad, CabinetPS2RightStickLeft.rawValue, max(0, -x))
+            CabinetPS2SetButton(pad, CabinetPS2RightStickUp.rawValue, max(0, -y))
+            CabinetPS2SetButton(pad, CabinetPS2RightStickDown.rawValue, max(0, y))
         }
     }
 
@@ -116,6 +139,7 @@ enum PS2Controls {
         let manager = GameControllerManager.shared
         manager.send = nil
         manager.sendStick = nil
+        manager.sendStick2 = nil
         manager.onMenu = nil
         manager.onDisconnect = nil
         menuIsOpen = nil

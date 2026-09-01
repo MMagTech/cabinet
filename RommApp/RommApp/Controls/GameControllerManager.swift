@@ -165,6 +165,19 @@ final class GameControllerManager: ObservableObject {
     /// ignores the digitized d-pad bits sent already, and needs the real
     /// analog value to move.
     var sendStick: ((Int, Float, Float) -> Void)?
+    /// A player's RIGHT stick position, x and y each -1 to 1, alongside
+    /// the digitized bits 20-23 `stick2` already sends.
+    ///
+    /// Those bits are all a twin-stick arcade cabinet needs, because its
+    /// second stick is a digital joystick rather than an analog one, and
+    /// for a long time arcade was the only thing reading that stick at
+    /// all. A console's second stick is a real axis: PS2's right stick
+    /// and the GameCube's C stick aim with it, and four on/off
+    /// directions at full deflection is not aiming.
+    ///
+    /// The same shape and the same convention as `sendStick`, so a
+    /// consumer that already handles one handles both.
+    var sendStick2: ((Int, Float, Float) -> Void)?
     /// Whether the left stick also presses d-pad directions, as well as
     /// reporting its true analog value through `sendStick`.
     ///
@@ -591,6 +604,17 @@ final class GameControllerManager: ObservableObject {
         digitizeAxis(20, magnitude: max(0, x), slot: slot, player: player)
         digitizeAxis(22, magnitude: max(0, -y), slot: slot, player: player)
         digitizeAxis(23, magnitude: max(0, y), slot: slot, player: player)
+        // Additive, exactly as sendStick is for the left stick: the four
+        // digitized bits above are untouched and still fire first, so
+        // FBNeo's twin-stick path runs the same code in the same order
+        // it did before this line existed. Nothing consumes sendStick2
+        // unless it sets it, and only PS2 and GameCube do.
+        //
+        // Same y flip as sendStick, and for the same reason: everything
+        // downstream of these publishers speaks libretro's down-positive
+        // convention, while GameController reports up-positive and the
+        // digitizing above depends on the raw sign.
+        sendStick2?(player, x, -y)
     }
 
     /// Turns one direction's stick deflection into a digital press, the

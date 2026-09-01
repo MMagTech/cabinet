@@ -163,6 +163,10 @@ typedef enum
 	CabinetPS2LeftStickRight = 19,
 	CabinetPS2LeftStickDown = 20,
 	CabinetPS2LeftStickLeft = 21,
+	CabinetPS2RightStickUp = 22,
+	CabinetPS2RightStickRight = 23,
+	CabinetPS2RightStickDown = 24,
+	CabinetPS2RightStickLeft = 25,
 } CabinetPS2Button;
 
 #ifdef __cplusplus

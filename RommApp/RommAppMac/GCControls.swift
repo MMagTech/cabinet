@@ -20,12 +20,10 @@
 //  That is the emulated hardware's own shape: a GameCube controller is
 //  polled.
 //
-//  KNOWN GAP, the same one PS2 has: the C stick. GameControllerManager
-//  digitises the right stick into arcade-specific bits rather than
-//  publishing it as an axis, so the C stick is only reachable through
-//  the four digital directions below. A 3D game that aims with it will
-//  feel stepped rather than smooth until that manager grows a real
-//  right-stick axis, which is deliberately not being changed here.
+//  The C stick reaches the game through GameControllerManager's
+//  sendStick2, added for this and for PS2's right stick. The manager's
+//  digitized twin-stick bits are untouched and still fire, so nothing
+//  about FBNeo's arcade path changed.
 
 import Foundation
 import UIKit
@@ -172,12 +170,32 @@ enum GCControls {
         manager.sendStick = { player, x, y in
             guard player >= 0, player < 4 else { return }
             pads[player].stickX = axis(x)
-            // Cabinet's y is positive up, matching libretro, and so is
-            // the GameCube's: 255 is up. No inversion here, and that is
-            // checked rather than assumed, because getting it wrong is
-            // exactly the class of bug that cost this project a
-            // twin-stick regression before.
-            pads[player].stickY = axis(y)
+            // NEGATED, and this is the seam worth reading twice.
+            //
+            // sendStick's y is DOWN-positive: GameControllerManager
+            // flips GameController's up-positive value at the publish
+            // point so everything downstream speaks libretro's
+            // convention. A GameCube stick is the other way, 255 is up.
+            // So the two conventions meet here and one of them has to
+            // turn round.
+            //
+            // The first version of this line did not negate, under a
+            // comment claiming both were up-positive. Half of that was
+            // right. It is the same axis and the same mistake that cost
+            // this project a twin-stick regression, which CLAUDE.md
+            // records twice.
+            pads[player].stickY = axis(-y)
+            push(player)
+        }
+
+        // The C stick. Until sendStick2 existed the manager only
+        // digitized the right stick into arcade twin-stick bits, so a
+        // GameCube game that aims with the C stick saw four on/off
+        // directions at full deflection.
+        manager.sendStick2 = { player, x, y in
+            guard player >= 0, player < 4 else { return }
+            pads[player].substickX = axis(x)
+            pads[player].substickY = axis(-y)
             push(player)
         }
     }
@@ -210,6 +228,7 @@ enum GCControls {
         let manager = GameControllerManager.shared
         manager.send = nil
         manager.sendStick = nil
+        manager.sendStick2 = nil
         manager.onMenu = nil
         manager.onDisconnect = nil
         menuIsOpen = nil
