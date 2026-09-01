@@ -78,6 +78,14 @@ typedef struct
 
 	/// Internal resolution, 1.0 being the PS2's own.
 	float upscale;
+
+	/// PCSX2's GSRendererType. -1 leaves Cabinet's own choice, which
+	/// is Metal with a view and Null without. Exists so a renderer can
+	/// be forced while chasing a game that draws nothing.
+	int renderer;
+
+	/// GSInterlaceMode, -1 for PCSX2's Automatic.
+	int deinterlace;
 } CabinetPS2Graphics;
 
 void CabinetPS2SetGraphics(const CabinetPS2Graphics* graphics);

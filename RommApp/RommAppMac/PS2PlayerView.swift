@@ -38,6 +38,9 @@ struct PS2PlayerView: View {
     /// Per game rather than machine-wide: whether a title is widescreen
     /// is a fact about the title.
     @State private var aspect: String = PS2Graphics.aspects[0]
+    /// Per game, like aspect: which renderer a title needs is a fact
+    /// about the title.
+    @State private var renderer: Int = 17
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -108,6 +111,7 @@ struct PS2PlayerView: View {
         }
         .onAppear {
             aspect = PS2Graphics.aspect(romId: rom?.id)
+            renderer = PS2Graphics.renderer(romId: rom?.id)
             PS2Controls.menuIsOpen = { player.menuVisible }
             PS2Controls.onMenuButton = { id in menuButton(id) }
         }
@@ -164,6 +168,22 @@ struct PS2PlayerView: View {
                                 applyGraphics()
                             } label: {
                                 if candidate.index == shaderIndex {
+                                    Label(candidate.label, systemImage: "checkmark")
+                                } else {
+                                    Text(candidate.label)
+                                }
+                            }
+                        }
+                    }
+                    settingRow("Renderer", systemImage: "cpu",
+                               value: PS2Graphics.rendererLabel(renderer)) {
+                        ForEach(PS2Graphics.renderers, id: \.value) { candidate in
+                            Button {
+                                renderer = candidate.value
+                                PS2Graphics.setRenderer(candidate.value, romId: rom?.id)
+                                applyGraphics()
+                            } label: {
+                                if candidate.value == renderer {
                                     Label(candidate.label, systemImage: "checkmark")
                                 } else {
                                     Text(candidate.label)

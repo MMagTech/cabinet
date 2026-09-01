@@ -68,9 +68,27 @@ enum PS2Launcher {
             guard got else { throw Failure.noBios }
         }
 
-        // Discs are kept too, and for a blunter reason than the BIOS:
-        // a PS2 game is gigabytes, and re-downloading Killzone to play
-        // it twice is not something to do to a household network.
+        // A game Cabinet already downloaded is used where it lies.
+        // Without this a kept PS2 game is fetched a second time into a
+        // second folder, which on this platform means gigabytes
+        // duplicated on disk and a download the person watching has
+        // every reason to think should not be happening. Same check
+        // NativeLauncher makes before its own download.
+        // KeptGameStore is main-actor isolated, so the lookup hops
+        // there rather than the whole prepare becoming main-actor work:
+        // the download below must not run on the main thread.
+        let keptDirectory = await MainActor.run { KeptGameStore.shared.launchDirectory(romId: rom.id) }
+        if let keptDir = keptDirectory {
+            let kept = keptDir.appending(path: rom.fsName)
+            if FileManager.default.fileExists(atPath: kept.path) {
+                return kept.path
+            }
+        }
+
+        // Otherwise a copy of our own, kept rather than fetched per
+        // launch: a PS2 game is gigabytes, and re-downloading Killzone
+        // to play it twice is not something to do to a household
+        // network.
         let gamesDir = PS2Player.dataRoot.appending(path: "games")
         try FileManager.default.createDirectory(at: gamesDir, withIntermediateDirectories: true)
         let discURL = gamesDir.appending(path: rom.fsName)

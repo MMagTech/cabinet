@@ -403,7 +403,26 @@ endif()
         "\tuint py = cabinet_source_row(data.p.y, uniform);\n"
         "\treturn ps_crt(res.sample(data.t), (px + (py % 3)) % 3);\n"
         "}",
+    ), (
+        "fragment float4 ps_filter_triangular(ConvertShaderData data [[stage_in]], ConvertPSRes res)\n"
+        "{\n"
+        "\tuint4 p = uint4(data.p);\n"
+        "\tuint val = ((p.x + ((p.y >> 1) & 1) * 3) >> 1) % 3;\n"
+        "\treturn ps_crt(res.sample(data.t), val);\n"
+        "}",
+        "fragment float4 ps_filter_triangular(ConvertShaderData data [[stage_in]], ConvertPSRes res,\n"
+        "\tconstant GSMTLPresentPSUniform& uniform [[buffer(GSMTLBufferIndexUniforms)]])\n"
+        "{\n"
+        "\tuint px = cabinet_source_col(data.p.x, uniform);\n"
+        "\tuint py = cabinet_source_row(data.p.y, uniform);\n"
+        "\tuint val = ((px + ((py >> 1) & 1) * 3) >> 1) % 3;\n"
+        "\treturn ps_crt(res.sample(data.t), val);\n"
+        "}",
     )], "CABINET_SHADER_SCALE")
+
+    # Wave needs nothing: it already works in source texture space
+    # rather than output pixels, which is why it is the one member of
+    # the family that was correct at any window size all along.
 
     print(f"patched {src} for Catalyst, host layer at {host}")
 

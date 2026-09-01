@@ -70,6 +70,8 @@ namespace CabinetPS2
 		std::string aspect = "Auto 4:3/3:2";
 		int blending = 1;
 		float upscale = 1.0f;
+		int renderer = -1;
+		int deinterlace = -1;
 	};
 
 	void SetGraphics(const Graphics& graphics);

@@ -35,11 +35,18 @@ enum PS2Graphics {
     /// PS2's own 640x448 and is invisible at 2880 tall. The scanline
     /// family is patched to follow the SOURCE resolution instead, so a
     /// scanline stays one source line thick whatever the window size.
-    /// See tools/patch-pcsx2-mac.py.
+    /// See tools/patch-pcsx2-mac.py. Wave needed no patch: it already
+    /// worked in source texture space.
+    ///
+    /// Lottes CRT is deliberately absent. It is a full CRT model whose
+    /// constants assume that old ratio, and at this size it crushes the
+    /// picture to black with nothing reporting a fault.
     static let shaders: [Shader] = [
         Shader(index: 0, label: "None"),
         Shader(index: 1, label: "Scanlines"),
         Shader(index: 2, label: "Diagonal"),
+        Shader(index: 3, label: "Triangular"),
+        Shader(index: 4, label: "Wave"),
     ]
 
     @AppStorage("ps2-shader") static var shaderIndex: Int = 0
@@ -78,6 +85,46 @@ enum PS2Graphics {
     /// this Mac has, not about any one game.
     @AppStorage("ps2-blending") static var blending: Int = 1
     @AppStorage("ps2-upscale") static var upscale: Double = 1.0
+
+    /// Diagnostic, no UI.
+    @AppStorage("ps2-deinterlace") static var deinterlace: Int = -1
+
+    /// PCSX2's GSRendererType values, source-exact.
+    ///
+    /// Not a preference: some PS2 games draw nothing at all on the
+    /// hardware renderer and are perfect on the software one. Mobile
+    /// Light Force 2 is one, verified 2026-08-31, and it presents as a
+    /// black screen with working audio, which looks like a broken app
+    /// rather than a game needing a different renderer. Upstream
+    /// PCSX2 has this picker for the same reason.
+    ///
+    /// Software costs speed, which on this machine there is plenty of:
+    /// PS2 runs at 100% with the EE under a quarter loaded.
+    /// Labelled as a remedy rather than a preference, because that is
+    /// what it is. Someone whose screen is black has exactly one thing
+    /// they can do, open this panel, and nothing else in the app can
+    /// tell them a renderer is the answer.
+    static let renderers: [(value: Int, label: String)] = [
+        (17, "Hardware"),
+        (13, "Software (fixes black screens)"),
+    ]
+
+    /// Per game, because it is a fact about the title's compatibility
+    /// rather than a preference about this Mac.
+    static func renderer(romId: Int?) -> Int {
+        guard let romId else { return 17 }
+        let stored = UserDefaults.standard.object(forKey: "ps2-renderer-\(romId)") as? Int
+        return stored ?? 17
+    }
+
+    static func setRenderer(_ value: Int, romId: Int?) {
+        guard let romId else { return }
+        UserDefaults.standard.set(value, forKey: "ps2-renderer-\(romId)")
+    }
+
+    static func rendererLabel(_ value: Int) -> String {
+        renderers.first { $0.value == value }?.label ?? "Hardware"
+    }
 
     static func upscaleLabel(_ value: Double) -> String {
         upscales.first { Double($0.value) == value }?.label ?? "Native"
@@ -129,7 +176,9 @@ enum PS2Graphics {
                 tv_shader: Int32(shaderIndex),
                 aspect: aspectName,
                 blending: Int32(blending),
-                upscale: Float(upscale)
+                upscale: Float(upscale),
+                renderer: Int32(renderer(romId: romId)),
+                deinterlace: Int32(deinterlace)
             )
             CabinetPS2SetGraphics(&graphics)
         }

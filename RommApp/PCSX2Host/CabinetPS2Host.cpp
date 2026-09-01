@@ -503,8 +503,14 @@ namespace CabinetPS2
 		s_settings.SetBoolValue("EmuCore/CPU/Recompiler", "EnableVU1", true);
 
 		// Metal, or nothing at all when Cabinet gave us no view.
-		s_settings.SetIntValue("EmuCore/GS", "Renderer",
-			config.view ? static_cast<int>(GSRendererType::Metal) : static_cast<int>(GSRendererType::Null));
+		{
+			std::unique_lock lock(s_graphics_lock);
+			const int forced = s_graphics.renderer;
+			s_settings.SetIntValue("EmuCore/GS", "Renderer",
+				forced >= 0 ? forced
+							: (config.view ? static_cast<int>(GSRendererType::Metal)
+										   : static_cast<int>(GSRendererType::Null)));
+		}
 
 		// Cubeb by name only. Neither of PCSX2's own backends exists
 		// in this build, so both names resolve to Cabinet's

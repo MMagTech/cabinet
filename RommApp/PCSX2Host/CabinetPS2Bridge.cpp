@@ -121,6 +121,8 @@ void CabinetPS2SetGraphics(const CabinetPS2Graphics* graphics)
 	g.aspect = graphics->aspect ? graphics->aspect : "";
 	g.blending = graphics->blending;
 	g.upscale = graphics->upscale;
+	g.renderer = graphics->renderer;
+	g.deinterlace = graphics->deinterlace;
 	CabinetPS2::SetGraphics(g);
 }
 

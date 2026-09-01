@@ -52,6 +52,14 @@ enum PS2BenchHarness {
     static var shotPath: String? {
         UserDefaults.standard.string(forKey: "cabinetPS2Shot")
     }
+
+    /// Seconds to wait before the snapshot. Six is too early for a game
+    /// with a long boot, and an early black frame reads as a broken
+    /// renderer rather than a game still loading.
+    static var shotAt: Int {
+        let value = UserDefaults.standard.integer(forKey: "cabinetPS2ShotAt")
+        return value > 0 ? value : 6
+    }
 }
 
 /// Wraps the player so the harness can end the run on its own.
@@ -65,10 +73,19 @@ struct PS2BenchView: View {
                 // point of the harness is a run nobody is watching.
                 for tick in 1...(PS2BenchHarness.seconds) {
                     try? await Task.sleep(for: .seconds(1))
-                    if let shot = PS2BenchHarness.shotPath, tick == 6 {
-                        print("PS2BENCH screenshot -> \(shot)")
+                    // A burst rather than one frame. A single snapshot
+                    // cannot tell a broken renderer from a game that
+                    // happens to be on a black screen, and it lands on
+                    // whichever field of an interlaced frame it hits.
+                    // Several in a row measure that directly.
+                    if let shot = PS2BenchHarness.shotPath,
+                       tick >= PS2BenchHarness.shotAt,
+                       tick < PS2BenchHarness.shotAt + 6 {
+                        let index = tick - PS2BenchHarness.shotAt
+                        let path = shot.replacingOccurrences(of: ".png", with: "-\(index).png")
+                        print("PS2BENCH screenshot \(index) -> \(path)")
                         fflush(stdout)
-                        CabinetPS2Screenshot(shot)
+                        CabinetPS2Screenshot(path)
                     }
                     if PS2BenchHarness.pauseAt > 0, tick == PS2BenchHarness.pauseAt {
                         print("PS2BENCH pausing")
