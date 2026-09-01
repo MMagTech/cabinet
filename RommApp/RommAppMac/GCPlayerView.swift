@@ -97,10 +97,16 @@ struct GCPlayerView: View {
                 .accessibilityHidden(true)
         }
         .onAppear {
+            // GameCube runs in the shell's own window rather than through
+            // MacWindow.setGameMode, which belongs to the libretro
+            // player. The toolbar still has no business across the top
+            // of a game, so this is asked for directly.
+            MacWindow.setToolbarAutoHide(true)
             GCControls.menuIsOpen = { player.menuVisible }
             GCControls.onMenuButton = { id in menuButton(id) }
         }
         .onDisappear {
+            MacWindow.setToolbarAutoHide(false)
             player.stop()
             // Dolphin flushes the card as it shuts down, so the upload
             // has to wait for that rather than read the file while the

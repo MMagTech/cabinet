@@ -110,12 +110,18 @@ struct PS2PlayerView: View {
                 .accessibilityHidden(true)
         }
         .onAppear {
+            // PS2 runs in the shell's own window rather than through
+            // MacWindow.setGameMode, which belongs to the libretro
+            // player. The toolbar still has no business across the top
+            // of a game, so this is asked for directly.
+            MacWindow.setToolbarAutoHide(true)
             aspect = PS2Graphics.aspect(romId: rom?.id)
             renderer = PS2Graphics.renderer(romId: rom?.id)
             PS2Controls.menuIsOpen = { player.menuVisible }
             PS2Controls.onMenuButton = { id in menuButton(id) }
         }
         .onDisappear {
+            MacWindow.setToolbarAutoHide(false)
             // A clean exit, so the settings that were live are cleared
             // of suspicion.
             PS2Graphics.markSessionClosed()

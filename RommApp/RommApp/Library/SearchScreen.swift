@@ -62,6 +62,28 @@ struct SearchScreen: View {
             .searchFocused($fieldFocused)
             .onAppear { fieldFocused = true }
             #endif
+            #if targetEnvironment(macCatalyst)
+            // Clicking Search in the sidebar should leave the caret in
+            // the field, not in the sidebar with the field waiting to be
+            // clicked a second time.
+            //
+            // The onAppear above is not enough here and iOS is not the
+            // reason: under Catalyst `.searchable` is a UISearchBar that
+            // AppKit installs into the window's toolbar, and it does not
+            // exist yet during the SwiftUI update pass that runs
+            // onAppear, so the focus lands on nothing. Retried a few
+            // times rather than deferred by one guessed interval,
+            // because the toolbar rebuild is the window's own work and
+            // its timing is not ours to know. Stops at the first frame
+            // that takes.
+            .task {
+                for _ in 0..<10 {
+                    if fieldFocused { return }
+                    fieldFocused = true
+                    try? await Task.sleep(for: .milliseconds(50))
+                }
+            }
+            #endif
             .task(id: searchText) { await runSearch() }
             // Live, matching everywhere else Offline Mode touches
             // tonight: stale online results should not sit on screen
