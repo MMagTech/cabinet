@@ -33,6 +33,7 @@ bool CabinetDolphinRun(const CabinetDolphinConfig* config, char* error, size_t e
 	host.game_path = ToString(config->game_path);
 	host.sys_dir = ToString(config->sys_dir);
 	host.user_dir = ToString(config->user_dir);
+	host.memory_card = ToString(config->memory_card);
 	host.verbose_log = config->verbose_log;
 
 	std::string message;
@@ -84,6 +85,16 @@ void CabinetDolphinRequestStop(void)
 bool CabinetDolphinIsRunning(void)
 {
 	return CabinetDolphin::IsRunning();
+}
+
+void CabinetDolphinSaveState(int slot)
+{
+	CabinetDolphin::SaveState(slot);
+}
+
+void CabinetDolphinLoadState(int slot)
+{
+	CabinetDolphin::LoadState(slot);
 }
 
 void CabinetDolphinScreenshot(const char* name)

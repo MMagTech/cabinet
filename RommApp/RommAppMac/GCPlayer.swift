@@ -58,7 +58,16 @@ final class GCPlayer {
         (Bundle.main.resourcePath ?? Bundle.main.bundlePath) + "/DolphinSys"
     }
 
-    func start(gamePath: String, romId: Int, view: UnsafeMutableRawPointer) {
+    /// The state slot the pause panel's Save and Load rows use.
+    ///
+    /// One slot, not ten. Dolphin numbers them 1 to 10 and Cabinet
+    /// offers a single "where I was", the same shape the PS2 panel
+    /// settled on: a picker is a feature for a save-state power user,
+    /// and the thing a person actually wants mid-game is one button
+    /// that means "put me back".
+    static let stateSlot: Int32 = 1
+
+    func start(gamePath: String, romId: Int, cardPath: String?, view: UnsafeMutableRawPointer) {
         guard state != .running else { return }
 
         let userDir = Self.userDirectory(romId: romId)
@@ -74,13 +83,16 @@ final class GCPlayer {
             gamePath.withCString { game in
                 Self.sysPath.withCString { sys in
                     userDir.path.withCString { user in
-                        var config = CabinetDolphinConfig(
-                            game_path: game,
-                            sys_dir: sys,
-                            user_dir: user,
-                            verbose_log: true
-                        )
-                        ok = CabinetDolphinRun(&config, &error, error.count)
+                        (cardPath ?? "").withCString { card in
+                            var config = CabinetDolphinConfig(
+                                game_path: game,
+                                sys_dir: sys,
+                                user_dir: user,
+                                memory_card: card,
+                                verbose_log: true
+                            )
+                            ok = CabinetDolphinRun(&config, &error, error.count)
+                        }
                     }
                 }
             }
@@ -106,6 +118,14 @@ final class GCPlayer {
         menuSelection = 0
         menuUsingController = false
         CabinetDolphinSetPaused(visible)
+    }
+
+    func saveState() {
+        CabinetDolphinSaveState(Self.stateSlot)
+    }
+
+    func loadState() {
+        CabinetDolphinLoadState(Self.stateSlot)
     }
 
     func stop() {

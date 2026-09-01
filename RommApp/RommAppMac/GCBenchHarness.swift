@@ -40,6 +40,20 @@ enum GCBenchHarness {
         UserDefaults.standard.integer(forKey: "cabinetGCPauseAt")
     }
 
+    /// Seconds after boot to save a state, then load it back four
+    /// seconds later. Zero means never.
+    static var stateAt: Int {
+        UserDefaults.standard.integer(forKey: "cabinetGCStateAt")
+    }
+
+    /// A memory card path, so a harness run can exercise the per-game
+    /// card rather than the shared one a real launch never uses.
+    /// Without it the card path stays untested by anything automated,
+    /// which is how a feature ships broken.
+    static var cardPath: String? {
+        UserDefaults.standard.string(forKey: "cabinetGCCard")
+    }
+
     static var isActive: Bool { discPath?.isEmpty == false }
 }
 
@@ -48,7 +62,10 @@ struct GCBenchView: View {
     let discPath: String
 
     var body: some View {
-        GCPlayerView(gamePath: discPath, title: "GameCube bench", romId: 0)
+        GCPlayerView(
+            gamePath: discPath, title: "GameCube bench", romId: 0,
+            cardPathOverride: GCBenchHarness.cardPath
+        )
             .task {
                 for tick in 1...GCBenchHarness.seconds {
                     try? await Task.sleep(for: .seconds(1))
@@ -69,8 +86,33 @@ struct GCBenchView: View {
                     // capture: one frame lands on whatever the game
                     // happens to be showing, and a capture cannot tell a
                     // black picture from a display that is asleep.
-                    if tick >= 12, tick < 18 {
+                    //
+                    // Taken at the END of the run rather than at a fixed
+                    // early tick, because a fixed one lands mid-boot on
+                    // a slow-loading game and reports black for a game
+                    // that is perfectly healthy. Viewtiful Joe 2 did
+                    // exactly that on the first sweep.
+                    let shotFrom = max(6, GCBenchHarness.seconds - 6)
+                    if tick >= shotFrom, tick < shotFrom + 5 {
                         CabinetDolphinScreenshot("cabinet-\(tick)")
+                    }
+                    // Save and load are exercised in every run rather
+                    // than behind a flag: they are scheduled onto
+                    // Dolphin's CPU thread rather than run where they
+                    // are asked, so the thing worth catching is a hang
+                    // or a crash a few frames later, which only shows up
+                    // if the run continues afterwards.
+                    if GCBenchHarness.stateAt > 0 {
+                        if tick == GCBenchHarness.stateAt {
+                            print("GCBENCH saving state")
+                            fflush(stdout)
+                            CabinetDolphinSaveState(1)
+                        }
+                        if tick == GCBenchHarness.stateAt + 4 {
+                            print("GCBENCH loading state")
+                            fflush(stdout)
+                            CabinetDolphinLoadState(1)
+                        }
                     }
                     let m = CabinetDolphinGetMetrics()
                     print(String(format: "GCBENCH t=%3ds fps=%6.2f vps=%6.2f speed=%6.1f%%",

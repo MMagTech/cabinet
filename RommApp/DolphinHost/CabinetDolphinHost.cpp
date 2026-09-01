@@ -42,6 +42,8 @@
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
 #include "Core/Host.h"
+#include "Core/HW/EXI/EXI_Device.h"
+#include "Core/State.h"
 #include "Core/System.h"
 #include "InputCommon/GCPadStatus.h"
 #include "UICommon/UICommon.h"
@@ -66,6 +68,11 @@ float s_surface_scale = 1.0f;
 // thread, read from Dolphin's emulation thread every frame, so the
 // whole struct is copied under a lock rather than torn field by field:
 // a half-updated stick is a visible glitch, and this is cheap.
+// Where this game's save states go, set at boot from the user
+// directory. Empty until then, which is what makes the state calls
+// no-ops before a game exists.
+std::string s_state_dir;
+
 std::mutex s_pad_lock;
 CabinetDolphin::PadState s_pads[4];
 bool s_pads_active = false;
@@ -117,6 +124,41 @@ bool IsRunning()
   return s_running.load();
 }
 
+// State::Save and State::Load take a SLOT and resolve it against
+// Dolphin's own StateSaves directory. Cabinet uses SaveAs and LoadAs
+// with a path of its own instead, for the same reason it hands Dolphin
+// an explicit memory card path: the file belongs beside the rest of
+// this game's data, under a name Cabinet chose, rather than in a shared
+// numbered slot whose location is Dolphin's business.
+std::string StatePath(int slot)
+{
+  return s_state_dir.empty() ? std::string()
+                             : s_state_dir + "/cabinet-" + std::to_string(slot) + ".sav";
+}
+
+void SaveState(int slot)
+{
+  if (!s_running.load() || s_state_dir.empty())
+    return;
+  const std::string path = StatePath(slot);
+  fprintf(stderr, "[GC] cabinet: saving state to %s\n", path.c_str());
+  State::SaveAs(Core::System::GetInstance(), path);
+}
+
+void LoadState(int slot)
+{
+  if (!s_running.load() || s_state_dir.empty())
+    return;
+  const std::string path = StatePath(slot);
+  if (!File::Exists(path))
+  {
+    fprintf(stderr, "[GC] cabinet: no state at %s\n", path.c_str());
+    return;
+  }
+  fprintf(stderr, "[GC] cabinet: loading state from %s\n", path.c_str());
+  State::LoadAs(Core::System::GetInstance(), path);
+}
+
 void SaveScreenshot(const std::string& name)
 {
   if (!s_running.load())
@@ -165,15 +207,23 @@ bool Run(const Config& config, std::string* error)
   UICommon::SetUserDirectory(config.user_dir);
   UICommon::Init();
 
+  s_state_dir = config.user_dir + "/CabinetStates";
+  File::CreateFullPath(s_state_dir + "/");
+
   if (config.verbose_log)
   {
     // Worth having rather than guessing from behaviour. It is the only
     // way to answer questions like whether the JIT actually took, and
     // that question has been answered wrongly from behaviour before.
-    Common::Log::LogManager::GetInstance()->SetConfigLogLevel(Common::Log::LogLevel::LINFO);
-    Common::Log::LogManager::GetInstance()->SetEnable(Common::Log::LogType::BOOT, true);
-    Common::Log::LogManager::GetInstance()->SetEnable(Common::Log::LogType::CORE, true);
-    Common::Log::LogManager::GetInstance()->SetEnable(Common::Log::LogType::VIDEO, true);
+    // Every log type, not a chosen few. The first version of this
+    // enabled BOOT, CORE and VIDEO, which is exactly the set that says
+    // nothing when a save state silently fails to write, and it turned
+    // a one line answer into a hunt. A verbose flag that is selective
+    // is a flag that hides the thing you turned it on for.
+    auto* log = Common::Log::LogManager::GetInstance();
+    log->SetConfigLogLevel(Common::Log::LogLevel::LINFO);
+    for (int type = 0; type < static_cast<int>(Common::Log::LogType::NUMBER_OF_LOGS); ++type)
+      log->SetEnable(static_cast<Common::Log::LogType>(type), true);
   }
 
   // Metal by name. Dolphin picks its backend from config and would
@@ -195,6 +245,19 @@ bool Run(const Config& config, std::string* error)
   // is used because it is the name this platform's config would already
   // hold from any earlier session.
   ::Config::SetBaseOrCurrent(::Config::MAIN_AUDIO_BACKEND, std::string(BACKEND_CUBEB));
+
+  // One memory card per game, in slot A, with slot B empty. Setting the
+  // path alone is not enough: the slot has to be told it holds a card
+  // at all, or Dolphin leaves the port empty and the game reports no
+  // memory card with the file sitting right there. Dolphin creates the
+  // file on first write.
+  if (!config.memory_card.empty())
+  {
+    ::Config::SetBaseOrCurrent(::Config::MAIN_MEMCARD_A_PATH, config.memory_card);
+    ::Config::SetBaseOrCurrent(::Config::MAIN_SLOT_A,
+                               ExpansionInterface::EXIDeviceType::MemoryCard);
+    ::Config::SetBaseOrCurrent(::Config::MAIN_SLOT_B, ExpansionInterface::EXIDeviceType::Dummy);
+  }
 
   // Which PowerPC engine Dolphin actually chose, said out loud once per
   // boot. Dolphin defaults to its ARM64 recompiler here and there is no

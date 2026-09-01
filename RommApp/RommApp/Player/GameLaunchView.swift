@@ -360,7 +360,10 @@ struct GameLaunchView: View {
         }
         .fullScreenCover(isPresented: $playingGC) {
             if let gcGamePath {
-                GCPlayerView(gamePath: gcGamePath, title: rom.displayName, romId: rom.id)
+                GCPlayerView(
+                    gamePath: gcGamePath, title: rom.displayName, romId: rom.id,
+                    rom: rom, session: session
+                )
             }
         }
         #endif
@@ -975,6 +978,9 @@ struct GameLaunchView: View {
             gcGamePath = try await GCLauncher.prepare(rom: rom, session: session) { fraction in
                 downloadProgress = fraction
             }
+            // Before the player exists, so the card is on disk by the
+            // time Dolphin opens it.
+            await GCMemoryCard.restore(rom: rom, session: session)
             playingGC = true
         } catch {
             playError = error.localizedDescription

@@ -164,6 +164,8 @@ _CabinetDolphinRequestStop
 _CabinetDolphinIsRunning
 _CabinetDolphinGetMetrics
 _CabinetDolphinScreenshot
+_CabinetDolphinSaveState
+_CabinetDolphinLoadState
 SYMBOLS
 LIBS=$(find "$BUILD" -name '*.a' | sort)
 ld -r -arch arm64 -syslibroot "$SDK" \

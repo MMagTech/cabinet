@@ -7,21 +7,37 @@
 //  twenty-three other cores use would put a Dolphin-shaped branch into
 //  the most blast-radius-heavy file in the app to gain nothing.
 //
-//  What is here: picture, sound, controllers, and a pause panel that can
-//  quit. What is NOT here yet, and is not hidden: no save states, no
-//  memory card sync back to RomM, and no per-game picture settings. PS2
-//  grew all three after it was first playable and this will too.
+//  What is here: picture, sound, controllers, a pause panel, one save
+//  state slot, and a per-game memory card that syncs to RomM. What is
+//  NOT here yet, and is not hidden: no per-game picture settings, and
+//  the C stick is only reachable through four digital directions
+//  because GameControllerManager publishes no right-stick axis. PS2 has
+//  that same gap and the same fix would close both.
 
 import SwiftUI
 
 struct GCPlayerView: View {
-    private static let menuRows = ["Quit", "Resume"]
+    private static let menuRows = ["Quit", "Save", "Load", "Resume"]
 
     let gamePath: String
     let title: String
     let romId: Int
 
+    /// Present for a real launch, absent for the bench harness, which
+    /// has no session to sync against.
+    var rom: Rom? = nil
+    var session: Session? = nil
+    /// The harness's way to exercise the per-game card path without a
+    /// rom behind it. Ignored on a real launch, which derives the path
+    /// from the rom.
+    var cardPathOverride: String? = nil
+
     @State private var player = GCPlayer()
+    /// What the card looked like before play, so the upload afterwards
+    /// can tell whether the game actually saved anything.
+    @State private var cardDigestBefore: Data?
+    /// What the panel says under the title: the result of the last
+    /// action, or nothing, in which case it reads "Paused".
     @State private var menuStatus: String?
     @Environment(\.dismiss) private var dismiss
 
@@ -30,7 +46,18 @@ struct GCPlayerView: View {
             Color.black.ignoresSafeArea()
 
             GCMetalSurface { view in
-                player.start(gamePath: gamePath, romId: romId, view: view)
+                if let rom {
+                    cardDigestBefore = GCMemoryCard.currentDigest(romId: rom.id)
+                }
+                player.start(
+                    gamePath: gamePath,
+                    romId: romId,
+                    // The harness has no rom, so it gets Dolphin's
+                    // shared card rather than a per-game one it would
+                    // then have to clean up.
+                    cardPath: rom.map { GCMemoryCard.url(romId: $0.id).path } ?? cardPathOverride,
+                    view: view
+                )
             }
             .ignoresSafeArea()
 
@@ -75,6 +102,20 @@ struct GCPlayerView: View {
         }
         .onDisappear {
             player.stop()
+            // Dolphin flushes the card as it shuts down, so the upload
+            // has to wait for that rather than read the file while the
+            // emulator is still holding it. The task outlives this view
+            // deliberately; it is the last chance a save has to travel.
+            if let rom, let session {
+                let before = cardDigestBefore
+                Task.detached {
+                    // Long enough for Dolphin's own shutdown to finish
+                    // writing. It is not instant and there is no
+                    // callback for it.
+                    try? await Task.sleep(for: .seconds(3))
+                    await GCMemoryCard.store(rom: rom, session: session, since: before)
+                }
+            }
         }
         .onChange(of: player.state) { _, state in
             // Dolphin stopping by itself, which is what a game's own
@@ -120,6 +161,17 @@ struct GCPlayerView: View {
         case "Quit":
             player.stop()
             dismiss()
+        case "Save":
+            player.saveState()
+            // Said rather than shown, because Dolphin schedules the
+            // write onto its CPU thread rather than doing it here:
+            // there is nothing to observe at the moment the row is
+            // pressed, and a panel that changed nothing reads as a
+            // button that did nothing.
+            menuStatus = "Saving where you are."
+        case "Load":
+            player.loadState()
+            menuStatus = "Going back to your last save."
         default:
             player.setMenu(false)
         }

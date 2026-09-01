@@ -55,6 +55,10 @@ typedef struct
 	/// the shader cache. One per game, so nothing bleeds between titles.
 	const char* user_dir;
 
+	/// This game's memory card, a full path. Dolphin creates the file
+	/// if it is not there. Empty leaves Dolphin's shared card.
+	const char* memory_card;
+
 	bool verbose_log;
 } CabinetDolphinConfig;
 
@@ -116,6 +120,13 @@ CabinetDolphinMetrics CabinetDolphinGetMetrics(void);
 /// ScreenShots folder, through Dolphin's own screenshot path. Separates
 /// "not drawing" from "not visible", which a screen capture cannot.
 void CabinetDolphinScreenshot(const char* name);
+
+/// Save states, slots 1 through 10, Dolphin's own numbering. Safe from
+/// any thread and NOT instant: Dolphin schedules them onto the CPU
+/// thread, so a state asked for immediately before a shutdown may never
+/// be written.
+void CabinetDolphinSaveState(int slot);
+void CabinetDolphinLoadState(int slot);
 
 #ifdef __cplusplus
 }

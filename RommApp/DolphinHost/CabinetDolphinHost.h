@@ -34,6 +34,12 @@ struct Config
   /// inside it.
   std::string user_dir;
 
+  /// This game's memory card, a full path. Dolphin creates the file if
+  /// it is not there. Empty leaves Dolphin's shared card, which is the
+  /// hardware's arrangement and the wrong one here: RomM stores saves
+  /// against a rom, and a shared card belongs to no rom in particular.
+  std::string memory_card;
+
   /// Prints Dolphin's own log. The only way to answer questions like
   /// whether the recompiler took.
   bool verbose_log = false;
@@ -107,4 +113,14 @@ Metrics GetMetrics();
 /// the emulator produced, so it separates "not drawing" from "not
 /// visible".
 void SaveScreenshot(const std::string& name);
+
+/// Save states, into the running game's user directory. Slots are
+/// Dolphin's own numbering, 1 through 10.
+///
+/// Both are safe from any thread: Dolphin schedules them onto the CPU
+/// thread rather than doing the work where it was asked, so neither
+/// blocks and neither is instant. That also means a state written just
+/// before the emulator stops may not exist by the time it has stopped.
+void SaveState(int slot);
+void LoadState(int slot);
 }  // namespace CabinetDolphin
