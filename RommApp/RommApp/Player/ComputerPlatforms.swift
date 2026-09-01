@@ -81,6 +81,25 @@ enum PlatformSupport {
         }
         return !macPendingPlatforms.contains(platform)
         #else
+        // Dreamcast is Mac only, and this is the same rule PS2 and
+        // GameCube were held to from the start rather than a new one.
+        //
+        // Flycast needs a recompiler. iOS and tvOS cannot have one, so
+        // the version that shipped here ran at half the SH4's clock with
+        // an audio governor built to hold it together. That was an
+        // exception to the JIT boundary, made before there was a
+        // platform that could run the system properly, and the Mac
+        // removes the reason for it. A system that is only playable in a
+        // compromised form does not belong on a platform; PS2 and
+        // GameCube were never offered here for exactly that reason.
+        //
+        // THE CORE IS STILL COMPILED IN, deliberately. This is a gate,
+        // not a removal, because the thing that would bring Dreamcast
+        // back is upstream work rather than ours: iFly's interpreter is
+        // license-clean and is the candidate that could reach full speed
+        // without a recompiler. If that lands, this guard comes out and
+        // nothing else has to be rebuilt.
+        if canonicalSlug == "dc" { return false }
         if !CoreCatalog.cores(for: canonicalSlug).isEmpty { return true }
         return NativeCore.core(bySlug: canonicalSlug, isArcade: false) != nil
         #endif
