@@ -298,6 +298,30 @@ bool Run(const Config& config, std::string* error)
   // hold from any earlier session.
   ::Config::SetBaseOrCurrent(::Config::MAIN_AUDIO_BACKEND, std::string(BACKEND_CUBEB));
 
+  // Shader compilation, and this is why SSX Tricky stuttered at 2x on
+  // an M4 while sitting at 100% speed.
+  //
+  // When a game needs to draw something it has not drawn before,
+  // Dolphin has to build a shader for it first, and upstream's default
+  // is Synchronous: the frame STOPS until that build finishes. It also
+  // defaults to ONE compiler thread. Turning MSAA on invalidates every
+  // cached pipeline, so the whole set rebuilds one stall at a time, on
+  // one core, which reads as stutter rather than as slowness.
+  //
+  // AsynchronousUberShaders draws with a generic shader that can handle
+  // anything, builds the specialised one in the background, and swaps
+  // it in when ready. Nothing stalls; an object looks slightly plainer
+  // for a fraction of a second instead. -1 is Dolphin's own "auto" for
+  // the thread count, which it reads as cores minus two.
+  //
+  // Not offered as a setting, on the Mac or anywhere. Nobody would
+  // choose the stuttering version, and this target's floor is Apple
+  // Silicon, where the background compile is comfortably affordable.
+  ::Config::SetBaseOrCurrent(::Config::GFX_SHADER_COMPILATION_MODE,
+                             ShaderCompilationMode::AsynchronousUberShaders);
+  ::Config::SetBaseOrCurrent(::Config::GFX_SHADER_COMPILER_THREADS, -1);
+  ::Config::SetBaseOrCurrent(::Config::GFX_SHADER_CACHE, true);
+
   // Before the boot, so the game starts with whatever the panel last
   // held rather than Dolphin's defaults for the first few seconds.
   ApplyGraphics();
