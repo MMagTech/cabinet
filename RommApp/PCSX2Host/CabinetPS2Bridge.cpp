@@ -143,3 +143,8 @@ void CabinetPS2ResizeDisplay(unsigned int width, unsigned int height, float scal
 	CabinetPS2::SetSurfaceSize(width, height, scale);
 	MTGS::ResizeDisplayWindow(width, height, scale);
 }
+
+void CabinetPS2SetSurfaceLayer(void* layer)
+{
+	CabinetPS2::SetSurfaceLayer(layer);
+}

@@ -26,6 +26,23 @@ final class PS2MetalView: UIView, UIPointerInteractionDelegate {
 
     var metalLayer: CAMetalLayer { layer as! CAMetalLayer }
 
+    /// A/B test of the remaining black-screen suspect.
+    ///
+    /// A (default): PCSX2 presents into the view's own backing
+    /// CAMetalLayer, which UIKit created and continues to manage.
+    ///
+    /// B: PCSX2 presents into a CAMetalLayer Cabinet makes and owns,
+    /// added as a sublayer, configured the way upstream's AppKit path
+    /// leaves its own. Upstream creates a fresh layer and assigns it to
+    /// the view; UIKit forbids that, so a sublayer is the closest
+    /// equivalent. If B draws where A is black, UIKit's management of
+    /// its backing layer is the cause.
+    private var ownedLayer: CAMetalLayer?
+
+    private var usesOwnedLayer: Bool {
+        UserDefaults.standard.integer(forKey: "ps2-layer-mode") == 1
+    }
+
     /// Fires once the view has a real size, never before. PCSX2 reads
     /// the drawable size when it opens its device, and a zero there
     /// gives a surface with no pixels: 60fps, no picture, no error.
@@ -82,6 +99,26 @@ final class PS2MetalView: UIView, UIPointerInteractionDelegate {
         guard reported else {
             reported = true
             lastReported = pixels
+
+            if usesOwnedLayer {
+                let own = CAMetalLayer()
+                own.frame = bounds
+                own.contentsScale = scale
+                own.drawableSize = pixels
+                // Left at Metal's own defaults deliberately: that is
+                // what upstream's fresh layer has, and the point is to
+                // compare against it rather than tune.
+                own.isOpaque = true
+                own.needsDisplayOnBoundsChange = true
+                layer.addSublayer(own)
+                ownedLayer = own
+                CabinetPS2SetSurfaceLayer(Unmanaged.passUnretained(own).toOpaque())
+                NSLog("[PS2] Layer mode B: Cabinet-owned sublayer %.0fx%.0f", pixels.width, pixels.height)
+            } else {
+                CabinetPS2SetSurfaceLayer(nil)
+                NSLog("[PS2] Layer mode A: UIKit backing layer %.0fx%.0f", pixels.width, pixels.height)
+            }
+
             CabinetPS2SetSurfaceSize(width, height, Float(scale))
             onSized?(Unmanaged.passUnretained(self).toOpaque())
             return
@@ -92,6 +129,10 @@ final class PS2MetalView: UIView, UIPointerInteractionDelegate {
         // allowed to touch the drawable once a game is running.
         guard pixels != lastReported else { return }
         lastReported = pixels
+        if let own = ownedLayer {
+            own.frame = bounds
+            own.drawableSize = pixels
+        }
         CabinetPS2ResizeDisplay(width, height, Float(scale))
     }
 }

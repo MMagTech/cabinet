@@ -115,6 +115,10 @@ void CabinetPS2SetPaused(bool paused);
 /// drawableSize from this, so leaving it zero produces a perfectly
 /// healthy looking 60fps into a surface with no pixels in it. Call it
 /// before Run, and again whenever the view resizes.
+/// Nominates a CAMetalLayer for PCSX2 to present into. Null means the
+/// view's own backing layer. Set before Run.
+void CabinetPS2SetSurfaceLayer(void* layer);
+
 void CabinetPS2SetSurfaceSize(unsigned int width, unsigned int height, float scale);
 
 /// Tells a RUNNING game the surface changed size, through PCSX2's own

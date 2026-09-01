@@ -62,6 +62,10 @@ namespace CabinetPS2
 	/// and fills error if the VM never started.
 	bool Run(const Config& config, std::string* error);
 
+	/// A CAMetalLayer for PCSX2 to present into, or null to use the
+	/// view's own backing layer. Set before Run.
+	void SetSurfaceLayer(void* layer);
+
 	/// The picture settings, applied together. Safe before Run, in
 	/// which case they are simply the settings the game starts with.
 	struct Graphics

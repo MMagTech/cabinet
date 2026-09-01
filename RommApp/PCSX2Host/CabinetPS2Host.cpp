@@ -70,6 +70,9 @@ namespace
 	// The view Cabinet gave us, and the surface size the renderer asks
 	// about. Read on the GS thread, written on the main thread.
 	std::atomic<void*> s_view{nullptr};
+	/// A CAMetalLayer Cabinet made itself, or null to use the view's
+	/// own backing layer. Exists to A/B the two.
+	std::atomic<void*> s_layer{nullptr};
 	std::atomic<u32> s_surface_width{0};
 	std::atomic<u32> s_surface_height{0};
 	std::atomic<float> s_surface_scale{1.0f};
@@ -96,6 +99,7 @@ namespace
 
 		wi.type = WindowInfo::Type::MacOS;
 		wi.window_handle = view;
+		wi.surface_handle = s_layer.load(std::memory_order_acquire);
 		wi.surface_width = s_surface_width.load(std::memory_order_relaxed);
 		wi.surface_height = s_surface_height.load(std::memory_order_relaxed);
 		wi.surface_scale = s_surface_scale.load(std::memory_order_relaxed);
@@ -745,6 +749,11 @@ namespace CabinetPS2
 		// later.
 		if (s_running.load())
 			Host::RunOnCPUThread([] { VMManager::ApplySettings(); }, false);
+	}
+
+	void SetSurfaceLayer(void* layer)
+	{
+		s_layer.store(layer, std::memory_order_release);
 	}
 
 	void SetSurfaceSize(unsigned int width, unsigned int height, float scale)

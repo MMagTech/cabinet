@@ -238,7 +238,11 @@ endif()
          "\t// its +layerClass. Taking it rather than making one is what\n"
          "\t// keeps the surface tracking the view's bounds.\n"
          "\tm_view = MRCRetain((__bridge UIView*)m_window_info.window_handle);\n"
-         "\tm_layer = MRCRetain((CAMetalLayer*)[m_view layer]);\n"
+         "\t// surface_handle, when Cabinet sets it, is a layer it made\n"
+         "\t// and owns. Otherwise the view's own backing layer. The two\n"
+         "\t// exist side by side so they can be compared directly.\n"
+         "\tCAMetalLayer* chosen = (__bridge CAMetalLayer*)m_window_info.surface_handle;\n"
+         "\tm_layer = MRCRetain(chosen ? chosen : (CAMetalLayer*)[m_view layer]);\n"
          "\t[m_layer setDrawableSize:CGSizeMake(m_window_info.surface_width, m_window_info.surface_height)];\n"
          "\t[m_layer setDevice:m_dev.dev];"),
         ("\t[m_view setLayer:nullptr];\n\t[m_view setWantsLayer:NO];\n\tm_view = nullptr;",
