@@ -31,6 +31,7 @@ final class PS2MetalView: UIView, UIPointerInteractionDelegate {
     /// gives a surface with no pixels: 60fps, no picture, no error.
     var onSized: ((UnsafeMutableRawPointer) -> Void)?
     private var reported = false
+    private var lastReported: CGSize = .zero
 
     override func didMoveToSuperview() {
         super.didMoveToSuperview()
@@ -61,16 +62,37 @@ final class PS2MetalView: UIView, UIPointerInteractionDelegate {
 
     private func pushSize() {
         let scale = window?.screen.scale ?? traitCollection.displayScale
-        metalLayer.contentsScale = scale
+
+        // contentsScale is set ONCE, before the emulator starts, and
+        // never again. Setting it makes CAMetalLayer recompute
+        // drawableSize, and PCSX2 sets drawableSize itself to match
+        // what it renders. Two owners of one property, rewritten on
+        // every layout pass and every video mode change, is what made
+        // the picture flicker and disappear.
+        if !reported {
+            metalLayer.contentsScale = scale
+        }
 
         let pixels = CGSize(width: bounds.width * scale, height: bounds.height * scale)
         guard pixels.width >= 1, pixels.height >= 1 else { return }
 
-        CabinetPS2SetSurfaceSize(UInt32(pixels.width), UInt32(pixels.height), Float(scale))
+        let width = UInt32(pixels.width)
+        let height = UInt32(pixels.height)
 
-        guard !reported else { return }
-        reported = true
-        onSized?(Unmanaged.passUnretained(self).toOpaque())
+        guard reported else {
+            reported = true
+            lastReported = pixels
+            CabinetPS2SetSurfaceSize(width, height, Float(scale))
+            onSized?(Unmanaged.passUnretained(self).toOpaque())
+            return
+        }
+
+        // Afterwards a real size change goes through PCSX2's own
+        // resize path, on its GS thread, which is the only thing
+        // allowed to touch the drawable once a game is running.
+        guard pixels != lastReported else { return }
+        lastReported = pixels
+        CabinetPS2ResizeDisplay(width, height, Float(scale))
     }
 }
 

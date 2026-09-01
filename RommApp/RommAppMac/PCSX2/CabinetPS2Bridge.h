@@ -117,6 +117,15 @@ void CabinetPS2SetPaused(bool paused);
 /// before Run, and again whenever the view resizes.
 void CabinetPS2SetSurfaceSize(unsigned int width, unsigned int height, float scale);
 
+/// Tells a RUNNING game the surface changed size, through PCSX2's own
+/// resize path so the GS thread updates the drawable itself.
+///
+/// Setting the layer's drawableSize from Cabinet instead is what
+/// caused a black and flickering picture: PCSX2 sets drawableSize to
+/// match what it renders, and a view that also touches contentsScale
+/// on every layout makes CAMetalLayer recompute it underneath.
+void CabinetPS2ResizeDisplay(unsigned int width, unsigned int height, float scale);
+
 /// Controller input, in PCSX2's own DualShock2 numbering. Cabinet maps
 /// its RetroPad ids on the Swift side, because that is where the
 /// mapping is readable next to the controller code it comes from.

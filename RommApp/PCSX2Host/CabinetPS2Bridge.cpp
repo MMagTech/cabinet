@@ -14,6 +14,7 @@
 #include "pcsx2/VMManager.h"
 #include "pcsx2/Host.h"
 #include "pcsx2/GS.h"
+#include "pcsx2/MTGS.h"
 
 bool CabinetPS2Run(const CabinetPS2Config* config, char* error, size_t error_length)
 {
@@ -132,4 +133,13 @@ void CabinetPS2Screenshot(const char* path)
 		return;
 
 	GSQueueSnapshot(std::string(path), 0);
+}
+
+void CabinetPS2ResizeDisplay(unsigned int width, unsigned int height, float scale)
+{
+	if (!CabinetPS2::IsRunning() || !MTGS::IsOpen())
+		return;
+
+	CabinetPS2::SetSurfaceSize(width, height, scale);
+	MTGS::ResizeDisplayWindow(width, height, scale);
 }
