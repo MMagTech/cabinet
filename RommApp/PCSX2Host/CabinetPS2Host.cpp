@@ -547,6 +547,16 @@ namespace CabinetPS2
 			s_settings.SetBoolValue("EmuCore/GS", key, false);
 		}
 
+		// PCSX2 defaults this on: it decides a frame is a duplicate of
+		// the last and declines to present it. The detection depends on
+		// signals that do not fire reliably here, so it threw away
+		// nearly every frame and let one through only when it hit its
+		// own skip limit, which is exactly the black picture with an
+		// occasional flash. The frames themselves were always perfect.
+		//
+		// It saves a little GPU work on a machine that has plenty.
+		s_settings.SetBoolValue("EmuCore/GS", "SkipDuplicateFrames", false);
+
 		// One card per game, in slot 1. PCSX2's own default is a single
 		// shared Mcd001.ps2 for the whole library, which is what a real
 		// PS2 had and what RomM cannot file against a rom.

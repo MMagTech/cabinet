@@ -428,6 +428,89 @@ endif()
     # rather than output pixels, which is why it is the one member of
     # the family that was correct at any window size all along.
 
+    # 15. Present-path tracing, observation only.
+    #
+    #     The picture is perfect in the GS and absent on screen, and
+    #     the layer has been ruled out by A/B test. This logs the whole
+    #     present path so the exact divergence between a working
+    #     progressive scene and a failing interlaced one can be read
+    #     off rather than guessed at. Off unless CABINET_PRESENT_TRACE
+    #     is set in the environment.
+    edit(src / "pcsx2/GS/Renderers/Metal/GSDeviceMTL.mm", [
+        ("GSDevice::PresentResult GSDeviceMTL::BeginPresent(bool frame_skip)\n{ @autoreleasepool {",
+         "// CABINET_PRESENT_TRACE\n"
+         "static bool CabinetTraceOn()\n{\n"
+         "\tstatic const bool on = getenv(\"CABINET_PRESENT_TRACE\") != nullptr;\n"
+         "\treturn on;\n}\n"
+         "static u32 s_cabinet_trace_frames = 0;\n"
+         "static bool CabinetTraceThisFrame()\n{\n"
+         "\treturn CabinetTraceOn() && (s_cabinet_trace_frames < 8 || (s_cabinet_trace_frames % 120) == 0);\n}\n\n"
+         "GSDevice::PresentResult GSDeviceMTL::BeginPresent(bool frame_skip)\n{ @autoreleasepool {"),
+        ("\tif (frame_skip || m_window_info.type == WindowInfo::Type::Surfaceless || !g_gs_device)\n"
+         "\t{\n"
+         "\t\tImGui::EndFrame();\n"
+         "\t\treturn PresentResult::FrameSkipped;\n"
+         "\t}",
+         "\tif (CabinetTraceThisFrame())\n"
+         "\t\tConsole.WriteLnFmt(\"[TRACE] BeginPresent frame={} skip={} surfaceless={} layer={} drawable_size={}x{}\",\n"
+         "\t\t\ts_cabinet_trace_frames, frame_skip,\n"
+         "\t\t\tm_window_info.type == WindowInfo::Type::Surfaceless, m_layer != nullptr,\n"
+         "\t\t\tm_layer ? (u32)[m_layer drawableSize].width : 0u,\n"
+         "\t\t\tm_layer ? (u32)[m_layer drawableSize].height : 0u);\n"
+         "\tif (frame_skip || m_window_info.type == WindowInfo::Type::Surfaceless || !g_gs_device)\n"
+         "\t{\n"
+         "\t\tif (CabinetTraceThisFrame())\n"
+         "\t\t\tConsole.WriteLn(\"[TRACE]   -> FrameSkipped at entry\");\n"
+         "\t\ts_cabinet_trace_frames++;\n"
+         "\t\tImGui::EndFrame();\n"
+         "\t\treturn PresentResult::FrameSkipped;\n"
+         "\t}"),
+        ("\tif (!m_current_drawable)\n"
+         "\t{\n"
+         "\t\t[buf pushDebugGroup:@\"Present Skipped\"];",
+         "\tif (CabinetTraceThisFrame())\n"
+         "\t\tConsole.WriteLnFmt(\"[TRACE]   nextDrawable {}\", m_current_drawable ? \"ok\" : \"NULL\");\n"
+         "\tif (!m_current_drawable)\n"
+         "\t{\n"
+         "\t\ts_cabinet_trace_frames++;\n"
+         "\t\t[buf pushDebugGroup:@\"Present Skipped\"];"),
+        ("void GSDeviceMTL::PresentRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, PresentShader shader, float shaderTime, Filter filter)\n{ @autoreleasepool {",
+         "void GSDeviceMTL::PresentRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, PresentShader shader, float shaderTime, Filter filter)\n{ @autoreleasepool {\n"
+         "\tif (CabinetTraceThisFrame())\n"
+         "\t\tConsole.WriteLnFmt(\"[TRACE]   PresentRect src={}x{} dTex={} sRect=({},{},{},{}) dRect=({},{},{},{}) shader={}\",\n"
+         "\t\t\tsTex ? sTex->GetWidth() : -1, sTex ? sTex->GetHeight() : -1, dTex != nullptr,\n"
+         "\t\t\tsRect.x, sRect.y, sRect.z, sRect.w, dRect.x, dRect.y, dRect.z, dRect.w,\n"
+         "\t\t\tstatic_cast<int>(shader));"),
+        ("\t\tif (use_present_drawable)\n\t\t\t[m_current_render_cmdbuf presentDrawable:m_current_drawable];",
+         "\t\tif (CabinetTraceThisFrame())\n"
+         "\t\t\tConsole.WriteLnFmt(\"[TRACE]   EndPresent use_present_drawable={} vsync={}\",\n"
+         "\t\t\t\tuse_present_drawable, static_cast<int>(m_vsync_mode));\n"
+         "\t\tif (use_present_drawable)\n\t\t\t[m_current_render_cmdbuf presentDrawable:m_current_drawable];"),
+        ("\tFlushEncoders();\n\tFrameCompleted();\n\tm_current_drawable = nullptr;",
+         "\tFlushEncoders();\n\tFrameCompleted();\n\ts_cabinet_trace_frames++;\n\tm_current_drawable = nullptr;"),
+    ], "CABINET_PRESENT_TRACE")
+
+    # 16. The present guard itself. PresentRect is never reached on the
+    #     failing games, and its guard is `current && !blank_frame`,
+    #     where blank_frame is !Merge(field). This says which one.
+    edit(src / "pcsx2/GS/Renderers/Common/GSRenderer.cpp", [(
+        "\tconst bool blank_frame = !Merge(field);",
+        "\tconst bool blank_frame = !Merge(field);\n"
+        "\t// CABINET_MERGE_TRACE\n"
+        "\tif (getenv(\"CABINET_PRESENT_TRACE\"))\n"
+        "\t{\n"
+        "\t\tstatic u32 n = 0;\n"
+        "\t\tif (n < 8 || (n % 120) == 0)\n"
+        "\t\t{\n"
+        "\t\t\tGSTexture* cur = g_gs_device->GetCurrent();\n"
+        "\t\t\tfprintf(stderr, \"[TRACE] Merge field=%d blank_frame=%d current=%d size=%dx%d\\n\",\n"
+        "\t\t\t\t(int)field, (int)blank_frame, cur != nullptr ? 1 : 0,\n"
+        "\t\t\t\tcur ? cur->GetWidth() : -1, cur ? cur->GetHeight() : -1);\n"
+        "\t\t}\n"
+        "\t\tn++;\n"
+        "\t}",
+    )], "CABINET_MERGE_TRACE")
+
     print(f"patched {src} for Catalyst, host layer at {host}")
 
 
