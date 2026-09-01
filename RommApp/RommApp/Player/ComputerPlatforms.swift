@@ -70,6 +70,12 @@ enum PlatformSupport {
         // still playable on this target, so the lookup failing must not
         // be read as unsupported.
         if PS2Launcher.isPS2(canonicalSlug: canonicalSlug) { return true }
+        // GameCube for the same reason, and it is this one source both
+        // the library section and the Play button read: patching only
+        // GameLaunchView's local copy leaves the game filed under
+        // Unsupported with a working Play path nobody can reach. That
+        // exact mistake cost a session on PS2.
+        if GCLauncher.isGameCube(canonicalSlug: canonicalSlug) { return true }
         guard let platform = NativePlatform.platform(bySlug: canonicalSlug, isArcade: false) else {
             return false
         }

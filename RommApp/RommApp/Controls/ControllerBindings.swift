@@ -105,6 +105,13 @@ enum ControllerBindings {
             return PlatformProfile(base: n64, digitizesLeftStick: false)
         case "dreamcast":
             return PlatformProfile(base: defaults, digitizesLeftStick: false)
+        case "ngc":
+            // The GameCube has a real analog stick AND a separate d-pad,
+            // and its games read both. Digitizing the stick into d-pad
+            // bits would make every stick movement press a direction too,
+            // which in a menu reads as the cursor running away. Additive:
+            // no other platform's answer changes.
+            return PlatformProfile(base: defaults, digitizesLeftStick: false)
         default:
             return PlatformProfile(base: defaults, digitizesLeftStick: true)
         }

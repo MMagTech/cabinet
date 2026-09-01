@@ -100,6 +100,9 @@ struct RommApp: App {
         if let disc = PS2BenchHarness.discPath, !disc.isEmpty {
             return AnyView(PS2BenchView(discPath: disc))
         }
+        if let disc = GCBenchHarness.discPath, !disc.isEmpty {
+            return AnyView(GCBenchView(discPath: disc))
+        }
         #endif
         return AnyView(appShell)
     }

@@ -6,4 +6,5 @@
 // for iOS, which never sees the header behind it.
 #if TARGET_OS_MACCATALYST
 #import "../../RommAppMac/PCSX2/CabinetPS2Bridge.h"
+#import "../../RommAppMac/Dolphin/CabinetDolphinBridge.h"
 #endif

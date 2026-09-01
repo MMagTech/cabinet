@@ -40,6 +40,8 @@ struct GameLaunchView: View {
     // playingNative with a second meaning.
     @State private var playingPS2 = false
     @State private var ps2DiscPath: String?
+    @State private var playingGC = false
+    @State private var gcGamePath: String?
     #endif
     @State private var nativeInitialState: Data?
     @State private var firmware: [Firmware] = []
@@ -354,6 +356,11 @@ struct GameLaunchView: View {
                 PS2PlayerView(
                     discPath: ps2DiscPath, title: rom.displayName, rom: rom, session: session
                 )
+            }
+        }
+        .fullScreenCover(isPresented: $playingGC) {
+            if let gcGamePath {
+                GCPlayerView(gamePath: gcGamePath, title: rom.displayName, romId: rom.id)
             }
         }
         #endif
@@ -912,6 +919,10 @@ struct GameLaunchView: View {
             await beginPS2Play()
             return
         }
+        if GCLauncher.isGameCube(canonicalSlug: canonicalSlug) {
+            await beginGCPlay()
+            return
+        }
         #endif
         if selectedBackend == .native {
             await beginNativePlay()
@@ -948,6 +959,23 @@ struct GameLaunchView: View {
             // time PCSX2 opens it.
             await PS2MemoryCard.restore(rom: rom, session: session)
             playingPS2 = true
+        } catch {
+            playError = error.localizedDescription
+        }
+    }
+
+    /// Same shape as the PS2 path, minus its firmware step: Dolphin
+    /// boots a GameCube disc with its own HLE IPL, so there is nothing
+    /// to fetch from RomM before a game will start.
+    private func beginGCPlay() async {
+        preparingPlay = true
+        downloadProgress = 0
+        defer { preparingPlay = false }
+        do {
+            gcGamePath = try await GCLauncher.prepare(rom: rom, session: session) { fraction in
+                downloadProgress = fraction
+            }
+            playingGC = true
         } catch {
             playError = error.localizedDescription
         }

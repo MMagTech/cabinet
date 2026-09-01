@@ -280,6 +280,7 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			explicitFolders = (
 				PCSX2Resources,
+				DolphinSys,
 			);
 			path = RommAppMac;
 			sourceTree = "<group>";
@@ -1305,6 +1306,9 @@
 					MetalFX,
 					"-lcurl",
 					"-lpcap",
+					"-lbz2",
+					"-liconv",
+					"-lresolv",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev.mac;
 				PRODUCT_NAME = "Cabinet Mac";
@@ -1414,6 +1418,9 @@
 					MetalFX,
 					"-lcurl",
 					"-lpcap",
+					"-lbz2",
+					"-liconv",
+					"-lresolv",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet.mac;
 				PRODUCT_NAME = "Cabinet Mac";
