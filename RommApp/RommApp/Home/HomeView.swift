@@ -316,13 +316,17 @@ struct HomeView: View {
                     .task(id: playing) { await resolveOfferName(playing) }
             }
             #endif
-            if let hero = recent.first {
+            if let hero = resumeHero {
                 heroCard(for: hero, height: portraitHeroHeight(for: height), wide: false)
                     .padding(.horizontal, 20)
-                if recent.count > 1 {
-                    rotationRow("Recent", Array(recent.dropFirst()), seeAll: .recentlyPlayed)
-                }
-            } else if loaded {
+            }
+            // Outside the hero's own block, and that matters: when
+            // nothing recent is playable here there is no hero, and the
+            // shelf is the only way back to those games. The empty state
+            // belongs to an empty library, not to an unplayable one.
+            if !recentBesides(resumeHero).isEmpty {
+                rotationRow("Recent", recentBesides(resumeHero), seeAll: .recentlyPlayed)
+            } else if loaded, recent.isEmpty {
                 emptyState.padding(.horizontal, 20)
             }
             if !favorites.isEmpty {
@@ -466,12 +470,12 @@ struct HomeView: View {
     private func macContent(height: CGFloat) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                if let hero = recent.first {
+                if let hero = resumeHero {
                     heroCard(for: hero, height: min(height * 0.34, 320), wide: true)
                         .padding(.bottom, 12)
                 }
-                if recent.count > 1 {
-                    rotationRow("Recent", Array(recent.dropFirst()), seeAll: .recentlyPlayed)
+                if !recentBesides(resumeHero).isEmpty {
+                    rotationRow("Recent", recentBesides(resumeHero), seeAll: .recentlyPlayed)
                 } else if loaded, recent.isEmpty {
                     emptyState.padding(.horizontal, 20)
                 }
@@ -505,12 +509,12 @@ struct HomeView: View {
             // the hero rather than sharing the same tight spacing Recent
             // and Favorites use between each other.
             VStack(alignment: .leading, spacing: 16) {
-                if let hero = recent.first {
+                if let hero = resumeHero {
                     heroCard(for: hero, height: min(height * 0.40, 420), wide: true)
                         .padding(.bottom, 20)
                 }
-                if recent.count > 1 {
-                    rotationRow("Recent", Array(recent.dropFirst()), seeAll: .recentlyPlayed)
+                if !recentBesides(resumeHero).isEmpty {
+                    rotationRow("Recent", recentBesides(resumeHero), seeAll: .recentlyPlayed)
                 } else if loaded, recent.isEmpty {
                     tvEmptyState
                 }
@@ -548,7 +552,7 @@ struct HomeView: View {
     #if !os(tvOS)
     private func legacyWideLayout(height: CGFloat) -> some View {
         HStack(alignment: .top, spacing: 20) {
-            if let hero = recent.first {
+            if let hero = resumeHero {
                 heroCard(for: hero, height: max(200, height - 40), wide: true)
                     .frame(maxWidth: 320)
                     .padding(.vertical, 20)
@@ -567,8 +571,8 @@ struct HomeView: View {
                             .padding(.top, 20)
                             .task(id: playing) { await resolveOfferName(playing) }
                     }
-                    if recent.count > 1 {
-                        rotationRow("Recent", Array(recent.dropFirst()), seeAll: .recentlyPlayed)
+                    if !recentBesides(resumeHero).isEmpty {
+                        rotationRow("Recent", recentBesides(resumeHero), seeAll: .recentlyPlayed)
                     } else if loaded, recent.isEmpty {
                         emptyState.padding(.horizontal, 20)
                     }
@@ -794,7 +798,9 @@ struct HomeView: View {
             // reading of Resume with nothing to resume into.
             guard loaded else { return }
             quickActions.pending = nil
-            if let first = recent.first {
+            // The same promise the hero makes, made from the app icon,
+            // so it picks the same game rather than the newest one.
+            if let first = resumeHero {
                 Task { await beginResume(first) }
             }
         case .recents:
@@ -1150,7 +1156,7 @@ struct HomeView: View {
         #endif
 
         do {
-            recent = playableHere(try await recentTask.items)
+            recent = try await recentTask.items
             offline = false
         } catch RommError.offline {
             offline = true
@@ -1163,28 +1169,32 @@ struct HomeView: View {
         loaded = true
     }
 
-    /// Drops games this device cannot actually play.
+    /// The game the hero offers to carry on with: the most recent one
+    /// this device can actually play.
     ///
-    /// Resume is a promise. The hero says "carry on with this", and a
+    /// Resume is a promise. The hero says carry on with this, and a
     /// platform that has been taken off this device cannot carry on with
     /// anything: tapping it reaches a launch screen with a greyed-out
     /// Play button, which reads as the app being broken rather than as a
-    /// system it no longer runs. Dreamcast became Mac only on
-    /// 2026-09-01 and is the first platform this has applied to.
+    /// system it no longer runs. Dreamcast going Mac only on 2026-09-01
+    /// is the first platform this has applied to.
     ///
-    /// Favourites are deliberately left alone. A favourite is a thing
-    /// you marked, not a thing the app is offering to continue, and a
-    /// library you keep on a server should still show you what is in it.
+    /// SKIPPED FOR THE HERO ONLY, never dropped from the shelf below it.
+    /// An unsupported game still belongs on Home and in the library:
+    /// its launch screen is how somebody gets the rom and its BIOS out
+    /// through Keep, to play in another emulator. Hiding it would take
+    /// away the one thing this app can still do for that game. The hero
+    /// is the single place that makes a promise, so it is the only
+    /// place that has to be able to keep it.
     ///
     /// THE EXCEPTION, iPhone only: a Dreamcast game whose VMU card
-    /// carries a minigame is still playable here, in the VMU core, and
-    /// that is the whole point of the phone-as-VMU design. Taking those
-    /// off Home would hide the one thing about that game the phone can
-    /// still do, and it is the thing most worth having on the way out of
-    /// the house. tvOS gets no exception because the VMU core is iOS
-    /// only, so there is nothing there to play.
-    private func playableHere(_ roms: [Rom]) -> [Rom] {
-        roms.filter { rom in
+    /// carries a minigame can lead the hero, because the card itself is
+    /// playable here in the VMU core and that is the whole point of the
+    /// phone-as-VMU design. It is also the thing most worth having on
+    /// the way out of the house. tvOS gets no exception because the VMU
+    /// core is iOS only, so there is nothing there to play.
+    private var resumeHero: Rom? {
+        recent.first { rom in
             let slug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
             if PlatformSupport.isSupported(canonicalSlug: slug, isArcade: rom.isArcade) {
                 return true
@@ -1198,6 +1208,13 @@ struct HomeView: View {
             #endif
             return false
         }
+    }
+
+    /// Everything recent except whichever game the hero took, so the
+    /// shelf never shows the same cover twice and never loses one.
+    private func recentBesides(_ hero: Rom?) -> [Rom] {
+        guard let hero else { return recent }
+        return recent.filter { $0.id != hero.id }
     }
 }
 
