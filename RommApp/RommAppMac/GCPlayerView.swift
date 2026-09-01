@@ -8,16 +8,20 @@
 //  the most blast-radius-heavy file in the app to gain nothing.
 //
 //  What is here: picture, sound, controllers, a pause panel, one save
-//  state slot, and a per-game memory card that syncs to RomM. What is
-//  NOT here yet, and is not hidden: no per-game picture settings, and
-//  the C stick is only reachable through four digital directions
-//  because GameControllerManager publishes no right-stick axis. PS2 has
-//  that same gap and the same fix would close both.
+//  state slot, a per-game memory card that syncs to RomM, and the three
+//  picture settings that matter on a big display. No shaders; see
+//  GCGraphics for why.
 
 import SwiftUI
 
 struct GCPlayerView: View {
     private static let menuRows = ["Quit", "Save", "Load", "Resume"]
+
+    /// Live, so the panel redraws when a row is stepped. The values
+    /// themselves live in GCGraphics, machine-wide.
+    @State private var resolutionIndex = GCGraphics.resolutionIndex
+    @State private var antialiasingIndex = GCGraphics.antialiasingIndex
+    @State private var anisotropyIndex = GCGraphics.anisotropyIndex
 
     let gamePath: String
     let title: String
@@ -49,6 +53,9 @@ struct GCPlayerView: View {
                 if let rom {
                     cardDigestBefore = GCMemoryCard.currentDigest(romId: rom.id)
                 }
+                // Before the boot, so the game starts with these rather
+                // than Dolphin's defaults for its first few seconds.
+                GCGraphics.apply()
                 player.start(
                     gamePath: gamePath,
                     romId: romId,
@@ -150,10 +157,52 @@ struct GCPlayerView: View {
                         in: RoundedRectangle(cornerRadius: 8)
                     )
             }
+
+            Divider()
+            picture
         }
         .padding(28)
-        .frame(maxWidth: 380)
+        .frame(maxWidth: 420)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    /// The picture rows. Pickers rather than buttons because these are
+    /// settings someone leaves alone, unlike the four actions above,
+    /// which are things they do and then close the panel.
+    private var picture: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Picker("Resolution", selection: $resolutionIndex) {
+                ForEach(Array(GCGraphics.resolutions.enumerated()), id: \.offset) { index, entry in
+                    Text(entry.label).tag(index)
+                }
+            }
+            Picker("Smoothing", selection: $antialiasingIndex) {
+                ForEach(Array(GCGraphics.antialiasing.enumerated()), id: \.offset) { index, entry in
+                    Text(entry.label).tag(index)
+                }
+            }
+            Picker("Texture detail", selection: $anisotropyIndex) {
+                ForEach(Array(GCGraphics.anisotropy.enumerated()), id: \.offset) { index, entry in
+                    Text(entry.label).tag(index)
+                }
+            }
+        }
+        .font(.callout)
+        // One apply for all three, because Dolphin re-reads its whole
+        // video config in one step and three separate calls would mean
+        // three of those.
+        .onChange(of: resolutionIndex) { _, new in
+            GCGraphics.resolutionIndex = new
+            GCGraphics.apply()
+        }
+        .onChange(of: antialiasingIndex) { _, new in
+            GCGraphics.antialiasingIndex = new
+            GCGraphics.apply()
+        }
+        .onChange(of: anisotropyIndex) { _, new in
+            GCGraphics.anisotropyIndex = new
+            GCGraphics.apply()
+        }
     }
 
     private func activate(_ index: Int) {

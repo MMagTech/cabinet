@@ -114,6 +114,37 @@ Metrics GetMetrics();
 /// visible".
 void SaveScreenshot(const std::string& name);
 
+/// The picture settings the pause panel offers, applied together.
+///
+/// Deliberately not shaders. Dolphin ships 48 post-processing shaders
+/// and they are effects rather than a television: sepia, invert,
+/// nightvision, FXAA. There is no scanline or CRT shader among them, so
+/// exposing them would not give GameCube the look Cabinet's handhelds
+/// have, it would give it filters. These three are the ones that make
+/// a GameCube game look better on a 5K display.
+struct Graphics
+{
+  /// Dolphin's InternalResolution. 0 is auto (match the window), 1 is
+  /// the console's own, up to 12. Source-exact: EFB_SCALE_AUTO_INTEGRAL
+  /// is 0 and GFX_MAX_EFB_SCALE is 12.
+  int internal_resolution = 1;
+
+  /// MSAA sample count. 1 is off, then 2, 4, 8.
+  unsigned int msaa = 1;
+
+  /// Supersampling rather than multisampling, using the same count.
+  /// Far more expensive and far better on a 2D-heavy game.
+  bool ssaa = false;
+
+  /// AnisotropicFilteringMode: -1 default, 0 forces 1x, then 1, 2, 3, 4
+  /// for 2x, 4x, 8x, 16x. Source-exact from VideoConfig.h.
+  int anisotropy = -1;
+};
+
+/// Safe before Run, in which case these are simply the settings the
+/// game starts with, and safe while running.
+void SetGraphics(const Graphics& graphics);
+
 /// Save states, into the running game's user directory. Slots are
 /// Dolphin's own numbering, 1 through 10.
 ///

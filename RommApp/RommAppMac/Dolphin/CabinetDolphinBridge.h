@@ -125,6 +125,28 @@ void CabinetDolphinScreenshot(const char* name);
 /// any thread and NOT instant: Dolphin schedules them onto the CPU
 /// thread, so a state asked for immediately before a shutdown may never
 /// be written.
+/// The picture settings the pause panel offers, applied together.
+///
+/// No shaders on purpose. Dolphin ships 48 post-processing shaders and
+/// they are effects rather than a television: sepia, invert,
+/// nightvision, FXAA, and no scanline or CRT among them. These three
+/// are what actually make a GameCube game look better on a 5K display.
+typedef struct
+{
+	/// 0 auto (match the window), 1 the console's own, up to 12.
+	int internal_resolution;
+	/// MSAA samples. 1 is off, then 2, 4, 8.
+	unsigned int msaa;
+	/// Supersampling instead of multisampling, same count. Expensive.
+	bool ssaa;
+	/// -1 default, 0 forces 1x, then 1, 2, 3, 4 for 2x, 4x, 8x, 16x.
+	int anisotropy;
+} CabinetDolphinGraphics;
+
+/// Safe before Run, in which case these are the settings the game
+/// starts with, and safe while running.
+void CabinetDolphinSetGraphics(const CabinetDolphinGraphics* graphics);
+
 void CabinetDolphinSaveState(int slot);
 void CabinetDolphinLoadState(int slot);
 

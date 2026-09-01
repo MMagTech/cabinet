@@ -164,6 +164,7 @@ _CabinetDolphinRequestStop
 _CabinetDolphinIsRunning
 _CabinetDolphinGetMetrics
 _CabinetDolphinScreenshot
+_CabinetDolphinSetGraphics
 _CabinetDolphinSaveState
 _CabinetDolphinLoadState
 SYMBOLS

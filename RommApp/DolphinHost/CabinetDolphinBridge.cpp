@@ -87,6 +87,18 @@ bool CabinetDolphinIsRunning(void)
 	return CabinetDolphin::IsRunning();
 }
 
+void CabinetDolphinSetGraphics(const CabinetDolphinGraphics* graphics)
+{
+	if (!graphics)
+		return;
+	CabinetDolphin::Graphics out;
+	out.internal_resolution = graphics->internal_resolution;
+	out.msaa = graphics->msaa;
+	out.ssaa = graphics->ssaa;
+	out.anisotropy = graphics->anisotropy;
+	CabinetDolphin::SetGraphics(out);
+}
+
 void CabinetDolphinSaveState(int slot)
 {
 	CabinetDolphin::SaveState(slot);

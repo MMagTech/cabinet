@@ -37,6 +37,7 @@
 #include "Core/Boot/Boot.h"
 #include "Core/BootManager.h"
 #include "Core/Config/GraphicsSettings.h"
+#include "VideoCommon/VideoConfig.h"
 #include "Core/Config/MainSettings.h"
 #include "Core/PowerPC/PowerPC.h"
 #include "Core/ConfigManager.h"
@@ -72,6 +73,47 @@ float s_surface_scale = 1.0f;
 // directory. Empty until then, which is what makes the state calls
 // no-ops before a game exists.
 std::string s_state_dir;
+
+std::mutex s_graphics_lock;
+CabinetDolphin::Graphics s_graphics;
+
+// Pushed into Dolphin's config rather than held here. Called before the
+// boot so a game starts with the settings, and again whenever the panel
+// changes one: the video backend reads these from config on its own
+// thread, which is why nothing here touches the renderer directly.
+// Dolphin's config layers do not exist until UICommon::Init, and
+// SetBaseOrCurrent into a config that is not up is a crash, not a
+// no-op. The panel legitimately calls SetGraphics before a game boots,
+// to seed the settings it will start with, so this is the guard that
+// makes that safe: the values are always stored, and Run applies them
+// itself once the config exists.
+std::atomic<bool> s_config_ready{false};
+
+void ApplyGraphics()
+{
+  if (!s_config_ready.load())
+    return;
+  CabinetDolphin::Graphics graphics;
+  {
+    std::lock_guard lock(s_graphics_lock);
+    graphics = s_graphics;
+  }
+  ::Config::SetBaseOrCurrent(::Config::GFX_EFB_SCALE, graphics.internal_resolution);
+  ::Config::SetBaseOrCurrent(::Config::GFX_MSAA, graphics.msaa);
+  ::Config::SetBaseOrCurrent(::Config::GFX_SSAA, graphics.ssaa);
+  ::Config::SetBaseOrCurrent(::Config::GFX_ENHANCE_MAX_ANISOTROPY,
+                             static_cast<AnisotropicFilteringMode>(graphics.anisotropy));
+
+  // Read back rather than trusting the write. Dolphin does not persist
+  // this config anywhere Cabinet can inspect afterwards, so without this
+  // line "the setting was applied" would rest on nothing but the call
+  // having been made, which is the shape of claim that has been wrong
+  // three times on this project already.
+  fprintf(stderr, "[GC] cabinet: picture applied, resolution=%d msaa=%u ssaa=%d anisotropy=%d\n",
+          ::Config::Get(::Config::GFX_EFB_SCALE), ::Config::Get(::Config::GFX_MSAA),
+          ::Config::Get(::Config::GFX_SSAA) ? 1 : 0,
+          static_cast<int>(::Config::Get(::Config::GFX_ENHANCE_MAX_ANISOTROPY)));
+}
 
 std::mutex s_pad_lock;
 CabinetDolphin::PadState s_pads[4];
@@ -159,6 +201,15 @@ void LoadState(int slot)
   State::LoadAs(Core::System::GetInstance(), path);
 }
 
+void SetGraphics(const Graphics& graphics)
+{
+  {
+    std::lock_guard lock(s_graphics_lock);
+    s_graphics = graphics;
+  }
+  ApplyGraphics();
+}
+
 void SaveScreenshot(const std::string& name)
 {
   if (!s_running.load())
@@ -206,6 +257,7 @@ bool Run(const Config& config, std::string* error)
   File::SetSysDirectory(config.sys_dir);
   UICommon::SetUserDirectory(config.user_dir);
   UICommon::Init();
+  s_config_ready.store(true);
 
   s_state_dir = config.user_dir + "/CabinetStates";
   File::CreateFullPath(s_state_dir + "/");
@@ -245,6 +297,10 @@ bool Run(const Config& config, std::string* error)
   // is used because it is the name this platform's config would already
   // hold from any earlier session.
   ::Config::SetBaseOrCurrent(::Config::MAIN_AUDIO_BACKEND, std::string(BACKEND_CUBEB));
+
+  // Before the boot, so the game starts with whatever the panel last
+  // held rather than Dolphin's defaults for the first few seconds.
+  ApplyGraphics();
 
   // One memory card per game, in slot A, with slot B empty. Setting the
   // path alone is not enough: the slot has to be told it holds a card
@@ -291,6 +347,7 @@ bool Run(const Config& config, std::string* error)
   {
     if (error)
       *error = "could not read " + config.game_path;
+    s_config_ready.store(false);
     UICommon::ShutdownControllers();
     UICommon::Shutdown();
     return false;
@@ -301,6 +358,7 @@ bool Run(const Config& config, std::string* error)
   {
     if (error)
       *error = "Dolphin refused to boot " + config.game_path;
+    s_config_ready.store(false);
     UICommon::ShutdownControllers();
     UICommon::Shutdown();
     return false;
@@ -319,6 +377,7 @@ bool Run(const Config& config, std::string* error)
 
   Core::Stop(system);
   Core::Shutdown(system);
+  s_config_ready.store(false);
   UICommon::ShutdownControllers();
   UICommon::Shutdown();
   return true;
