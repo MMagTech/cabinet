@@ -405,7 +405,29 @@ enum NativeCoreOptions {
     /// 100MHz effective. Keeping 200 here preserves that behaviour
     /// exactly now that the dial is real; re-tune per platform from
     /// measurements on the wired core, not before.
-    static let dreamcastDefaultClock = "200"
+    static var dreamcastDefaultClock: String {
+        #if targetEnvironment(macCatalyst)
+        // The real SH4's 200MHz, measured rather than assumed, now that
+        // Dreamcast is this platform's alone and has a recompiler.
+        //
+        // The 100MHz default was a phone compromise the Mac inherited,
+        // and its cost is not framerate: Crazy Taxi 2 holds 60 either
+        // way. It is the TAIL. Measured 2026-09-01 over 25 seconds of
+        // scripted gameplay, emulation cost per frame, mean and p99:
+        //
+        //   100MHz 640x480    4.700 / 16.243 ms   worst 105.09
+        //   200MHz 640x480    3.750 /  4.599 ms   worst  18.31
+        //   100MHz 1920x1440  3.452 /  3.608 ms   worst  65.03
+        //   200MHz 1920x1440  3.226 /  3.339 ms   worst  60.02
+        //
+        // A p99 of 16.243 against a 16.67ms frame budget is a game
+        // living on the edge of dropping one, which is exactly what
+        // jitter feels like. The real clock takes that to 3.3.
+        return "400"
+        #else
+        return "200"
+        #endif
+    }
 
     /// Per-platform option sets. A platform absent from this switch has no
     /// options worth exposing, per docs/scope-native-core-settings.md:
@@ -808,6 +830,17 @@ enum NativeCoreOptionsStore {
             #endif
             return psx
         case .dreamcast:
+            // Internal resolution, Mac only. Flycast defaults to the
+            // console's own 640x480 and Cabinet never set it, so a
+            // Dreamcast game has been rendering at 1x and being scaled
+            // to a 5K panel. 3x measured FASTER per frame than 1x on
+            // this machine, at both clocks, which reads as odd until you
+            // remember the cost that matters here is not fill rate.
+            // Kept to 3x rather than higher because that is where the
+            // measurements stop and a number nobody benched is a guess.
+            //
+            // Anisotropic filtering is deliberately absent: Flycast
+            // already defaults it to 4.
             // Threaded rendering back ON, reversing the override this
             // returned between d49008d and 2026-08-16. That override was
             // added on the theory that running the core synchronously
@@ -843,7 +876,11 @@ enum NativeCoreOptionsStore {
             // Dreamcast option (NativeCoreOptions.dreamcast), always sent
             // at its resolved value by dictionary(for:) above, with a
             // per-platform default measured on device.
-            return ["reicast_threaded_rendering": "enabled"]
+            var dc = ["reicast_threaded_rendering": "enabled"]
+            #if targetEnvironment(macCatalyst)
+            dc["reicast_internal_resolution"] = "1920x1440"
+            #endif
+            return dc
         case .segaCD:
             // The CD console's internal backup RAM defaults to "per
             // bios", one shared .brm per region across every Sega CD
