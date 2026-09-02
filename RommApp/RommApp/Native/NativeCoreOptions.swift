@@ -602,6 +602,36 @@ enum NativeCoreOptionsStore {
     /// 480x272 is the PSP's own screen, and it is what every platform
     /// shipped until now. On a phone that is right. On a 5K panel it is
     /// a 480-wide picture stretched across the desk.
+    /// N64's internal resolution. The long note beside the option this
+    /// feeds explains why 320x240: unanswered, the core keeps a static
+    /// 640x480 rather than its own documented 4:3 default, which was
+    /// four times the fragment work, four times the readback and four
+    /// times the upload on a phone that could not spare any of it.
+    ///
+    /// The Mac can. Blast Corps, NTSC so the budget is a real 16.67ms,
+    /// three paired trials, p99 emulation cost per frame:
+    ///
+    ///   320x240   8.194 ms   49% of budget
+    ///   1280x960  8.973 ms   54% of budget
+    ///
+    /// Five percentage points for four times the pixels. Readback does
+    /// double, 1.25ms to 3.9ms, and it is still small enough not to
+    /// matter here.
+    ///
+    /// Worth recording that this was first measured as "no headroom" and
+    /// that was two mistakes stacked: the game benched was a PAL release
+    /// running at 50Hz, so its 20ms budget was read as 16.67, and a
+    /// first-run shader spike in one trial of three was read as a
+    /// recurring cost. Check target_fps in the trace before comparing
+    /// anything to a frame budget.
+    private static var n64ScreenSize: String {
+        #if targetEnvironment(macCatalyst)
+        "1280x960"
+        #else
+        "320x240"
+        #endif
+    }
+
     private static var pspInternalResolution: String {
         #if targetEnvironment(macCatalyst)
         "1920x1088"
@@ -1051,7 +1081,7 @@ enum NativeCoreOptionsStore {
                 // because `aspect` is likewise unanswered, leaving
                 // AspectRatio at its static 0 and screen_size_key at the
                 // 4:3 one it is initialized to (libretro.c:917).
-                "mupen64plus-43screensize": "320x240",
+                "mupen64plus-43screensize": n64ScreenSize,
                 // Let the core tell us when a frame is unchanged. With
                 // this off, every retro_run produces a frame and every
                 // frame pays the full readback; with it on, a duplicate
