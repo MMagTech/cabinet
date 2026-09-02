@@ -105,6 +105,39 @@ enum PlatformSupport {
         #endif
     }
 
+    /// Whether this device can actually start this game.
+    ///
+    /// The same question `isSupported` answers, asked about a rom, plus
+    /// the one exception that is not about platforms at all: on the
+    /// iPhone a Dreamcast game whose VMU card carries a minigame IS
+    /// playable, in the VMU core, even though Dreamcast is not.
+    ///
+    /// Lives here rather than in a view because THREE different places
+    /// offer a game to continue and every one of them is a promise:
+    /// Home's hero, the iPhone widget, and the Apple TV top shelf. The
+    /// first version of this filter only fixed Home, which left the
+    /// widget on somebody's Home Screen still offering a GameCube game
+    /// to a phone that cannot run one.
+    ///
+    /// NOT for browsing. A list someone scrolls should still show the
+    /// games this device cannot play, because their launch screen is how
+    /// the rom and its BIOS get out through Keep. Only use this where
+    /// tapping is meant to start something.
+    /// Takes the versions map rather than the session so the widget and
+    /// top shelf writers, which are not main-actor bound, can ask too.
+    static func canPlay(_ rom: Rom, platformsVersions: [String: String]) -> Bool {
+        let slug = rom.canonicalPlatformSlug(platformsVersions: platformsVersions)
+        if isSupported(canonicalSlug: slug, isArcade: rom.isArcade) { return true }
+        #if os(iOS) && !targetEnvironment(macCatalyst)
+        if NativePlatform.platform(for: rom, canonicalSlug: slug) == .dreamcast,
+           let card = VMULauncher.currentCard(romId: rom.id),
+           VMUCard.minigameName(card) != nil {
+            return true
+        }
+        #endif
+        return false
+    }
+
     #if targetEnvironment(macCatalyst)
     /// Platforms whose Mac core is still a link placeholder
     /// (tools/build-mac-core-stub.sh). Listing one here keeps the

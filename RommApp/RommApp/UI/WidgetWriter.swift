@@ -65,6 +65,17 @@ enum WidgetWriter {
             // better answer to that than an empty one.
             return
         }
+        // The widget is a launcher, not a list: every tile is a promise
+        // that tapping starts the game. So it gets the same filter Home's
+        // hero does, which the first version of that fix missed entirely,
+        // leaving a GameCube tile on the Home screen of a phone that
+        // cannot run one.
+        let playable = await MainActor.run {
+            page.items.filter {
+                PlatformSupport.canPlay($0, platformsVersions: session.platformsVersions)
+            }
+        }
+
         guard let directory = WidgetSnapshot.coversDirectory else {
             NSLog("[widget] no container URL for the app group")
             return
@@ -86,7 +97,7 @@ enum WidgetWriter {
         var games: [WidgetSnapshot.Game] = []
         var kept: Set<String> = []
 
-        for rom in page.items {
+        for rom in playable {
             let file = await cover(for: rom, in: directory, session: session)
             if let file { kept.insert(file) }
             games.append(WidgetSnapshot.Game(

@@ -1194,20 +1194,7 @@ struct HomeView: View {
     /// the way out of the house. tvOS gets no exception because the VMU
     /// core is iOS only, so there is nothing there to play.
     private var resumeHero: Rom? {
-        recent.first { rom in
-            let slug = rom.canonicalPlatformSlug(platformsVersions: session.platformsVersions)
-            if PlatformSupport.isSupported(canonicalSlug: slug, isArcade: rom.isArcade) {
-                return true
-            }
-            #if os(iOS) && !targetEnvironment(macCatalyst)
-            if NativePlatform.platform(for: rom, canonicalSlug: slug) == .dreamcast,
-               let card = VMULauncher.currentCard(romId: rom.id),
-               VMUCard.minigameName(card) != nil {
-                return true
-            }
-            #endif
-            return false
-        }
+        recent.first { PlatformSupport.canPlay($0, platformsVersions: session.platformsVersions) }
     }
 
     /// Everything recent except whichever game the hero took, so the
