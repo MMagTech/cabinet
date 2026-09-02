@@ -17,7 +17,8 @@ body:
       options:
         - iOS
         - tvOS
-        - Both
+        - macOS
+        - More than one
     validations:
       required: true
 
@@ -63,7 +64,7 @@ body:
     id: os-version
     attributes:
       label: OS version
-      placeholder: "iOS 18.5, or tvOS 18.5"
+      placeholder: "iOS 26.0, tvOS 26.0, or macOS 26.0"
     validations:
       required: true
 
@@ -71,7 +72,7 @@ body:
     id: device
     attributes:
       label: Device
-      placeholder: iPhone 15 Pro, or Apple TV 4K
+      placeholder: iPhone 15 Pro, Apple TV 4K, or MacBook Pro M2
     validations:
       required: true
 
@@ -90,6 +91,7 @@ body:
       label: How you installed Cabinet
       options:
         - Sideloaded IPA from Releases
+        - TestFlight
         - Built from source
     validations:
       required: true

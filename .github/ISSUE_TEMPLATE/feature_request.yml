@@ -10,7 +10,8 @@ body:
       options:
         - iOS
         - tvOS
-        - Both
+        - macOS
+        - More than one
         - Not platform-specific
     validations:
       required: false
