@@ -593,6 +593,23 @@ enum NativeCoreOptionsStore {
     /// CPUCore::IR_INTERPRETER).
     private static var pspCpuCore: String { "IR JIT" }
 
+    /// PSP's internal resolution. Both values are upstream's own strings
+    /// from its option table; "Auto" is never used and that is the trap
+    /// this option is famous for here, since it sizes the render to a
+    /// display a libretro frontend never reports and every frame comes
+    /// out 0x0 and is dropped.
+    ///
+    /// 480x272 is the PSP's own screen, and it is what every platform
+    /// shipped until now. On a phone that is right. On a 5K panel it is
+    /// a 480-wide picture stretched across the desk.
+    private static var pspInternalResolution: String {
+        #if targetEnvironment(macCatalyst)
+        "1920x1088"
+        #else
+        "480x272"
+        #endif
+    }
+
     static func dictionary(for platform: NativePlatform) -> [String: String] {
         var result: [String: String] = [:]
         let alwaysSendResolved = platform != .n64 && platform != .dreamcast
@@ -711,7 +728,7 @@ enum NativeCoreOptionsStore {
             // disabled), no frameskip.
             return [
                 "ppsspp_cpu_core": pspCpuCore,
-                "ppsspp_internal_resolution": "480x272",
+                "ppsspp_internal_resolution": pspInternalResolution,
             ]
         case .nds:
             // boot_directly is this core's defaults trap: the option
