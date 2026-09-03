@@ -82,6 +82,14 @@ final class GameControllerManager: ObservableObject {
         var stickDown: [Int: Bool] = [:]
         /// The physical d-pad's direction claims: see setDirection.
         var dpadDown: Set<Int> = []
+        /// Last polled values, Mac only: the per-frame poll reports a
+        /// change to the same state machine the callbacks feed elsewhere,
+        /// and these are what "change" is measured against.
+        var pollPressed: [String: Bool] = [:]
+        var pollValue: [String: Float] = [:]
+        var pollDpad: [Int: Bool] = [:]
+        var pollStick: (Float, Float) = (0, 0)
+        var pollStick2: (Float, Float) = (0, 0)
         var hapticEngines: [GCHapticsLocality: CHHapticEngine] = [:]
         var availableButtons: [String] = []
         /// Raw element names currently held, tracked independent of any
@@ -239,6 +247,10 @@ final class GameControllerManager: ObservableObject {
     func start() {
         guard !started else { return }
         started = true
+        ControllerTrace.shared.begin()
+        #if targetEnvironment(macCatalyst)
+        startPolling()
+        #endif
 
         observers.append(NotificationCenter.default.addObserver(
             forName: .GCControllerDidConnect, object: nil, queue: .main
@@ -326,7 +338,25 @@ final class GameControllerManager: ObservableObject {
         slot.bindings = ControllerBindings.effective(
             for: controller.vendorName ?? "unknown", platform: activePlatform)
         publishConnection()
+        ControllerTrace.shared.connect(controller, slot: index)
 
+        #if targetEnvironment(macCatalyst)
+        // No callbacks on the Mac. Apple's input guide: poll "when input
+        // handling occurs at a fixed interval as part of your game's
+        // loop". The callbacks below run on the main queue, which is the
+        // queue the frame loop already occupies, and a Bluetooth pad
+        // reported 2026-09-02 stopped mid-action and recovered while the
+        // game ran on. The poll in pollAll reads the framework's own
+        // state every frame and reports changes into the same functions
+        // these callbacks would have called, so everything below the
+        // edge is shared with iOS and tvOS unchanged.
+        let candidates = Self.buttonElements(gamepad)
+        slot.pollPressed = [:]
+        slot.pollValue = [:]
+        slot.pollDpad = [:]
+        slot.pollStick = (0, 0)
+        slot.pollStick2 = (0, 0)
+        #else
         // Directions come from the d-pad and the left stick, always, with no
         // binding involved. They are never the thing that goes missing.
         gamepad.dpad.up.pressedChangedHandler = direction(RetroPad.up, player: index)
@@ -361,31 +391,7 @@ final class GameControllerManager: ObservableObject {
         // several aliases at once, so iterating it installs handlers under
         // whichever alias happens to come last and no name ever matches the
         // binding table again.
-        var candidates: [(String, GCControllerButtonInput)] = [
-            (GCInputButtonA, gamepad.buttonA),
-            (GCInputButtonB, gamepad.buttonB),
-            (GCInputButtonX, gamepad.buttonX),
-            (GCInputButtonY, gamepad.buttonY),
-            (GCInputLeftShoulder, gamepad.leftShoulder),
-            (GCInputRightShoulder, gamepad.rightShoulder),
-            (GCInputLeftTrigger, gamepad.leftTrigger),
-            (GCInputRightTrigger, gamepad.rightTrigger),
-        ]
-        // These are optional on the profile: a compact pad may have none of
-        // them, which is exactly why remapping exists.
-        if let options = gamepad.buttonOptions {
-            candidates.append((GCInputButtonOptions, options))
-        }
-        if let home = gamepad.buttonHome {
-            candidates.append((GCInputButtonHome, home))
-        }
-        if let l3 = gamepad.leftThumbstickButton {
-            candidates.append((GCInputLeftThumbstickButton, l3))
-        }
-        if let r3 = gamepad.rightThumbstickButton {
-            candidates.append((GCInputRightThumbstickButton, r3))
-        }
-
+        let candidates = Self.buttonElements(gamepad)
 
         for (name, button) in candidates {
             // Triggers report analog values and need a threshold; everything
@@ -406,9 +412,104 @@ final class GameControllerManager: ObservableObject {
         // game is running. Still advertised as available either way, so
         // the remap screen can offer it.
         bindMenuButton(gamepad, player: index)
+        #endif
         slot.availableButtons = candidates.map(\.0) + [GCInputButtonMenu]
         if index == 0 { availableButtons = slot.availableButtons }
     }
+
+    /// The standard buttons by their canonical names, in binding-table
+    /// order. Built from a live profile to install callbacks, and from a
+    /// snapshot to poll; the same list either way, which is what keeps
+    /// the two paths bound to the same names.
+    private static func buttonElements(_ gamepad: GCExtendedGamepad) -> [(String, GCControllerButtonInput)] {
+            var candidates: [(String, GCControllerButtonInput)] = [
+                (GCInputButtonA, gamepad.buttonA),
+                (GCInputButtonB, gamepad.buttonB),
+                (GCInputButtonX, gamepad.buttonX),
+                (GCInputButtonY, gamepad.buttonY),
+                (GCInputLeftShoulder, gamepad.leftShoulder),
+                (GCInputRightShoulder, gamepad.rightShoulder),
+                (GCInputLeftTrigger, gamepad.leftTrigger),
+                (GCInputRightTrigger, gamepad.rightTrigger),
+            ]
+            // These are optional on the profile: a compact pad may have none of
+            // them, which is exactly why remapping exists.
+            if let options = gamepad.buttonOptions {
+                candidates.append((GCInputButtonOptions, options))
+            }
+            if let home = gamepad.buttonHome {
+                candidates.append((GCInputButtonHome, home))
+            }
+            if let l3 = gamepad.leftThumbstickButton {
+                candidates.append((GCInputLeftThumbstickButton, l3))
+            }
+            if let r3 = gamepad.rightThumbstickButton {
+                candidates.append((GCInputRightThumbstickButton, r3))
+            }
+        return candidates
+    }
+
+    #if targetEnvironment(macCatalyst)
+    private var pollLink: CADisplayLink?
+
+    private func startPolling() {
+        guard pollLink == nil else { return }
+        let link = CADisplayLink(target: self, selector: #selector(pollTick))
+        link.add(to: .main, forMode: .common)
+        pollLink = link
+    }
+
+    @objc private func pollTick() {
+        pollAll()
+    }
+
+    /// One frame's poll. A snapshot per pad, per Apple's guidance, so the
+    /// elements are read consistently; then every element compared with
+    /// last frame's and only a change reported, so the functions below
+    /// see exactly the edges the callbacks would have delivered.
+    private func pollAll() {
+        for (index, slot) in slots.enumerated() {
+            guard let slot, let pad = slot.pad else { continue }
+            let snap = pad.capture()
+
+            let dpad: [(Int, GCControllerButtonInput)] = [
+                (RetroPad.up, snap.dpad.up), (RetroPad.down, snap.dpad.down),
+                (RetroPad.left, snap.dpad.left), (RetroPad.right, snap.dpad.right),
+            ]
+            for (id, input) in dpad {
+                let pressed = input.isPressed
+                guard slot.pollDpad[id] != pressed else { continue }
+                slot.pollDpad[id] = pressed
+                direction(id, player: index)(input, input.value, pressed)
+            }
+
+            let left = (snap.leftThumbstick.xAxis.value, snap.leftThumbstick.yAxis.value)
+            if left != slot.pollStick {
+                slot.pollStick = left
+                stick(x: left.0, y: left.1, player: index)
+            }
+            let right = (snap.rightThumbstick.xAxis.value, snap.rightThumbstick.yAxis.value)
+            if right != slot.pollStick2 {
+                slot.pollStick2 = right
+                stick2(x: right.0, y: right.1, player: index)
+            }
+
+            for (name, input) in Self.buttonElements(snap) + [(GCInputButtonMenu, snap.buttonMenu)] {
+                if input.isAnalog {
+                    let value = input.value
+                    guard slot.pollValue[name] != value else { continue }
+                    slot.pollValue[name] = value
+                    analog(name, value: value, player: index)
+                } else {
+                    let pressed = input.isPressed
+                    guard slot.pollPressed[name] != pressed else { continue }
+                    slot.pollPressed[name] = pressed
+                    button(name, pressed: pressed, player: index)
+                }
+            }
+        }
+    }
+    #endif
 
     /// Installs, or on tvOS deliberately withholds, the Menu button handler.
     ///
@@ -645,6 +746,7 @@ final class GameControllerManager: ObservableObject {
         } else {
             guard slot.pressedInputs.remove(id) != nil else { return }
         }
+        ControllerTrace.shared.edge(id, down: down, player: player)
         send?(player, id, down)
     }
 
@@ -661,6 +763,7 @@ final class GameControllerManager: ObservableObject {
             return slot.controller == nil
         }) else { return }
 
+        ControllerTrace.shared.disconnect(controller, slot: index)
         releaseAll(player: index)
         slots[index] = nil
         publishConnection()
