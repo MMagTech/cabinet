@@ -803,6 +803,20 @@ void videoRefresh(const void *data, unsigned width, unsigned height, size_t pitc
             return;
         }
         std::lock_guard<std::mutex> lock(gFrameMutex);
+        // A frame larger than the framebuffer. The FBO is sized at load
+        // from the core's base geometry, and Flycast's base is a fixed
+        // 640x480 whatever its internal resolution, so at 3x it drew
+        // 1920x1440 into a 640x480 buffer: the bottom-left third survived
+        // and the readback asked for 1920 columns of a 640-wide buffer,
+        // which is the doubled SEGA line of 2026-09-02. Read back what
+        // this frame's buffer actually holds, then grow the buffer for the
+        // next frame. Grow only, never shrink: the Dreamcast boot flips
+        // between 640 and 1920 wide several times a second, and a buffer
+        // that followed it down would be rebuilt on every flip. Cores whose
+        // frames already fit, N64 and PSP, never enter either branch.
+        const GLuint wantWidth = width, wantHeight = height;
+        if (width > gFBOWidth) width = gFBOWidth;
+        if (height > gFBOHeight) height = gFBOHeight;
         size_t bytesPerRow = (size_t)width * 4;
         size_t needed = bytesPerRow * height;
         // Drained before touching GL ourselves: glGetError returns and
@@ -902,6 +916,10 @@ void videoRefresh(const void *data, unsigned width, unsigned height, size_t pitc
             published = true;
         }
         recordStage(gTimeReadbackMS, nowMS() - readbackStart);
+        if (wantWidth > gFBOWidth || wantHeight > gFBOHeight) {
+            setupHWFramebuffer(std::max(wantWidth, gFBOWidth), std::max(wantHeight, gFBOHeight));
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
         // Kept, reporting zero, rather than removed with its accessor:
         // FrameTrace writes a fixed set of columns and a rebuilt trace
         // should stay comparable against the ones already captured.
@@ -1293,6 +1311,15 @@ bool environmentCallback(unsigned cmd, void *data) {
             }
             if (info->geometry.aspect_ratio > 0) {
                 gAspectRatio.store(info->geometry.aspect_ratio, std::memory_order_relaxed);
+            }
+            // A base geometry larger than the framebuffer grows it ahead
+            // of the frame, the same grow-only rule videoRefresh applies
+            // after the fact. PPSSPP announces a resolution change here.
+            if (gUsesHWRender && gFBO != 0 &&
+                (info->geometry.base_width > gFBOWidth || info->geometry.base_height > gFBOHeight)) {
+                setupHWFramebuffer(std::max((GLuint)info->geometry.base_width, gFBOWidth),
+                                   std::max((GLuint)info->geometry.base_height, gFBOHeight));
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
             }
             return true;
         }
