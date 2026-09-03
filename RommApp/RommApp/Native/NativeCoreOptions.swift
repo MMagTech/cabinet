@@ -923,11 +923,17 @@ enum NativeCoreOptionsStore {
             // Dreamcast option (NativeCoreOptions.dreamcast), always sent
             // at its resolved value by dictionary(for:) above, with a
             // per-platform default measured on device.
-            var dc = ["reicast_threaded_rendering": "enabled"]
-            #if targetEnvironment(macCatalyst)
-            dc["reicast_internal_resolution"] = "1920x1440"
-            #endif
-            return dc
+            // The Mac stays at the console's own 640x480 for now. The
+            // 2026-09-01 move to 1920x1440 measured a lower mean and
+            // p99 and shipped, and the next morning Marcus reported
+            // Dreamcast launching "all weird". The frame trace shows
+            // why: at 1920x1440 one retro_run in every 300 takes about
+            // 60ms, a stall every five seconds for the whole session,
+            // and at 640x480 with the same clock it never happens. One
+            // frame in 300 is 0.33%, which sits just past the 99th
+            // percentile, so p99 hid it; max would not have. The clock
+            // change stands, it was measured clean on its own here.
+            return ["reicast_threaded_rendering": "enabled"]
         case .segaCD:
             // The CD console's internal backup RAM defaults to "per
             // bios", one shared .brm per region across every Sega CD
