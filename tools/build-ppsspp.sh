@@ -91,6 +91,22 @@ if [ "$PLATFORM" = mac ]; then
         echo "ppsspp cpu-core probe patch did not apply" >&2; exit 1; }
 fi
 
+# Save the GL shader cache when the context is lost, not only when the
+# GPU object dies. Cabinet destroys PPSSPP's context BEFORE unloading
+# the game (the core's own unload frees the context object its
+# context_destroy trampoline dereferences, see the PSP notes), and the
+# core's context-destroy path drops the linked shader list on the spot,
+# so the save in ~GPU_GLES found an empty list and wrote nothing: no
+# .glshadercache ever appeared on any platform (found 2026-09-02). The
+# periodic save is every 32767 frames, about nine minutes, so short
+# sessions never reached it either. All platforms; idempotent.
+perl -0pi -e '
+    s/(void GPU_GLES::DeviceLost\(\) \{\n\tINFO_LOG\(Log::G3D, "GPU_GLES: DeviceLost"\);\n)/$1\t\/\/ cabinet: save the shader cache before the list below is cleared.\n\tif (shaderCachePath_.Valid() && draw_ && g_Config.bShaderCache) {\n\t\tshaderManagerGL_->SaveCache(shaderCachePath_, &drawEngine_);\n\t}\n/
+    unless /cabinet: save the shader cache/;
+' "$SRC/GPU/GLES/GPU_GLES.cpp"
+grep -q 'cabinet: save the shader cache' "$SRC/GPU/GLES/GPU_GLES.cpp" || {
+    echo "ppsspp shader cache save patch did not apply" >&2; exit 1; }
+
 if [ "$PLATFORM" = mac ]; then
     # CMAKE_SYSTEM_PROCESSOR is set by hand because naming
     # CMAKE_SYSTEM_NAME puts CMake into cross-compiling mode, where it

@@ -242,8 +242,11 @@ struct NativeBenchRunnerView: View {
             }
             ready = false
             // One runloop turn for the player's onDisappear to flush the
-            // trace and shut the core down cleanly.
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            // trace and shut the core down cleanly. `-cabinetBenchExitDelay
+            // <seconds>` stretches it for a core whose unload does real
+            // work, PPSSPP saving its shader cache for one.
+            let delay = UserDefaults.standard.double(forKey: "cabinetBenchExitDelay")
+            try? await Task.sleep(nanoseconds: UInt64((delay > 0 ? delay : 1.5) * 1_000_000_000))
             exit(0)
         }
     }
