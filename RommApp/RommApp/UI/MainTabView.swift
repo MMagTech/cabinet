@@ -26,7 +26,9 @@ struct MainTabView: View {
     @ObservedObject private var networkMonitor = NetworkMonitor.shared
     #if targetEnvironment(macCatalyst)
     @EnvironmentObject private var session: Session
-    @State private var showingMacSettings = false
+    @Environment(\.openWindow) private var openWindow
+    @State private var showingMacAbout = false
+    @State private var showingMacDiagnostics = false
     #endif
 
     var body: some View {
@@ -46,15 +48,59 @@ struct MainTabView: View {
             MacSidebarShell()
         }
         .environment(\.colorScheme, .dark)
-        // The app menu's Settings… (Cmd+comma) lands here, the same
-        // screen Home's gear reaches. Session injected explicitly, the
-        // Catalyst presentation-inheritance lesson from the player
-        // covers.
+        // The app menu's Settings… (Cmd+comma) opens the Settings window,
+        // a scene of its own; see MacSettingsWindow. About and
+        // Diagnostics are sheets on the shell, session injected
+        // explicitly, the Catalyst presentation-inheritance lesson.
         .onReceive(NotificationCenter.default.publisher(for: .cabinetShowSettings)) { _ in
-            showingMacSettings = true
+            openWindow(id: MacSettingsWindow.windowID)
         }
-        .sheet(isPresented: $showingMacSettings) {
-            NavigationStack { SettingsView() }
+        .onReceive(NotificationCenter.default.publisher(for: .cabinetShowAbout)) { _ in
+            showingMacAbout = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .cabinetShowDiagnostics)) { _ in
+            showingMacDiagnostics = true
+        }
+        .sheet(isPresented: $showingMacAbout) {
+            MacAboutView()
+                .environmentObject(session)
+                .environment(\.colorScheme, .dark)
+                .presentationBackground(.ultraThinMaterial)
+        }
+        .sheet(isPresented: $showingMacDiagnostics) {
+            NavigationStack {
+                DebugView()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showingMacDiagnostics = false }
+                        }
+                    }
+            }
+                .environmentObject(session)
+                .environment(\.colorScheme, .dark)
+                .presentationBackground(.ultraThinMaterial)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .cabinetShowAbout)) { _ in
+            showingMacAbout = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .cabinetShowDiagnostics)) { _ in
+            showingMacDiagnostics = true
+        }
+        .sheet(isPresented: $showingMacAbout) {
+            MacAboutView()
+                .environmentObject(session)
+                .environment(\.colorScheme, .dark)
+                .presentationBackground(.ultraThinMaterial)
+        }
+        .sheet(isPresented: $showingMacDiagnostics) {
+            NavigationStack {
+                DebugView()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showingMacDiagnostics = false }
+                        }
+                    }
+            }
                 .environmentObject(session)
                 .environment(\.colorScheme, .dark)
                 .presentationBackground(.ultraThinMaterial)

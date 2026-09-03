@@ -292,9 +292,11 @@ struct GameLaunchView: View {
             ToolbarItem(placement: .topBarLeading) {
                 routeIndicator
             }
+            .macBare()
             ToolbarItem(placement: .topBarTrailing) {
                 exportButton
             }
+            .macBare()
             // The Mac shows this beside the title instead, where it sits
             // with the game rather than in the window's chrome. See
             // macFavoriteStar.
@@ -303,24 +305,14 @@ struct GameLaunchView: View {
                 favoriteButton
             }
             #endif
+            // Not on the Mac: this screen is pushed there and the back
+            // button is the way out. The modal X it had sat where the
+            // title bar owns the mouse and did nothing windowed.
+            #if !targetEnvironment(macCatalyst)
             ToolbarItem(placement: .topBarTrailing) {
-                // A glyph on the Mac, not the word: beside the star,
-                // "Close" as text read as one crowded pill of mismatched
-                // shapes. Two symbols read as two buttons.
-                #if targetEnvironment(macCatalyst)
-                // Escape, because closing a modal is what Escape does on
-                // a Mac. The swipe-to-dismiss below this screen's scroll
-                // content is a touch gesture and never fires here: a
-                // two-finger trackpad swipe is a scroll event, not a
-                // drag, so SwiftUI hands it to the scroll view instead.
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark.circle.fill")
-                }
-                .keyboardShortcut(.escape, modifiers: [])
-                #else
                 Button("Close") { dismiss() }
-                #endif
             }
+            #endif
         }
         .sheet(isPresented: Binding(
             get: { exporter.exportURLs != nil }, set: { if !$0 { exporter.finishExport() } }
@@ -443,18 +435,11 @@ struct GameLaunchView: View {
         // the bar leaves a strip of the shell showing through above
         // it, the sidebar's darker material making a hard-edged block
         // in the corner. This screen fills the window instead.
-        #if targetEnvironment(macCatalyst)
-        .ignoresSafeArea()
-        // Tells the shell to drop its sidebar toggle while this covers
-        // it. Set asynchronously so the write never lands inside the
-        // presentation's own update pass. See MacChrome.
-        .onAppear {
-            DispatchQueue.main.async { MacChrome.shared.coveringScreenUp = true }
-        }
-        .onDisappear {
-            DispatchQueue.main.async { MacChrome.shared.coveringScreenUp = false }
-        }
-        #endif
+        // Pushed in the detail pane on the Mac since 2026-09-02, so it
+        // covers nothing: it keeps the safe area, and the sidebar and
+        // its toggle stay where they are. The old modal filled the
+        // window and took the toggle away through MacChrome; that flag
+        // now only ever matters to the player's own cover.
     }
 
     // MARK: Pieces
@@ -2480,5 +2465,28 @@ private struct LaunchCard<Content: View>: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 14))
+    }
+}
+
+extension ToolbarContent {
+    /// Strips the glass pill macOS 26 wraps around toolbar items, on the
+    /// Mac only. Over this screen's blurred cover art the route icon and
+    /// the close glyph each came in a dark rounded shape of their own,
+    /// and the two shapes read as clutter rather than as buttons. Apple's
+    /// sharedBackgroundVisibility page: toolbar items "are given a glass
+    /// background effect that is shared with other items in the same
+    /// logical grouping", and hiding it puts the item in its own group
+    /// with no effect. iOS keeps the system look, which is iOS's own.
+    @ToolbarContentBuilder
+    func macBare() -> some ToolbarContent {
+        #if targetEnvironment(macCatalyst)
+        if #available(iOS 26, *) {
+            sharedBackgroundVisibility(.hidden)
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
     }
 }

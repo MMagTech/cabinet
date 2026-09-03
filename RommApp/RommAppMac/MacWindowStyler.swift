@@ -10,12 +10,45 @@ import os
 ///
 /// Compiled only into the Mac target; iOS and tvOS never see this file.
 enum MacWindow {
+    /// The Settings window's scene, once it reports in. Everything
+    /// below that walks connectedScenes is the SHELL's chrome, hiding
+    /// title bars and holding a 980-point minimum, and would strip the
+    /// pane toolbar off a Settings window and pin it to the shell's
+    /// size. So the shell loops skip it, by session identifier.
+    private static var settingsSceneIDs: Set<String> = []
+
+    static func isShell(_ scene: UIWindowScene) -> Bool {
+        !settingsSceneIDs.contains(scene.session.persistentIdentifier)
+    }
+
+    /// Called by the Settings window's own view as soon as it has a
+    /// scene. Fixed to the pane's size, per Apple's guidance, with
+    /// minimize and zoom off the window: Cmd+comma brings it back, so
+    /// there is nothing to keep in the Dock and nothing to resize.
+    static func adoptSettingsScene(_ scene: UIWindowScene, title: String) {
+        settingsSceneIDs.insert(scene.session.persistentIdentifier)
+        scene.title = title
+        scene.titlebar?.titleVisibility = .visible
+        scene.sizeRestrictions?.minimumSize = CGSize(width: 640, height: 520)
+        scene.sizeRestrictions?.maximumSize = CGSize(width: 640, height: 520)
+        scene.sizeRestrictions?.allowsFullScreen = false
+        for window in scene.windows { window.overrideUserInterfaceStyle = .unspecified }
+        if let appKit = appKitWindow(titled: title) {
+            let miniaturizable: UInt = 1 << 2
+            let resizable: UInt = 1 << 3
+            if let mask = (appKit.value(forKey: "styleMask") as? NSNumber)?.uintValue {
+                let wanted = mask & ~miniaturizable & ~resizable
+                if wanted != mask { appKit.setValue(NSNumber(value: wanted), forKey: "styleMask") }
+            }
+        }
+    }
+
     /// Idempotent, safe to call from any view's `onAppear`, which is the
     /// simplest moment guaranteed to be after the scene exists under the
     /// SwiftUI lifecycle.
     static func styleAll() {
         for scene in UIApplication.shared.connectedScenes {
-            guard let windowScene = scene as? UIWindowScene else { continue }
+            guard let windowScene = scene as? UIWindowScene, isShell(windowScene) else { continue }
             if let titlebar = windowScene.titlebar {
                 titlebar.titleVisibility = .hidden
                 titlebar.toolbar = nil
@@ -79,20 +112,24 @@ enum MacWindow {
     /// is what crashed the app when it was tried.
     private static let fullSizeContentViewBit: UInt = 1 << 15
 
-    /// Held, not set once.
+    /// Held, not polled.
     ///
     /// Catalyst rebuilds this window's titlebar whenever the window
-    /// changes shape: entering or leaving fullscreen, and presenting a
-    /// game over the shell. Each rebuild restores the toolbar and can
-    /// drop the style bits, which is why applying this at launch left
-    /// the bar back in exactly the two states that matter. The probe
-    /// measured the toolbar returning within half a second.
+    /// changes shape: entering or leaving fullscreen, resizing, and
+    /// presenting a game over the shell. Each rebuild restores the
+    /// toolbar and can drop the style bits, and the probe measured the
+    /// toolbar returning within half a second of the change.
     ///
-    /// So this runs on a slow timer for the life of the app. Every pass
-    /// checks before it writes, so once the window is in the right shape
-    /// the cost is two property reads a second and nothing else.
-    private static var chromeTimer: Timer?
-
+    /// This used to run on a half-second timer for the life of the app.
+    /// It cannot: merely reading the titlebar's properties every tick
+    /// disturbed any open context menu, which was re-presented on top
+    /// of itself as a second, larger menu (2026-09-02, found frame by
+    /// frame after an evening spent blaming the menu; a timer that
+    /// fired and did nothing was clean, one that only read was not).
+    /// So it listens for the shape changes themselves, AppKit's own
+    /// notifications by name since Catalyst cannot import them, and
+    /// applies in a short burst after each to catch the re-attach.
+    private static var chromeObservers: [NSObjectProtocol] = []
     private static func perform0(_ object: NSObject, _ name: String) -> Any? {
         let selector = NSSelectorFromString(name)
         guard object.responds(to: selector) else { return nil }
@@ -100,11 +137,35 @@ enum MacWindow {
     }
 
     static func holdChromeless() {
+        applyChromelessBurst()
+        guard chromeObservers.isEmpty else { return }
+        // Shape changes of the SHELL's window only. Not key-window
+        // changes: a context menu is a window of its own, it becomes
+        // key as it opens, and reacting to that ran the styler while
+        // the menu was up, which re-presented it.
+        let names = [
+            "NSWindowDidResizeNotification",
+            "NSWindowDidEnterFullScreenNotification",
+            "NSWindowDidExitFullScreenNotification",
+            "NSWindowDidChangeScreenNotification",
+        ].map { Notification.Name($0) }
+        for name in names {
+            chromeObservers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { note in
+                guard let window = note.object as? NSObject, window === appKitWindow() else { return }
+                applyChromelessBurst()
+            })
+        }
+        chromeObservers.append(NotificationCenter.default.addObserver(forName: UIScene.didActivateNotification, object: nil, queue: .main) { _ in
+            applyChromelessBurst()
+        })
+    }
+
+    /// Now, and again at the intervals the re-attach was measured at.
+    private static func applyChromelessBurst() {
         makeChromeless()
-        guard chromeTimer == nil else { return }
-        let timer = Timer(timeInterval: 0.5, repeats: true) { _ in makeChromeless() }
-        RunLoop.main.add(timer, forMode: .common)
-        chromeTimer = timer
+        for delay in [0.3, 0.7, 1.2] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { makeChromeless() }
+        }
     }
 
     static func makeChromeless() {
@@ -114,7 +175,12 @@ enum MacWindow {
            mask & fullSizeContentViewBit == 0 {
             window.setValue(NSNumber(value: mask | fullSizeContentViewBit), forKey: "styleMask")
         }
-        if window.responds(to: NSSelectorFromString("setTitlebarAppearsTransparent:")) {
+        // Checked first, like the style mask above it: this ran on the
+        // half-second timer as an unconditional write, and every write
+        // makes Catalyst rebuild the title bar, which re-presented any
+        // open context menu on top of itself.
+        if window.responds(to: NSSelectorFromString("setTitlebarAppearsTransparent:")),
+           (window.value(forKey: "titlebarAppearsTransparent") as? NSNumber)?.boolValue != true {
             window.setValue(NSNumber(value: true), forKey: "titlebarAppearsTransparent")
         }
         // The window's AppKit toolbar is deliberately left alone. It is
@@ -132,13 +198,25 @@ enum MacWindow {
         // Only while fullscreen. Windowed, this same view carries the
         // traffic lights, and windowed has no band to begin with.
         for scene in UIApplication.shared.connectedScenes {
-            guard let windowScene = scene as? UIWindowScene else { continue }
-            windowScene.titlebar?.titleVisibility = .hidden
-            windowScene.titlebar?.separatorStyle = .none
+            guard let windowScene = scene as? UIWindowScene, isShell(windowScene),
+                  let titlebar = windowScene.titlebar else { continue }
+            // Checked before written, every one of them. This runs on
+            // the half-second timer, and an unconditional write here
+            // makes Catalyst rebuild the title bar and re-lay out the
+            // window each tick, which re-presented any open context
+            // menu on top of itself: a second, larger menu settling
+            // over the first. Found frame by frame, 2026-09-02, after
+            // an evening spent blaming the menu.
+            if titlebar.titleVisibility != .hidden { titlebar.titleVisibility = .hidden }
+            if titlebar.separatorStyle != .none { titlebar.separatorStyle = .none }
             // Held alongside the rest: Catalyst rebuilds the titlebar on
             // every window shape change, and this is the property that
-            // governs fullscreen.
-            windowScene.titlebar?.autoHidesToolbarInFullScreen = true
+            // governs fullscreen. Always on, Marcus's call 2026-09-02:
+            // in full screen the toolbar, sidebar toggle and back button
+            // included, shows when the mouse goes to the top and not
+            // otherwise. Keeping it visible in the shell was tried and
+            // rejected the same day.
+            if !titlebar.autoHidesToolbarInFullScreen { titlebar.autoHidesToolbarInFullScreen = true }
         }
     }
 
@@ -164,7 +242,7 @@ enum MacWindow {
     /// it is the only way to press anything without a pad.
     static func setGameMode(_ active: Bool) {
         for scene in UIApplication.shared.connectedScenes {
-            guard let windowScene = scene as? UIWindowScene else { continue }
+            guard let windowScene = scene as? UIWindowScene, isShell(windowScene) else { continue }
             windowScene.titlebar?.titleVisibility = .hidden
             windowScene.titlebar?.toolbar = nil
             windowScene.titlebar?.separatorStyle = active ? .none : .automatic
@@ -219,11 +297,23 @@ enum MacWindow {
               let app = appClass.perform(sharedSelector)?.takeUnretainedValue() as? NSObject
         else { return nil }
         guard let windows = app.value(forKey: "windows") as? [NSObject] else { return nil }
-        // The game window is the one carrying the scene, which on this
-        // app is the only real window; panels and the like are not
-        // visible when a game is running.
-        return windows.first { ($0.value(forKey: "isVisible") as? NSNumber)?.boolValue == true }
-            ?? windows.first
+        // The game window is the one carrying the shell's scene. The
+        // Settings window, when open, is skipped by its title, which
+        // adoptSettingsScene keeps on the pane's name.
+        let shell = windows.filter { !settingsTitles.contains(($0.value(forKey: "title") as? String) ?? "") }
+        return shell.first { ($0.value(forKey: "isVisible") as? NSNumber)?.boolValue == true }
+            ?? shell.first
+    }
+
+    private static let settingsTitles: Set<String> = ["Controllers", "Library", "Server", "Cores"]
+
+    private static func appKitWindow(titled title: String) -> NSObject? {
+        guard let appClass = NSClassFromString("NSApplication") as AnyObject as? NSObjectProtocol else { return nil }
+        let sharedSelector = NSSelectorFromString("sharedApplication")
+        guard appClass.responds(to: sharedSelector),
+              let app = appClass.perform(sharedSelector)?.takeUnretainedValue() as? NSObject,
+              let windows = app.value(forKey: "windows") as? [NSObject] else { return nil }
+        return windows.first { ($0.value(forKey: "title") as? String) == title }
     }
 
     /// Called from the player whenever the pointer moves.
@@ -270,7 +360,7 @@ enum MacWindow {
         // titlebar and putting the same object back is what actually
         // moves it.
         for scene in UIApplication.shared.connectedScenes {
-            guard let windowScene = scene as? UIWindowScene,
+            guard let windowScene = scene as? UIWindowScene, isShell(windowScene),
                   let titlebar = windowScene.titlebar else { continue }
             if hidden {
                 if let toolbar = titlebar.toolbar {
@@ -284,7 +374,7 @@ enum MacWindow {
         if hidden {
             var found: [UIView] = []
             for scene in UIApplication.shared.connectedScenes {
-                guard let windowScene = scene as? UIWindowScene else { continue }
+                guard let windowScene = scene as? UIWindowScene, isShell(windowScene) else { continue }
                 for window in windowScene.windows {
                     collectBars(window, into: &found)
                 }
@@ -329,7 +419,7 @@ enum MacWindow {
     /// covers untouched: they all set their own colors.
     private static func clearDefaultPlanes() {
         for scene in UIApplication.shared.connectedScenes {
-            guard let windowScene = scene as? UIWindowScene else { continue }
+            guard let windowScene = scene as? UIWindowScene, isShell(windowScene) else { continue }
             for window in windowScene.windows {
                 clearDefaultPlanes(in: window.rootViewController?.view, traits: window.traitCollection)
             }

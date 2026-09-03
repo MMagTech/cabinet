@@ -88,6 +88,16 @@ struct RommApp: App {
             if !isManualOffline { KeptGameStore.shared.healCanonicalSlugs(session: session) }
             syncIfOnline()
         }
+
+        #if targetEnvironment(macCatalyst)
+        // The Mac's Settings window, opened from the app menu; see
+        // MacSettingsWindow. A second scene, which the shared scene
+        // manifest already permits for the external display.
+        WindowGroup(id: MacSettingsWindow.windowID) {
+            MacSettingsWindow()
+                .environmentObject(session)
+        }
+        #endif
     }
 
     private var appContent: some View {

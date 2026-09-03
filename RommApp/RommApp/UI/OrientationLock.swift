@@ -98,6 +98,16 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         super.buildMenu(with: builder)
         MacMenus.apply(builder)
     }
+
+    /// File > Download All… is enabled only while the sidebar shows a
+    /// platform and no queue is running; see MacMenus.
+    override func validate(_ command: UICommand) {
+        super.validate(command)
+        if command.action == #selector(cabinetDownloadAllSelected) {
+            let ready = MacChrome.shared.selectedPlatform != nil && KeptGameStore.shared.bulk == nil
+            command.attributes = ready ? [] : [.disabled]
+        }
+    }
     #endif
 
     func application(

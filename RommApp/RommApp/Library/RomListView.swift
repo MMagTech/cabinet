@@ -191,9 +191,19 @@ struct RomListView: View {
                 await loadNextPage()
             }
         }
+        #if targetEnvironment(macCatalyst)
+        // Pushed, with the back button, not presented over the shell:
+        // a Mac shows a detail in place. The modal's X sat where the
+        // title bar owns the mouse and did nothing windowed, and the
+        // modal kept Settings from opening until it closed.
+        .navigationDestination(item: $playing) { rom in
+            GameLaunchView(rom: rom)
+        }
+        #else
         .fullScreenCover(item: $playing) { rom in
             NavigationStack { GameLaunchView(rom: rom) }
         }
+        #endif
     }
     #endif
 

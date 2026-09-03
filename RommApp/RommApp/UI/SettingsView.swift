@@ -22,9 +22,6 @@ struct SettingsView: View {
     /// discovered; Home only grows its shortcut row once a pairing
     /// exists, so nobody without an Apple TV ever sees it there.
     @State private var showingControllerPad = false
-    #if targetEnvironment(macCatalyst)
-    @AppStorage(BiasGlowLevel.storageKey) private var glowStored = BiasGlowLevel.subtle.rawValue
-    #endif
 
     var body: some View {
         List {
@@ -35,36 +32,7 @@ struct SettingsView: View {
                 // longer than that: "OhSnap MCON II" wrapped to a stack of
                 // clipped lines, which rendered as an empty gap the height
                 // of the wrap. Below the title it has the whole row.
-                HStack(spacing: 10) {
-                    Image(systemName: controllers.isConnected
-                          ? "gamecontroller.fill" : "gamecontroller")
-                        .foregroundStyle(controllers.isConnected
-                                         ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Controller")
-                        if controllers.isConnected {
-                            // One line per connected slot, not just player 1:
-                            // this row used to show a single name back when
-                            // only one controller could ever be attached at
-                            // once, and kept doing that even after a second
-                            // player became possible.
-                            ForEach(Array(controllers.connectedNames.enumerated()), id: \.offset) { index, name in
-                                if let name {
-                                    Text("Player \(index + 1): \(name)")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                        .truncationMode(.tail)
-                                }
-                            }
-                        } else {
-                            Text("None connected")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    Spacer(minLength: 0)
-                }
+                ControllerStatusRow()
                 NavigationLink {
                     ControllerRemapView()
                 } label: {
@@ -80,6 +48,10 @@ struct SettingsView: View {
                 } label: {
                     Label("Phone controller", systemImage: "iphone.gen3")
                 }
+                // With the pad, where it belongs: on the Mac the Controls
+                // section below is phone-only touch settings, and a
+                // section holding one toggle was a leftover of that.
+                Toggle("Rumble", isOn: $rumbleEnabled)
                 #endif
             } header: {
                 Text("Physical controller")
@@ -92,8 +64,8 @@ struct SettingsView: View {
             }
             .tvRow()
 
+            #if !targetEnvironment(macCatalyst)
             Section {
-                #if !targetEnvironment(macCatalyst)
                 Picker("Button colours", selection: $controlTheme) {
                     ForEach(ControlTheme.allCases, id: \.self) { theme in
                         Text(theme.label).tag(theme.rawValue)
@@ -120,31 +92,15 @@ struct SettingsView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
-                #endif
 
                 Toggle("Rumble", isOn: $rumbleEnabled)
             } header: {
                 Text("Controls")
             }
             .tvRow()
-
-            #if targetEnvironment(macCatalyst)
-            // The TV's letterbox glow, same setting and same stored
-            // key, because a desk monitor is the same dead-space
-            // situation at arm's length (Marcus, 2026-08-30).
-            Section {
-                Picker("Letterbox glow", selection: $glowStored) {
-                    ForEach(BiasGlowLevel.allCases) { level in
-                        Text(level.label).tag(level.rawValue)
-                    }
-                }
-            } header: {
-                Text("Display")
-            } footer: {
-                Text("A soft light in the dead space around the picture, the way a bias light sits behind a television.")
-            }
-            .tvRow()
             #endif
+
+            // Letterbox glow lives in the Mac's View menu; see MacMenus.
 
             #if !targetEnvironment(macCatalyst)
             Section {
@@ -182,6 +138,8 @@ struct SettingsView: View {
             .tvRow()
             #endif
 
+            // On the Mac this is View > Show Platforms By; see MacMenus.
+            #if !targetEnvironment(macCatalyst)
             Section {
                 Picker("Platform names", selection: $platformLabelSourceRaw) {
                     ForEach(PlatformLabelSource.allCases, id: \.self) { source in
@@ -194,6 +152,7 @@ struct SettingsView: View {
                 Text("If a platform's name looks wrong, switching the source here usually fixes it.")
             }
             .tvRow()
+            #endif
 
             Section {
                 LabeledContent("Server", value: session.serverURL?.host ?? "unknown")
@@ -214,10 +173,30 @@ struct SettingsView: View {
                         value: session.isUsingLocalAddress ? "Local network" : "Internet"
                     )
                 }
+                #if targetEnvironment(macCatalyst)
+                // The account actions live with the account, the way a
+                // Mac app's account pane keeps Sign Out beside the
+                // server it signs out of. Apple's words, not the phone's
+                // "unpair": a Mac is not a device you pair.
+                Button("Sign Out…", role: .destructive) {
+                    confirmingUnpair = true
+                }
+                Button("Switch Server…", role: .destructive) {
+                    confirmingForget = true
+                }
+                #endif
             } header: {
+                #if targetEnvironment(macCatalyst)
+                Text("Server")
+                #else
                 Text("Connection")
+                #endif
             } footer: {
+                #if targetEnvironment(macCatalyst)
+                Text("If your server has a second address, Cabinet uses whichever one is on this network. Signing out keeps the server; switching servers forgets everything.")
+                #else
                 Text("If your server has a second address, Cabinet uses whichever one is on this network, and the other when you're away.")
+                #endif
             }
             .tvRow()
 
@@ -227,6 +206,14 @@ struct SettingsView: View {
                 } label: {
                     Label("Storage", systemImage: "internaldrive")
                 }
+                #if targetEnvironment(macCatalyst)
+                // The Mac's own gesture for a folder an app fills.
+                Button("Show in Finder") {
+                    let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                        .appendingPathComponent("Cabinet", isDirectory: true)
+                    UIApplication.shared.open(folder)
+                }
+                #endif
             } footer: {
                 #if targetEnvironment(macCatalyst)
                 Text("Games kept on this Mac, in Documents/Cabinet.")
@@ -256,6 +243,9 @@ struct SettingsView: View {
             }
             .tvRow()
 
+            // On the Mac, Licenses and Credits are behind About and
+            // Debug is Help > Diagnostics; see MacMenus and MacAboutView.
+            #if !targetEnvironment(macCatalyst)
             Section {
                 NavigationLink {
                     LicensesView()
@@ -303,7 +293,9 @@ struct SettingsView: View {
                 Text("Cabinet talks to your RomM server, built by the RomM project and team. It was inspired by romm-ios-app, an earlier native client for RomM.")
             }
             .tvRow()
+            #endif
 
+            #if !targetEnvironment(macCatalyst)
             Section {
                 Button("Unpair this device", role: .destructive) {
                     confirmingUnpair = true
@@ -315,6 +307,7 @@ struct SettingsView: View {
                 Text("Unpairing signs this device out but remembers the server. Switching servers forgets everything.")
             }
             .tvRow()
+            #endif
         }
         #if targetEnvironment(macCatalyst)
         // The TV settings screen's read at a desk: rows as glass over
@@ -330,11 +323,11 @@ struct SettingsView: View {
             ControllerPadView()
         }
         .confirmationDialog(
-            "Unpair this device?",
+            Self.signOutTitle,
             isPresented: $confirmingUnpair,
             titleVisibility: .visible
         ) {
-            Button("Unpair", role: .destructive) {
+            Button(Self.signOutAction, role: .destructive) {
                 // Both outlive the pairing they describe if left alone: a
                 // widget still showing the last account's games on a
                 // shared home screen, and Spotlight results naming them.
@@ -346,11 +339,11 @@ struct SettingsView: View {
             Text("You will need to approve this device again to reconnect.")
         }
         .confirmationDialog(
-            "Forget this server?",
+            Self.switchTitle,
             isPresented: $confirmingForget,
             titleVisibility: .visible
         ) {
-            Button("Forget server", role: .destructive) {
+            Button(Self.switchAction, role: .destructive) {
                 // Same hygiene as Unpair above.
                 WidgetWriter.wipe()
                 SpotlightIndexer.wipe()
@@ -360,5 +353,19 @@ struct SettingsView: View {
             Text("The saved address and pairing are removed.")
         }
     }
+
+    // The Mac says sign out and switch; the phone and TV keep unpair
+    // and forget, which is how their pairing was introduced to them.
+    #if targetEnvironment(macCatalyst)
+    private static let signOutTitle = "Sign out?"
+    private static let signOutAction = "Sign Out"
+    private static let switchTitle = "Switch server?"
+    private static let switchAction = "Switch Server"
+    #else
+    private static let signOutTitle = "Unpair this device?"
+    private static let signOutAction = "Unpair"
+    private static let switchTitle = "Forget this server?"
+    private static let switchAction = "Forget server"
+    #endif
 }
 

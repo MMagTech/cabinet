@@ -11,6 +11,10 @@ final class MacChrome: ObservableObject {
 
     @Published var coveringScreenUp = false
 
+    /// The platform the sidebar shows, and its label, for File >
+    /// Download All…. Nil on Home, Library, Search and collections.
+    @Published var selectedPlatform: (platform: Platform, label: String)?
+
     private init() {}
 }
 

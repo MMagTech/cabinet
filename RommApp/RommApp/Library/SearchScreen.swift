@@ -68,6 +68,11 @@ struct SearchScreen: View {
             // once the toggle flips, and typed text should not need to
             // be re-entered to see it re-scoped to what is kept.
             .onChange(of: networkMonitor.isOffline) { _, _ in Task { await runSearch() } }
+            #if targetEnvironment(macCatalyst)
+            .navigationDestination(item: $playing) { rom in
+                GameLaunchView(rom: rom)
+            }
+            #else
             .fullScreenCover(item: $playing) { rom in
                 #if os(iOS)
                 NavigationStack { GameLaunchView(rom: rom) }
@@ -75,6 +80,7 @@ struct SearchScreen: View {
                 TVGameLaunchView(rom: rom)
                 #endif
             }
+            #endif
         }
     }
 

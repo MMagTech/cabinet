@@ -176,6 +176,13 @@ struct HomeView: View {
                 // top trailing corner is the worst place for the two
                 // things reached every session. Settings earns its place
                 // here precisely because it is reached rarely.
+                // Not on the Mac. A Mac app keeps Settings in the app
+                // menu, under Cmd+comma, and nowhere else; the gear
+                // exists on the phone only because there is no menu
+                // bar. Inherited by Catalyst, it pushed Settings onto
+                // Home's stack while the menu presented a sheet, two
+                // arrivals at one screen. See MacMenus.
+                #if !targetEnvironment(macCatalyst)
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
                         SettingsView()
@@ -183,6 +190,7 @@ struct HomeView: View {
                         Image(systemName: "gearshape")
                     }
                 }
+                #endif
                 // A real Toggle, not a plain button: a toolbar icon that
                 // just triggers something is the wrong shape for a mode
                 // that stays on, nothing in iOS treats Low Power Mode or
@@ -195,6 +203,9 @@ struct HomeView: View {
                 // Invisible, not merely disabled, when there is nothing
                 // it could switch to, matching every other control this
                 // app has cut back to only where it applies.
+                // Not on the Mac, which has no airplane moment: its
+                // kept games are a source in the sidebar, Downloaded.
+                #if !targetEnvironment(macCatalyst)
                 if !KeptGameStore.shared.offlinePlatforms().isEmpty {
                     ToolbarItem(placement: .topBarLeading) {
                         // No explicit tint: the app has no custom accent
@@ -208,6 +219,7 @@ struct HomeView: View {
                         .toggleStyle(.button)
                     }
                 }
+                #endif
             }
             #endif
             .refreshable { await load() }
@@ -246,6 +258,11 @@ struct HomeView: View {
             // tvOS has no webview player and never will (see CLAUDE.md's JIT
             // boundary). Native launch (nativeDirectLaunch, below) is the one
             // tvOS actually has, PS1 only for now.
+            #if targetEnvironment(macCatalyst)
+            .navigationDestination(item: $resuming) { rom in
+                GameLaunchView(rom: rom)
+            }
+            #else
             .fullScreenCover(item: $resuming) { rom in
                 #if os(iOS)
                 NavigationStack { GameLaunchView(rom: rom) }
@@ -253,6 +270,7 @@ struct HomeView: View {
                 TVGameLaunchView(rom: rom)
                 #endif
             }
+            #endif
             #if os(iOS)
             .fullScreenCover(item: $directLaunch) { launch in
                 PlayerView(
