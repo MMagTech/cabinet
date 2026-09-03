@@ -257,6 +257,14 @@ bool Run(const Config& config, std::string* error)
   File::SetSysDirectory(config.sys_dir);
   UICommon::SetUserDirectory(config.user_dir);
   UICommon::Init();
+  // Dolphin's own frontend makes the user tree, Init does not, and
+  // the shader cache's index (<Cache>/<GameID>.uidcache, the list of
+  // shaders a game needed so the next launch builds them before they
+  // are seen) is written with no attempt to create its directory. So
+  // without this every launch started with an empty index and the
+  // first-time shader moments happened every session. Found
+  // 2026-09-02 when a size question found no Cache folder at all.
+  UICommon::CreateDirectories();
   s_config_ready.store(true);
 
   s_state_dir = config.user_dir + "/CabinetStates";
