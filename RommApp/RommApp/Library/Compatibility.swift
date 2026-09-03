@@ -169,15 +169,44 @@ private struct FavoriteBadge: ViewModifier {
 /// "kept" badge once the download finishes: that state already lives
 /// in Storage, and restating it on every cover forever would be one
 /// more thing this app was trying all day to stop doing.
+/// A download's own ring: a faint track with an arc that fills clockwise,
+/// the shape App Store, Music and TV draw for the same job. Drawn by hand
+/// because SwiftUI's circular style has no determinate form on UIKit
+/// platforms; Apple's page: "in cases where no determinate circular
+/// progress view style is available, circular progress views use an
+/// indeterminate style". So a real fraction went in and a spinner came
+/// out, on every platform this app ships to. The fraction is real:
+/// bytes received over the server's length, or over RomM's own size for
+/// the file when the server sends none. Only a download with neither
+/// still spins. No stop square inside, the App Store's has it because a
+/// tap cancels, and this badge does not.
 private struct DownloadProgressRing: View {
     @ObservedObject private var keptStore = KeptGameStore.shared
     let romId: Int
 
     var body: some View {
         if let progress = keptStore.downloading[romId] {
-            ProgressView(value: min(progress.fraction, 1))
-                .progressViewStyle(.circular)
-                .controlSize(.mini)
+            if progress.totalBytes > 0 {
+                let fraction = min(max(progress.fraction, 0), 1)
+                // Softened to sit as lightly on the cover as the star
+                // does: a full-strength tint ring read heavier than the
+                // favorite badge beside it (Marcus, 2026-09-02).
+                ZStack {
+                    Circle()
+                        .stroke(.tint.opacity(0.2), lineWidth: 2)
+                    Circle()
+                        .trim(from: 0, to: fraction)
+                        .stroke(.tint.opacity(0.8), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .animation(.linear(duration: 0.25), value: fraction)
+                }
+                .frame(width: 14, height: 14)
+                .accessibilityLabel("Downloading")
+                .accessibilityValue("\(Int(fraction * 100)) percent")
+            } else {
+                ProgressView()
+                    .controlSize(.mini)
+            }
         }
     }
 }

@@ -26,6 +26,7 @@ import SwiftUI
 struct MacSidebarShell: View {
     @EnvironmentObject private var session: Session
     @ObservedObject private var networkMonitor = NetworkMonitor.shared
+    @ObservedObject private var keptStore = KeptGameStore.shared
     @AppStorage(PlatformLabelSource.key) private var labelSourceRaw = PlatformLabelSource.platformName.rawValue
 
     @State private var selection: MacDestination? = .home
@@ -44,13 +45,68 @@ struct MacSidebarShell: View {
         PlatformLabelSource(rawValue: labelSourceRaw) ?? .platformName
     }
 
+    /// What the Downloaded screen will list, not what the store holds:
+    /// a kept game with no native core cannot play on this Mac, and a
+    /// badge that counts it promises a game the screen never shows.
+    private var downloadedCount: Int {
+        keptStore.offlinePlatforms().reduce(0) { $0 + $1.roms.count }
+    }
+
     var body: some View {
         NavigationSplitView {
             SidebarColumn { sidebar }
         } detail: {
             detail
         }
+        // Balanced, stated: Apple's abstract, "reduces the size of the
+        // detail content to make room when showing the leading column".
+        // The pushed launch screen came up laid out for the whole
+        // window with the sidebar over its cover, the prominent-detail
+        // shape, and nothing here should ever sit under the sidebar.
+        .navigationSplitViewStyle(.balanced)
+        .macDownloadAllPrompt()
+        // File > Download All… acts on the platform the sidebar has
+        // selected; the menu bar cannot see SwiftUI state, so it is
+        // published where the app delegate can read it.
+        .onChange(of: selection, initial: true) { _, now in
+            if case .platform(let platform)? = now {
+                MacChrome.shared.selectedPlatform = (platform, label(for: platform))
+            } else {
+                MacChrome.shared.selectedPlatform = nil
+            }
+        }
         .task { await load() }
+        #if DEBUG
+        // Proves the queue without a hand on the mouse: boots, fetches
+        // the platform, starts the queue, cancels it after N seconds,
+        // and logs each step. `-cabinetDownloadAll <platformId>
+        // -cabinetDownloadAllCancelAt <seconds>`.
+        .task {
+            let platformId = UserDefaults.standard.integer(forKey: "cabinetDownloadAll")
+            guard platformId > 0 else { return }
+            while session.stage != .ready { try? await Task.sleep(for: .seconds(1)) }
+            await session.loadPlatformConfigIfNeeded()
+            let platform = Platform(id: platformId, name: "bench", displayName: nil, slug: "bench", fsSlug: "bench", romCount: 0)
+            MacDownloadAll.shared.prepare(platform, name: "bench", session: session)
+            while MacDownloadAll.shared.preparing != nil { try? await Task.sleep(for: .milliseconds(200)) }
+            guard case .confirm(_, _, let roms, let bytes, let free) = MacDownloadAll.shared.prompt else {
+                NSLog("[downloadall] prompt: %@", String(describing: MacDownloadAll.shared.prompt)); return
+            }
+            NSLog("[downloadall] %d games, %lld bytes, free %lld", roms.count, bytes, free ?? -1)
+            MacDownloadAll.shared.prompt = nil
+            MacDownloadAll.shared.start(platform: platform, name: "bench", roms: roms, session: session)
+            let cancelAt = UserDefaults.standard.integer(forKey: "cabinetDownloadAllCancelAt")
+            var tick = 0
+            while let bulk = keptStore.bulk {
+                NSLog("[downloadall] t=%ds done=%d of %d current=%d failed=%d", tick, bulk.done, bulk.total, bulk.currentRomId ?? -1, bulk.failed)
+                if cancelAt > 0, tick == cancelAt { NSLog("[downloadall] cancelling"); keptStore.cancelBulk() }
+                try? await Task.sleep(for: .seconds(1)); tick += 1
+            }
+            NSLog("[downloadall] finished, kept=%d", keptStore.games.count)
+            try? await Task.sleep(for: .seconds(1))
+            exit(0)
+        }
+        #endif
         // The lists are a snapshot of the server, so they go stale the
         // same way every other screen's do. Same triggers the library
         // screen already uses.
@@ -65,6 +121,14 @@ struct MacSidebarShell: View {
             Section {
                 Label("Home", systemImage: "house").tag(MacDestination.home)
                 Label("Library", systemImage: "square.grid.2x2").tag(MacDestination.library)
+                // Only once something is on this disk: a row that opens
+                // an empty screen is a promise the Mac cannot keep, the
+                // same rule the phone's airplane follows.
+                if downloadedCount > 0 {
+                    Label("Downloaded", systemImage: "arrow.down.circle")
+                        .badge(downloadedCount)
+                        .tag(MacDestination.downloaded)
+                }
                 Label("Search", systemImage: "magnifyingglass").tag(MacDestination.search)
             }
             // Above the platforms deliberately. Collections are few and
@@ -100,7 +164,18 @@ struct MacSidebarShell: View {
         // make those sections collapsible are this style's, not the
         // plain list's.
         .listStyle(.sidebar)
+        // The List's own selection-aware menu, Apple's API for a
+        // source list, rather than a menu on each row: a row-level
+        // menu in a selectable List presents twice on Catalyst, the
+        // row's UIKit selection adding a second presentation over the
+        // first. Found frame by frame, 2026-09-02.
+        .contextMenu(forSelectionType: MacDestination.self) { items in
+            if let first = items.first, case .platform(let platform) = first {
+                MacPlatformMenu(platform: platform, label: label(for: platform))
+            }
+        }
         .navigationSplitViewColumnWidth(min: 220, ideal: 250, max: 320)
+        .safeAreaInset(edge: .bottom, spacing: 0) { MacDownloadAllStatus() }
     }
 
     private func row(for platform: Platform) -> some View {
@@ -123,6 +198,8 @@ struct MacSidebarShell: View {
             HomeView()
         case .library:
             NavigationStack { LibraryScreen() }
+        case .downloaded:
+            NavigationStack { MacDownloadedView() }
         case .search:
             SearchScreen()
         // Identified by the source, not left to SwiftUI's structural
@@ -182,6 +259,7 @@ struct MacSidebarShell: View {
 enum MacDestination: Hashable {
     case home
     case library
+    case downloaded
     case search
     case platform(Platform)
     case collection(Collection)

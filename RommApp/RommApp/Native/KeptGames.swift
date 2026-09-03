@@ -96,6 +96,103 @@ final class KeptGameStore: ObservableObject {
     @Published private(set) var downloading: [Int: DownloadProgress] = [:]
     @Published private(set) var errors: [Int: String] = [:]
 
+    /// A whole platform being kept, one game after another. `keep`
+    /// starts a task per game, which is right for a person tapping
+    /// three toggles and wrong for a hundred and forty: this walks a
+    /// list and awaits each download in turn, through the same
+    /// performKeep, so the per-cover ring, the error text and the
+    /// Downloaded count all behave exactly as they do for one. Cancel
+    /// stops after the current file and keeps what finished. One at a
+    /// time in the whole app; a second request while one runs is
+    /// ignored rather than queued behind it.
+    struct BulkDownload: Equatable {
+        let platformId: Int
+        var done: Int
+        var total: Int
+        var currentRomId: Int?
+        var failed: Int
+    }
+
+    @Published private(set) var bulk: BulkDownload?
+    private var bulkTask: Task<Void, Never>?
+
+    func keepAll(_ roms: [Rom], platformId: Int, session: Session) {
+        guard bulkTask == nil else { return }
+        let queue = roms.filter { kept(romId: $0.id) == nil && tasks[$0.id] == nil }
+        guard !queue.isEmpty else { return }
+        bulk = BulkDownload(platformId: platformId, done: 0, total: queue.count, currentRomId: nil, failed: 0)
+        bulkTask = Task { [weak self] in
+            for rom in queue {
+                guard let self, !Task.isCancelled else { break }
+                self.errors[rom.id] = nil
+                self.downloading[rom.id] = DownloadProgress(fraction: 0, receivedBytes: 0, totalBytes: rom.fsSizeBytes)
+                self.bulk?.currentRomId = rom.id
+                // The same shape `keep` gives a single download, so the
+                // tasks table, cancel and the ring all see one of those.
+                let task = Task<Void, Never> {
+                    do {
+                        try await self.performKeep(rom: rom, session: session)
+                    } catch {
+                        if !(error is CancellationError), !Task.isCancelled {
+                            self.errors[rom.id] = "The download didn't finish. Turn Download on again to retry."
+                            self.bulk?.failed += 1
+                            DiagnosticsLog.record(
+                                context: "Download all", message: "\(rom.displayName): \(error.localizedDescription)",
+                                romVersion: session.serverVersion
+                            )
+                        }
+                    }
+                }
+                self.tasks[rom.id] = task
+                await task.value
+                self.downloading[rom.id] = nil
+                self.tasks[rom.id] = nil
+                self.bulk?.done += 1
+            }
+            self?.bulk = nil
+            self?.bulkTask = nil
+        }
+    }
+
+    /// The Finder folder this platform's kept games are mirrored into,
+    /// or nil until something is kept there. For the Mac's Show in Finder.
+    func mirrorRomsFolder(platformFsSlug: String) -> URL? {
+        let slug = platformFsSlug.isEmpty ? "unknown" : platformFsSlug
+        let folder = documentsRoot
+            .appendingPathComponent(Self.safeComponent(slug), isDirectory: true)
+            .appendingPathComponent("roms", isDirectory: true)
+        return FileManager.default.fileExists(atPath: folder.path) ? folder : nil
+    }
+
+    /// Every kept game on a platform. Remove All's counterpart to keepAll.
+    func removeAll(platformId: Int) {
+        for game in games where game.rom.platformId == platformId {
+            remove(romId: game.romId)
+        }
+    }
+
+    func cancelBulk() {
+        if let current = bulk?.currentRomId {
+            tasks[current]?.cancel()
+        }
+        bulkTask?.cancel()
+    }
+
+    /// Bytes free on the volume the kept games live on, by the measure
+    /// the system uses for a download it considers important, which
+    /// counts purgeable space as free. Nil when the volume will not say.
+    func availableCapacity() -> Int64? {
+        #if os(tvOS)
+        // The "important usage" measure, which counts purgeable space as
+        // free, does not exist on tvOS; the plain figure does.
+        let values = try? root.resourceValues(forKeys: [.volumeAvailableCapacityKey])
+        return values?.volumeAvailableCapacity.map(Int64.init)
+        #else
+        let values = try? root.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        return values?.volumeAvailableCapacityForImportantUsage
+        #endif
+    }
+
     private var tasks: [Int: Task<Void, Never>] = [:]
     private let root: URL
     /// The person-facing mirror in the Files app, laid out as RomM's

@@ -39,6 +39,17 @@ worth having in the open.
   measurement too. That is worth remembering before writing anything
   else off.
 
+- **Download a whole platform on the Mac.** A phone keeps a handful of
+  games; a desk machine has the disk for all of them. The idea is a
+  single action on a platform, "Download All", that keeps every game
+  the Mac can play from that system, the way Music downloads an album
+  rather than a song at a time. It would say the count and the total
+  size before it starts, queue the files one after another rather than
+  all at once, and stay cancellable. It would take every game Cabinet
+  can keep, playable here or not: an unsupported platform's files are
+  still worth having for another emulator, which is already how a
+  single download works. Built for the Mac the same day it was noted,
+  2026-09-02, and waiting on a release.
 - **A native touch control restyle.** The current on-screen controls are
   functional but read a little flat next to the rest of the app. A
   restyle direction has been discussed, not built.
