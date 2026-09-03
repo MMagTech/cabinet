@@ -1,3 +1,4 @@
+#import <CommonCrypto/CommonCrypto.h>
 #import "LibretroFrontend.h"
 #include "LibretroCoreAPI.h"
 // Explicit, not inherited: TARGET_OS_MACCATALYST is used in an #if below,
@@ -257,6 +258,63 @@ EGLSurface gEGLSurface = EGL_NO_SURFACE;
 // Non-nil sentinel so every `if (gGLContext)` guard in this file keeps
 // meaning "the GL world exists" without rewriting each site.
 void *gGLContext = nullptr;
+
+// ANGLE's blob cache, EGL_ANDROID_blob_cache. Every GL core's shaders
+// reach Metal through ANGLE, which translates each program from GLSL
+// to Metal's language at link time, every session, and that
+// translation is the share of a first-minutes hitch that macOS's own
+// Metal cache cannot save (it caches the compile that follows). With
+// these two callbacks installed, ANGLE stores each linked program's
+// translated form under a key of its own and asks for it back on the
+// next link, so the second visit to a game skips the translation. One
+// hook, shared by N64, Dreamcast and PSP; the cores need no change and
+// their own shader caches (GLideN64's storage, PPSSPP's file) are just
+// other ways of saving the same thing. Files are regenerable, so they
+// live in Caches, where the system may trim them.
+static NSString *cabinetAngleBlobDirectory(void) {
+    static NSString *dir;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        NSString *caches = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject;
+        dir = [caches stringByAppendingPathComponent:@"Cabinet/angle-programs"];
+        [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+    });
+    return dir;
+}
+
+static NSString *cabinetAngleBlobPath(const void *key, long keySize) {
+    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(key, (CC_LONG)keySize, digest);
+    char hex[2 * CC_SHA256_DIGEST_LENGTH + 1];
+    for (int i = 0; i < CC_SHA256_DIGEST_LENGTH; i++) snprintf(hex + 2 * i, 3, "%02x", digest[i]);
+    return [cabinetAngleBlobDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"%s.bin", hex]];
+}
+
+static void cabinetAngleBlobSet(const void *key, long keySize, const void *value, long valueSize) {
+    @autoreleasepool {
+        NSData *data = [NSData dataWithBytes:value length:(NSUInteger)valueSize];
+        [data writeToFile:cabinetAngleBlobPath(key, keySize) options:NSDataWritingAtomic error:nil];
+    }
+}
+
+// Per the extension: return the blob's size; copy only when the
+// caller's buffer is large enough, which ANGLE asks in two passes.
+static long cabinetAngleBlobGet(const void *key, long keySize, void *value, long valueSize) {
+    @autoreleasepool {
+        NSData *data = [NSData dataWithContentsOfFile:cabinetAngleBlobPath(key, keySize)];
+        if (!data) return 0;
+        if (value && valueSize >= (long)data.length) memcpy(value, data.bytes, data.length);
+        return (long)data.length;
+    }
+}
+
+static void cabinetInstallAngleBlobCache(EGLDisplay display) {
+    typedef void (*SetBlobFuncs)(EGLDisplay, void (*)(const void *, long, const void *, long),
+                                 long (*)(const void *, long, void *, long));
+    SetBlobFuncs install = (SetBlobFuncs)eglGetProcAddress("eglSetBlobCacheFuncsANDROID");
+    if (install) install(display, cabinetAngleBlobSet, cabinetAngleBlobGet);
+}
+
 static bool cabinetAngleMakeCurrent(void) {
     // The N64 rainbow-noise root cause (2026-08-19) is fixed inside the
     // ANGLE frameworks themselves: mtl_buffer_pool.mm stamps retiring
@@ -268,6 +326,7 @@ static bool cabinetAngleMakeCurrent(void) {
         gEGLDisplay = eglGetDisplay(EGL_DEFAULT_DISPLAY);
         EGLint maj, min;
         if (!eglInitialize(gEGLDisplay, &maj, &min)) { gEGLDisplay = EGL_NO_DISPLAY; return false; }
+        cabinetInstallAngleBlobCache(gEGLDisplay);
         EGLint cfgAttrs[] = { EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_RED_SIZE, 8,
                               EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8,
                               EGL_DEPTH_SIZE, 24, EGL_STENCIL_SIZE, 8,

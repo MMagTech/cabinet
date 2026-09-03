@@ -145,6 +145,12 @@ struct NativeBenchRunnerView: View {
     @EnvironmentObject private var session: Session
     @State private var plan: NativeBenchHarness.Plan?
     @State private var ready = false
+    /// Once per process. The Mac opened two windows for a while
+    /// (2026-09-02, while the Settings window was being added) and the
+    /// bench ran in both, the second launch's temp clean-up deleting the
+    /// first launch's folder mid-move. A harness must not depend on the
+    /// shell mounting it exactly once.
+    nonisolated(unsafe) private static var started = false
     @State private var failure: String?
 
     var body: some View {
@@ -169,6 +175,8 @@ struct NativeBenchRunnerView: View {
             }
         }
         .task {
+            guard !Self.started else { return }
+            Self.started = true
             // The platform mapping has to be in hand before launching.
             // `NativeLauncher.prepare` resolves a rom's platform through
             // `session.platformsVersions`, and a bench launch starts with
