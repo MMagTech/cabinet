@@ -14,7 +14,12 @@
 // Built by tools/build-pcsx2-mac.sh, needs the JIT entitlement:
 //
 //   codesign -f -s - --entitlements <ent> cabinet-ps2-smoke
-//   ./cabinet-ps2-smoke <disc> <data-root> <resources> [seconds]
+//   ./cabinet-ps2-smoke <disc> <data-root> <resources> [seconds] [capped|uncapped] [runs]
+//
+// runs, default 1, boots the disc that many times in the one process.
+// Two is the number that matters: the second PS2 game of a session
+// used to abort in SetBaseSettingsLayer, and only a second Run in the
+// same process can show that it no longer does.
 
 #include <CoreFoundation/CoreFoundation.h>
 
@@ -49,6 +54,12 @@ int main(int argc, char* argv[])
 	// "capped" to pace it to 60Hz instead, which makes EE load the
 	// headroom figure and is directly comparable to the spike numbers.
 	config.unlimited = !(argc > 5 && std::string(argv[5]) == "capped");
+
+	const int runs = (argc > 6) ? std::max(1, std::atoi(argv[6])) : 1;
+	for (int run = 0; run < runs; run++)
+	{
+	std::printf("SMOKE run %d of %d\n", run + 1, runs);
+	std::fflush(stdout);
 
 	std::string error;
 	bool ok = false;
@@ -94,5 +105,6 @@ int main(int argc, char* argv[])
 	}
 
 	std::printf("SMOKE done, peak ee=%.1f%% gs=%.1f%%\n", peak_ee, peak_gs);
+	}
 	return 0;
 }

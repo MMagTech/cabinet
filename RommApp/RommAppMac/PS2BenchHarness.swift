@@ -87,6 +87,26 @@ struct PS2BenchView: View {
                         fflush(stdout)
                         CabinetPS2Screenshot(path)
                     }
+                    // The composited window, as Core Animation shows it,
+                    // taken from inside the process. A display capture
+                    // needs Screen Recording permission and sees the
+                    // lock screen; this sees only the app's own window,
+                    // and unlike the GS screenshot it includes what the
+                    // layer does with the drawable's alpha.
+                    if let shot = UserDefaults.standard.string(forKey: "cabinetPS2WindowShot"),
+                       tick >= PS2BenchHarness.shotAt,
+                       tick < PS2BenchHarness.shotAt + 6,
+                       let window = UIApplication.shared.connectedScenes
+                           .compactMap({ ($0 as? UIWindowScene)?.keyWindow }).first {
+                        let index = tick - PS2BenchHarness.shotAt
+                        let path = shot.replacingOccurrences(of: ".png", with: "-\(index).png")
+                        let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+                            _ = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+                        }
+                        try? image.pngData()?.write(to: URL(fileURLWithPath: path))
+                        print("PS2BENCH window shot \(index) -> \(path)")
+                        fflush(stdout)
+                    }
                     if PS2BenchHarness.pauseAt > 0, tick == PS2BenchHarness.pauseAt {
                         print("PS2BENCH pausing")
                         fflush(stdout)

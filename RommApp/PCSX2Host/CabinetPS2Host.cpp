@@ -494,7 +494,18 @@ namespace CabinetPS2
 
 	static void ApplyDefaults(const Config& config)
 	{
-		Host::Internal::SetBaseSettingsLayer(&s_settings);
+		// Once per process. SetBaseSettingsLayer aborts if the layer
+		// is already set, and nothing ever clears it, so a second PS2
+		// game in the same session died here whichever game it was.
+		// The 2026-08-31 commit message said this was fixed; the guard
+		// was never in the tree. Verified by cabinet-ps2-smoke, which
+		// runs twice for exactly this reason.
+		static bool s_base_layer_installed = false;
+		if (!s_base_layer_installed)
+		{
+			Host::Internal::SetBaseSettingsLayer(&s_settings);
+			s_base_layer_installed = true;
+		}
 		VMManager::SetDefaultSettings(s_settings, true, true, true, true, true);
 
 		// The recompilers are the entire reason PS2 is possible on this

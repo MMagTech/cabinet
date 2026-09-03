@@ -511,6 +511,34 @@ endif()
         "\t}",
     )], "CABINET_MERGE_TRACE")
 
+    # 17. The final drawable itself. Everything upstream of the present
+    #     pass has been proven correct; this reads the CAMetalDrawable
+    #     after the GPU completes, logs the command buffer's status and
+    #     error, and dumps the pixels. See CabinetDrawableProbe.h. Off
+    #     unless CABINET_DRAWABLE_PROBE is set. Temporary.
+    edit(src / "pcsx2/CMakeLists.txt", [(
+        "\t\t\"${CABINET_HOST_DIR}/CabinetAudioStream.mm\")",
+        "\t\t\"${CABINET_HOST_DIR}/CabinetAudioStream.mm\"\n"
+        "\t\t\"${CABINET_HOST_DIR}/CabinetDrawableProbe.mm\")\n"
+        "\t# CABINET_DRAWABLE_PROBE\n"
+        "\tset_source_files_properties(\"${CABINET_HOST_DIR}/CabinetDrawableProbe.mm\" PROPERTIES COMPILE_OPTIONS -fobjc-arc)",
+    )], "CABINET_DRAWABLE_PROBE")
+    edit(src / "pcsx2/GS/Renderers/Metal/GSDeviceMTL.mm", [
+        ('#include "GSMTLSharedHeader.h"',
+         '#include "GSMTLSharedHeader.h"\n'
+         '#include "CabinetDrawableProbe.h" // CABINET_DRAWABLE_PROBE'),
+        ("\t[m_layer setDevice:m_dev.dev];\n}",
+         "\t[m_layer setDevice:m_dev.dev];\n"
+         "\tCabinetProbeConfigureLayer(m_layer, m_view);\n}"),
+        ("\tEndRenderPass();\n\tif (m_current_drawable)\n\t{\n\t\tconst bool use_present_drawable",
+         "\tEndRenderPass();\n"
+         "\tCabinetProbePresent(m_current_render_cmdbuf, m_current_drawable, m_layer, m_dev.dev);\n"
+         "\tif (m_current_drawable)\n\t{\n\t\tconst bool use_present_drawable"),
+        ("\t[m_current_render_cmdbuf commit];\n\tm_current_render_cmdbuf = nil;",
+         "\tCabinetProbeCommandBuffer(m_current_render_cmdbuf);\n"
+         "\t[m_current_render_cmdbuf commit];\n\tm_current_render_cmdbuf = nil;"),
+    ], "CABINET_DRAWABLE_PROBE")
+
     print(f"patched {src} for Catalyst, host layer at {host}")
 
 

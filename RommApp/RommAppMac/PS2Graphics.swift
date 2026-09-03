@@ -112,6 +112,12 @@ enum PS2Graphics {
     /// Per game, because it is a fact about the title's compatibility
     /// rather than a preference about this Mac.
     static func renderer(romId: Int?) -> Int {
+        // Harness only: -cabinetPS2Renderer 13 boots a disc on the
+        // software renderer, which a command-line run otherwise
+        // cannot reach because it has no RomM id to store one under.
+        if UserDefaults.standard.object(forKey: "cabinetPS2Renderer") != nil {
+            return UserDefaults.standard.integer(forKey: "cabinetPS2Renderer")
+        }
         guard let romId else { return 17 }
         let stored = UserDefaults.standard.object(forKey: "ps2-renderer-\(romId)") as? Int
         return stored ?? 17

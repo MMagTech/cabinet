@@ -88,6 +88,18 @@ final class PS2MetalView: UIView, UIPointerInteractionDelegate {
         // the picture flicker and disappear.
         if !reported {
             metalLayer.contentsScale = scale
+            // The layer must be opaque, and UIKit does not make it so:
+            // the view's isOpaque is only a drawing hint for draw(_:)
+            // and never reaches a CAMetalLayer backing layer, whose own
+            // default is false. AppKit's layer in upstream PCSX2 reads
+            // opaque=1. Non-opaque, Core Animation composites the
+            // drawable using its alpha channel, and PCSX2's merge pass
+            // writes the game's own framebuffer alpha there: 1.0 for
+            // some scenes, 0 for others, so a title screen that is
+            // pixel-perfect in the drawable composites as transparent
+            // over the black view, and fades read as flicker. Found by
+            // reading the presented drawable back, 2026-09-01.
+            metalLayer.isOpaque = true
         }
 
         let pixels = CGSize(width: bounds.width * scale, height: bounds.height * scale)
