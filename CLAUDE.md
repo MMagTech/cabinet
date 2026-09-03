@@ -208,6 +208,37 @@ between them: the title bar strip over a full screen game is solved by
 `UITitlebar.autoHidesToolbarInFullScreen`, and removing the title bar
 belongs in the scene delegate rather than a view's `onAppear`.
 
+A CAMetalLayer that is a UIView's backing layer is not opaque, and
+`UIView.isOpaque` does not make it so: that property is a `draw(_:)`
+hint and never reaches the layer, whose own default is false. A
+non-opaque layer is composited with the drawable's alpha channel, so
+an emulator that writes the game's framebuffer alpha into its
+drawable (PCSX2's merge pass does) shows a pixel-perfect frame as a
+black screen. Set `layer.isOpaque = true` on any Metal surface a core
+presents into. Found 2026-09-01 by reading the presented drawable
+back; AppKit's layer in upstream PCSX2 reads opaque already.
+
+Game controllers on the Mac are polled once per frame, not driven by
+callbacks. Apple's Game Controller guide says a game with its own loop
+should poll with `capture()`; the callbacks run on the main queue,
+which is the queue the frame loop already occupies, and a Bluetooth
+pad stopped responding mid-action with the game running on. iOS and
+tvOS keep the callbacks. Also documented: on macOS 11.3 and later pad
+input is not forwarded to an app that is not frontmost.
+
+Never poll the window's title bar. `MacWindow` once re-applied its
+chromeless title bar on a half-second timer, and merely reading the
+title bar's properties on each tick re-presented any open context
+menu on top of itself: a second, larger menu settling over the first,
+which with a one-item menu looked like a glass panel around it. A
+timer that fired and did nothing was clean; one that only read was
+not. The chrome is now re-applied on the shell window's own shape
+events (resize, full screen in and out, screen change) with a short
+burst after each, never on key-window changes, since a menu is a
+window that becomes key as it opens. Found 2026-09-02 frame by frame
+with region screen captures; window-id captures leave the menu's own
+window out and hid it for an evening.
+
 Apple's documentation pages are JavaScript rendered and fetch as an
 empty shell. The content is served as JSON at
 `https://developer.apple.com/tutorials/data/documentation/<path>.json`;
