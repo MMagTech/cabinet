@@ -214,8 +214,13 @@ struct CabinetWidgetView: View {
     @ViewBuilder
     private func fitted(_ art: UIImage?, title: String) -> some View {
         if let art {
+            // Rounded like the small tiles beside it and every cover in
+            // the app; a square hero next to rounded thumbnails read as
+            // an oversight (Marcus, 2026-09-03). A touch larger a
+            // radius than theirs, in step with its size.
             colourManaged(Image(uiImage: art).resizable())
                 .scaledToFit()
+                .clipShape(RoundedRectangle(cornerRadius: 12))
         } else {
             // No art cached for this game. The title carries the card
             // rather than the row being dropped: a nameless gap reads as
