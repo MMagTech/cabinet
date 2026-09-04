@@ -77,35 +77,8 @@ struct MacSidebarShell: View {
         }
         .task { await load() }
         #if DEBUG
-        // Proves the queue without a hand on the mouse: boots, fetches
-        // the platform, starts the queue, cancels it after N seconds,
-        // and logs each step. `-cabinetDownloadAll <platformId>
-        // -cabinetDownloadAllCancelAt <seconds>`.
-        .task {
-            let platformId = UserDefaults.standard.integer(forKey: "cabinetDownloadAll")
-            guard platformId > 0 else { return }
-            while session.stage != .ready { try? await Task.sleep(for: .seconds(1)) }
-            await session.loadPlatformConfigIfNeeded()
-            let platform = Platform(id: platformId, name: "bench", displayName: nil, slug: "bench", fsSlug: "bench", romCount: 0)
-            MacDownloadAll.shared.prepare(platform, name: "bench", session: session)
-            while MacDownloadAll.shared.preparing != nil { try? await Task.sleep(for: .milliseconds(200)) }
-            guard case .confirm(_, _, let roms, let bytes, let free) = MacDownloadAll.shared.prompt else {
-                NSLog("[downloadall] prompt: %@", String(describing: MacDownloadAll.shared.prompt)); return
-            }
-            NSLog("[downloadall] %d games, %lld bytes, free %lld", roms.count, bytes, free ?? -1)
-            MacDownloadAll.shared.prompt = nil
-            MacDownloadAll.shared.start(platform: platform, name: "bench", roms: roms, session: session)
-            let cancelAt = UserDefaults.standard.integer(forKey: "cabinetDownloadAllCancelAt")
-            var tick = 0
-            while let bulk = keptStore.bulk {
-                NSLog("[downloadall] t=%ds done=%d of %d current=%d failed=%d", tick, bulk.done, bulk.total, bulk.currentRomId ?? -1, bulk.failed)
-                if cancelAt > 0, tick == cancelAt { NSLog("[downloadall] cancelling"); keptStore.cancelBulk() }
-                try? await Task.sleep(for: .seconds(1)); tick += 1
-            }
-            NSLog("[downloadall] finished, kept=%d", keptStore.games.count)
-            try? await Task.sleep(for: .seconds(1))
-            exit(0)
-        }
+        // `-cabinetDownloadAll <platformId>`; see DownloadAll.runHarnessIfRequested.
+        .task { await DownloadAll.runHarnessIfRequested(session: session) }
         #endif
         // The lists are a snapshot of the server, so they go stale the
         // same way every other screen's do. Same triggers the library

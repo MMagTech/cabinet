@@ -160,6 +160,18 @@ struct RomListView: View {
                         Label("Grid", systemImage: "square.grid.3x3").tag(ViewMode.grid)
                         Label("List", systemImage: "list.bullet").tag(ViewMode.list)
                     }
+                    // Download All and Remove All Downloads, the platform's
+                    // own actions, in the one menu this screen has; the
+                    // Mac puts them beside the title, see MacPlatformMenu.
+                    if case .platform(let platform) = source {
+                        Divider()
+                        PlatformDownloadMenuItems(platform: platform, label: navigationLabel)
+                    } else if case .keptPlatform(let platform, _) = source {
+                        // Offline: only Remove All Downloads, nothing to
+                        // download without a connection.
+                        Divider()
+                        PlatformDownloadMenuItems(platform: platform, label: navigationLabel, offersDownloadAll: false)
+                    }
                 } label: {
                     Image(systemName: viewMode == .grid ? "square.grid.3x3" : "list.bullet")
                 }
@@ -169,7 +181,21 @@ struct RomListView: View {
         .onChange(of: viewMode) { _, mode in
             UserDefaults.standard.set(mode.rawValue, forKey: Self.modeKey(for: source.modeKey))
         }
+        #if os(iOS) && !targetEnvironment(macCatalyst)
+        // This platform's own queue, at the top of its screen; the rings
+        // on the covers show which file is coming down right now.
+        .safeAreaInset(edge: .top) {
+            if case .platform(let platform) = source, keptStore.bulk?.platformId == platform.id {
+                DownloadAllStatusCard()
+            }
+        }
+        #endif
         .task { await reload() }
+        // A kept game removed while this screen is up, from its own long
+        // press: the list is the store's, so it follows the store.
+        .onChange(of: keptStore.games.count) { _, _ in
+            if case .keptPlatform = source { Task { await reload() } }
+        }
         // The scrubber can only jump to rows that exist, so list mode pulls
         // the whole set rather than paging on scroll. A list is just names;
         // even the 1,204 arcade titles are a few small requests, and a
@@ -425,14 +451,21 @@ struct RomListView: View {
         loading = true
         do {
             switch source {
-            case .keptPlatform(_, let kept):
+            case .keptPlatform(let platform, let kept):
                 // No page to fetch: every kept rom for this platform is
                 // already known, already on the phone. Assigned
                 // directly rather than routed through RomPage, which
                 // models a server's paged response, not a plain local
-                // array.
-                roms = kept
-                total = kept.count
+                // array. Read from the store now rather than the array
+                // the link was built with, so a game removed from this
+                // screen's own menu leaves it at once instead of after
+                // the next trip through the offline list (Marcus,
+                // 2026-09-03, in airplane mode). The passed array is
+                // only the fallback for a platform the store no longer
+                // groups, which is an empty screen either way.
+                let live = keptStore.offlinePlatforms().first { $0.platform.id == platform.id }?.roms
+                roms = live ?? kept.filter { keptStore.kept(romId: $0.id) != nil }
+                total = roms.count
             case .platform(let platform):
                 let page = try await session.roms(platformId: platform.id, offset: roms.count)
                 roms.append(contentsOf: page.items)

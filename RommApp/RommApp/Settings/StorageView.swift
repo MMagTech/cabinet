@@ -92,6 +92,11 @@ struct StorageView: View {
             }
 
             if category == .kept {
+                // A platform coming down, with its cancel, above the
+                // games it has landed so far.
+                if keptStore.bulk != nil {
+                    Section { DownloadAllStatusContent() }
+                }
                 // Kept games live in this app's own storage, not the
                 // webview cache below, so this renders regardless of
                 // whether the bridge ever comes up. Storage lives in one

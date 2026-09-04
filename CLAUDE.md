@@ -196,6 +196,21 @@ did not change something Cabinet depends on.
   generated.
 - Commit `tools/*.xml` or `tools/profiles.json`. Derived data, regenerate it.
 
+## Kept games and the Files mirror
+
+Never walk the Files mirror once per kept game, and never do a file
+walk on the main thread at launch. `KeptGameStore.reconcileFilesFolder`
+once called `filesFolderInodes()`, a walk of every file under Documents,
+inside `ensureLinks` for every kept game: quadratic, on the main thread,
+at launch and on every return to the foreground. Fine at fifty games,
+and at four hundred it froze the app on every foreground, starved the
+Download All queue (which lives on the main actor), and tripped the
+launch watchdog: a black screen, then a kill. Found 2026-09-03 on a
+real phone. The reconcile now walks the mirror once, off the main
+thread, and hands the main actor only its decisions; Remove All walks
+once for the platform. Keep it that way, and time any new launch work
+against a library of hundreds, not the simulator's handful.
+
 ## Mac Catalyst conventions
 
 Read Apple's documentation for the exact class or modifier before

@@ -49,7 +49,11 @@ worth having in the open.
   can keep, playable here or not: an unsupported platform's files are
   still worth having for another emulator, which is already how a
   single download works. Built for the Mac the same day it was noted,
-  2026-09-02, and waiting on a release.
+  2026-09-02, and for the phone the day after: there the files come
+  down through the system's own background downloader, over Wi-Fi
+  only, so a platform started at the table finishes with the phone
+  locked in a pocket, and a queue the system quit the app in the middle
+  of carries on at the next launch. Both waiting on a release.
 - **A native touch control restyle.** The current on-screen controls are
   functional but read a little flat next to the rest of the app. A
   restyle direction has been discussed, not built.

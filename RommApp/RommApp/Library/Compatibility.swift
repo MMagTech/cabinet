@@ -261,10 +261,15 @@ private struct GameContextMenu: ViewModifier {
                         Label("Cancel Download", systemImage: "xmark.circle")
                     }
                 } else if keptStore.kept(romId: romId) != nil {
-                    Button {
+                    // Destructive, red with the trash can, the way
+                    // Podcasts and Music draw Remove Download and the
+                    // way the platform's Remove All Downloads already
+                    // reads; the two sat side by side in different
+                    // colours (Marcus, 2026-09-03).
+                    Button(role: .destructive) {
                         keptStore.remove(romId: romId)
                     } label: {
-                        Label("Remove Download", systemImage: "xmark.circle")
+                        Label("Remove Download", systemImage: "trash")
                     }
                 } else {
                     Button {

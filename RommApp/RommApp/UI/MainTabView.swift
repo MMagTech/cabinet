@@ -24,8 +24,10 @@ struct MainTabView: View {
     @State private var selection: AppTab = .home
     @ObservedObject private var quickActions = QuickActionRouter.shared
     @ObservedObject private var networkMonitor = NetworkMonitor.shared
-    #if targetEnvironment(macCatalyst)
+    #if !os(tvOS)
     @EnvironmentObject private var session: Session
+    #endif
+    #if targetEnvironment(macCatalyst)
     @Environment(\.openWindow) private var openWindow
     @State private var showingMacAbout = false
     @State private var showingMacDiagnostics = false
@@ -105,8 +107,21 @@ struct MainTabView: View {
                 .environment(\.colorScheme, .dark)
                 .presentationBackground(.ultraThinMaterial)
         }
+        #elseif os(tvOS)
+        tabs
         #else
         tabs
+            // Download All's confirmation, attached once here so a menu
+            // on the platform screen or a library tile can raise it.
+            .downloadAllPrompt()
+            .task {
+                // A queue the system quit the app in the middle of
+                // carries on; see DownloadAll.
+                DownloadAll.shared.resumeIfNeeded(session: session)
+                #if DEBUG
+                await DownloadAll.runHarnessIfRequested(session: session)
+                #endif
+            }
         #endif
     }
     // Tried drawing the tvOS account chip as a `ZStack` overlay here so it

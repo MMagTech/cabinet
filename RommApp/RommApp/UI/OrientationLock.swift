@@ -115,6 +115,15 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         QuickAction.register()
+        #if os(iOS) && !targetEnvironment(macCatalyst)
+        // Recreates the background download session at every launch, so
+        // a queue the system carried on with while the app was gone
+        // delivers its files now. Apple's page for
+        // handleEventsForBackgroundURLSession: at launch the app is not
+        // told about transfers still in progress, "you must recreate the
+        // session object yourself".
+        BackgroundDownloads.shared.prepare()
+        #endif
         // Both halves of this live in GameControllerManager now, so tvOS
         // can run them too: this file is not in that target, which is
         // exactly why rumble never worked there.
@@ -137,6 +146,24 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         }
         return true
     }
+
+    #if os(iOS) && !targetEnvironment(macCatalyst)
+    /// The system relaunched the app because its background downloads
+    /// finished. The handler is called back once the session has
+    /// delivered them; see BackgroundDownloads.
+    func application(
+        _ application: UIApplication,
+        handleEventsForBackgroundURLSession identifier: String,
+        completionHandler: @escaping () -> Void
+    ) {
+        guard identifier == BackgroundDownloads.identifier else {
+            completionHandler()
+            return
+        }
+        BackgroundDownloads.shared.eventsCompletionHandler = completionHandler
+        BackgroundDownloads.shared.prepare()
+    }
+    #endif
 
     /// Names the scene delegate that receives quick action taps; SwiftUI
     /// keeps driving the scene's content exactly as before, this only adds

@@ -149,8 +149,17 @@ struct HomeView: View {
             // without needing to be threaded into both layouts
             // separately.
             .safeAreaInset(edge: .top) {
-                if let summary = session.lastSyncSummary {
-                    syncBanner(summary)
+                VStack(spacing: 0) {
+                    if let summary = session.lastSyncSummary {
+                        syncBanner(summary)
+                    }
+                    #if os(iOS) && !targetEnvironment(macCatalyst)
+                    // A platform coming down, with its count and cancel,
+                    // on the screen everyone lands on: the phone's
+                    // answer to the Mac's sidebar foot (Marcus,
+                    // 2026-09-03, could not find the progress).
+                    DownloadAllStatusCard()
+                    #endif
                 }
             }
             .onChange(of: session.lastSyncSummary) { _, summary in

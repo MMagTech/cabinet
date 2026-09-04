@@ -13,6 +13,7 @@
 		BB00000000000000000059 /* CabinetWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = BB00000000000000000050 /* CabinetWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		BB0000000000000000005B /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000005A /* WidgetSnapshot.swift */; };
 		BB0000000000000000005C /* CabinetLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000004A /* CabinetLink.swift */; };
+		BB0000000000000000005E /* DownloadActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000005D /* DownloadActivity.swift */; };
 		F50297785940689BEBC3D8A3 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E4B2AC95B1AB0E374EB9378B /* Foundation.framework */; };
 /* End PBXBuildFile section */
 
@@ -65,6 +66,7 @@
 		BB0000000000000000004A /* CabinetLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CabinetLink.swift; path = RommApp/UI/CabinetLink.swift; sourceTree = "<group>"; };
 		BB00000000000000000050 /* CabinetWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CabinetWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB0000000000000000005A /* WidgetSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WidgetSnapshot.swift; path = RommApp/UI/WidgetSnapshot.swift; sourceTree = "<group>"; };
+		BB0000000000000000005D /* DownloadActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DownloadActivity.swift; path = RommApp/UI/DownloadActivity.swift; sourceTree = "<group>"; };
 		E4B2AC95B1AB0E374EB9378B /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
@@ -349,6 +351,7 @@
 				BB00000000000000000023 /* RommAppTopShelf */,
 				BB0000000000000000004A /* CabinetLink.swift */,
 				BB0000000000000000005A /* WidgetSnapshot.swift */,
+				BB0000000000000000005D /* DownloadActivity.swift */,
 			);
 			name = "Recovered References";
 			sourceTree = "<group>";
@@ -695,6 +698,7 @@
 			files = (
 				BB0000000000000000005B /* WidgetSnapshot.swift in Sources */,
 				BB0000000000000000005C /* CabinetLink.swift in Sources */,
+				BB0000000000000000005E /* DownloadActivity.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -899,6 +903,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet Dev";
 				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -993,6 +998,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Cabinet;
 				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -1253,6 +1259,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet Dev";
 				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1365,6 +1372,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Cabinet;
 				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

@@ -300,6 +300,13 @@ struct LibraryScreen: View {
                     .font(.callout.monospacedDigit())
             }
         }
+        #if os(iOS) && !targetEnvironment(macCatalyst)
+        // The same download items the tile carries, so the list mode
+        // is not a way to lose them (Marcus, 2026-09-03).
+        .contextMenu {
+            PlatformDownloadMenuItems(platform: platform, label: platformLabel(for: platform))
+        }
+        #endif
     }
 
     private func platformTile(_ platform: Platform) -> some View {
@@ -321,13 +328,25 @@ struct LibraryScreen: View {
         .contextMenu {
             MacPlatformMenu(platform: platform, label: platformLabel(for: platform))
         }
-        #else
+        #elseif os(tvOS)
         return tile(
             title: platformLabel(for: platform),
             count: platform.romCount,
             coverKey: LibraryTileArt.key(platform: platform),
             source: .platform(platform)
         )
+        #else
+        // The platform's download items on a long press, the phone's
+        // context menu, as the Mac's tile has them on a right click.
+        return tile(
+            title: platformLabel(for: platform),
+            count: platform.romCount,
+            coverKey: LibraryTileArt.key(platform: platform),
+            source: .platform(platform)
+        )
+        .contextMenu {
+            PlatformDownloadMenuItems(platform: platform, label: platformLabel(for: platform))
+        }
         #endif
     }
 

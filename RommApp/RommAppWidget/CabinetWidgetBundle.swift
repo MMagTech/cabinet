@@ -9,5 +9,6 @@ import WidgetKit
 struct CabinetWidgetBundle: WidgetBundle {
     var body: some Widget {
         CabinetWidget()
+        DownloadActivityWidget()
     }
 }
