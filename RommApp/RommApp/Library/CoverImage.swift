@@ -37,14 +37,27 @@ struct CoverImage: View {
 
     /// Debug builds only: `-cabinetBlurCovers 1` blurs every cover past
     /// recognition, for App Store screenshots taken against a real
-    /// library without putting its box art on the store page.
-    static let screenshotBlur: CGFloat = {
+    /// library without putting its box art on the store page. Applied
+    /// to the decoded image itself, so every surface that draws a cover
+    /// gets it and nothing about layout changes.
+    static let blursCovers: Bool = {
         #if DEBUG
-        return UserDefaults.standard.bool(forKey: "cabinetBlurCovers") ? 18 : 0
+        return UserDefaults.standard.bool(forKey: "cabinetBlurCovers")
         #else
-        return 0
+        return false
         #endif
     }()
+
+    static func screenshotBlurred(_ image: UIImage) -> UIImage {
+        guard blursCovers, let input = CIImage(image: image) else { return image }
+        let clamped = input.clampedToExtent()
+        guard let blur = CIFilter(name: "CIGaussianBlur") else { return image }
+        blur.setValue(clamped, forKey: kCIInputImageKey)
+        blur.setValue(max(image.size.width, image.size.height) / 12, forKey: kCIInputRadiusKey)
+        guard let output = blur.outputImage?.cropped(to: input.extent),
+              let cg = CIContext().createCGImage(output, from: input.extent) else { return image }
+        return UIImage(cgImage: cg, scale: image.scale, orientation: image.imageOrientation)
+    }
 
     var body: some View {
         ZStack {
@@ -68,14 +81,14 @@ struct CoverImage: View {
                     // caller's clip catches the backdrop's overdraw.
                     Color.clear
                         .overlay(
-                            Image(uiImage: image).blur(radius: Self.screenshotBlur, opaque: true)
+                            Image(uiImage: image)
                                 .resizable()
                                 .aspectRatio(contentMode: .fill)
                                 .scaleEffect(1.3)
                                 .blur(radius: 12)
                         )
                     Color.black.opacity(0.18)
-                    Image(uiImage: image).blur(radius: Self.screenshotBlur, opaque: true)
+                    Image(uiImage: image)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                 } else if contentMode == .fill {
@@ -93,13 +106,13 @@ struct CoverImage: View {
                     // cover shape.
                     Color.clear
                         .overlay(
-                            Image(uiImage: image).blur(radius: Self.screenshotBlur, opaque: true)
+                            Image(uiImage: image)
                                 .resizable()
                                 .aspectRatio(contentMode: .fill)
                         )
                         .clipped()
                 } else {
-                    Image(uiImage: image).blur(radius: Self.screenshotBlur, opaque: true)
+                    Image(uiImage: image)
                         .resizable()
                         .aspectRatio(contentMode: contentMode)
                 }
@@ -138,7 +151,7 @@ struct CoverImage: View {
         }
 
         if let cached = await CoverCache.shared.image(forKey: path) {
-            image = cached
+            image = Self.screenshotBlurred(cached)
             return
         }
 
@@ -151,7 +164,7 @@ struct CoverImage: View {
                 return
             }
             await CoverCache.shared.set(decoded, data: data, forKey: path)
-            image = decoded
+            image = Self.screenshotBlurred(decoded)
         } catch {
             // A cancelled fetch is the view moving on to a newer path,
             // not a failure of this one.
