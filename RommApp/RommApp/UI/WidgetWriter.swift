@@ -157,8 +157,13 @@ enum WidgetWriter {
     private static func cover(
         for rom: Rom, in directory: URL, session: Session
     ) async -> String? {
-        guard let path = rom.pathCoverSmall ?? rom.pathCoverLarge else { return nil }
-        let name = "\(fingerprint(path)).png"
+        // The large cover, not the small: the small one is sized for a
+        // grid thumbnail and the widget's hero drew it blown up and soft
+        // (Marcus, 2026-09-03). Scaled down to a ceiling the widget can
+        // afford in memory, and written as JPEG so three of them stay
+        // small in the shared container.
+        guard let path = rom.pathCoverLarge ?? rom.pathCoverSmall else { return nil }
+        let name = "\(fingerprint(path)).jpg"
         let url = directory.appendingPathComponent(name)
         if FileManager.default.fileExists(atPath: url.path) { return name }
 
@@ -166,14 +171,29 @@ enum WidgetWriter {
         if image == nil, let data = try? await session.coverData(path: path) {
             image = UIImage(data: data)
         }
-        guard let image, let png = image.pngData() else { return nil }
+        guard let image, let jpeg = scaled(image, longestSide: 800).jpegData(compressionQuality: 0.88) else { return nil }
         do {
-            try png.write(to: url, options: .atomic)
+            try jpeg.write(to: url, options: .atomic)
         } catch {
             NSLog("[widget] could not write %@: %@", url.path, "\(error)")
             return nil
         }
         return name
+    }
+
+    /// Down only, never up, so a cover already smaller than the ceiling
+    /// is written as it is.
+    private static func scaled(_ image: UIImage, longestSide: CGFloat) -> UIImage {
+        let size = image.size
+        let longest = max(size.width, size.height)
+        guard longest > longestSide, longest > 0 else { return image }
+        let factor = longestSide / longest
+        let target = CGSize(width: (size.width * factor).rounded(), height: (size.height * factor).rounded())
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: target, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: target))
+        }
     }
 
     private static func fingerprint(_ s: String) -> String {
