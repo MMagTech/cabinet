@@ -35,6 +35,17 @@ struct CoverImage: View {
         return abs(image.size.width / image.size.height - 0.75) > 0.06
     }
 
+    /// Debug builds only: `-cabinetBlurCovers 1` blurs every cover past
+    /// recognition, for App Store screenshots taken against a real
+    /// library without putting its box art on the store page.
+    static let screenshotBlur: CGFloat = {
+        #if DEBUG
+        return UserDefaults.standard.bool(forKey: "cabinetBlurCovers") ? 18 : 0
+        #else
+        return 0
+        #endif
+    }()
+
     var body: some View {
         ZStack {
             if let image {
@@ -57,14 +68,14 @@ struct CoverImage: View {
                     // caller's clip catches the backdrop's overdraw.
                     Color.clear
                         .overlay(
-                            Image(uiImage: image)
+                            Image(uiImage: image).blur(radius: Self.screenshotBlur, opaque: true)
                                 .resizable()
                                 .aspectRatio(contentMode: .fill)
                                 .scaleEffect(1.3)
                                 .blur(radius: 12)
                         )
                     Color.black.opacity(0.18)
-                    Image(uiImage: image)
+                    Image(uiImage: image).blur(radius: Self.screenshotBlur, opaque: true)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                 } else if contentMode == .fill {
@@ -82,13 +93,13 @@ struct CoverImage: View {
                     // cover shape.
                     Color.clear
                         .overlay(
-                            Image(uiImage: image)
+                            Image(uiImage: image).blur(radius: Self.screenshotBlur, opaque: true)
                                 .resizable()
                                 .aspectRatio(contentMode: .fill)
                         )
                         .clipped()
                 } else {
-                    Image(uiImage: image)
+                    Image(uiImage: image).blur(radius: Self.screenshotBlur, opaque: true)
                         .resizable()
                         .aspectRatio(contentMode: contentMode)
                 }
