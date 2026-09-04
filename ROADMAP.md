@@ -83,10 +83,12 @@ worth having in the open.
   The idea is a proper full-screen moment for genuinely large
   downloads, small ones would keep today's quick inline behavior. Not
   settled whether to build it at all, let alone how.
-- **PS1 and Saturn multi-disc support.** Genuinely undecided rather than
-  merely unbuilt, it would need real `.m3u`-style disc swapping, not just
-  a missing feature flag, and nobody has weighed whether that's worth
-  carrying.
+- **Multi-disc games.** Waiting on a real one. It would need `.m3u`-style
+  disc swapping in the player, which the libretro cores already
+  understand, and any disc system could meet it, PlayStation and Saturn
+  most often. As of 2026-09-03 the library it is built against has no
+  multi-disc game on any platform, so there is nothing to build it
+  against or test it with. It gets built when one arrives, not before.
 - **Settings syncing across your devices via iCloud.** No confirmed real
   need yet, just an idea that comes up alongside the pairing work above.
 - **A widget, and opening at a game from outside the app.** A home
