@@ -83,9 +83,13 @@ enum TVTopShelfWriter {
         // shelf item that leads to "this platform isn't supported on
         // Apple TV yet" is a broken promise on the Home screen, so those
         // are filtered out here rather than explained later.
-        let playable = page.items.filter { rom in
-            let slug = rom.canonicalPlatformSlug(platformsVersions: platformsVersions)
-            return NativePlatform.platform(for: rom, canonicalSlug: slug) != nil
+        // Was "does a native core exist for this platform", which had the
+        // right instinct and the wrong test: Dreamcast's core is still
+        // compiled in, it is only gated off this device, so that check
+        // kept offering Crazy Taxi 2 on the Home screen. PlatformSupport
+        // knows about the gate; NativePlatform does not.
+        let playable = page.items.filter {
+            PlatformSupport.canPlay($0, platformsVersions: platformsVersions)
         }
 
         guard let directory = TopShelfSnapshot.postersDirectory else { return }

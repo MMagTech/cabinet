@@ -53,8 +53,17 @@ tvos)
     MINVERSION_FLAG=-mappletvos-version-min=13.0
     IOS_PLATFORM=TVOS
     FFMPEG_ARCH=tvos/arm64 ;;
+mac)
+    # Mac Catalyst. Upstream's ios.cmake knows OS and TVOS and nothing
+    # about macabi, so this platform does not use it: the configure
+    # below drives CMake directly against the macOS SDK with every
+    # compile carrying the Catalyst target, the same rewrite
+    # build-core.sh performs for every other core.
+    SDK=$(xcrun -sdk macosx --show-sdk-path)
+    MINVERSION_FLAG="-target arm64-apple-ios18.0-macabi"
+    FFMPEG_ARCH=macabi/arm64 ;;
 *)
-    echo "unknown platform: $PLATFORM (expected ios or tvos)" >&2; exit 1 ;;
+    echo "unknown platform: $PLATFORM (expected ios, tvos or mac)" >&2; exit 1 ;;
 esac
 
 if [ ! -d "$SRC" ]; then
@@ -62,6 +71,81 @@ if [ ! -d "$SRC" ]; then
     git clone --recurse-submodules --depth 1 https://github.com/hrydgard/ppsspp.git "$SRC"
 fi
 
+# Mac only. PPSSPP picks its CPU engine silently: MIPSState::Init turns
+# PSP_CoreParameter().cpuCore into one of three very different objects
+# and says nothing, and the libretro layer will quietly rewrite a
+# request for the recompiler into the IR interpreter when the frontend
+# does not answer RETRO_ENVIRONMENT_GET_JIT_CAPABLE. So "PPSSPP runs and
+# renders" has never been evidence of which engine is running, and the
+# question sat unresolved for days because there was nothing to read.
+# This makes the core state its own answer once per boot, through
+# PPSSPP's own log, which the libretro frontend already receives.
+# Applied for the mac build alone, so the iOS and tvOS libraries are
+# untouched.
+if [ "$PLATFORM" = mac ]; then
+    perl -0pi -e '
+        s/(\tif \(PSP_CoreParameter\(\)\.cpuCore == CPUCore::JIT \|\| PSP_CoreParameter\(\)\.cpuCore == CPUCore::JIT_IR\) \{\n)/\tINFO_LOG(Log::CPU, "cabinet: CPU engine = %d (0 interpreter, 1 native JIT, 2 IR interpreter, 3 JIT+IR)", (int)PSP_CoreParameter().cpuCore);\n$1/
+        unless /cabinet: CPU engine/;
+    ' "$SRC/Core/MIPS/MIPS.cpp"
+    grep -q 'cabinet: CPU engine' "$SRC/Core/MIPS/MIPS.cpp" || {
+        echo "ppsspp cpu-core probe patch did not apply" >&2; exit 1; }
+fi
+
+# Save the GL shader cache when the context is lost, not only when the
+# GPU object dies. Cabinet destroys PPSSPP's context BEFORE unloading
+# the game (the core's own unload frees the context object its
+# context_destroy trampoline dereferences, see the PSP notes), and the
+# core's context-destroy path drops the linked shader list on the spot,
+# so the save in ~GPU_GLES found an empty list and wrote nothing: no
+# .glshadercache ever appeared on any platform (found 2026-09-02). The
+# periodic save is every 32767 frames, about nine minutes, so short
+# sessions never reached it either. All platforms; idempotent.
+perl -0pi -e '
+    s/(void GPU_GLES::DeviceLost\(\) \{\n\tINFO_LOG\(Log::G3D, "GPU_GLES: DeviceLost"\);\n)/$1\t\/\/ cabinet: save the shader cache before the list below is cleared.\n\tif (shaderCachePath_.Valid() && draw_ && g_Config.bShaderCache) {\n\t\tshaderManagerGL_->SaveCache(shaderCachePath_, &drawEngine_);\n\t}\n/
+    unless /cabinet: save the shader cache/;
+' "$SRC/GPU/GLES/GPU_GLES.cpp"
+grep -q 'cabinet: save the shader cache' "$SRC/GPU/GLES/GPU_GLES.cpp" || {
+    echo "ppsspp shader cache save patch did not apply" >&2; exit 1; }
+
+if [ "$PLATFORM" = mac ]; then
+    # CMAKE_SYSTEM_PROCESSOR is set by hand because naming
+    # CMAKE_SYSTEM_NAME puts CMake into cross-compiling mode, where it
+    # stops inferring the processor from the host and leaves it empty.
+    # ext/cpu_features matches that string to pick its architecture and
+    # fails the configure outright on an empty one.
+    #
+    # The same IOS masquerade tvOS and Flycast already rely on: PPSSPP
+    # keys its mobile GLES path off CMake's IOS variable, and without it
+    # a Darwin build falls through to desktop GL, which Catalyst has no
+    # library for. GLES headers come from the vendored ANGLE tree since
+    # the macOS SDK ships none, and OPENGL_LIBRARIES is pointed at the
+    # ANGLE library by hand because the masquerade would otherwise make
+    # CMake look for OpenGLES.framework.
+    #
+    # FFMPEG_DIR is set outright rather than left to upstream's platform
+    # table, which knows ios/universal, tvos/arm64 and macosx/universal
+    # and has no macabi entry. tools/build-ppsspp-ffmpeg-mac.sh builds
+    # what it points at; a macosx archive cannot stand in, since an
+    # arm64-apple-macos object will not link into a Catalyst binary.
+    ANGLE="$PWD/RommApp/Vendor/ANGLE"
+    MACFLAGS="-fno-common $MINVERSION_FLAG -I$ANGLE/include -I$PWD/tools/mac-support/gles-compat"
+    cmake -S "$SRC" -B "$BUILD" -G "Unix Makefiles" \
+        -DCMAKE_SYSTEM_NAME=Darwin \
+        -DCMAKE_SYSTEM_PROCESSOR=arm64 \
+        -DCMAKE_OSX_SYSROOT=macosx \
+        -DCMAKE_OSX_ARCHITECTURES=arm64 \
+        -DIOS=ON \
+        -DUSING_GLES2=ON \
+        -DMOBILE_DEVICE=ON \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DLIBRETRO=ON \
+        -DUSE_SYSTEM_FFMPEG=OFF \
+        -DUSE_DISCORD=OFF \
+        -DFFMPEG_DIR="ffmpeg/$FFMPEG_ARCH" \
+        -DOPENGL_LIBRARIES="$ANGLE/mac/libGLESv2.framework/libGLESv2" \
+        -DCMAKE_C_FLAGS="$MACFLAGS" \
+        -DCMAKE_CXX_FLAGS="$MACFLAGS"
+else
 cmake -S "$SRC" -B "$BUILD" -G "Unix Makefiles" \
     -DCMAKE_TOOLCHAIN_FILE="$PWD/$SRC/cmake/Toolchains/ios.cmake" \
     -DIOS_PLATFORM=$IOS_PLATFORM \
@@ -71,6 +155,7 @@ cmake -S "$SRC" -B "$BUILD" -G "Unix Makefiles" \
     -DUSE_DISCORD=OFF \
     -DCMAKE_C_FLAGS=-fno-common \
     -DCMAKE_CXX_FLAGS=-fno-common
+fi
 
 cmake --build "$BUILD" -j"$JOBS" --target ppsspp_libretro
 

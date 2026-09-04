@@ -149,8 +149,17 @@ struct HomeView: View {
             // without needing to be threaded into both layouts
             // separately.
             .safeAreaInset(edge: .top) {
-                if let summary = session.lastSyncSummary {
-                    syncBanner(summary)
+                VStack(spacing: 0) {
+                    if let summary = session.lastSyncSummary {
+                        syncBanner(summary)
+                    }
+                    #if os(iOS) && !targetEnvironment(macCatalyst)
+                    // A platform coming down, with its count and cancel,
+                    // on the screen everyone lands on: the phone's
+                    // answer to the Mac's sidebar foot (Marcus,
+                    // 2026-09-03, could not find the progress).
+                    DownloadAllStatusCard()
+                    #endif
                 }
             }
             .onChange(of: session.lastSyncSummary) { _, summary in
@@ -176,6 +185,13 @@ struct HomeView: View {
                 // top trailing corner is the worst place for the two
                 // things reached every session. Settings earns its place
                 // here precisely because it is reached rarely.
+                // Not on the Mac. A Mac app keeps Settings in the app
+                // menu, under Cmd+comma, and nowhere else; the gear
+                // exists on the phone only because there is no menu
+                // bar. Inherited by Catalyst, it pushed Settings onto
+                // Home's stack while the menu presented a sheet, two
+                // arrivals at one screen. See MacMenus.
+                #if !targetEnvironment(macCatalyst)
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
                         SettingsView()
@@ -183,6 +199,7 @@ struct HomeView: View {
                         Image(systemName: "gearshape")
                     }
                 }
+                #endif
                 // A real Toggle, not a plain button: a toolbar icon that
                 // just triggers something is the wrong shape for a mode
                 // that stays on, nothing in iOS treats Low Power Mode or
@@ -195,6 +212,9 @@ struct HomeView: View {
                 // Invisible, not merely disabled, when there is nothing
                 // it could switch to, matching every other control this
                 // app has cut back to only where it applies.
+                // Not on the Mac, which has no airplane moment: its
+                // kept games are a source in the sidebar, Downloaded.
+                #if !targetEnvironment(macCatalyst)
                 if !KeptGameStore.shared.offlinePlatforms().isEmpty {
                     ToolbarItem(placement: .topBarLeading) {
                         // No explicit tint: the app has no custom accent
@@ -208,6 +228,7 @@ struct HomeView: View {
                         .toggleStyle(.button)
                     }
                 }
+                #endif
             }
             #endif
             .refreshable { await load() }
@@ -246,6 +267,11 @@ struct HomeView: View {
             // tvOS has no webview player and never will (see CLAUDE.md's JIT
             // boundary). Native launch (nativeDirectLaunch, below) is the one
             // tvOS actually has, PS1 only for now.
+            #if targetEnvironment(macCatalyst)
+            .navigationDestination(item: $resuming) { rom in
+                GameLaunchView(rom: rom)
+            }
+            #else
             .fullScreenCover(item: $resuming) { rom in
                 #if os(iOS)
                 NavigationStack { GameLaunchView(rom: rom) }
@@ -253,6 +279,7 @@ struct HomeView: View {
                 TVGameLaunchView(rom: rom)
                 #endif
             }
+            #endif
             #if os(iOS)
             .fullScreenCover(item: $directLaunch) { launch in
                 PlayerView(
@@ -273,7 +300,11 @@ struct HomeView: View {
             #endif
             .fullScreenCover(item: $nativeDirectLaunch) { launch in
                 #if os(iOS)
+                // Explicit for the same Catalyst reason as
+                // GameLaunchView's covers: inheritance of environment
+                // objects into a fullScreenCover is not reliable there.
                 NativePlayerView(rom: launch.rom, core: launch.core, initialState: launch.initialState)
+                    .environmentObject(session)
                 #else
                 TVPlayerView(rom: launch.rom, core: launch.core, initialState: launch.initialState)
                 #endif
@@ -312,13 +343,17 @@ struct HomeView: View {
                     .task(id: playing) { await resolveOfferName(playing) }
             }
             #endif
-            if let hero = recent.first {
+            if let hero = resumeHero {
                 heroCard(for: hero, height: portraitHeroHeight(for: height), wide: false)
                     .padding(.horizontal, 20)
-                if recent.count > 1 {
-                    rotationRow("Recent", Array(recent.dropFirst()), seeAll: .recentlyPlayed)
-                }
-            } else if loaded {
+            }
+            // Outside the hero's own block, and that matters: when
+            // nothing recent is playable here there is no hero, and the
+            // shelf is the only way back to those games. The empty state
+            // belongs to an empty library, not to an unplayable one.
+            if !recentBesides(resumeHero).isEmpty {
+                rotationRow("Recent", recentBesides(resumeHero), seeAll: .recentlyPlayed)
+            } else if loaded, recent.isEmpty {
                 emptyState.padding(.horizontal, 20)
             }
             if !favorites.isEmpty {
@@ -445,10 +480,45 @@ struct HomeView: View {
             .ignoresSafeArea(edges: .top)
         }
         .focusScope(homeFocus)
+        #elseif targetEnvironment(macCatalyst)
+        return macContent(height: height)
         #else
         return legacyWideLayout(height: height)
         #endif
     }
+
+    #if targetEnvironment(macCatalyst)
+    /// The TV's Home composition read at a desk instead of a sofa: the
+    /// same hero band leading the same rows, with `TenFoot`'s Mac tier
+    /// carrying the scale change. `tvContent` is this layout's model;
+    /// keep the two structurally in step when either changes. The
+    /// phone-as-controller offer is deliberately absent, a Mac is the
+    /// screen end of that arrangement.
+    private func macContent(height: CGFloat) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                if let hero = resumeHero {
+                    heroCard(for: hero, height: min(height * 0.34, 320), wide: true)
+                        .padding(.bottom, 12)
+                }
+                if !recentBesides(resumeHero).isEmpty {
+                    rotationRow("Recent", recentBesides(resumeHero), seeAll: .recentlyPlayed)
+                } else if loaded, recent.isEmpty {
+                    emptyState.padding(.horizontal, 20)
+                }
+                if !favorites.isEmpty {
+                    rotationRow(
+                        "Favorites", favorites, seeAll: session.favoriteCollection.map { .collection($0) }
+                    )
+                }
+            }
+            .padding(.horizontal, TenFoot.contentInset)
+            .padding(.top, 24)
+        }
+        .contentMargins(.bottom, 60, for: .scrollContent)
+        .withoutScrollEdgeEffect()
+    }
+    #endif
 
     #if os(tvOS)
     private func tvContent(height: CGFloat) -> some View {
@@ -466,12 +536,12 @@ struct HomeView: View {
             // the hero rather than sharing the same tight spacing Recent
             // and Favorites use between each other.
             VStack(alignment: .leading, spacing: 16) {
-                if let hero = recent.first {
+                if let hero = resumeHero {
                     heroCard(for: hero, height: min(height * 0.40, 420), wide: true)
                         .padding(.bottom, 20)
                 }
-                if recent.count > 1 {
-                    rotationRow("Recent", Array(recent.dropFirst()), seeAll: .recentlyPlayed)
+                if !recentBesides(resumeHero).isEmpty {
+                    rotationRow("Recent", recentBesides(resumeHero), seeAll: .recentlyPlayed)
                 } else if loaded, recent.isEmpty {
                     tvEmptyState
                 }
@@ -509,7 +579,7 @@ struct HomeView: View {
     #if !os(tvOS)
     private func legacyWideLayout(height: CGFloat) -> some View {
         HStack(alignment: .top, spacing: 20) {
-            if let hero = recent.first {
+            if let hero = resumeHero {
                 heroCard(for: hero, height: max(200, height - 40), wide: true)
                     .frame(maxWidth: 320)
                     .padding(.vertical, 20)
@@ -528,8 +598,8 @@ struct HomeView: View {
                             .padding(.top, 20)
                             .task(id: playing) { await resolveOfferName(playing) }
                     }
-                    if recent.count > 1 {
-                        rotationRow("Recent", Array(recent.dropFirst()), seeAll: .recentlyPlayed)
+                    if !recentBesides(resumeHero).isEmpty {
+                        rotationRow("Recent", recentBesides(resumeHero), seeAll: .recentlyPlayed)
                     } else if loaded, recent.isEmpty {
                         emptyState.padding(.horizontal, 20)
                     }
@@ -755,7 +825,9 @@ struct HomeView: View {
             // reading of Resume with nothing to resume into.
             guard loaded else { return }
             quickActions.pending = nil
-            if let first = recent.first {
+            // The same promise the hero makes, made from the app icon,
+            // so it picks the same game rather than the newest one.
+            if let first = resumeHero {
                 Task { await beginResume(first) }
             }
         case .recents:
@@ -998,6 +1070,7 @@ struct HomeView: View {
                             .focused($focusedShelfCard, equals: "\(title)-\(rom.id)")
                             #else
                             .buttonStyle(.plain)
+                            .macHoverLift()
                             #endif
                             .gameContextMenu(rom: rom)
 
@@ -1097,8 +1170,17 @@ struct HomeView: View {
         // dead connection paid the timeout twice before this screen could
         // say anything, which doubled the wait for the answer that matters
         // least.
+        #if targetEnvironment(macCatalyst)
+        // Desk-width shelves: a Mac window fits far more than the
+        // phone-tuned eight, so fetch enough that both rows run past the
+        // window edge and scroll, the way the TV's rotation rows read.
+        // iOS and tvOS compile the untouched calls in the other branch.
+        async let recentTask = session.recentlyPlayed(limit: 16)
+        async let favoritesTask = session.favoriteRoms(limit: 24)
+        #else
         async let recentTask = session.recentlyPlayed()
         async let favoritesTask = session.favoriteRoms()
+        #endif
 
         do {
             recent = try await recentTask.items
@@ -1112,6 +1194,41 @@ struct HomeView: View {
             favorites = favs
         }
         loaded = true
+    }
+
+    /// The game the hero offers to carry on with: the most recent one
+    /// this device can actually play.
+    ///
+    /// Resume is a promise. The hero says carry on with this, and a
+    /// platform that has been taken off this device cannot carry on with
+    /// anything: tapping it reaches a launch screen with a greyed-out
+    /// Play button, which reads as the app being broken rather than as a
+    /// system it no longer runs. Dreamcast going Mac only on 2026-09-01
+    /// is the first platform this has applied to.
+    ///
+    /// SKIPPED FOR THE HERO ONLY, never dropped from the shelf below it.
+    /// An unsupported game still belongs on Home and in the library:
+    /// its launch screen is how somebody gets the rom and its BIOS out
+    /// through Keep, to play in another emulator. Hiding it would take
+    /// away the one thing this app can still do for that game. The hero
+    /// is the single place that makes a promise, so it is the only
+    /// place that has to be able to keep it.
+    ///
+    /// THE EXCEPTION, iPhone only: a Dreamcast game whose VMU card
+    /// carries a minigame can lead the hero, because the card itself is
+    /// playable here in the VMU core and that is the whole point of the
+    /// phone-as-VMU design. It is also the thing most worth having on
+    /// the way out of the house. tvOS gets no exception because the VMU
+    /// core is iOS only, so there is nothing there to play.
+    private var resumeHero: Rom? {
+        recent.first { PlatformSupport.canPlay($0, platformsVersions: session.platformsVersions) }
+    }
+
+    /// Everything recent except whichever game the hero took, so the
+    /// shelf never shows the same cover twice and never loses one.
+    private func recentBesides(_ hero: Rom?) -> [Rom] {
+        guard let hero else { return recent }
+        return recent.filter { $0.id != hero.id }
     }
 }
 

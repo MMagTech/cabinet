@@ -69,10 +69,10 @@ final class ContentProvider: TVTopShelfContentProvider {
         // they are for. Play boots the game. Select opens its launch
         // screen, where the save states are, because someone resuming
         // Tuesday's run wants that and not a fresh boot.
-        if let play = TopShelfSnapshot.Link.play(romId: game.romId) {
+        if let play = CabinetLink.play(romId: game.romId) {
             item.playAction = TVTopShelfAction(url: play)
         }
-        if let display = TopShelfSnapshot.Link.game(romId: game.romId) {
+        if let display = CabinetLink.game(romId: game.romId) {
             item.displayAction = TVTopShelfAction(url: display)
         }
 

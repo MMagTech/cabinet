@@ -27,6 +27,11 @@ final class NetworkMonitor: ObservableObject {
     private let monitor = NWPathMonitor()
     /// The literal hardware truth: is there a network path right now.
     @Published private(set) var isConnected = true
+    /// Whether that path is one the system calls expensive, cellular or
+    /// a personal hotspot. Read by Download All on the phone, which only
+    /// ever transfers over Wi-Fi, so its confirmation can say the queue
+    /// will wait rather than start.
+    @Published private(set) var isExpensive = false
     /// A person's own choice to have the app act as though there is no
     /// connection, kept games only, even when there genuinely is one.
     /// The Low Data Mode shape, not a fallback for a broken signal: the
@@ -62,7 +67,11 @@ final class NetworkMonitor: ObservableObject {
         let queue = DispatchQueue(label: "com.mmagtech.RommApp.networkMonitor")
         monitor.pathUpdateHandler = { [weak self] path in
             let connected = path.status == .satisfied
-            Task { @MainActor in self?.isConnected = connected }
+            let expensive = path.isExpensive
+            Task { @MainActor in
+                self?.isConnected = connected
+                self?.isExpensive = expensive
+            }
         }
         monitor.start(queue: queue)
     }

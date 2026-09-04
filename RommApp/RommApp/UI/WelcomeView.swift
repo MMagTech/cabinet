@@ -42,6 +42,10 @@ struct WelcomeView: View {
                         showingServerSetup = true
                     }
 
+                    // Not on the Mac: that door is for the device in your
+                    // hand becoming the controller, and a Mac is the screen
+                    // end of that arrangement, never the controller end.
+                    #if !targetEnvironment(macCatalyst)
                     Divider().padding(.leading, 54)
 
                     door(
@@ -51,6 +55,7 @@ struct WelcomeView: View {
                     ) {
                         session.useAsControllerOnly()
                     }
+                    #endif
                 }
                 .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 12))
 

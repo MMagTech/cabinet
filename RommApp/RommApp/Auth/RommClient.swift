@@ -280,11 +280,22 @@ actor RommClient {
         var req = request(path: "/api/auth/device/init", method: "POST")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
+        #if targetEnvironment(macCatalyst)
+        // UIDevice.current.name under Catalyst reports a generic "iPad",
+        // which is exactly how the first Mac pairing showed up in RomM's
+        // devices list. The host name is the Mac's actual name.
+        let host = ProcessInfo.processInfo.hostName
+        let deviceName = host.hasSuffix(".local") ? String(host.dropLast(".local".count)) : host
+        let devicePlatform = "macOS"
+        #else
+        let deviceName = await UIDevice.current.name
+        let devicePlatform = "iOS"
+        #endif
         let body: [String: Any] = [
             "client_device_identifier": Self.deviceIdentifier,
-            "name": await UIDevice.current.name,
+            "name": deviceName.isEmpty ? devicePlatform : deviceName,
             "client": "romm-ios",
-            "platform": "iOS",
+            "platform": devicePlatform,
             "client_version": Self.appVersion,
             "requested_scopes": RommScopes.required,
         ]

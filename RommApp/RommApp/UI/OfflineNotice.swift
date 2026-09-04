@@ -47,6 +47,22 @@ struct OfflineNotice: View {
 /// can do anything about it. Views hold one of these instead of a bare
 /// `String` so the offline case can get its own treatment without every
 /// screen re-testing the error itself.
+/// Whether an error is a load being cancelled rather than a load
+/// failing.
+///
+/// A `.task` is cancelled whenever its view goes away or is rebuilt with
+/// a new identity, and the in-flight request throws on the way out.
+/// That is not a failure and must not be shown as one: the Mac sidebar
+/// gives every platform its own identity, so selecting one could cancel
+/// the previous one's fetch and paint "Could not load games" over a
+/// screen that was simply being replaced. Pressing Try again then
+/// "worked", because nothing had been wrong.
+func isCancellation(_ error: Error) -> Bool {
+    if error is CancellationError { return true }
+    if let urlError = error as? URLError, urlError.code == .cancelled { return true }
+    return false
+}
+
 enum LoadFailure: Equatable {
     case offline
     case other(String)

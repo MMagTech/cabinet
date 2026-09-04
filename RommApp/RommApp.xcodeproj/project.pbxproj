@@ -9,6 +9,11 @@
 /* Begin PBXBuildFile section */
 		10C5183AB7ADB61F260D8031 /* CoreImage.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 085D59256C4DAA9CDEBB4573 /* CoreImage.framework */; };
 		BB00000000000000000022 /* CabinetTopShelf.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = BB00000000000000000021 /* CabinetTopShelf.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		BB0000000000000000004B /* CabinetLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000004A /* CabinetLink.swift */; };
+		BB00000000000000000059 /* CabinetWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = BB00000000000000000050 /* CabinetWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		BB0000000000000000005B /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000005A /* WidgetSnapshot.swift */; };
+		BB0000000000000000005C /* CabinetLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000004A /* CabinetLink.swift */; };
+		BB0000000000000000005E /* DownloadActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000005D /* DownloadActivity.swift */; };
 		F50297785940689BEBC3D8A3 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E4B2AC95B1AB0E374EB9378B /* Foundation.framework */; };
 /* End PBXBuildFile section */
 
@@ -19,6 +24,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = BB00000000000000000020;
 			remoteInfo = CabinetTopShelf;
+		};
+		BB00000000000000000056 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BB00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BB00000000000000000052;
+			remoteInfo = CabinetWidget;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -34,12 +46,27 @@
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BB00000000000000000058 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				BB00000000000000000059 /* CabinetWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		085D59256C4DAA9CDEBB4573 /* CoreImage.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreImage.framework; path = System/Library/Frameworks/CoreImage.framework; sourceTree = SDKROOT; };
 		22568825F8A2B0F5F517C40C /* Cabinet TV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Cabinet TV.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000021 /* CabinetTopShelf.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CabinetTopShelf.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB0000000000000000004A /* CabinetLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CabinetLink.swift; path = RommApp/UI/CabinetLink.swift; sourceTree = "<group>"; };
+		BB00000000000000000050 /* CabinetWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CabinetWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB0000000000000000005A /* WidgetSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WidgetSnapshot.swift; path = RommApp/UI/WidgetSnapshot.swift; sourceTree = "<group>"; };
+		BB0000000000000000005D /* DownloadActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DownloadActivity.swift; path = RommApp/UI/DownloadActivity.swift; sourceTree = "<group>"; };
 		E4B2AC95B1AB0E374EB9378B /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
@@ -72,6 +99,9 @@
 				Native/Snes9x/libsnes9x_ios.a,
 				Native/Stella2014/libstella2014_ios.a,
 				Native/Vecx/libvecx_ios.a,
+				Native/VeMUlator/libvemulator_ios.a,
+				Native/VeMUlator/VeMUlatorCore.mm,
+				Native/VMUPlayerView.swift,
 				Player/GameLaunchView.swift,
 				Player/PlayerView.swift,
 				Player/RomExporter.swift,
@@ -197,6 +227,13 @@
 			);
 			target = BB00000000000000000020 /* CabinetTopShelf */;
 		};
+		BB00000000000000000060 /* Exceptions for "RommAppWidget" folder in "CabinetWidget" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = BB00000000000000000052 /* CabinetWidget */;
+		};
 		C6626E28D50263B9632B46B6 /* Exceptions for "RommAppTV" folder in "RommAppTV" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -231,6 +268,23 @@
 				BB00000000000000000025 /* Exceptions for "RommAppTopShelf" folder in "CabinetTopShelf" target */,
 			);
 			path = RommAppTopShelf;
+			sourceTree = "<group>";
+		};
+		BB00000000000000000051 /* RommAppWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				BB00000000000000000060 /* Exceptions for "RommAppWidget" folder in "CabinetWidget" target */,
+			);
+			path = RommAppWidget;
+			sourceTree = "<group>";
+		};
+		BB000000000000000000A7 /* RommAppMac */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			explicitFolders = (
+				PCSX2Resources,
+				DolphinSys,
+			);
+			path = RommAppMac;
 			sourceTree = "<group>";
 		};
 		C16DDCA1D4B951A394B9FA7D /* RommAppTV */ = {
@@ -274,6 +328,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BB00000000000000000054 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BB000000000000000000A5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -281,6 +349,9 @@
 			isa = PBXGroup;
 			children = (
 				BB00000000000000000023 /* RommAppTopShelf */,
+				BB0000000000000000004A /* CabinetLink.swift */,
+				BB0000000000000000005A /* WidgetSnapshot.swift */,
+				BB0000000000000000005D /* DownloadActivity.swift */,
 			);
 			name = "Recovered References";
 			sourceTree = "<group>";
@@ -308,6 +379,8 @@
 				BB0000000000000000000F /* RommApp */,
 				BB00000000000000000017 /* LayoutEditor */,
 				C16DDCA1D4B951A394B9FA7D /* RommAppTV */,
+				BB000000000000000000A7 /* RommAppMac */,
+				BB00000000000000000051 /* RommAppWidget */,
 				BB00000000000000000003 /* Products */,
 				4AE25F905859E16D5B246FD0 /* Frameworks */,
 				0F2C9EB8303235A40049E308 /* Recovered References */,
@@ -319,6 +392,7 @@
 			children = (
 				22568825F8A2B0F5F517C40C /* Cabinet TV.app */,
 				BB00000000000000000021 /* CabinetTopShelf.appex */,
+				BB00000000000000000050 /* CabinetWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -334,10 +408,12 @@
 				BB00000000000000000008 /* Frameworks */,
 				BB00000000000000000007 /* Resources */,
 				BB0000000000000000003A /* Embed ANGLE Frameworks */,
+				BB00000000000000000058 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				BB00000000000000000057 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				BB0000000000000000000F /* RommApp */,
@@ -384,6 +460,47 @@
 			productName = CabinetTopShelf;
 			productReference = BB00000000000000000021 /* CabinetTopShelf.appex */;
 			productType = "com.apple.product-type.app-extension";
+		};
+		BB00000000000000000052 /* CabinetWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BB0000000000000000005F /* Build configuration list for PBXNativeTarget "CabinetWidget" */;
+			buildPhases = (
+				BB00000000000000000053 /* Sources */,
+				BB00000000000000000054 /* Frameworks */,
+				BB00000000000000000055 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				BB00000000000000000051 /* RommAppWidget */,
+			);
+			name = CabinetWidget;
+			productName = CabinetWidget;
+			productReference = BB00000000000000000050 /* CabinetWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		BB000000000000000000A0 /* RommAppMac */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BB000000000000000000A1 /* Build configuration list for PBXNativeTarget "RommAppMac" */;
+			buildPhases = (
+				BB000000000000000000A4 /* Sources */,
+				BB000000000000000000A5 /* Frameworks */,
+				BB000000000000000000A6 /* Resources */,
+				BB000000000000000000A8 /* Embed ANGLE Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				BB0000000000000000000F /* RommApp */,
+				BB000000000000000000A7 /* RommAppMac */,
+			);
+			name = RommAppMac;
+			productName = RommAppMac;
+			productType = "com.apple.product-type.application";
 		};
 		FB4792A61D4A9C6E7864DCEB /* RommAppTV */ = {
 			isa = PBXNativeTarget;
@@ -445,7 +562,9 @@
 				BB00000000000000000004 /* RommApp */,
 				BB00000000000000000010 /* LayoutEditor */,
 				FB4792A61D4A9C6E7864DCEB /* RommAppTV */,
+				BB000000000000000000A0 /* RommAppMac */,
 				BB00000000000000000020 /* CabinetTopShelf */,
+				BB00000000000000000052 /* CabinetWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -473,6 +592,20 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		BB0000000000000000002C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BB00000000000000000055 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BB000000000000000000A6 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -512,6 +645,21 @@
 			shellPath = /bin/sh;
 			shellScript = "if [ \"$PLATFORM_NAME\" != \"appletvos\" ]; then exit 0; fi\nDEST=\"$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH\"\nmkdir -p \"$DEST\"\nfor FW in libEGL libGLESv2; do\n  rsync -a --delete \"$PROJECT_DIR/Vendor/ANGLE/tvos/$FW.framework\" \"$DEST/\"\n  if [ \"$CODE_SIGNING_ALLOWED\" = \"YES\" ] && [ -n \"$EXPANDED_CODE_SIGN_IDENTITY\" ]; then\n    codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --timestamp=none \"$DEST/$FW.framework\"\n  fi\ndone\n";
 		};
+		BB000000000000000000A8 /* Embed ANGLE Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Embed ANGLE Frameworks";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"$PLATFORM_NAME\" != \"macosx\" ]; then exit 0; fi\nDEST=\"$BUILT_PRODUCTS_DIR/$FRAMEWORKS_FOLDER_PATH\"\nmkdir -p \"$DEST\"\nfor FW in libEGL libGLESv2; do\n  rsync -a --delete \"$PROJECT_DIR/Vendor/ANGLE/mac/$FW.framework\" \"$DEST/\"\n  if [ \"$CODE_SIGNING_ALLOWED\" = \"YES\" ] && [ -n \"$EXPANDED_CODE_SIGN_IDENTITY\" ]; then\n    codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" --timestamp=none \"$DEST/$FW.framework\"\n  fi\ndone\n\n# ANGLE's libEGL does not carry the EGL implementation. The first\n# eglGetDisplay dlopens libGLESv2 by a path built from the EXECUTABLE'S\n# own directory: <exec dir>/Frameworks/libGLESv2.framework/libGLESv2.\n# iOS and tvOS bundles are flat, so that resolves. A Mac bundle puts the\n# executable in Contents/MacOS and frameworks in Contents/Frameworks, so\n# the dlopen fails and ANGLE then calls through a null pointer. Every\n# hardware-rendered core (Dreamcast, N64, PSP) segfaulted at exactly that\n# call. The symlink gives the loader the layout it expects without\n# duplicating 12MB of framework.\nEXEC_DIR=\"$BUILT_PRODUCTS_DIR/$EXECUTABLE_FOLDER_PATH\"\nif [ \"$EXEC_DIR\" != \"$DEST\" ]; then\n  ln -sfn ../Frameworks \"$EXEC_DIR/Frameworks\"\nfi\n";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -540,6 +688,24 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BB0000000000000000004B /* CabinetLink.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BB00000000000000000053 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BB0000000000000000005B /* WidgetSnapshot.swift in Sources */,
+				BB0000000000000000005C /* CabinetLink.swift in Sources */,
+				BB0000000000000000005E /* DownloadActivity.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BB000000000000000000A4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -551,6 +717,11 @@
 			target = BB00000000000000000020 /* CabinetTopShelf */;
 			targetProxy = BB00000000000000000027 /* PBXContainerItemProxy */;
 		};
+		BB00000000000000000057 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BB00000000000000000052 /* CabinetWidget */;
+			targetProxy = BB00000000000000000056 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -561,10 +732,12 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
 				CODE_SIGN_ENTITLEMENTS = RommAppTV/RommAppTV.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
+				EXCLUDED_SOURCE_FILE_NAMES = "*_mac.a";
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=appletvsimulator*]" = (
+					"*_mac.a",
 					"*_tvos.a",
 					"*Core.mm",
 				);
@@ -611,8 +784,9 @@
 					"$(PROJECT_DIR)/RommApp/Native/MelonDS",
 					"$(PROJECT_DIR)/RommApp/Native/PPSSPP",
 					"$(PROJECT_DIR)/RommApp/Native/GW",
+					"$(PROJECT_DIR)/RommApp/Native/VeMUlator",
 				);
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 1.0.0;
 				OTHER_LDFLAGS = "-lz";
 				"OTHER_LDFLAGS[sdk=appletvos*]" = (
 					"-lz",
@@ -691,12 +865,15 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
+				CODE_SIGN_ENTITLEMENTS = RommApp/RommApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
+				EXCLUDED_SOURCE_FILE_NAMES = "*_mac.a";
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = (
 					"*_ios.a",
+					"*_mac.a",
 					"*Core.mm",
 				);
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = "$(PROJECT_DIR)/Vendor/ANGLE/ios";
@@ -726,6 +903,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet Dev";
 				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -757,8 +935,9 @@
 					"$(PROJECT_DIR)/RommApp/Native/MelonDS",
 					"$(PROJECT_DIR)/RommApp/Native/PPSSPP",
 					"$(PROJECT_DIR)/RommApp/Native/GW",
+					"$(PROJECT_DIR)/RommApp/Native/VeMUlator",
 				);
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 1.0.0;
 				OTHER_LDFLAGS = (
 					"-lz",
 					"-framework",
@@ -781,12 +960,15 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
+				CODE_SIGN_ENTITLEMENTS = RommApp/RommApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
+				EXCLUDED_SOURCE_FILE_NAMES = "*_mac.a";
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = (
 					"*_ios.a",
+					"*_mac.a",
 					"*Core.mm",
 				);
 				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = "$(PROJECT_DIR)/Vendor/ANGLE/ios";
@@ -816,6 +998,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Cabinet;
 				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -847,8 +1030,9 @@
 					"$(PROJECT_DIR)/RommApp/Native/MelonDS",
 					"$(PROJECT_DIR)/RommApp/Native/PPSSPP",
 					"$(PROJECT_DIR)/RommApp/Native/GW",
+					"$(PROJECT_DIR)/RommApp/Native/VeMUlator",
 				);
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 1.0.0;
 				OTHER_LDFLAGS = (
 					"-lz",
 					"-framework",
@@ -929,7 +1113,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = RommAppTopShelf/RommAppTopShelf.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RommAppTopShelf/Info.plist;
@@ -939,7 +1123,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev.tv.topshelf;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -956,7 +1140,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = RommAppTopShelf/RommAppTopShelf.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RommAppTopShelf/Info.plist;
@@ -966,7 +1150,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet.topshelf;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -979,6 +1163,287 @@
 			};
 			name = Release;
 		};
+		BB00000000000000000061 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = RommAppWidget/RommAppWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 12;
+				DEVELOPMENT_TEAM = ZMUB88RZ5D;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RommAppWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Cabinet;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		BB00000000000000000062 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = RommAppWidget/RommAppWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 12;
+				DEVELOPMENT_TEAM = ZMUB88RZ5D;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RommAppWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Cabinet;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		BB000000000000000000A2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIconMac;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
+				CODE_SIGN_ENTITLEMENTS = RommAppMac/CabinetMac.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
+				DEVELOPMENT_TEAM = ZMUB88RZ5D;
+				EXCLUDED_SOURCE_FILE_NAMES = (
+					"*_ios.a",
+					"*_tvos.a",
+				);
+				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Vendor/ANGLE/mac";
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"CABINET_ANGLE=1",
+				);
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/RommApp/Native/Libretro",
+					"$(PROJECT_DIR)/RommApp/Native/FBNeo",
+					"$(PROJECT_DIR)/RommApp/Native/Saturn",
+					"$(PROJECT_DIR)/RommApp/Native/Gambatte",
+					"$(PROJECT_DIR)/RommApp/Native/MGBA",
+					"$(PROJECT_DIR)/RommApp/Native/GenesisPlusGX",
+					"$(PROJECT_DIR)/RommApp/Native/BeetlePCEFast",
+					"$(PROJECT_DIR)/RommApp/Native/Snes9x",
+					"$(PROJECT_DIR)/RommApp/Native/FCEUmm",
+					"$(PROJECT_DIR)/RommApp/Native/BeetleNGP",
+					"$(PROJECT_DIR)/RommApp/Native/ProSystem",
+					"$(PROJECT_DIR)/RommApp/Native/PicoDrive",
+					"$(PROJECT_DIR)/RommApp/Native/PCSXReARMed",
+					"$(PROJECT_DIR)/RommApp/Native/Archive",
+					"$(PROJECT_DIR)/Vendor/ANGLE/include",
+				);
+				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Cabinet Dev";
+				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/RommApp/Native/BeetleNGP",
+					"$(PROJECT_DIR)/RommApp/Native/BeetlePCEFast",
+					"$(PROJECT_DIR)/RommApp/Native/BeetleVB",
+					"$(PROJECT_DIR)/RommApp/Native/FBNeo",
+					"$(PROJECT_DIR)/RommApp/Native/FCEUmm",
+					"$(PROJECT_DIR)/RommApp/Native/Flycast",
+					"$(PROJECT_DIR)/RommApp/Native/Gambatte",
+					"$(PROJECT_DIR)/RommApp/Native/GenesisPlusGX",
+					"$(PROJECT_DIR)/RommApp/Native/GW",
+					"$(PROJECT_DIR)/RommApp/Native/MAME2003Plus",
+					"$(PROJECT_DIR)/RommApp/Native/MelonDS",
+					"$(PROJECT_DIR)/RommApp/Native/MGBA",
+					"$(PROJECT_DIR)/RommApp/Native/Mupen64Plus",
+					"$(PROJECT_DIR)/RommApp/Native/Opera",
+					"$(PROJECT_DIR)/RommApp/Native/PCSXReARMed",
+					"$(PROJECT_DIR)/RommApp/Native/PicoDrive",
+					"$(PROJECT_DIR)/RommApp/Native/PPSSPP",
+					"$(PROJECT_DIR)/RommApp/Native/ProSystem",
+					"$(PROJECT_DIR)/RommApp/Native/Saturn",
+					"$(PROJECT_DIR)/RommApp/Native/Snes9x",
+					"$(PROJECT_DIR)/RommApp/Native/Stella2014",
+					"$(PROJECT_DIR)/RommApp/Native/Vecx",
+					"$(PROJECT_DIR)/RommApp/Native/VeMUlator",
+				);
+				MARKETING_VERSION = 1.0.0;
+				OTHER_LDFLAGS = (
+					"-lz",
+					"-lc++",
+					"-framework",
+					libEGL,
+					"-framework",
+					libGLESv2,
+					"-framework",
+					Metal,
+					"-framework",
+					QuartzCore,
+					"-framework",
+					AVFoundation,
+					"-framework",
+					CoreMedia,
+					"-framework",
+					IOKit,
+					"-framework",
+					MetalFX,
+					"-lcurl",
+					"-lpcap",
+					"-lbz2",
+					"-liconv",
+					"-lresolv",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev.mac;
+				PRODUCT_NAME = "Cabinet Mac";
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "RommApp/Native/RommApp-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				"TARGETED_DEVICE_FAMILY[sdk=macosx*]" = 6;
+			};
+			name = Debug;
+		};
+		BB000000000000000000A3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIconMac;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
+				CODE_SIGN_ENTITLEMENTS = RommAppMac/CabinetMac.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
+				DEVELOPMENT_TEAM = ZMUB88RZ5D;
+				EXCLUDED_SOURCE_FILE_NAMES = (
+					"*_ios.a",
+					"*_tvos.a",
+				);
+				FRAMEWORK_SEARCH_PATHS = "$(PROJECT_DIR)/Vendor/ANGLE/mac";
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"CABINET_ANGLE=1",
+				);
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/RommApp/Native/Libretro",
+					"$(PROJECT_DIR)/RommApp/Native/FBNeo",
+					"$(PROJECT_DIR)/RommApp/Native/Saturn",
+					"$(PROJECT_DIR)/RommApp/Native/Gambatte",
+					"$(PROJECT_DIR)/RommApp/Native/MGBA",
+					"$(PROJECT_DIR)/RommApp/Native/GenesisPlusGX",
+					"$(PROJECT_DIR)/RommApp/Native/BeetlePCEFast",
+					"$(PROJECT_DIR)/RommApp/Native/Snes9x",
+					"$(PROJECT_DIR)/RommApp/Native/FCEUmm",
+					"$(PROJECT_DIR)/RommApp/Native/BeetleNGP",
+					"$(PROJECT_DIR)/RommApp/Native/ProSystem",
+					"$(PROJECT_DIR)/RommApp/Native/PicoDrive",
+					"$(PROJECT_DIR)/RommApp/Native/PCSXReARMed",
+					"$(PROJECT_DIR)/RommApp/Native/Archive",
+					"$(PROJECT_DIR)/Vendor/ANGLE/include",
+				);
+				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Cabinet;
+				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = NO;
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/RommApp/Native/BeetleNGP",
+					"$(PROJECT_DIR)/RommApp/Native/BeetlePCEFast",
+					"$(PROJECT_DIR)/RommApp/Native/BeetleVB",
+					"$(PROJECT_DIR)/RommApp/Native/FBNeo",
+					"$(PROJECT_DIR)/RommApp/Native/FCEUmm",
+					"$(PROJECT_DIR)/RommApp/Native/Flycast",
+					"$(PROJECT_DIR)/RommApp/Native/Gambatte",
+					"$(PROJECT_DIR)/RommApp/Native/GenesisPlusGX",
+					"$(PROJECT_DIR)/RommApp/Native/GW",
+					"$(PROJECT_DIR)/RommApp/Native/MAME2003Plus",
+					"$(PROJECT_DIR)/RommApp/Native/MelonDS",
+					"$(PROJECT_DIR)/RommApp/Native/MGBA",
+					"$(PROJECT_DIR)/RommApp/Native/Mupen64Plus",
+					"$(PROJECT_DIR)/RommApp/Native/Opera",
+					"$(PROJECT_DIR)/RommApp/Native/PCSXReARMed",
+					"$(PROJECT_DIR)/RommApp/Native/PicoDrive",
+					"$(PROJECT_DIR)/RommApp/Native/PPSSPP",
+					"$(PROJECT_DIR)/RommApp/Native/ProSystem",
+					"$(PROJECT_DIR)/RommApp/Native/Saturn",
+					"$(PROJECT_DIR)/RommApp/Native/Snes9x",
+					"$(PROJECT_DIR)/RommApp/Native/Stella2014",
+					"$(PROJECT_DIR)/RommApp/Native/Vecx",
+					"$(PROJECT_DIR)/RommApp/Native/VeMUlator",
+				);
+				MARKETING_VERSION = 1.0.0;
+				OTHER_LDFLAGS = (
+					"-lz",
+					"-lc++",
+					"-framework",
+					libEGL,
+					"-framework",
+					libGLESv2,
+					"-framework",
+					Metal,
+					"-framework",
+					QuartzCore,
+					"-framework",
+					AVFoundation,
+					"-framework",
+					CoreMedia,
+					"-framework",
+					IOKit,
+					"-framework",
+					MetalFX,
+					"-lcurl",
+					"-lpcap",
+					"-lbz2",
+					"-liconv",
+					"-lresolv",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet.mac;
+				PRODUCT_NAME = "Cabinet Mac";
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "RommApp/Native/RommApp-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				"TARGETED_DEVICE_FAMILY[sdk=macosx*]" = 6;
+			};
+			name = Release;
+		};
 		F79B1708F32E796D92796E0D /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -986,10 +1451,12 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
 				CODE_SIGN_ENTITLEMENTS = RommAppTV/RommAppTV.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
+				EXCLUDED_SOURCE_FILE_NAMES = "*_mac.a";
 				"EXCLUDED_SOURCE_FILE_NAMES[sdk=appletvsimulator*]" = (
+					"*_mac.a",
 					"*_tvos.a",
 					"*Core.mm",
 				);
@@ -1036,8 +1503,9 @@
 					"$(PROJECT_DIR)/RommApp/Native/MelonDS",
 					"$(PROJECT_DIR)/RommApp/Native/PPSSPP",
 					"$(PROJECT_DIR)/RommApp/Native/GW",
+					"$(PROJECT_DIR)/RommApp/Native/VeMUlator",
 				);
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 1.0.0;
 				OTHER_LDFLAGS = "-lz";
 				"OTHER_LDFLAGS[sdk=appletvos*]" = (
 					"-lz",
@@ -1101,6 +1569,24 @@
 			buildConfigurations = (
 				BB0000000000000000002E /* Release */,
 				BB0000000000000000002D /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BB0000000000000000005F /* Build configuration list for PBXNativeTarget "CabinetWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BB00000000000000000062 /* Release */,
+				BB00000000000000000061 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BB000000000000000000A1 /* Build configuration list for PBXNativeTarget "RommAppMac" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BB000000000000000000A2 /* Debug */,
+				BB000000000000000000A3 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -1,5 +1,10 @@
+#import <CommonCrypto/CommonCrypto.h>
 #import "LibretroFrontend.h"
 #include "LibretroCoreAPI.h"
+// Explicit, not inherited: TARGET_OS_MACCATALYST is used in an #if below,
+// and an undefined macro there evaluates to 0 in silence rather than
+// failing the build.
+#include <TargetConditionals.h>
 // The fourteen per-core static libraries are built for real tvOS/iOS
 // hardware (arm64-apple-tvos), not for a simulator, and rebuilding
 // emulator cores for a simulator target buys nothing: performance there
@@ -8,7 +13,10 @@
 // cores at all and exists purely for UI work, which is most of what
 // anyone iterates on anyway. Everything above this line, the frontend
 // itself, still compiles, so nothing else in the app needs to know.
-#if !TARGET_OS_SIMULATOR
+// CABINET_NO_NATIVE_CORES is the same idea for a real platform: the Mac
+// target defines it while no Mac core libraries exist yet, and drops the
+// definition, not this guard, when they land.
+#if !TARGET_OS_SIMULATOR && !CABINET_NO_NATIVE_CORES
 #import "FBNeoCore.h"
 #import "SaturnCore.h"
 #import "GambatteCore.h"
@@ -32,6 +40,7 @@
 #import "PPSSPPCore.h"
 #if !TARGET_OS_TV
 #import "GWCore.h"
+#import "VeMUlatorCore.h"
 #endif
 #endif
 
@@ -249,6 +258,63 @@ EGLSurface gEGLSurface = EGL_NO_SURFACE;
 // Non-nil sentinel so every `if (gGLContext)` guard in this file keeps
 // meaning "the GL world exists" without rewriting each site.
 void *gGLContext = nullptr;
+
+// ANGLE's blob cache, EGL_ANDROID_blob_cache. Every GL core's shaders
+// reach Metal through ANGLE, which translates each program from GLSL
+// to Metal's language at link time, every session, and that
+// translation is the share of a first-minutes hitch that macOS's own
+// Metal cache cannot save (it caches the compile that follows). With
+// these two callbacks installed, ANGLE stores each linked program's
+// translated form under a key of its own and asks for it back on the
+// next link, so the second visit to a game skips the translation. One
+// hook, shared by N64, Dreamcast and PSP; the cores need no change and
+// their own shader caches (GLideN64's storage, PPSSPP's file) are just
+// other ways of saving the same thing. Files are regenerable, so they
+// live in Caches, where the system may trim them.
+static NSString *cabinetAngleBlobDirectory(void) {
+    static NSString *dir;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        NSString *caches = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject;
+        dir = [caches stringByAppendingPathComponent:@"Cabinet/angle-programs"];
+        [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+    });
+    return dir;
+}
+
+static NSString *cabinetAngleBlobPath(const void *key, long keySize) {
+    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(key, (CC_LONG)keySize, digest);
+    char hex[2 * CC_SHA256_DIGEST_LENGTH + 1];
+    for (int i = 0; i < CC_SHA256_DIGEST_LENGTH; i++) snprintf(hex + 2 * i, 3, "%02x", digest[i]);
+    return [cabinetAngleBlobDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"%s.bin", hex]];
+}
+
+static void cabinetAngleBlobSet(const void *key, long keySize, const void *value, long valueSize) {
+    @autoreleasepool {
+        NSData *data = [NSData dataWithBytes:value length:(NSUInteger)valueSize];
+        [data writeToFile:cabinetAngleBlobPath(key, keySize) options:NSDataWritingAtomic error:nil];
+    }
+}
+
+// Per the extension: return the blob's size; copy only when the
+// caller's buffer is large enough, which ANGLE asks in two passes.
+static long cabinetAngleBlobGet(const void *key, long keySize, void *value, long valueSize) {
+    @autoreleasepool {
+        NSData *data = [NSData dataWithContentsOfFile:cabinetAngleBlobPath(key, keySize)];
+        if (!data) return 0;
+        if (value && valueSize >= (long)data.length) memcpy(value, data.bytes, data.length);
+        return (long)data.length;
+    }
+}
+
+static void cabinetInstallAngleBlobCache(EGLDisplay display) {
+    typedef void (*SetBlobFuncs)(EGLDisplay, void (*)(const void *, long, const void *, long),
+                                 long (*)(const void *, long, void *, long));
+    SetBlobFuncs install = (SetBlobFuncs)eglGetProcAddress("eglSetBlobCacheFuncsANDROID");
+    if (install) install(display, cabinetAngleBlobSet, cabinetAngleBlobGet);
+}
+
 static bool cabinetAngleMakeCurrent(void) {
     // The N64 rainbow-noise root cause (2026-08-19) is fixed inside the
     // ANGLE frameworks themselves: mtl_buffer_pool.mm stamps retiring
@@ -260,6 +326,7 @@ static bool cabinetAngleMakeCurrent(void) {
         gEGLDisplay = eglGetDisplay(EGL_DEFAULT_DISPLAY);
         EGLint maj, min;
         if (!eglInitialize(gEGLDisplay, &maj, &min)) { gEGLDisplay = EGL_NO_DISPLAY; return false; }
+        cabinetInstallAngleBlobCache(gEGLDisplay);
         EGLint cfgAttrs[] = { EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_RED_SIZE, 8,
                               EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8,
                               EGL_DEPTH_SIZE, 24, EGL_STENCIL_SIZE, 8,
@@ -338,6 +405,36 @@ GLuint gColorTexture = 0;
 GLuint gDepthRenderbuffer = 0;
 GLuint gFBOWidth = 0;
 GLuint gFBOHeight = 0;
+// The readback ladder's third rung: a pixel-pack double buffer, so
+// glReadPixels stops being a synchronous wait for the GPU to finish the
+// frame the core just submitted. Each videoRefresh issues an async copy
+// of the CURRENT frame into one slot and publishes the OTHER slot's
+// finished frame from a whole frame ago, whose copy the GPU completed
+// long since, so mapping it costs the residual, not the render.
+// Measured before this existed: 12.7ms median inside glReadPixels on
+// Zombie Revenge (iPhone Air, 2026-08-29), two thirds of the whole
+// frame, scaling with scene weight because the stall IS the GPU wait;
+// shrinking the pixels was already proven not to help (the 4x-fewer-
+// pixels N64 measurement moved readback 2.3ms to 2.35ms). The price is
+// one frame of picture latency on the three hardware-rendered cores.
+//
+// Each slot remembers the dimensions its pending copy was issued at, so
+// a mid-game resolution switch (N64 does this) publishes the old-size
+// frame with its own true dimensions for exactly one frame instead of
+// lying about its shape. Slot ids and sizes live as long as the GL
+// context, like gFBO; validity is reset per core activation so no game
+// ever publishes a predecessor's picture.
+GLuint gReadbackPBO[2] = {0, 0};
+size_t gReadbackPBOSize[2] = {0, 0};
+unsigned gReadbackPBOWidth[2] = {0, 0};
+unsigned gReadbackPBOHeight[2] = {0, 0};
+bool gReadbackPBOValid[2] = {false, false};
+int gReadbackPBOCursor = 0;
+// The old synchronous path, kept whole: the permanent fallback if a map
+// ever fails (it then re-arms per activation), and the DEBUG A/B lever
+// via the -cabinetSyncReadback launch argument, mirroring the bench's
+// -cabinetBenchStockOptions revert.
+bool gForceSyncReadback = false;
 // Surfaced through -hwRenderDiagnostics for the Dreamcast spike UI, since
 // there is no easy console log access from a real device without Xcode
 // attached: cheaper to make the pipeline state visible in-app than to
@@ -706,11 +803,22 @@ void videoRefresh(const void *data, unsigned width, unsigned height, size_t pitc
             return;
         }
         std::lock_guard<std::mutex> lock(gFrameMutex);
+        // A frame larger than the framebuffer. The FBO is sized at load
+        // from the core's base geometry, and Flycast's base is a fixed
+        // 640x480 whatever its internal resolution, so at 3x it drew
+        // 1920x1440 into a 640x480 buffer: the bottom-left third survived
+        // and the readback asked for 1920 columns of a 640-wide buffer,
+        // which is the doubled SEGA line of 2026-09-02. Read back what
+        // this frame's buffer actually holds, then grow the buffer for the
+        // next frame. Grow only, never shrink: the Dreamcast boot flips
+        // between 640 and 1920 wide several times a second, and a buffer
+        // that followed it down would be rebuilt on every flip. Cores whose
+        // frames already fit, N64 and PSP, never enter either branch.
+        const GLuint wantWidth = width, wantHeight = height;
+        if (width > gFBOWidth) width = gFBOWidth;
+        if (height > gFBOHeight) height = gFBOHeight;
         size_t bytesPerRow = (size_t)width * 4;
         size_t needed = bytesPerRow * height;
-        if (gFrameBytes.size() != needed) {
-            gFrameBytes.resize(needed);
-        }
         // Drained before touching GL ourselves: glGetError returns and
         // clears one error at a time in the order they occurred, so a
         // single call after our own readback can actually be reporting
@@ -729,33 +837,98 @@ void videoRefresh(const void *data, unsigned width, unsigned height, size_t pitc
         // valid glReadPixels format/type pair on every GLES3
         // implementation. RGBA/UNSIGNED_BYTE is the one combination every
         // implementation is required to accept.
-        //
-        // Straight into gFrameBytes, with no intermediate buffer and no
-        // per-pixel work afterwards. This used to read into a fresh
-        // std::vector allocated every frame (1.2MB at 640x480, about
-        // 60MB/s of allocator churn at 50fps), then walk every pixel to
-        // swap R and B and reverse the row order into gFrameBytes. Both
-        // are gone: the bytes are handed to Metal as RGBA, and the upside
-        // down GL origin is corrected by flipping the display quad's
-        // texture coordinates, which costs nothing. Measured on Apple TV
-        // 2026-08-16 at 1.15ms a frame for the swizzle alone, against a
-        // 20ms budget the core was already missing in heavy scenes.
         glBindFramebuffer(GL_FRAMEBUFFER, gFBO);
         glPixelStorei(GL_PACK_ALIGNMENT, 1);
         double readbackStart = nowMS();
-        glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, gFrameBytes.data());
+        GLenum readbackErr = GL_NO_ERROR;
+        // Whether a finished picture landed in gFrameBytes this call. On
+        // the async path the very first frame after activation (or after
+        // a map failure) has no predecessor to publish, so the display
+        // simply keeps last frame's picture, the same thing a core dupe
+        // already does; publishing globals for an unfilled buffer is the
+        // one thing this flag exists to prevent.
+        bool published = false;
+        if (!gForceSyncReadback) {
+            int cur = gReadbackPBOCursor;
+            int prev = cur ^ 1;
+            // Issue this frame's copy, asynchronously: with a pack
+            // buffer bound, glReadPixels schedules a GPU-side copy and
+            // returns without waiting for the render to finish. That
+            // wait was the whole cost.
+            if (gReadbackPBO[cur] == 0) {
+                glGenBuffers(1, &gReadbackPBO[cur]);
+            }
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, gReadbackPBO[cur]);
+            if (gReadbackPBOSize[cur] != needed) {
+                glBufferData(GL_PIXEL_PACK_BUFFER, needed, nullptr, GL_STREAM_READ);
+                gReadbackPBOSize[cur] = needed;
+            }
+            glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            readbackErr = glGetError();
+            gReadbackPBOWidth[cur] = width;
+            gReadbackPBOHeight[cur] = height;
+            gReadbackPBOValid[cur] = readbackErr == GL_NO_ERROR;
+
+            // Publish the previous slot, whose copy has had a full frame
+            // to complete: mapping it costs the residual, not the render.
+            if (gReadbackPBOValid[prev]) {
+                size_t prevBytesPerRow = (size_t)gReadbackPBOWidth[prev] * 4;
+                size_t prevNeeded = prevBytesPerRow * gReadbackPBOHeight[prev];
+                glBindBuffer(GL_PIXEL_PACK_BUFFER, gReadbackPBO[prev]);
+                void *mapped = glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, prevNeeded, GL_MAP_READ_BIT);
+                if (mapped) {
+                    if (gFrameBytes.size() != prevNeeded) {
+                        gFrameBytes.resize(prevNeeded);
+                    }
+                    memcpy(gFrameBytes.data(), mapped, prevNeeded);
+                    glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+                    gFrameWidth = gReadbackPBOWidth[prev];
+                    gFrameHeight = gReadbackPBOHeight[prev];
+                    gFrameBytesPerRow = (uint32_t)prevBytesPerRow;
+                    published = true;
+                } else {
+                    // A map that fails once is a driver saying no; take
+                    // the loss honestly and run the old synchronous path
+                    // from here on (re-armed per activation). This frame
+                    // falls through to it below, so no picture is lost.
+                    gForceSyncReadback = true;
+                    gReadbackPBOValid[0] = gReadbackPBOValid[1] = false;
+                    gHWSetupDiagnostic += ", PBO map failed, sync readback fallback";
+                }
+            }
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+            gReadbackPBOCursor = prev;
+        }
+        if (gForceSyncReadback) {
+            // The original path, byte for byte: straight into gFrameBytes,
+            // no intermediate buffer, no per-pixel work (the old fresh-
+            // vector-plus-swizzle version cost 1.15ms/frame of pure CPU
+            // before it went; the bytes go to Metal as RGBA and the GL
+            // origin is corrected in texture coordinates).
+            if (gFrameBytes.size() != needed) {
+                gFrameBytes.resize(needed);
+            }
+            glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, gFrameBytes.data());
+            readbackErr = glGetError();
+            gFrameWidth = width;
+            gFrameHeight = height;
+            gFrameBytesPerRow = (uint32_t)bytesPerRow;
+            published = true;
+        }
         recordStage(gTimeReadbackMS, nowMS() - readbackStart);
-        GLenum readbackErr = glGetError();
+        if (wantWidth > gFBOWidth || wantHeight > gFBOHeight) {
+            setupHWFramebuffer(std::max(wantWidth, gFBOWidth), std::max(wantHeight, gFBOHeight));
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
         // Kept, reporting zero, rather than removed with its accessor:
         // FrameTrace writes a fixed set of columns and a rebuilt trace
         // should stay comparable against the ones already captured.
         recordStage(gTimeSwizzleMS, 0);
-        gFrameWidth = width;
-        gFrameHeight = height;
-        gFrameBytesPerRow = (uint32_t)bytesPerRow;
-        gPixelFormat = LibretroPixelFormatRGBA8888;
-        gFrameFlipped = true;
-        gFrameDirty = true;
+        if (published) {
+            gPixelFormat = LibretroPixelFormatRGBA8888;
+            gFrameFlipped = true;
+            gFrameDirty = true;
+        }
 
         uint32_t frameCount = gHWFrameCount.fetch_add(1, std::memory_order_relaxed) + 1;
         if (frameCount <= 3 || frameCount % 300 == 0) {
@@ -909,14 +1082,18 @@ int16_t inputState(unsigned port, unsigned device, unsigned index, unsigned id) 
     // FBNeo is deliberately excluded. Its retro_input.cpp has a "fake
     // analog" fallback that reads this axis even for plain digital
     // joystick games and ORs the result into the digital directions.
-    // Physical controllers have fed this channel unconditionally since
-    // the two-player rework (GameController y is up-positive, opposite
-    // libretro's convention on this path), so a Bluetooth pad pushing up
-    // registered digital UP and fake-analog DOWN in the same frame:
-    // exactly the "character doesn't go where the stick points" report
-    // on Smash TV, github.com/MMagTech/cabinet#3, found 2026-08-15.
-    // Arcade sticks are fully covered by the digital bits; FBNeo has no
-    // real analog-stick hardware to serve here at all.
+    // Physical controllers fed this channel unconditionally since the
+    // two-player rework, and at the time with GameController's raw
+    // up-positive y, opposite libretro's convention on this path, so a
+    // Bluetooth pad pushing up registered digital UP and fake-analog
+    // DOWN in the same frame: exactly the "character doesn't go where
+    // the stick points" report on Smash TV,
+    // github.com/MMagTech/cabinet#3, found 2026-08-15. The sign seam
+    // moved into GameControllerManager.stick on 2026-08-29 (pads now
+    // arrive down-positive like the touch stick always did), but this
+    // refusal stays regardless of sign: the fake-analog OR-ing is the
+    // problem, arcade sticks are fully covered by the digital bits, and
+    // FBNeo has no real analog-stick hardware to serve here at all.
     if (device == RETRO_DEVICE_ANALOG && index == RETRO_DEVICE_INDEX_ANALOG_LEFT
         && gCoreID != LibretroCoreIDFBNeo) {
         float value = id == RETRO_DEVICE_ID_ANALOG_X ? gAnalogLeftX[port].load(std::memory_order_relaxed)
@@ -1023,6 +1200,17 @@ void logCallback(enum retro_log_level level, const char *fmt, ...) {
     static const char *names[] = {"debug", "info", "warn", "error"};
     unsigned idx = level <= RETRO_LOG_ERROR ? level : RETRO_LOG_ERROR;
     NSLog(@"[core %s] %s", names[idx], buffer);
+#if TARGET_OS_MACCATALYST
+    // Mac only. NSLog is not a usable channel for reading what a core
+    // says: os_log redacts every %s as <private> unless the device has a
+    // logging profile installed, and its duplicate-to-stderr throttles
+    // itself off the moment a core logs in bulk, which is exactly when
+    // there is something to read. Between them, a core that is
+    // announcing its CPU engine, its memory map and its self-test can
+    // look completely silent. On a desktop app stderr is the console a
+    // developer already has, so send it there as well.
+    fprintf(stderr, "[core %s] %s\n", names[idx], buffer);
+#endif
 }
 
 // The two halves of libretro's sensor interface.
@@ -1124,6 +1312,15 @@ bool environmentCallback(unsigned cmd, void *data) {
             if (info->geometry.aspect_ratio > 0) {
                 gAspectRatio.store(info->geometry.aspect_ratio, std::memory_order_relaxed);
             }
+            // A base geometry larger than the framebuffer grows it ahead
+            // of the frame, the same grow-only rule videoRefresh applies
+            // after the fact. PPSSPP announces a resolution change here.
+            if (gUsesHWRender && gFBO != 0 &&
+                (info->geometry.base_width > gFBOWidth || info->geometry.base_height > gFBOHeight)) {
+                setupHWFramebuffer(std::max((GLuint)info->geometry.base_width, gFBOWidth),
+                                   std::max((GLuint)info->geometry.base_height, gFBOHeight));
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            }
             return true;
         }
         case RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY:
@@ -1153,6 +1350,36 @@ bool environmentCallback(unsigned cmd, void *data) {
             // 90-degree counter-clockwise steps.
             gRotation.store(*(const unsigned *)data, std::memory_order_relaxed);
             return true;
+#if TARGET_OS_MACCATALYST
+        case RETRO_ENVIRONMENT_GET_JIT_CAPABLE:
+            // Mac only, and compiled out everywhere else on purpose, so
+            // iOS and tvOS keep running this switch byte-identically.
+            //
+            // Three of the cores ask this: PPSSPP, Flycast and
+            // mupen64plus. It is here for PPSSPP, whose Catalyst build
+            // defines PPSSPP_PLATFORM_IOS (TARGET_OS_IPHONE is 1 under
+            // macabi) and therefore takes the iOS branch of
+            // System_GetPropertyBool(SYSPROP_CAN_JIT). Unanswered, that
+            // call fails and libretro.cpp quietly rewrites a request
+            // for CPUCore::JIT into CPUCore::IR_INTERPRETER, so the Mac
+            // asking for "JIT" in NativeCoreOptions had no effect at
+            // all: the option was set and then overruled.
+            //
+            // The other two are unaffected. Flycast only refuses to
+            // load when this call SUCCEEDS and says no, so it has been
+            // loading on the strength of the call failing; a yes is the
+            // same outcome by a better route. mupen64plus only consults
+            // it to demote the ParaLLEl RSP, and this app leaves that
+            // core on its own "hle" default, so that branch is
+            // unreachable here.
+            //
+            // Answering yes is a claim about the process, not the
+            // hardware: it is true because CabinetMac.entitlements
+            // carries com.apple.security.cs.allow-jit. If that
+            // entitlement is ever dropped, this must go with it.
+            *(bool *)data = true;
+            return true;
+#endif
         case RETRO_ENVIRONMENT_GET_LOG_INTERFACE:
             ((struct retro_log_callback *)data)->log = logCallback;
             return true;
@@ -1228,9 +1455,10 @@ bool environmentCallback(unsigned cmd, void *data) {
 // The one place a core id becomes a function table. Adding a core means
 // one wiring file and one line here.
 const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
-#if TARGET_OS_SIMULATOR
-    // No cores in a simulator build; every launch path fails cleanly
-    // before it gets here (see NativePlatform.platform(bySlug:)).
+#if TARGET_OS_SIMULATOR || CABINET_NO_NATIVE_CORES
+    // No cores in a simulator build, nor in a Mac build until the Mac
+    // core libraries exist; every launch path fails cleanly before it
+    // gets here (see NativePlatform.platform(bySlug:)).
     (void)coreID;
     return nullptr;
 #else
@@ -1280,6 +1508,8 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
 #if !TARGET_OS_TV
         case LibretroCoreIDGW:
             return GWCoreAPI();
+        case LibretroCoreIDVeMUlator:
+            return VeMUlatorCoreAPI();
 #endif
         default:
             // This used to fall through to the PlayStation core, so a
@@ -1385,6 +1615,46 @@ const LibretroCoreAPI *coreAPI(LibretroCoreID coreID) {
     gUsesHWRender = false;
     gHWRender = {};
     gHWContextDestroyed = false;
+    // The readback double buffer never carries one game's picture into
+    // the next: slot validity dies here (the buffer ids live on with the
+    // GL context, like gFBO), and the sync fallback re-arms, consulting
+    // the DEBUG A/B lever fresh.
+    gReadbackPBOValid[0] = false;
+    gReadbackPBOValid[1] = false;
+    gReadbackPBOCursor = 0;
+    gForceSyncReadback = false;
+#if TARGET_OS_MACCATALYST
+    // The async pixel-buffer readback loses draws on this platform. With
+    // it on, N64 rendered skies and backgrounds while the depth-tested
+    // geometry went missing: Mario Kart 64 came back correct the moment
+    // the synchronous path was forced, Hydro Thunder came most of the
+    // way back (Marcus, 2026-08-30, on both an M4 and an A18 Pro).
+    // Whatever ANGLE's Metal backend does with a mapped pixel buffer
+    // here, it is not the finished frame the iPhone and Apple TV hand
+    // back, and correctness is worth more than the readback time.
+    //
+    // Deliberately Catalyst only. iOS and tvOS keep the async ladder,
+    // where it was measured taking readback from 3.5ms to 0.08ms, and
+    // compile this branch out entirely.
+    gForceSyncReadback = true;
+#endif
+#if DEBUG
+    // Either a launch argument or a stored default. The argument alone
+    // was untestable on the Mac: a Catalyst app relaunched through
+    // LaunchServices never sees the arguments `open --args` was given,
+    // so the lever could not be thrown on a machine being driven
+    // remotely. `defaults write <bundle id> cabinetSyncReadback -bool
+    // YES` reaches it either way.
+    gForceSyncReadback = gForceSyncReadback
+        || [[NSProcessInfo processInfo].arguments containsObject:@"-cabinetSyncReadback"]
+        || [[NSUserDefaults standardUserDefaults] boolForKey:@"cabinetSyncReadback"];
+    // The other direction, so the async path stays reachable on the
+    // platform that now defaults away from it and the next person can
+    // retest it rather than take the comment above on faith.
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"cabinetAsyncReadback"]) {
+        gForceSyncReadback = false;
+    }
+#endif
 }
 
 - (void)setCoreOptions:(NSDictionary<NSString *, NSString *> *)options {

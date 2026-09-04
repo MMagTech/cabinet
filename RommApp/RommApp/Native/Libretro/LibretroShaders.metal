@@ -236,6 +236,27 @@ fragment float4 shader_lcd_fragment(VertexOut in [[stage_in]],
     return float4(shaped, color.a);
 }
 
+// vmu: the VMU minigame player's sunken grey-green LCD, never offered in
+// any shader menu; VMUPlayerView sets it directly and nothing else ever
+// does. The core hands over pure 1-bit frames (white paper, black ink)
+// and this maps them onto the skin's sage face with exactly the stamped
+// mock's math (spikes/vmu/vmu-skin-mock2.html: the frame multiplied over
+// the face at 0.85 opacity, so ink lands at 0.15 x paper and paper passes
+// through). Paper is the face's own top-to-bottom gradient, #c3cdb4 to
+// #b3bfa6; the 0.1154..0.8846 remap is the picture's fixed vertical
+// placement inside the face (160 of 208 units, centred), kept in lock
+// step with VMULCDScreen's layout constants so the picture's paper meets
+// the face around it without a seam.
+fragment float4 shader_vmu_lcd_fragment(VertexOut in [[stage_in]],
+                                         texture2d<float> tex [[texture(0)]],
+                                         sampler samp [[sampler(0)]],
+                                         constant float2 &texelSize [[buffer(1)]]) {
+    float lum = tex.sample(samp, in.texCoord).r;
+    float faceY = mix(0.1154, 0.8846, in.texCoord.y);
+    float3 paper = mix(float3(0.765, 0.804, 0.706), float3(0.702, 0.749, 0.651), faceY);
+    return float4(paper * (0.15 + 0.85 * lum), 1.0);
+}
+
 // gameboy: a two-axis dot-matrix grid (both x and y, unlike lcd's
 // scanline-only pattern), a touch of extra contrast, and a faint warm-
 // green tint evoking the original DMG/GBC reflective screen. The real

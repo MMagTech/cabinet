@@ -122,17 +122,30 @@ struct RomListView: View {
                     Button("Try again") { Task { await reload() } }
                 }
             } else {
+                #if targetEnvironment(macCatalyst)
+                // Grid only, like the television; the list mode and its
+                // letter scrubber are thumb furniture.
+                grid
+                #else
                 switch viewMode {
                 case .grid: grid
                 case .list: list
                 }
+                #endif
             }
         }
+        #if targetEnvironment(macCatalyst)
+        // The name is drawn as content inside the grid, TV-style; the
+        // bar keeps only its back affordance.
+        .navigationTitle("")
+        #else
         .navigationTitle(navigationLabel)
+        #endif
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
+            #if !targetEnvironment(macCatalyst)
             ToolbarItem(placement: .topBarTrailing) {
                 // A menu, not a segmented picker. iOS 26 wraps every
                 // toolbar item in its own glass container, and a segmented
@@ -147,15 +160,42 @@ struct RomListView: View {
                         Label("Grid", systemImage: "square.grid.3x3").tag(ViewMode.grid)
                         Label("List", systemImage: "list.bullet").tag(ViewMode.list)
                     }
+                    // Download All and Remove All Downloads, the platform's
+                    // own actions, in the one menu this screen has; the
+                    // Mac puts them beside the title, see MacPlatformMenu.
+                    if case .platform(let platform) = source {
+                        Divider()
+                        PlatformDownloadMenuItems(platform: platform, label: navigationLabel)
+                    } else if case .keptPlatform(let platform, _) = source {
+                        // Offline: only Remove All Downloads, nothing to
+                        // download without a connection.
+                        Divider()
+                        PlatformDownloadMenuItems(platform: platform, label: navigationLabel, offersDownloadAll: false)
+                    }
                 } label: {
                     Image(systemName: viewMode == .grid ? "square.grid.3x3" : "list.bullet")
                 }
             }
+            #endif
         }
         .onChange(of: viewMode) { _, mode in
             UserDefaults.standard.set(mode.rawValue, forKey: Self.modeKey(for: source.modeKey))
         }
+        #if os(iOS) && !targetEnvironment(macCatalyst)
+        // This platform's own queue, at the top of its screen; the rings
+        // on the covers show which file is coming down right now.
+        .safeAreaInset(edge: .top) {
+            if case .platform(let platform) = source, keptStore.bulk?.platformId == platform.id {
+                DownloadAllStatusCard()
+            }
+        }
+        #endif
         .task { await reload() }
+        // A kept game removed while this screen is up, from its own long
+        // press: the list is the store's, so it follows the store.
+        .onChange(of: keptStore.games.count) { _, _ in
+            if case .keptPlatform = source { Task { await reload() } }
+        }
         // The scrubber can only jump to rows that exist, so list mode pulls
         // the whole set rather than paging on scroll. A list is just names;
         // even the 1,204 arcade titles are a few small requests, and a
@@ -177,14 +217,33 @@ struct RomListView: View {
                 await loadNextPage()
             }
         }
+        #if targetEnvironment(macCatalyst)
+        // Pushed, with the back button, not presented over the shell:
+        // a Mac shows a detail in place. The modal's X sat where the
+        // title bar owns the mouse and did nothing windowed, and the
+        // modal kept Settings from opening until it closed.
+        .navigationDestination(item: $playing) { rom in
+            GameLaunchView(rom: rom)
+        }
+        #else
         .fullScreenCover(item: $playing) { rom in
             NavigationStack { GameLaunchView(rom: rom) }
         }
+        #endif
     }
     #endif
 
     private var grid: some View {
         ScrollView {
+            #if targetEnvironment(macCatalyst)
+            HStack {
+                Text(navigationLabel)
+                    .font(.title2.bold())
+                Spacer()
+            }
+            .padding(.horizontal, TenFoot.contentInset)
+            .padding(.top, 16)
+            #endif
             LazyVGrid(
                 columns: [GridItem(.adaptive(minimum: TenFoot.gridCoverMinimum), spacing: TenFoot.gridSpacing)],
                 spacing: TenFoot.gridSpacing
@@ -212,6 +271,7 @@ struct RomListView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .macHoverLift()
                     .gameContextMenu(rom: rom)
                     .onAppear { Task { await loadMoreIfNeeded(current: rom) } }
                 }
@@ -260,6 +320,7 @@ struct RomListView: View {
                         .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
+                    .macHoverLift()
                     .gameContextMenu(rom: rom)
                     .onAppear { Task { await loadMoreIfNeeded(current: rom) } }
                 }
@@ -327,11 +388,58 @@ struct RomListView: View {
     }
 
     private func reload() async {
+        #if targetEnvironment(macCatalyst)
+        // Paint what this source had last time, then check the server
+        // rather than trust it. The Mac rebuilds this view every time
+        // the sidebar comes back to a platform, so without the cache
+        // every visit is a cold fetch, and without the check behind it
+        // a visit would show yesterday's library with no way to
+        // refresh: this screen has no pull-to-refresh.
+        if let cached = MacRomListCache.shared.entry(for: source.modeKey) {
+            roms = cached.roms
+            total = cached.total
+            error = nil
+            await revalidate()
+            return
+        }
+        #endif
         roms = []
         total = 0
         error = nil
         await loadNextPage()
     }
+
+    #if targetEnvironment(macCatalyst)
+    /// Asks the server for this source's first page and, if the count no
+    /// longer matches what was cached, throws the cache away and loads
+    /// again from the top.
+    ///
+    /// The total is the cheap signal: a game added, removed or moved on
+    /// the server changes it, and one page is a far smaller ask than
+    /// refetching a platform with hundreds of roms just to find out
+    /// nothing moved. A failure here is silent on purpose, since there
+    /// are already games on screen and this is a check, not a load.
+    private func revalidate() async {
+        let latest: Int?
+        switch source {
+        case .platform(let platform):
+            latest = try? await session.roms(platformId: platform.id, offset: 0).total
+        case .collection(let collection):
+            latest = try? await session.roms(collectionId: collection.id, offset: 0).total
+        case .recentlyPlayed, .keptPlatform:
+            // Recents reorder without changing count, and a kept list is
+            // read from the device rather than the server. Neither is
+            // reachable from the Mac sidebar today; both are left alone
+            // rather than given a check that would not mean anything.
+            return
+        }
+        guard let latest, latest != total else { return }
+        MacRomListCache.shared.drop(source.modeKey)
+        roms = []
+        total = 0
+        await loadNextPage()
+    }
+    #endif
 
     private func loadMoreIfNeeded(current rom: Rom) async {
         guard rom.id == roms.last?.id, roms.count < total else { return }
@@ -343,14 +451,21 @@ struct RomListView: View {
         loading = true
         do {
             switch source {
-            case .keptPlatform(_, let kept):
+            case .keptPlatform(let platform, let kept):
                 // No page to fetch: every kept rom for this platform is
                 // already known, already on the phone. Assigned
                 // directly rather than routed through RomPage, which
                 // models a server's paged response, not a plain local
-                // array.
-                roms = kept
-                total = kept.count
+                // array. Read from the store now rather than the array
+                // the link was built with, so a game removed from this
+                // screen's own menu leaves it at once instead of after
+                // the next trip through the offline list (Marcus,
+                // 2026-09-03, in airplane mode). The passed array is
+                // only the fallback for a platform the store no longer
+                // groups, which is an empty screen either way.
+                let live = keptStore.offlinePlatforms().first { $0.platform.id == platform.id }?.roms
+                roms = live ?? kept.filter { keptStore.kept(romId: $0.id) != nil }
+                total = roms.count
             case .platform(let platform):
                 let page = try await session.roms(platformId: platform.id, offset: roms.count)
                 roms.append(contentsOf: page.items)
@@ -364,8 +479,13 @@ struct RomListView: View {
                 roms.append(contentsOf: page.items)
                 total = page.total
             }
+            #if targetEnvironment(macCatalyst)
+            MacRomListCache.shared.store(roms, total: total, for: source.modeKey)
+            #endif
         } catch {
-            self.error = LoadFailure(error)
+            // A cancelled fetch leaves whatever is already on screen
+            // alone. See isCancellation.
+            if !isCancellation(error) { self.error = LoadFailure(error) }
         }
         loading = false
     }

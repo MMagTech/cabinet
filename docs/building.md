@@ -108,7 +108,7 @@ from it too, automatically. Fixing at the shared layer, when a problem
 found on one platform can be, is the preferred outcome over a
 platform-only patch.
 
-One core carries a platform-only exception. **Game & Watch (gw-libretro)
+Two cores carry a platform-only exception. **Game & Watch (gw-libretro)
 is iOS-only, by decision, 2026-08-25.** Not a technical failure: the
 core is a plain Lua 5.3 interpreter with working upstream tvOS makefile
 targets, and it would build. The reasons are presentational and
@@ -120,6 +120,19 @@ hand far better than a television across the room. Decided by the
 project owner as a scoping call; if the decision changes, nothing
 technical stands in the way of adding the tvOS build later, and this
 paragraph is what to update when it happens.
+
+**VeMUlator (the VMU minigame player) is iOS-only, by decision,
+2026-08-29.** Same shape of call, stronger reasons: the whole point of
+a VMU minigame is that it is the thing you take away from the
+television, and a 48x32 1-bit screen is absurd at living room size. The
+upstream makefile has a tvos-arm64 target, so again nothing technical
+stands in the way if the decision ever changes. Note the television
+still participates in the VMU's other half: during a Dreamcast session
+it streams the game's live VMU LCD to the phone-as-controller screen
+(the display side, `VMULCDRelay`); it just never hosts VMU play. The
+`tools/lab/wiring/run.sh` platform-parity check knows both of these
+cores by name; a third iOS-only core would be added to its `IOS_ONLY`
+list alongside its paragraph here.
 
 On the Xcode project side: the `Native/<core>` folders hold both an
 `_ios.a` and a `_tvos.a` build of a core, and the shared `NativeCore.swift`

@@ -1,4 +1,9 @@
 import AVFoundation
+// Explicit rather than inherited from AVFoundation: on Mac Catalyst the
+// AVFoundation umbrella does not re-export the CoreAudio Swift overlay
+// that defines UnsafeMutableAudioBufferListPointer. No effect on iOS or
+// tvOS, where the overlay already arrives transitively.
+import CoreAudio
 import os
 
 /// Feeds the core's audio batches into CoreAudio through a small ring

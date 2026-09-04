@@ -24,9 +24,105 @@ struct MainTabView: View {
     @State private var selection: AppTab = .home
     @ObservedObject private var quickActions = QuickActionRouter.shared
     @ObservedObject private var networkMonitor = NetworkMonitor.shared
+    #if !os(tvOS)
+    @EnvironmentObject private var session: Session
+    #endif
+    #if targetEnvironment(macCatalyst)
+    @Environment(\.openWindow) private var openWindow
+    @State private var showingMacAbout = false
+    @State private var showingMacDiagnostics = false
+    #endif
 
     var body: some View {
+        #if targetEnvironment(macCatalyst)
+        // The Mac is the desk-sized member of the tvOS side of the
+        // family: one shared ambient backdrop from game art behind the
+        // whole shell, always dark, content floating over it. The same
+        // Tab structure runs on top unchanged; iOS keeps its own
+        // contained-ambient rule (GameLaunchView only) and never
+        // compiles this branch.
+        ZStack {
+            MacAmbientBackground()
+            // Not `tabs`: this platform navigates from a source list, and
+            // having no tab controller in the window is what keeps
+            // Catalyst from hoisting a tab bar into the titlebar. See
+            // MacSidebarShell.
+            MacSidebarShell()
+        }
+        .environment(\.colorScheme, .dark)
+        // The app menu's Settings… (Cmd+comma) opens the Settings window,
+        // a scene of its own; see MacSettingsWindow. About and
+        // Diagnostics are sheets on the shell, session injected
+        // explicitly, the Catalyst presentation-inheritance lesson.
+        .onReceive(NotificationCenter.default.publisher(for: .cabinetShowSettings)) { _ in
+            openWindow(id: MacSettingsWindow.windowID)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .cabinetShowAbout)) { _ in
+            showingMacAbout = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .cabinetShowDiagnostics)) { _ in
+            showingMacDiagnostics = true
+        }
+        .sheet(isPresented: $showingMacAbout) {
+            MacAboutView()
+                .environmentObject(session)
+                .environment(\.colorScheme, .dark)
+                .presentationBackground(.ultraThinMaterial)
+        }
+        .sheet(isPresented: $showingMacDiagnostics) {
+            NavigationStack {
+                DebugView()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showingMacDiagnostics = false }
+                        }
+                    }
+            }
+                .environmentObject(session)
+                .environment(\.colorScheme, .dark)
+                .presentationBackground(.ultraThinMaterial)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .cabinetShowAbout)) { _ in
+            showingMacAbout = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .cabinetShowDiagnostics)) { _ in
+            showingMacDiagnostics = true
+        }
+        .sheet(isPresented: $showingMacAbout) {
+            MacAboutView()
+                .environmentObject(session)
+                .environment(\.colorScheme, .dark)
+                .presentationBackground(.ultraThinMaterial)
+        }
+        .sheet(isPresented: $showingMacDiagnostics) {
+            NavigationStack {
+                DebugView()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showingMacDiagnostics = false }
+                        }
+                    }
+            }
+                .environmentObject(session)
+                .environment(\.colorScheme, .dark)
+                .presentationBackground(.ultraThinMaterial)
+        }
+        #elseif os(tvOS)
         tabs
+        #else
+        tabs
+            // Download All's confirmation, attached once here so a menu
+            // on the platform screen or a library tile can raise it.
+            .downloadAllPrompt()
+            .task {
+                // A queue the system quit the app in the middle of
+                // carries on; see DownloadAll.
+                DownloadAll.shared.resumeIfNeeded(session: session)
+                #if DEBUG
+                await DownloadAll.runHarnessIfRequested(session: session)
+                #endif
+            }
+        #endif
     }
     // Tried drawing the tvOS account chip as a `ZStack` overlay here so it
     // stayed visible across every tab instead of only Home. Reverted: the

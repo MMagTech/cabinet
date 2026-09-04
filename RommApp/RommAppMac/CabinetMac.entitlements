@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Catalyst SecItem calls always use the iOS-style data protection
+	     keychain, which refuses writes from a binary carrying no
+	     application identifier. Requesting the app's own keychain group
+	     forces profile-based signing, which is what actually embeds
+	     that identifier. Without this the very first pairing fails at
+	     "Could not save to the keychain." -->
+	<!-- The whole reason this target exists. macOS grants a signed app
+	     the right to map executable pages, so the cores' dynamic
+	     recompilers can actually run: no debugger attached, no
+	     per-session ritual, no sideload enabler. iOS and tvOS have no
+	     equivalent, which is why they stay on interpreters and why
+	     Dreamcast, N64 and PSP are only ever partly themselves there.
+	     See docs/scope-v0.1.md's JIT boundary. -->
+	<key>com.apple.security.cs.allow-jit</key>
+	<true/>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	</array>
+</dict>
+</plist>

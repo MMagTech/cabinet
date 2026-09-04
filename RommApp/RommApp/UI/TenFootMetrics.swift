@@ -13,30 +13,38 @@ import SwiftUI
 enum TenFoot {
     #if os(tvOS)
     static let isTV = true
+    static let isMac = false
+    #elseif targetEnvironment(macCatalyst)
+    static let isTV = false
+    static let isMac = true
     #else
     static let isTV = false
+    static let isMac = false
     #endif
 
     /// Shelf cover art on Home. 3:4, the aspect every cover in the app
-    /// already uses.
-    static var shelfCoverWidth: CGFloat { isTV ? 260 : 100 }
-    static var shelfCoverHeight: CGFloat { isTV ? 347 : 133 }
-    static var shelfSpacing: CGFloat { isTV ? 40 : 12 }
+    /// already uses. The Mac tier is the ten-foot design read at one to
+    /// three feet: the TV's own composition, scaled for a desk, so it
+    /// sits between the sofa's 260 and the palm's 100.
+    static var shelfCoverWidth: CGFloat { isTV ? 260 : (isMac ? 156 : 100) }
+    static var shelfCoverHeight: CGFloat { isTV ? 347 : (isMac ? 208 : 133) }
+    static var shelfSpacing: CGFloat { isTV ? 40 : (isMac ? 20 : 12) }
 
     /// The caption under a cover, and the header above a shelf. `.callout`
     /// on tvOS, not `.title3`: the rom grid's own cover captions
     /// (TVRomGridView) already use `.callout` directly, so `.title3` here
     /// meant Home's shelves ran visibly larger than Library's grid for the
     /// same kind of label, not a deliberate size difference.
-    static var captionFont: Font { isTV ? .callout : .caption }
-    static var sectionHeaderFont: Font { isTV ? .title2.bold() : .headline }
+    static var captionFont: Font { isTV ? .callout : (isMac ? .callout : .caption) }
+    static var sectionHeaderFont: Font { isTV ? .title2.bold() : (isMac ? .title3.bold() : .headline) }
 
     /// The library's own cover grid (RomListView), which is a full screen
     /// of covers rather than a single scrolling row.
-    static var gridCoverMinimum: CGFloat { isTV ? 240 : 110 }
-    static var gridSpacing: CGFloat { isTV ? 36 : 12 }
+    static var gridCoverMinimum: CGFloat { isTV ? 240 : (isMac ? 150 : 110) }
+    static var gridSpacing: CGFloat { isTV ? 36 : (isMac ? 20 : 12) }
 
     /// Horizontal inset for content. tvOS needs a real overscan-safe
-    /// margin; iOS just needs the usual gutter.
-    static var contentInset: CGFloat { isTV ? 60 : 20 }
+    /// margin; iOS just needs the usual gutter, and a desk-distance
+    /// window wants something in between.
+    static var contentInset: CGFloat { isTV ? 60 : (isMac ? 32 : 20) }
 }

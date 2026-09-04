@@ -96,6 +96,14 @@ struct LayoutEditorView: View {
                         if editingCompanion, layout.system == "nds" {
                             DSScreenGuide(area: CGRect(origin: .zero, size: geo.size))
                         }
+                        // Dreamcast pins player one's VMU window over
+                        // the panel. It cannot be moved, so it is an
+                        // obstacle rather than an element, and the
+                        // editor has to show it or you lay controls
+                        // underneath it unknowingly.
+                        if editingCompanion, layout.system == "dreamcast" {
+                            VMUGuide(area: CGRect(origin: .zero, size: geo.size))
+                        }
                         pad(size: padSize, landscape: true)
                     }
                     .frame(width: geo.size.width, height: geo.size.height)

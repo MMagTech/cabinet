@@ -27,8 +27,20 @@ tvos)
     SDK=$(xcrun -sdk appletvos --show-sdk-path)
     MINVERSION_FLAG=-mappletvos-version-min=18.0
     MAKE_PLATFORM=tvos-arm64 ;;
+mac)
+    # Mac Catalyst. No libretro Makefile knows the macabi triple, so
+    # this rides each core's ios-arm64 case, which picks the right
+    # sources and Apple defines, and the compiler shim below rewrites
+    # the platform flags: the iOS minimum-version and sysroot flags are
+    # stripped and the Catalyst target plus the macOS SDK take their
+    # place. The objects come out arm64-apple-ios-macabi, which is what
+    # the RommAppMac target links; plain macOS objects would be
+    # rejected by its linker.
+    SDK=$(xcrun -sdk macosx --show-sdk-path)
+    MINVERSION_FLAG="-target arm64-apple-ios18.0-macabi"
+    MAKE_PLATFORM=ios-arm64 ;;
 *)
-    echo "unknown platform: $PLATFORM (expected ios or tvos)" >&2; exit 1 ;;
+    echo "unknown platform: $PLATFORM (expected ios, tvos or mac)" >&2; exit 1 ;;
 esac
 
 case "$NAME" in
@@ -114,6 +126,20 @@ gw)
     # tvos-arm64 case if it ever reverses.
     PREFIX=gw; REPO=https://github.com/libretro/gw-libretro.git
     MAKEDIR=.; MAKEFILE=Makefile.libretro; OUT=GW; LIB=libgw_ios.a ;;
+vemulator)
+    # The Dreamcast VMU itself, as a machine: an LC86K interpreter with a
+    # 48x32 LCD, the smallest core here by two orders of magnitude. Plays
+    # the minigames Dreamcast games download onto their save card (Chao
+    # Adventure and friends), booting them straight out of the same
+    # 128KB card image the DC save sync already stores; with
+    # enable_flash_write on it commits every flash write back into that
+    # file in real time, so the round-trip is the core's own behavior.
+    # HLE boot, no BIOS file ever. iOS-ONLY by decision, recorded in
+    # docs/building.md 2026-08-29: the minigame's identity is the thing
+    # you take away from the TV, and 48x32 is absurd on a living room
+    # screen. Spike notes: spikes/vmu/notes-SPIKE.md.
+    PREFIX=vmu; REPO=https://github.com/libretro/vemulator-libretro.git
+    MAKEDIR=.; MAKEFILE=Makefile; OUT=VeMUlator; LIB=libvemulator_ios.a ;;
 melonds)
     # Nintendo DS. The libretro melonDS fork builds interpreter-only for
     # ios-arm64/tvos-arm64 out of the box (no JIT_ARCH set for either),
@@ -122,22 +148,43 @@ melonds)
     # FreeBIOS is compiled in, so direct boot needs no user firmware.
     # Chosen over desmume2015, whose no-JIT arm64 build does not even
     # link (MMU.cpp calls JIT hooks with DESMUME_JIT=0).
+    #
+    # On Mac only, JIT_ARCH=aarch64 is added below. melonDS's own ARM64
+    # recompiler already knows Apple Silicon: it allocates its code
+    # buffer with MAP_JIT and toggles W^X through
+    # pthread_jit_write_protect_np, so this is the flag the Mac was
+    # missing rather than a port. iOS and tvOS pass no MAKEARGS at all
+    # and build byte-identically to before.
     PREFIX=mds; REPO=https://github.com/libretro/melonDS.git
-    MAKEDIR=.; MAKEFILE=Makefile; OUT=MelonDS; LIB=libmelonds_ios.a ;;
+    MAKEDIR=.; MAKEFILE=Makefile; OUT=MelonDS; LIB=libmelonds_ios.a
+    if [ "$PLATFORM" = mac ]; then MAKEARGS="JIT_ARCH=aarch64"; fi ;;
 pcsx_rearmed)
     # platform=ios-arm64 (or tvos-arm64) forces DYNAREC=0 in this core's
     # own Makefile, a pure interpreter build, the same no-JIT exception
     # Beetle Saturn already proved out for its SH-2 core. Confirm on-device
     # speed before treating PS1 as shipped on either platform; this is a
     # go/no-go, not a batch build like the other nine cores.
+    #
+    # On Mac only, DYNAREC=ari64 is added below, overriding that forced
+    # 0 from the command line. Unlike N64's, this recompiler is already
+    # ported to Apple: linkage_arm64.S goes through ESYM() for the
+    # Mach-O underscore prefix and guards its ELF-only directives, and
+    # new_dynarec_config.h turns on NO_WRITE_EXEC for __MACH__ so the
+    # code cache is toggled between writable and executable rather than
+    # mapped as both. iOS and tvOS pass no MAKEARGS and keep the
+    # interpreter.
     PREFIX=psx; REPO=https://github.com/libretro/pcsx_rearmed.git
-    MAKEDIR=.; MAKEFILE=Makefile.libretro; OUT=PCSXReARMed; LIB=libpcsx_rearmed_ios.a ;;
+    MAKEDIR=.; MAKEFILE=Makefile.libretro; OUT=PCSXReARMed; LIB=libpcsx_rearmed_ios.a
+    if [ "$PLATFORM" = mac ]; then MAKEARGS="DYNAREC=ari64"; fi ;;
 *)
     echo "unknown core: $NAME" >&2; exit 1 ;;
 esac
 
 if [ "$PLATFORM" = tvos ]; then
     LIB=$(echo "$LIB" | sed 's/_ios\.a$/_tvos.a/')
+fi
+if [ "$PLATFORM" = mac ]; then
+    LIB=$(echo "$LIB" | sed 's/_ios\.a$/_mac.a/')
 fi
 
 # A separate spike/source checkout per platform: these Makefiles drop .o
@@ -186,6 +233,102 @@ if [ "$NAME" = melonds ]; then
         echo "melonds unload-flush patch did not apply" >&2; exit 1; }
 fi
 
+# Mac only, and only reached when JIT_ARCH=aarch64 above put melonDS's
+# ARM64 recompiler into the build. Two edits, neither of which iOS or
+# tvOS ever compiles: those platforms set no JIT_ARCH, so ARMJIT.cpp and
+# the whole ARMJIT_A64 directory are not in their source list at all.
+if [ "$PLATFORM" = mac ] && [ "$NAME" = melonds ]; then
+    # Catalyst marks pthread_jit_write_protect_np __API_UNAVAILABLE even
+    # though the symbol is live in libsystem on any Apple Silicon Mac,
+    # so melonDS's direct call is a hard compile error. Resolve it
+    # through dlsym past the annotation, the same bypass
+    # tools/build-flycast.sh uses for Flycast's three recompilers.
+    perl -0pi -e '
+        s/void JitEnableWrite\(\)/#if defined(__APPLE__) \&\& defined(__aarch64__)\n#include <dlfcn.h>\nstatic void cabinet_jit_write_protect(int enabled)\n{\n    typedef void (*cabinet_jitwp_t)(int);\n    static cabinet_jitwp_t fn = (cabinet_jitwp_t)dlsym(RTLD_DEFAULT, "pthread_jit_write_protect_np");\n    if (fn) fn(enabled);\n}\n#endif\n\nvoid JitEnableWrite()/
+        unless /cabinet_jit_write_protect/;
+        s/if \(__builtin_available\(macOS 11\.0, \*\)\)\n            pthread_jit_write_protect_np\(/cabinet_jit_write_protect(/g;
+    ' "$SRC/src/ARMJIT.cpp"
+    grep -q 'cabinet_jit_write_protect(false)' "$SRC/src/ARMJIT.cpp" || {
+        echo "melonds W^X dlsym patch did not apply" >&2; exit 1; }
+
+    # melonDS never says which CPU engine it chose, so a recompiler that
+    # silently failed to get executable memory is indistinguishable from
+    # one that is running. This is the core's own runtime proof, printed
+    # once at JIT init: it names the buffer it actually got, or the
+    # errno it failed with. Do not remove it and then claim the Mac has
+    # a DS recompiler; that claim has been wrong before.
+    perl -0pi -e '
+        s/#include <stdlib\.h>/#include <stdlib.h>\n#include <stdio.h>\n#include <string.h>\n#include <errno.h>/
+        unless /cabinet: ARM64 recompiler/;
+        s/(pageAligned = \(u8\*\)mmap\(NULL, 1024\*1024\*16.*?\n)/$1        fprintf(stderr, pageAligned == MAP_FAILED\n            ? "[melonDS] cabinet: ARM64 recompiler FAILED to map JIT memory (%s)\\n"\n            : "[melonDS] cabinet: ARM64 recompiler live, 16MB MAP_JIT buffer\\n",\n            strerror(errno));\n/
+        unless /cabinet: ARM64 recompiler/;
+    ' "$SRC/src/ARMJIT_A64/ARMJIT_Compiler.cpp"
+    grep -q 'cabinet: ARM64 recompiler live' "$SRC/src/ARMJIT_A64/ARMJIT_Compiler.cpp" || {
+        echo "melonds JIT probe patch did not apply" >&2; exit 1; }
+
+    # Fastmem's fault handler PATCHES THE JIT'S OWN CODE and never asks
+    # for write permission first. That is correct where the code cache
+    # is plain RWX, which is every platform melonDS's ARM64 JIT has
+    # shipped on; under MAP_JIT the same pages are execute-only until
+    # pthread_jit_write_protect_np says otherwise, so the first
+    # unmapped-address access inside recompiled code kills the process.
+    # It presents as a bus error a fraction of a second into the game,
+    # with the recompiler visibly working right up to that instant:
+    # SIGBUS in ARM64XEmitter::BL, called from RewriteMemAccess, called
+    # from the SIGSEGV handler, called from ARMv5::ExecuteJIT.
+    # Bracketing the rewrite is the whole fix, and JitEnableWrite and
+    # JitEnableExecute compile to nothing off Apple, so this stays
+    # correct if it is ever sent upstream.
+    perl -0pi -e '
+        s/        if \(rewriteToSlowPath\)\n            faultDesc\.FaultPC = ARMJIT::JITCompiler->RewriteMemAccess\(faultDesc\.FaultPC\);/        if (rewriteToSlowPath)\n        {\n            ARMJIT::JitEnableWrite();\n            faultDesc.FaultPC = ARMJIT::JITCompiler->RewriteMemAccess(faultDesc.FaultPC);\n            ARMJIT::JitEnableExecute();\n        }/
+        unless /ARMJIT::JitEnableWrite\(\);/;
+    ' "$SRC/src/ARMJIT_Memory.cpp"
+    grep -q 'ARMJIT::JitEnableWrite();' "$SRC/src/ARMJIT_Memory.cpp" || {
+        echo "melonds fastmem W^X patch did not apply" >&2; exit 1; }
+fi
+
+# Mac only, and only reached because DYNAREC=ari64 above put PCSX
+# ReARMed's ARM64 recompiler into the build; iOS and tvOS compile
+# new_dynarec.c not at all (no ari64, so the Makefile adds -DDRC_DISABLE
+# and leaves the object out entirely).
+if [ "$PLATFORM" = mac ] && [ "$NAME" = pcsx_rearmed ]; then
+    # mprotect_w_x rounds the start of the range it is about to reprotect
+    # down to a 4096-byte boundary. Apple Silicon pages are 16384 bytes,
+    # which this same file already knows: new_dynarec_init prints
+    # "pgsize 16384" three lines before the first call. mprotect demands
+    # a page-aligned address, so any range starting on a 4K boundary that
+    # is not also a 16K one fails with EINVAL, the code cache is left
+    # execute-only, and the recompiler wedges on its next write.
+    #
+    # It is intermittent by nature, which makes it worse than a hard
+    # failure: PCSX ReARMed logs one "mprotect(w) failed: Invalid
+    # argument" and then hangs with a running emulator, a healthy log and
+    # a passed dynarec self-test behind it. Seen exactly once per launch,
+    # a few seconds into the BIOS.
+    #
+    # The end of the range is rounded up for the same reason, so the
+    # length stays a whole number of real pages.
+    perl -0pi -e '
+        s/  u_long mstart = \(u_long\)start & ~4095ul;\n  u_long mend = \(u_long\)end;/  u_long mpsize = (u_long)sysconf(_SC_PAGESIZE);\n  if ((long)mpsize < 1) mpsize = 4096;\n  u_long mstart = (u_long)start & ~(mpsize - 1);\n  u_long mend = ((u_long)end + mpsize - 1) & ~(mpsize - 1);/
+        unless /mpsize/;
+    ' "$SRC/libpcsxcore/new_dynarec/new_dynarec.c"
+    grep -q 'u_long mpsize = (u_long)sysconf(_SC_PAGESIZE);' "$SRC/libpcsxcore/new_dynarec/new_dynarec.c" || {
+        echo "pcsx_rearmed page-size patch did not apply" >&2; exit 1; }
+fi
+
+# VeMUlator finds the loaded file's extension with strchr, the FIRST dot
+# in the whole path, so any dot in a parent directory name makes every
+# extension check miss and the card silently loads as nothing: no flash
+# image, no write-through, a blank VMU with no error. Cabinet's own card
+# path is kept dot-free on top of this, but the load must not hinge on a
+# path convention a future directory rename could break. strrchr is the
+# last dot, which is what "the extension" means.
+if [ "$NAME" = vemulator ]; then
+    sed -i '' 's/char \*ext = strchr(path/char *ext = strrchr(path/' "$SRC/main.cpp"
+    grep -q 'strrchr(path' "$SRC/main.cpp" || {
+        echo "vemulator strrchr patch did not apply" >&2; exit 1; }
+fi
+
 if [ "$MAKEFILE" = cmake ]; then
     # mGBA dropped Makefile.libretro; its CMake build has a libretro
     # target instead. Unlike the Makefile-based cores, mGBA's own
@@ -198,15 +341,26 @@ if [ "$MAKEFILE" = cmake ]; then
     # tvos-arm64 Makefile case.
     CMAKE_SYSTEM_NAME=iOS
     [ "$PLATFORM" = tvos ] && CMAKE_SYSTEM_NAME=tvOS
+    CMAKE_FLAGS="-fno-common"
+    if [ "$PLATFORM" = mac ]; then
+        # Catalyst via CMake: a Darwin build against the macOS SDK whose
+        # every compile carries the macabi target, the same rewrite the
+        # Makefile cores get from the compiler shim.
+        CMAKE_SYSTEM_NAME=Darwin
+        CMAKE_FLAGS="-fno-common -target arm64-apple-ios18.0-macabi"
+        CMAKE_EXTRA="-DCMAKE_OSX_SYSROOT=macosx"
+    else
+        CMAKE_EXTRA="-DCMAKE_OSX_DEPLOYMENT_TARGET=18.0"
+    fi
     cmake -S "$SRC" -B "$SPIKE/build" \
         -DCMAKE_SYSTEM_NAME=$CMAKE_SYSTEM_NAME \
         -DCMAKE_OSX_ARCHITECTURES=arm64 \
-        -DCMAKE_OSX_DEPLOYMENT_TARGET=18.0 \
+        $CMAKE_EXTRA \
         -DBUILD_LIBRETRO=ON -DBUILD_QT=OFF -DBUILD_SDL=OFF \
         -DUSE_FFMPEG=OFF -DUSE_SQLITE3=OFF -DUSE_DISCORD_RPC=OFF \
         -DUSE_EDITLINE=OFF -DUSE_ELF=OFF -DBUILD_GLES2=OFF \
         -DBUILD_GLES3=OFF -DBUILD_GL=OFF \
-        -DCMAKE_C_FLAGS=-fno-common -DCMAKE_CXX_FLAGS=-fno-common \
+        -DCMAKE_C_FLAGS="$CMAKE_FLAGS" -DCMAKE_CXX_FLAGS="$CMAKE_FLAGS" \
         > "$SPIKE/cmake.log" 2>&1
     cmake --build "$SPIKE/build" --target mgba_libretro -j"$JOBS"
     SRC=$SPIKE/build
@@ -244,12 +398,28 @@ else
     mkdir -p "$WRAP"
     XCRUN_SDK=iphoneos
     [ "$PLATFORM" = tvos ] && XCRUN_SDK=appletvos
+    [ "$PLATFORM" = mac ] && XCRUN_SDK=macosx
     real_cc=$(xcrun -sdk "$XCRUN_SDK" -find clang)
     real_cxx=$(xcrun -sdk "$XCRUN_SDK" -find clang++)
-    printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cc" > "$WRAP/cc"
-    printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cc" > "$WRAP/clang"
-    printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cxx" > "$WRAP/c++"
-    printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cxx" > "$WRAP/clang++"
+    if [ "$PLATFORM" = mac ]; then
+        # The Catalyst rewrite, on top of -fno-common: the Makefiles'
+        # ios-arm64 cases bake -miphoneos-version-min and the iPhone
+        # sysroot into their compile and link lines, and both must give
+        # way to the macabi target and the macOS SDK. Everything else
+        # passes through untouched. Bash rather than sh for the argv
+        # array.
+        for tool in cc clang; do
+            printf '#!/bin/bash\nout=(); skip=0\nfor a in "$@"; do\n  if [[ $skip == 1 ]]; then skip=0; continue; fi\n  case "$a" in\n    -miphoneos-version-min=*) continue ;;\n    -isysroot) skip=1; continue ;;\n  esac\n  out+=("$a")\ndone\nexec "%s" -fno-common -target arm64-apple-ios18.0-macabi -isysroot "%s" "${out[@]}"\n' "$real_cc" "$SDK" > "$WRAP/$tool"
+        done
+        for tool in c++ clang++; do
+            printf '#!/bin/bash\nout=(); skip=0\nfor a in "$@"; do\n  if [[ $skip == 1 ]]; then skip=0; continue; fi\n  case "$a" in\n    -miphoneos-version-min=*) continue ;;\n    -isysroot) skip=1; continue ;;\n  esac\n  out+=("$a")\ndone\nexec "%s" -fno-common -target arm64-apple-ios18.0-macabi -isysroot "%s" "${out[@]}"\n' "$real_cxx" "$SDK" > "$WRAP/$tool"
+        done
+    else
+        printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cc" > "$WRAP/cc"
+        printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cc" > "$WRAP/clang"
+        printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cxx" > "$WRAP/c++"
+        printf '#!/bin/sh\nexec "%s" -fno-common "$@"\n' "$real_cxx" > "$WRAP/clang++"
+    fi
     chmod +x "$WRAP"/*
     # MAKEARGS: extra per-core make variables from the case table above.
     # Unset for every core that predates it, so those builds are invoked
@@ -270,7 +440,10 @@ sed "s/bsat_/${PREFIX}_/g" spikes/BeetleSaturnStatic/bsat_wrapper.c \
     | sed 's|#include "libretro-common/include/libretro.h"|#include "libretro.h"|' \
     > "$WRAP"
 
-cc -arch arm64 -isysroot "$SDK" "$MINVERSION_FLAG" -O2 \
+# MINVERSION_FLAG is deliberately unquoted: the mac case's value is
+# two words ("-target <triple>") that must split; the ios and tvos
+# values are single words either way.
+cc -arch arm64 -isysroot "$SDK" $MINVERSION_FLAG -O2 \
     -I"RommApp/RommApp/Native/Libretro" -c "$WRAP" -o "$SPIKE/wrapper.o"
 
 # Export exactly what the wrapper defines, nothing else. Deriving the

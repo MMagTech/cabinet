@@ -520,15 +520,23 @@ enum NativeLauncher {
     }
 
     private static func activate(platform: NativePlatform, core: NativeCore, loadURL: URL, workDir: URL, saveDir: URL, gunCabinet: Bool = false) throws -> NativeCore {
-        #if targetEnvironment(simulator)
+        #if targetEnvironment(simulator) || CABINET_NO_NATIVE_CORES
         // A simulator build links no cores: they are built for real
         // hardware and rebuilding emulator cores for a simulator proves
         // nothing, since performance there is meaningless. The block sits
         // here, at the point of actually starting a core, rather than in
         // platform resolution, so the rest of the app still knows
         // perfectly well which platforms are supported and the library
-        // does not label every one of them unplayable.
+        // does not label every one of them unplayable. A Mac build with
+        // no core libraries yet takes the same exit with its own words:
+        // native cores are the Mac's only player, and until this
+        // platform's core is compiled for the Mac the honest answer is
+        // that the game cannot start.
+        #if targetEnvironment(macCatalyst)
+        throw LaunchError.unsupportedFormat("This game's core isn't in the Mac build yet.")
+        #else
         throw LaunchError.unsupportedFormat("Games can't run in the Simulator. Use a real Apple TV.")
+        #endif
         #else
         LibretroFrontend.shared.activateCore(core.coreID)
         var coreOptions = NativeCoreOptionsStore.dictionary(for: platform)

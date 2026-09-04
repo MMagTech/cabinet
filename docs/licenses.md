@@ -57,6 +57,9 @@ from the commits below.
 | vecx | Vectrex | GPL v3 | [libretro/libretro-vecx](https://github.com/libretro/libretro-vecx) | `8f671cc9d737` |
 | Stella 2014 | Atari 2600 | GPL v2 | [libretro/stella2014-libretro](https://github.com/libretro/stella2014-libretro) | `4a7da82595d2` |
 | Opera | 3DO | Modified LGPL, non-commercial (FreeDO terms) | [libretro/opera-libretro](https://github.com/libretro/opera-libretro) | `a501a278d057` |
+| PPSSPP | PSP | GPL v2 or later | [hrydgard/ppsspp](https://github.com/hrydgard/ppsspp) | `c989c2553e10` |
+| gw-libretro | Game & Watch (iOS only) | zlib | [libretro/gw-libretro](https://github.com/libretro/gw-libretro) | `91d599b951e7` |
+| VeMUlator | Dreamcast VMU minigames (iOS only) | GPL v3 | [libretro/vemulator-libretro](https://github.com/libretro/vemulator-libretro) | `27a062f6ae53` |
 
 The GPL v2 cores are statically linked, which makes the distributed app a
 combined work under those terms. The corresponding source is the upstream commit
@@ -73,6 +76,7 @@ named above, unmodified, built with `tools/build-core.sh` from this repository.
 | LZMA SDK | Archive decompression | Public domain |
 | Tremor | CD audio decoding | BSD |
 | inih | Config parsing, built into mGBA | BSD |
+| FFmpeg | Video and audio decoding inside PPSSPP, the prebuilt static build PPSSPP's own tree carries for iOS and tvOS | LGPL v2.1 or later |
 
 ## Bundled artwork
 

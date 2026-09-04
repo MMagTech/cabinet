@@ -22,8 +22,15 @@ import SwiftUI
 /// tall one. This page is now the same shape as the page that pushes to
 /// it.
 struct TVNativeCoresView: View {
+    // Same filter as iOS's NativeCoresView, same reason: no settings
+    // for a player this device is not offering.
+    @AppStorage(ExperimentalCores.key) private var experimentalCores = false
+
     private var platforms: [NativePlatform] {
-        NativePlatform.allCases.filter { !NativeCoreOptions.options(for: $0).isEmpty }
+        NativePlatform.allCases.filter {
+            !NativeCoreOptions.options(for: $0).isEmpty
+                && (!$0.isExperimental || experimentalCores)
+        }
     }
 
     var body: some View {

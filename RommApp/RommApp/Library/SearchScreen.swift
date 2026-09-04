@@ -49,7 +49,11 @@ struct SearchScreen: View {
                 } else if results.isEmpty {
                     ContentUnavailableView.search(text: searchText)
                 } else {
+                    #if targetEnvironment(macCatalyst)
+                    resultGrid
+                    #else
                     resultList
+                    #endif
                 }
             }
             .navigationTitle("Search")
@@ -64,6 +68,11 @@ struct SearchScreen: View {
             // once the toggle flips, and typed text should not need to
             // be re-entered to see it re-scoped to what is kept.
             .onChange(of: networkMonitor.isOffline) { _, _ in Task { await runSearch() } }
+            #if targetEnvironment(macCatalyst)
+            .navigationDestination(item: $playing) { rom in
+                GameLaunchView(rom: rom)
+            }
+            #else
             .fullScreenCover(item: $playing) { rom in
                 #if os(iOS)
                 NavigationStack { GameLaunchView(rom: rom) }
@@ -71,8 +80,69 @@ struct SearchScreen: View {
                 TVGameLaunchView(rom: rom)
                 #endif
             }
+            #endif
         }
     }
+
+    #if targetEnvironment(macCatalyst)
+    /// Search results as cover art, the way the library and Home show
+    /// games on this platform.
+    ///
+    /// The shared list is a phone result list: a 40pt thumbnail and two
+    /// lines of text per row, which on a desk-sized window left a
+    /// handful of tiny rows in one corner of an empty screen. The
+    /// covers are the thing you actually recognise a game by, and this
+    /// screen is the one place in the app that was still showing them
+    /// at postage-stamp size.
+    ///
+    /// Same grid metrics, same badges, same hover lift and context menu
+    /// as `RomListView`, so a game found by searching looks and behaves
+    /// exactly like the same game found by browsing.
+    private var resultGrid: some View {
+        ScrollView {
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: TenFoot.gridCoverMinimum), spacing: TenFoot.gridSpacing)],
+                spacing: TenFoot.gridSpacing
+            ) {
+                ForEach(results) { rom in
+                    Button {
+                        playing = rom
+                    } label: {
+                        VStack(spacing: 6) {
+                            CoverImage(path: rom.pathCoverSmall, title: rom.displayName)
+                                .aspectRatio(3.0 / 4.0, contentMode: .fit)
+                                .clipShape(.rect(cornerRadius: 10))
+                                .contentShape(Rectangle())
+                                .compatibilityBadge(romId: rom.id)
+                                .favoriteBadge(romId: rom.id)
+                                .downloadBadge(romId: rom.id)
+                            VStack(spacing: 1) {
+                                Text(rom.displayName)
+                                    .font(TenFoot.captionFont)
+                                    .lineLimit(1)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                // Searching crosses every platform at
+                                // once, so unlike a platform's own grid
+                                // this has to say which machine a result
+                                // belongs to.
+                                Text(rom.platformLabel(source: labelSource, platformNames: session.platformNames))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .macHoverLift()
+                    .gameContextMenu(rom: rom)
+                }
+            }
+            .padding(.horizontal, TenFoot.contentInset)
+            .padding(.vertical, 16)
+        }
+    }
+    #endif
 
     private var resultList: some View {
         List {
@@ -100,6 +170,7 @@ struct SearchScreen: View {
                 .gameContextMenu(rom: rom)
             }
         }
+        .macTransparentList()
         .listStyle(.plain)
     }
 

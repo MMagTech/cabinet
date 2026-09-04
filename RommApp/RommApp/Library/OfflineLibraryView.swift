@@ -72,6 +72,14 @@ struct OfflineLibraryView: View {
                                     .font(.callout.monospacedDigit())
                             }
                         }
+                        #if os(iOS) && !targetEnvironment(macCatalyst)
+                        // Remove All Downloads on a long press, the one
+                        // platform action that makes sense with no
+                        // connection (Marcus, 2026-09-03, airplane mode).
+                        .contextMenu {
+                            PlatformDownloadMenuItems(platform: entry.platform, label: platformLabel(for: entry.platform), offersDownloadAll: false)
+                        }
+                        #endif
                     }
                 } header: {
                     // Text alone, no icon: the real toggle is already on

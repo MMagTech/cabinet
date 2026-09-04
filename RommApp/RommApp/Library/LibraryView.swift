@@ -22,6 +22,10 @@ struct LibraryScreen: View {
     /// appears immediately and the art fills in rather than the whole
     /// screen waiting on N extra requests.
     @State private var mosaics: [String: [String]] = [:]
+    #if targetEnvironment(macCatalyst)
+    /// The platform a Mac tile opens; see platformTile.
+    @State private var openPlatform: Platform?
+    #endif
 
     @State private var collections: [Collection] = []
     @State private var loadingCollections = true
@@ -75,6 +79,12 @@ struct LibraryScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
+            // Neither control on the Mac. Its sidebar already lists the
+            // collections, so a Platforms/Collections switcher would be
+            // a second way to the same place, and its game lists are the
+            // TV grid with no view toggle (see RomListView, and the Mac
+            // target's founding commit). The menu was also inert there.
+            #if !targetEnvironment(macCatalyst)
             ToolbarItem(placement: .principal) {
                 Picker("Browse by", selection: $browsing) {
                     ForEach(Browsing.allCases, id: \.self) { Text($0.rawValue) }
@@ -82,7 +92,6 @@ struct LibraryScreen: View {
                 .pickerStyle(.segmented)
                 .frame(maxWidth: 260)
             }
-            #if os(iOS)
             ToolbarItem(placement: .topBarTrailing) {
                 // A menu, not a segmented picker, for the same iOS 26
                 // glass-nesting reason as RomListView's copy of this
@@ -119,7 +128,14 @@ struct LibraryScreen: View {
         .onChange(of: networkMonitor.isConnected) { _, _ in Task { await loadPlatforms() } }
         .onChange(of: networkMonitor.manualOfflineMode) { _, _ in Task { await loadPlatforms() } }
         // GameLaunchView is iOS-only for now; see HomeView.swift for why.
-        #if os(iOS)
+        #if targetEnvironment(macCatalyst)
+        .navigationDestination(item: $playing) { rom in
+            GameLaunchView(rom: rom)
+        }
+        .navigationDestination(item: $openPlatform) { platform in
+            RomListView(source: .platform(platform))
+        }
+        #elseif os(iOS)
         .fullScreenCover(item: $playing) { rom in
             NavigationStack { GameLaunchView(rom: rom) }
         }
@@ -222,7 +238,7 @@ struct LibraryScreen: View {
                     // This was the one screen in the app with no artwork
                     // at all.
                     LazyVGrid(
-                        columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible())],
+                        columns: Self.tileColumns,
                         spacing: 10
                     ) {
                         if !supportedPlatforms.isEmpty {
@@ -248,7 +264,11 @@ struct LibraryScreen: View {
                     .padding(.bottom, 12)
                 }
             }
+            // Not on the Mac: pull to refresh is a touch gesture, and a
+            // Mac list refreshes on its own triggers.
+            #if !targetEnvironment(macCatalyst)
             .refreshable { await loadPlatforms() }
+            #endif
         }
     }
 
@@ -280,15 +300,54 @@ struct LibraryScreen: View {
                     .font(.callout.monospacedDigit())
             }
         }
+        #if os(iOS) && !targetEnvironment(macCatalyst)
+        // The same download items the tile carries, so the list mode
+        // is not a way to lose them (Marcus, 2026-09-03).
+        .contextMenu {
+            PlatformDownloadMenuItems(platform: platform, label: platformLabel(for: platform))
+        }
+        #endif
     }
 
     private func platformTile(_ platform: Platform) -> some View {
-        tile(
+        #if targetEnvironment(macCatalyst)
+        // A plain Button on the Mac, opening the platform through
+        // navigationDestination below, lifted under the pointer the way
+        // the covers are, with the platform's menu on it. Built this
+        // way while chasing a doubled context menu that turned out to
+        // be MacWindow's title bar timer, not the link; kept because it
+        // matches the covers' construction exactly.
+        let covers = mosaics[LibraryTileArt.key(platform: platform)] ?? []
+        return Button {
+            openPlatform = platform
+        } label: {
+            PlatformTile(title: platformLabel(for: platform), count: platform.romCount, covers: covers)
+        }
+        .buttonStyle(.plain)
+        .macHoverLift()
+        .contextMenu {
+            MacPlatformMenu(platform: platform, label: platformLabel(for: platform))
+        }
+        #elseif os(tvOS)
+        return tile(
             title: platformLabel(for: platform),
             count: platform.romCount,
             coverKey: LibraryTileArt.key(platform: platform),
             source: .platform(platform)
         )
+        #else
+        // The platform's download items on a long press, the phone's
+        // context menu, as the Mac's tile has them on a right click.
+        return tile(
+            title: platformLabel(for: platform),
+            count: platform.romCount,
+            coverKey: LibraryTileArt.key(platform: platform),
+            source: .platform(platform)
+        )
+        .contextMenu {
+            PlatformDownloadMenuItems(platform: platform, label: platformLabel(for: platform))
+        }
+        #endif
     }
 
     private func collectionTile(_ collection: Collection) -> some View {
@@ -300,6 +359,24 @@ struct LibraryScreen: View {
         )
     }
 
+    /// The tile art's label-zone fraction and cover slices were designed
+    /// around a phone's half-width tile. Two flexible columns keep that
+    /// true on every phone and pad; a Mac window is wide enough that two
+    /// columns stretched each tile to five times its designed width,
+    /// which turned the label panel into a dead expanse and the cover
+    /// slices into seamed landscape crops. Adaptive columns hand the
+    /// tile its intended proportions back, five or six to a row.
+    private static var tileColumns: [GridItem] {
+        #if targetEnvironment(macCatalyst)
+        // Four across at any window width, Marcus's call: tiles stay
+        // small and even rather than adapting into five or six slivers
+        // at fullscreen.
+        Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
+        #else
+        [GridItem(.flexible(), spacing: 10), GridItem(.flexible())]
+        #endif
+    }
+
     private func tile(
         title: String, count: Int, coverKey: String, source: RomListView.Source
     ) -> some View {
@@ -307,89 +384,11 @@ struct LibraryScreen: View {
         return NavigationLink {
             RomListView(source: source)
         } label: {
-            ZStack(alignment: .bottomLeading) {
-                tileBackdrop(covers: covers)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.7)
-                        .multilineTextAlignment(.leading)
-                        .shadow(color: .black.opacity(0.5), radius: 4, y: 1)
-                    Text("\(count) games")
-                        .font(.caption2)
-                        .foregroundStyle(.white.opacity(0.65))
-                        .shadow(color: .black.opacity(0.5), radius: 3, y: 1)
-                }
-                .padding(11)
-            }
-            .frame(height: 96)
-            .frame(maxWidth: .infinity)
-            .clipShape(.rect(cornerRadius: 12))
-            .animation(.easeOut(duration: 0.35), value: covers)
+            PlatformTile(title: title, count: count, covers: covers)
         }
         .buttonStyle(.plain)
     }
 
-    /// The tile's art: two covers filling the trailing side edge to edge,
-    /// with the label zone kept a flat opaque panel that fades out over
-    /// the art. Proportional, never fixed points: the label zone is a
-    /// fraction of the tile's own width, so the same tile works on any
-    /// phone or pad width. The lesson came from the tvOS tile, where
-    /// fixed widths squeezed "Arcade" until it hyphenated.
-    private func tileBackdrop(covers: [String]) -> some View {
-        GeometryReader { geo in
-            // Where the covers start, as a fraction of the tile. The
-            // label overhangs into the faded region for long names, which
-            // is why the gradient's first stretch stays mostly opaque.
-            let labelZone = geo.size.width * 0.42
-            ZStack(alignment: .leading) {
-                Self.panel
-                if !covers.isEmpty {
-                    HStack(spacing: 0) {
-                        ForEach(Array(covers.prefix(2).enumerated()), id: \.offset) { _, path in
-                            CoverImage(path: path, title: "", showsPlaceholder: false)
-                                .frame(
-                                    width: (geo.size.width - labelZone) / 2,
-                                    height: geo.size.height
-                                )
-                                .clipped()
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-
-                    // A solid fill for the label zone rather than the
-                    // gradient's own opaque stop: on the tvOS tile an
-                    // interpolated "opaque" stop left a per-platform
-                    // hairline of art color at the tile's edge, and a
-                    // plain Rectangle has no interpolation to get wrong.
-                    HStack(spacing: 0) {
-                        Rectangle()
-                            .fill(Self.panel)
-                            .frame(width: labelZone)
-                        LinearGradient(
-                            stops: [
-                                .init(color: Self.panel, location: 0),
-                                .init(color: Self.panel.opacity(0.8), location: 0.28),
-                                .init(color: Self.panel.opacity(0), location: 0.8),
-                            ],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    }
-                }
-            }
-            .frame(width: geo.size.width, height: geo.size.height)
-            .clipped()
-        }
-    }
-
-    /// The same panel value the tvOS tile settled on, and deliberately
-    /// darker and less saturated than the approved mockup's purple: the
-    /// same sRGB values render far more vividly on a wide-gamut display,
-    /// which is how the first tvOS build came out a loud electric purple.
-    private static let panel = Color(red: 0.14, green: 0.10, blue: 0.24)
 
     /// A platform this app can actually put a Play button in front of:
     /// not a keyboard machine, per `ComputerPlatforms`, and RomM's own core
@@ -431,6 +430,13 @@ struct LibraryScreen: View {
                 .sorted { platformLabel(for: $0) < platformLabel(for: $1) }
             await loadTileArt()
         } catch {
+            // A cancelled fetch leaves whatever is already on screen
+            // alone, and is not worth a diagnostics entry either. See
+            // isCancellation.
+            guard !isCancellation(error) else {
+                loadingPlatforms = false
+                return
+            }
             platformsError = LoadFailure(error)
             DiagnosticsLog.record(
                 context: "Library load", message: error.localizedDescription, romVersion: session.serverVersion
@@ -505,7 +511,7 @@ struct LibraryScreen: View {
                         .padding(.horizontal)
                 } else {
                     LazyVGrid(
-                        columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible())],
+                        columns: Self.tileColumns,
                         spacing: 10
                     ) {
                         ForEach(collections) { collection in

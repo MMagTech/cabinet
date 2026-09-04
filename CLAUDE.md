@@ -26,11 +26,12 @@ design and the reasoning behind it, and most decisions in it are already settled
   reflect the project regardless of what has or hasn't shipped yet. A
   docs-only commit can go straight to both branches. Anything that touches
   code, even a one-line fix, waits for a real release cut.
-- Releases are per platform, tagged independently on `main`: `ios-v0.x.x-alpha`
-  and `tvos-v0.x.x-alpha`, titled "Cabinet for iOS 0.x.x-alpha" and
-  "Cabinet for tvOS 0.x.x-alpha". The two platforms do not have to release
-  together or share version numbers. The two oldest iOS tags (`v0.1.0-alpha`
-  and `v0.2.0-alpha`) predate this convention and keep their names.
+- Releases are per platform, tagged independently on `main`: `ios-v1.x.x`,
+  `tvos-v1.x.x` and `mac-v1.x.x`, titled "Cabinet for iOS 1.x.x", "Cabinet
+  for tvOS 1.x.x" and "Cabinet for Mac 1.x.x". The three platforms do not
+  have to release together or share version numbers. Tags before 1.0.0
+  carried an `-alpha` suffix, and the two oldest iOS tags (`v0.1.0-alpha`
+  and `v0.2.0-alpha`) predate even that convention; all keep their names.
 - To cut a release, in order: first set the target's `MARKETING_VERSION` in
   the project to match the tag being cut, and bump `CURRENT_PROJECT_VERSION`
   if the build will also go to TestFlight (Apple requires a unique build
@@ -41,6 +42,18 @@ design and the reasoning behind it, and most decisions in it are already settled
   the built `.app` into a `Payload/` folder and zip it as an unsigned
   `.ipa`, then `gh release create` with the tag and `gh release upload` the
   IPA.
+- The Mac release is a signed, notarized disk image, since macOS refuses
+  an unsigned app outright. Archive the `RommAppMac` scheme for
+  `generic/platform=macOS,variant=Mac Catalyst`, export it with an
+  ExportOptions plist whose method is `developer-id` (team `ZMUB88RZ5D`,
+  automatic signing; the Developer ID Application certificate lives in
+  the login keychain), submit the exported app to
+  `xcrun notarytool submit --wait` with the App Store Connect API key,
+  `xcrun stapler staple` the app, wrap it with `hdiutil create` into
+  `Cabinet-mac-<version>.dmg`, and upload that to the release. The Mac
+  entitlements already carry `com.apple.security.cs.allow-jit`, which the
+  hardened runtime needs for the recompilers; the app is deliberately
+  unsandboxed, which Developer ID permits.
 - The old squash-merge-only rule is retired. Decided 2026-08-09, at launch: the
   history is public and complete on purpose, including the messy parts. Do not
   squash it away or propose hiding branches.
@@ -57,7 +70,7 @@ design and the reasoning behind it, and most decisions in it are already settled
 
 ## Project shape
 
-Native SwiftUI shell, with two ways to run a game: eighteen libretro cores
+Native SwiftUI shell, with two ways to run a game: twenty-three libretro cores
 compiled into the app, and a `WKWebView` player running RomM's EmulatorJS page
 for everything else.
 
@@ -195,6 +208,75 @@ did not change something Cabinet depends on.
   third party iOS client breaks across RomM versions. Hand written calls, not
   generated.
 - Commit `tools/*.xml` or `tools/profiles.json`. Derived data, regenerate it.
+
+## Kept games and the Files mirror
+
+Never walk the Files mirror once per kept game, and never do a file
+walk on the main thread at launch. `KeptGameStore.reconcileFilesFolder`
+once called `filesFolderInodes()`, a walk of every file under Documents,
+inside `ensureLinks` for every kept game: quadratic, on the main thread,
+at launch and on every return to the foreground. Fine at fifty games,
+and at four hundred it froze the app on every foreground, starved the
+Download All queue (which lives on the main actor), and tripped the
+launch watchdog: a black screen, then a kill. Found 2026-09-03 on a
+real phone. The reconcile now walks the mirror once, off the main
+thread, and hands the main actor only its decisions; Remove All walks
+once for the platform. Keep it that way, and time any new launch work
+against a library of hundreds, not the simulator's handful.
+
+## Mac Catalyst conventions
+
+Read Apple's documentation for the exact class or modifier before
+changing Catalyst UI, and say what it says. Catalyst behaviour is rarely
+guessable from the running app: the window's title bar, its toolbar and
+its safe area are owned by AppKit and rebuilt by Catalyst on every
+window shape change, so probing shows what happens without ever
+revealing the property that governs it. Two examples that cost a night
+between them: the title bar strip over a full screen game is solved by
+`UITitlebar.autoHidesToolbarInFullScreen`, and removing the title bar
+belongs in the scene delegate rather than a view's `onAppear`.
+
+A CAMetalLayer that is a UIView's backing layer is not opaque, and
+`UIView.isOpaque` does not make it so: that property is a `draw(_:)`
+hint and never reaches the layer, whose own default is false. A
+non-opaque layer is composited with the drawable's alpha channel, so
+an emulator that writes the game's framebuffer alpha into its
+drawable (PCSX2's merge pass does) shows a pixel-perfect frame as a
+black screen. Set `layer.isOpaque = true` on any Metal surface a core
+presents into. Found 2026-09-01 by reading the presented drawable
+back; AppKit's layer in upstream PCSX2 reads opaque already.
+
+Game controllers on the Mac are polled once per frame, not driven by
+callbacks. Apple's Game Controller guide says a game with its own loop
+should poll with `capture()`; the callbacks run on the main queue,
+which is the queue the frame loop already occupies, and a Bluetooth
+pad stopped responding mid-action with the game running on. iOS and
+tvOS keep the callbacks. Also documented: on macOS 11.3 and later pad
+input is not forwarded to an app that is not frontmost.
+
+Never poll the window's title bar. `MacWindow` once re-applied its
+chromeless title bar on a half-second timer, and merely reading the
+title bar's properties on each tick re-presented any open context
+menu on top of itself: a second, larger menu settling over the first,
+which with a one-item menu looked like a glass panel around it. A
+timer that fired and did nothing was clean; one that only read was
+not. The chrome is now re-applied on the shell window's own shape
+events (resize, full screen in and out, screen change) with a short
+burst after each, never on key-window changes, since a menu is a
+window that becomes key as it opens. Found 2026-09-02 frame by frame
+with region screen captures; window-id captures leave the menu's own
+window out and hid it for an evening.
+
+Apple's documentation pages are JavaScript rendered and fetch as an
+empty shell. The content is served as JSON at
+`https://developer.apple.com/tutorials/data/documentation/<path>.json`;
+`primaryContentSections` carries the prose and code, `topicSections`
+lists every property on a class.
+
+Never publish state that re-renders the view currently presenting
+something. It tears the presentation down: a shared flag flipped from a
+launch screen's `onAppear`, observed by the shell, made that screen open
+and immediately close.
 
 ## tvOS conventions
 

@@ -16,6 +16,26 @@ struct RommApp: App {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-cabinetLink") {
                 ControllerPadView()
+            } else if ProcessInfo.processInfo.arguments.contains("-cabinetVMUSkin") {
+                // The stamped-skin bench: the VMU player straight at the
+                // root, for eyeballing the shell against the approved
+                // mock in a simulator, where no core can run. The boot
+                // alert is dismissed by hand (dismiss on a root view is
+                // a no-op) and every frontend-side behavior stays live:
+                // the tilting cross, the depressing buttons, SLEEP's
+                // fade and z animation, MENU and the LED rules.
+                VMUPlayerView(
+                    rom: Rom(
+                        id: 0, name: "Skin bench", fsName: "skin-bench.chd",
+                        fsNameNoTags: "skin-bench", fsNameNoExt: "skin-bench",
+                        platformId: 0, platformSlug: "dc", platformFsSlug: "dc",
+                        platformDisplayName: "Dreamcast", summary: nil,
+                        pathCoverSmall: nil, pathCoverLarge: nil,
+                        fsSizeBytes: 0, hasMultipleFiles: false, md5Hash: nil
+                    ),
+                    cardURL: FileManager.default.temporaryDirectory.appendingPathComponent("skin-bench-card.bin")
+                )
+                .environmentObject(session)
             } else if let aim = AimLab.launchRole, case .send = aim {
                 AimSenderView()
             } else if let role = NetProbe.launchRole {
@@ -31,6 +51,14 @@ struct RommApp: App {
         // and the moment it can look again is exactly here. Without
         // this, a game deleted in Files kept showing its toggle on
         // until its screen happened to reload.
+        .onChange(of: session.stage) { _, stage in
+            // A fresh pairing has nothing written at all, and somebody
+            // may add the widget before they open the app a second time.
+            if stage == .ready {
+                WidgetWriter.refresh(session: session)
+                SpotlightIndexer.refresh(session: session)
+            }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 KeptGameStore.shared.reconcileFilesFolder()
@@ -60,11 +88,56 @@ struct RommApp: App {
             if !isManualOffline { KeptGameStore.shared.healCanonicalSlugs(session: session) }
             syncIfOnline()
         }
+
+        #if targetEnvironment(macCatalyst)
+        // The Mac's Settings window, opened from the app menu; see
+        // MacSettingsWindow. A second scene, which the shared scene
+        // manifest already permits for the external display.
+        WindowGroup(id: MacSettingsWindow.windowID) {
+            MacSettingsWindow()
+                .environmentObject(session)
+        }
+        #endif
     }
 
     private var appContent: some View {
+        #if targetEnvironment(macCatalyst)
+        // The PS2 picture cannot be verified by building, and the
+        // headless smoke test deliberately draws nothing, so this is
+        // the one way to exercise the real render path without a
+        // person clicking through sign-in and the library. Inert
+        // without its launch argument.
+        if let disc = PS2BenchHarness.discPath, !disc.isEmpty {
+            return AnyView(PS2BenchView(discPath: disc))
+        }
+        if let disc = GCBenchHarness.discPath, !disc.isEmpty {
+            return AnyView(GCBenchView(discPath: disc))
+        }
+        #endif
+        return AnyView(appShell)
+    }
+
+    private var appShell: some View {
         RootView()
             .environmentObject(session)
+            #if targetEnvironment(macCatalyst)
+            .onAppear { MacWindow.styleAll() }
+            // The whole app's type, one dial: a desk sits further from
+            // the glass than a hand does, so the Mac reads every
+            // semantic font two dynamic-type notches up. Set here so it
+            // cascades through every screen and presentation.
+            //
+            // Two rather than one because Catalyst has already mapped
+            // every iOS text style down to Mac metrics before this
+            // applies, putting body at 13pt against the phone's 17, so
+            // the first notch only undoes part of that.
+            .dynamicTypeSize(.xxLarge)
+            #endif
+            #if os(iOS)
+            // A widget press or a Spotlight result arrives here as a
+            // cabinet:// URL. See DeepLink.swift.
+            .handlesGameDeepLinks(session: session)
+            #endif
             .task {
                 // A native core crash takes the whole app, so the only
                 // moment it can be counted is the next launch.
@@ -74,6 +147,14 @@ struct RommApp: App {
 
     private func syncIfOnline() {
         guard !networkMonitor.isOffline else { return }
+        // The widget cannot fetch anything itself, so the app has to
+        // leave it something current whenever it has a connection. Cheap
+        // when nothing changed: unchanged covers are not rewritten.
+        WidgetWriter.refresh(session: session)
+        // Spotlight likewise, though it gates itself to a daily walk:
+        // fourteen hundred games do not change between breakfast and
+        // lunch, and the widget's recents do.
+        SpotlightIndexer.refresh(session: session)
         Task {
             let savesUploaded = await KeptGameStore.shared.syncPendingStates(session: session)
             let sessionsUploaded = await session.syncPendingPlaySessions()

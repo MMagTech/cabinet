@@ -34,6 +34,15 @@ struct GameLaunchView: View {
     @State private var selectedNativeCore: NativeCore?
     @State private var selectedBackend: LaunchChoices.PlayerBackend = .webview
     @State private var playingNative = false
+    #if targetEnvironment(macCatalyst)
+    // PS2 is Mac only and does not go through the native player, so it
+    // carries its own presentation state rather than overloading
+    // playingNative with a second meaning.
+    @State private var playingPS2 = false
+    @State private var ps2DiscPath: String?
+    @State private var playingGC = false
+    @State private var gcGamePath: String?
+    #endif
     @State private var nativeInitialState: Data?
     @State private var firmware: [Firmware] = []
     /// Firmware the server knows about but cannot actually serve: the entry
@@ -121,6 +130,27 @@ struct GameLaunchView: View {
         case failed
     }
 
+    /// The VMU row's state, Dreamcast only: a GAME-type file on this
+    /// game's memory card is a minigame the game downloaded there, and
+    /// the row is the one door to playing it (the VMU is never a
+    /// platform, never in the library). Detection parses the same card
+    /// the boot would open, prefetched so a card saved on another
+    /// device counts.
+    @State private var vmuMinigame: String?
+    @State private var vmuPreparing = false
+    @State private var playingVMU = false
+    #if targetEnvironment(macCatalyst)
+    @State private var favoriteFill: CGFloat = 0
+    @State private var favoriteScale: CGFloat = 1
+    #endif
+    @State private var vmuCardURL: URL?
+    /// The two-writer rule's eyes: while a television is running a DC
+    /// session for THIS game, the card is that session's to write, so
+    /// the row declines rather than letting two machines edit one card.
+    /// Non-arcade televisions advertise "<layout>.<rom id>", which is
+    /// exactly enough to recognise this game.
+    @StateObject private var vmuScout = ControllerLinkScout()
+
     /// Whether the scroll content is resting at its top, the only moment a
     /// downward drag should be read as "dismiss" rather than "scroll".
     @State private var isScrolledToTop = true
@@ -142,6 +172,14 @@ struct GameLaunchView: View {
                 }
                 .frame(height: 0)
 
+                #if targetEnvironment(macCatalyst)
+                // The TV's launch composition read at a desk: cover
+                // left, identity and the action right, the option cards
+                // the Mac actually uses below the action. The phone's
+                // landscape/portrait split never applies here.
+                let _ = landscape
+                macLayout(height: geometry.size.height)
+                #else
                 if landscape {
                     // A short wide screen has width to spare and almost no
                     // height, so the option cards sit side by side rather
@@ -200,6 +238,7 @@ struct GameLaunchView: View {
                             if isComputerPlatform { computerPlatformCard }
                             downloadStatusCard
                             if interruptedAt != nil { continueCard }
+                            vmuCard
                             compatibilityCard
                             resetSettingsCard
                             if arcadeBase != nil { arcadeControlsCard }
@@ -217,6 +256,7 @@ struct GameLaunchView: View {
                     }
                     .padding(20)
                 }
+                #endif
             }
             .coordinateSpace(name: "gameLaunchScroll")
             .onPreferenceChange(ScrollOffsetKey.self) { isScrolledToTop = $0 >= -1 }
@@ -252,15 +292,27 @@ struct GameLaunchView: View {
             ToolbarItem(placement: .topBarLeading) {
                 routeIndicator
             }
+            .macBare()
             ToolbarItem(placement: .topBarTrailing) {
                 exportButton
             }
+            .macBare()
+            // The Mac shows this beside the title instead, where it sits
+            // with the game rather than in the window's chrome. See
+            // macFavoriteStar.
+            #if !targetEnvironment(macCatalyst)
             ToolbarItem(placement: .topBarTrailing) {
                 favoriteButton
             }
+            #endif
+            // Not on the Mac: this screen is pushed there and the back
+            // button is the way out. The modal X it had sat where the
+            // title bar owns the mouse and did nothing windowed.
+            #if !targetEnvironment(macCatalyst)
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Close") { dismiss() }
             }
+            #endif
         }
         .sheet(isPresented: Binding(
             get: { exporter.exportURLs != nil }, set: { if !$0 { exporter.finishExport() } }
@@ -271,14 +323,46 @@ struct GameLaunchView: View {
         }
         .task { await load() }
         .onAppear { refreshCoreSettings() }
+        .onDisappear { vmuScout.stop() }
         .fullScreenCover(isPresented: $playing) {
             PlayerView(
                 rom: rom, launch: launchChoices, resumeFromAutosave: continueRun, stateToLoad: stateToLoad
             )
+            .environmentObject(session)
         }
         .fullScreenCover(isPresented: $playingNative) {
+            // The explicit injection matters: on Mac Catalyst a
+            // fullScreenCover does not reliably inherit environment
+            // objects from its presenter, and the first native launch on
+            // the Mac died exactly there, NativePlayerView reading
+            // Session out of an environment that never got it. Explicit
+            // is a no-op on iOS, where inheritance already worked.
             if let core = NativeCore.core(for: rom, canonicalSlug: canonicalSlug) {
                 NativePlayerView(rom: rom, core: core, initialState: nativeInitialState)
+                    .environmentObject(session)
+            }
+        }
+        #if targetEnvironment(macCatalyst)
+        .fullScreenCover(isPresented: $playingPS2) {
+            if let ps2DiscPath {
+                PS2PlayerView(
+                    discPath: ps2DiscPath, title: rom.displayName, rom: rom, session: session
+                )
+            }
+        }
+        .fullScreenCover(isPresented: $playingGC) {
+            if let gcGamePath {
+                GCPlayerView(
+                    gamePath: gcGamePath, title: rom.displayName, romId: rom.id,
+                    rom: rom, session: session
+                )
+            }
+        }
+        #endif
+        .fullScreenCover(isPresented: $playingVMU) {
+            if let vmuCardURL {
+                VMUPlayerView(rom: rom, cardURL: vmuCardURL)
+                    .environmentObject(session)
             }
         }
         // One alert serves every way a launch can fail, so its title must
@@ -346,6 +430,16 @@ struct GameLaunchView: View {
             // promise the boot cannot keep.
             selectedState = nil
         }
+        // The Mac's window carries its content full size under a
+        // transparent title bar, so a presentation that stops below
+        // the bar leaves a strip of the shell showing through above
+        // it, the sidebar's darker material making a hard-edged block
+        // in the corner. This screen fills the window instead.
+        // Pushed in the detail pane on the Mac since 2026-09-02, so it
+        // covers nothing: it keeps the safe area, and the sidebar and
+        // its toggle stay where they are. The old modal filled the
+        // window and took the toggle away through MacChrome; that flag
+        // now only ever matters to the player's own cover.
     }
 
     // MARK: Pieces
@@ -455,6 +549,26 @@ struct GameLaunchView: View {
     /// class of bug a single source of truth is supposed to prevent.
     private var isPlatformSupported: Bool {
         PlatformSupport.isSupported(canonicalSlug: canonicalSlug, isArcade: rom.isArcade)
+    }
+
+    /// A platform this device could play but is not offering: behind the
+    /// experimental switch, switch off, and with no webview core to fall
+    /// back to (Dreamcast; N64 has a webview core and simply plays
+    /// there). Distinguished from plain unsupported so the screen can
+    /// name the one-sentence fix instead of shrugging.
+    private var gatedExperimental: Bool {
+        guard !isPlatformSupported,
+              let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug)
+        else { return false }
+        return platform.isExperimental && !ExperimentalCores.enabled
+    }
+
+    private var experimentalCard: some View {
+        LaunchCard(title: "Experimental", systemImage: "testtube.2") {
+            Text("Speed varies by game on this platform. Turn on Experimental cores in Settings to play it.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 
     /// Whether a real Web player / Native picker is offered, matching
@@ -788,6 +902,16 @@ struct GameLaunchView: View {
     /// run's own local recovery is untouched: that path never goes near
     /// the server at all, by design, see `PlayerView.resumeFromAutosave`.
     private func beginPlay() async {
+        #if targetEnvironment(macCatalyst)
+        if PS2Launcher.isPS2(canonicalSlug: canonicalSlug) {
+            await beginPS2Play()
+            return
+        }
+        if GCLauncher.isGameCube(canonicalSlug: canonicalSlug) {
+            await beginGCPlay()
+            return
+        }
+        #endif
         if selectedBackend == .native {
             await beginNativePlay()
             return
@@ -806,6 +930,48 @@ struct GameLaunchView: View {
         stateToLoad = .remote(bytes)
         playing = true
     }
+
+    #if targetEnvironment(macCatalyst)
+    /// Same shape as the native path below, and for the same reason: the
+    /// download happens before the player is presented so a failure is
+    /// an alert rather than a black screen.
+    private func beginPS2Play() async {
+        preparingPlay = true
+        downloadProgress = 0
+        defer { preparingPlay = false }
+        do {
+            ps2DiscPath = try await PS2Launcher.prepare(rom: rom, session: session) { fraction in
+                downloadProgress = fraction
+            }
+            // Before the player exists, so the card is on disk by the
+            // time PCSX2 opens it.
+            await PS2MemoryCard.restore(rom: rom, session: session)
+            playingPS2 = true
+        } catch {
+            playError = error.localizedDescription
+        }
+    }
+
+    /// Same shape as the PS2 path, minus its firmware step: Dolphin
+    /// boots a GameCube disc with its own HLE IPL, so there is nothing
+    /// to fetch from RomM before a game will start.
+    private func beginGCPlay() async {
+        preparingPlay = true
+        downloadProgress = 0
+        defer { preparingPlay = false }
+        do {
+            gcGamePath = try await GCLauncher.prepare(rom: rom, session: session) { fraction in
+                downloadProgress = fraction
+            }
+            // Before the player exists, so the card is on disk by the
+            // time Dolphin opens it.
+            await GCMemoryCard.restore(rom: rom, session: session)
+            playingGC = true
+        } catch {
+            playError = error.localizedDescription
+        }
+    }
+    #endif
 
     /// The native path downloads before presenting rather than behind a
     /// boot curtain, so a failure surfaces here as an alert instead of a
@@ -963,15 +1129,22 @@ struct GameLaunchView: View {
                 spacing: 12
             ) {
                 if isComputerPlatform { computerPlatformCard }
+                if gatedExperimental { experimentalCard }
                 downloadStatusCard
                 if interruptedAt != nil { continueCard }
-                if !showsPlayerPicker, selectedBackend == .webview, cores.count > 1 { coreCard }
-                if !showsPlayerPicker, selectedBackend == .webview, showsFirmwareCard { firmwareCard }
+                if !gatedExperimental, !showsPlayerPicker, selectedBackend == .webview, cores.count > 1 { coreCard }
+                if !gatedExperimental, !showsPlayerPicker, selectedBackend == .webview, showsFirmwareCard { firmwareCard }
                 if showsPlayerPicker, !networkMonitor.isOffline { playerCard }
+                // Deliberately NOT hidden while gated, unlike the BIOS
+                // picker and resume list: unsupported platforms have
+                // always left a way to the file so it can be played in
+                // another emulator, and Keep is that way here, the game
+                // and its BIOS land in the Files app's Games folder.
                 if showsKeepCard { keepCard }
+                vmuCard
                 if arcadeBase != nil { arcadeControlsCard }
                 resetSettingsCard
-                if !states.isEmpty || !saves.isEmpty { resumeCard }
+                if !gatedExperimental, !states.isEmpty || !saves.isEmpty { resumeCard }
             }
         }
     }
@@ -987,15 +1160,22 @@ struct GameLaunchView: View {
         } else {
             VStack(spacing: 14) {
                 if isComputerPlatform { computerPlatformCard }
+                if gatedExperimental { experimentalCard }
                 downloadStatusCard
                 if interruptedAt != nil { continueCard }
-                if !showsPlayerPicker, selectedBackend == .webview, cores.count > 1 { coreCard }
-                if !showsPlayerPicker, selectedBackend == .webview, showsFirmwareCard { firmwareCard }
+                if !gatedExperimental, !showsPlayerPicker, selectedBackend == .webview, cores.count > 1 { coreCard }
+                if !gatedExperimental, !showsPlayerPicker, selectedBackend == .webview, showsFirmwareCard { firmwareCard }
                 if showsPlayerPicker, !networkMonitor.isOffline { playerCard }
+                // Deliberately NOT hidden while gated, unlike the BIOS
+                // picker and resume list: unsupported platforms have
+                // always left a way to the file so it can be played in
+                // another emulator, and Keep is that way here, the game
+                // and its BIOS land in the Files app's Games folder.
                 if showsKeepCard { keepCard }
+                vmuCard
                 if arcadeBase != nil { arcadeControlsCard }
                 resetSettingsCard
-                if !states.isEmpty || !saves.isEmpty { resumeCard }
+                if !gatedExperimental, !states.isEmpty || !saves.isEmpty { resumeCard }
             }
         }
     }
@@ -1094,6 +1274,30 @@ struct GameLaunchView: View {
     /// the config it offered to delete is gone.
     @ViewBuilder
     private var resetSettingsCard: some View {
+        #if targetEnvironment(macCatalyst)
+        // PS2 has no libretro core, so the card below never appears for
+        // it, and its one real remedy is otherwise reachable only from
+        // inside a game that may be showing nothing at all. Some PS2
+        // titles draw nothing on the hardware renderer and are perfect
+        // on the software one, which reads as a broken app rather than
+        // a setting to change. Offering it here means the fix is in
+        // front of someone BEFORE they hit the black screen, not
+        // buried behind it.
+        if PS2Launcher.isPS2(canonicalSlug: canonicalSlug) {
+            LaunchCard(title: "Troubleshoot", systemImage: "wrench.and.screwdriver") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Toggle("Software renderer", isOn: Binding(
+                        get: { PS2Graphics.renderer(romId: rom.id) == 13 },
+                        set: { PS2Graphics.setRenderer($0 ? 13 : 17, romId: rom.id) }
+                    ))
+                    .font(.callout)
+                    Text("Turn on if the picture is black or flickers. Slower, and this Mac has the headroom.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        #endif
         if hasCoreSettings, let core = NativeCore.core(for: rom, canonicalSlug: canonicalSlug) {
             // Named for the tvOS capsule that does the same job, so
             // one idea carries one name across both platforms. Not
@@ -1123,6 +1327,58 @@ struct GameLaunchView: View {
             return
         }
         hasCoreSettings = NativeLauncher.hasCoreSettings(romId: rom.id, core: core)
+    }
+
+    /// Whether a live TV session for this game holds the card right now.
+    private var vmuDeclined: Bool {
+        vmuScout.playing == "dreamcast.\(rom.id)"
+    }
+
+    /// The way into the minigame this game downloaded onto its memory
+    /// card. Boots the card itself in the VMU player; progress writes
+    /// straight back into the same save the Dreamcast session uses, so
+    /// there is nothing to pick and nothing to manage. Deliberately not
+    /// behind the experimental-cores gate: the VMU core is not the
+    /// gated Dreamcast core, and the card is real whether or not DC
+    /// itself may launch here today.
+    @ViewBuilder
+    private var vmuCard: some View {
+        if let name = vmuMinigame {
+            LaunchCard(title: "VMU", systemImage: "memorychip") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Button {
+                        startVMUPlay()
+                    } label: {
+                        if vmuPreparing {
+                            ProgressView()
+                        } else {
+                            Text("Play \(name)")
+                        }
+                    }
+                    .font(.callout)
+                    .disabled(vmuDeclined || vmuPreparing)
+                    Text(vmuDeclined
+                        ? "The TV is playing this game, so its memory card is in use."
+                        : "A minigame on this game's memory card.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func startVMUPlay() {
+        vmuPreparing = true
+        Task {
+            let url = await VMULauncher.prepare(rom: rom, session: session)
+            vmuPreparing = false
+            guard let url else {
+                playError = "The memory card couldn't be placed for the VMU."
+                return
+            }
+            vmuCardURL = url
+            playingVMU = true
+        }
     }
 
     /// Says what is known about this game running here, and never more
@@ -1198,6 +1454,296 @@ struct GameLaunchView: View {
     /// restructure the page. One card changes height, everything else
     /// holds still, and the choices that only configure the web player
     /// now visibly belong to it.
+    #if targetEnvironment(macCatalyst)
+    /// TVGameLaunchView's screen, on the Mac. Not a Mac arrangement of
+    /// iOS's cards: the same composition and the same contents as the
+    /// television's launcher, platform label over title, the play pill,
+    /// the Continue-from row, the emulator and troubleshoot capsules,
+    /// and nothing else, per Marcus (2026-08-30). The one deliberate
+    /// divergence is downloads: the Mac keeps the Keep toggle, because
+    /// offline storage is a real Mac feature and the TV never had it.
+    /// Keep this structurally in step with TVGameLaunchView when either
+    /// changes.
+    /// Favouriting, beside the name of the thing being favourited.
+    ///
+    /// On the Mac this used to be a toolbar item, which Catalyst hoists
+    /// into the window's title bar. That put a control that acts on the
+    /// game into the app's own furniture, at the far edge of the screen
+    /// from the game it applies to, and full screen hides it until the
+    /// pointer is thrown at the top of the display. The close button
+    /// belongs up there because it acts on the window. This does not.
+    ///
+    /// The star keeps the tiles' vocabulary, same symbol and same
+    /// yellow, so the filled state means what it already means
+    /// everywhere else in the app. iOS and the television are untouched
+    /// and keep their toolbar item.
+    private var macFavoriteStar: some View {
+        let isOn = session.isFavorite(romId: rom.id)
+        return Button {
+            let romId = rom.id
+            let turningOn = !session.isFavorite(romId: romId)
+            playFavoriteMoment(turningOn: turningOn)
+            togglingFavorite = true
+            Task {
+                do {
+                    try await session.toggleFavorite(romId: romId)
+                } catch {
+                    favoriteError = error.localizedDescription
+                }
+                togglingFavorite = false
+            }
+        } label: {
+            ZStack {
+                Image(systemName: "star")
+                    .foregroundStyle(.secondary)
+                Image(systemName: "star.fill")
+                    .foregroundStyle(.yellow)
+                    // The colour arrives rather than cross-fades: the
+                    // fill rises from the bottom of the star, so there
+                    // is a moment where it is half full. A fade between
+                    // two symbols is mush and reads as a checkbox.
+                    .mask(alignment: .bottom) {
+                        Rectangle().scaleEffect(y: favoriteFill, anchor: .bottom)
+                    }
+            }
+            .font(.title2)
+            .scaleEffect(favoriteScale)
+            // Sat on the title's baseline by its own bottom edge rather
+            // than by the symbol's baseline. SF Symbols carry descender
+            // room a star never uses, so baseline alignment floats it
+            // above the line; this puts the star's two lower points on
+            // the same line the title sits on.
+            .alignmentGuide(.firstTextBaseline) { $0[.bottom] }
+        }
+        .buttonStyle(.plain)
+        .disabled(togglingFavorite)
+        .help(isOn ? "Remove from favourites" : "Add to favourites")
+        .accessibilityLabel(isOn ? "Remove from favourites" : "Add to favourites")
+        .onAppear { favoriteFill = isOn ? 1 : 0 }
+        .onChange(of: isOn) { _, now in
+            // Keeps the star honest if the state changes from somewhere
+            // else, without replaying the animation.
+            if favoriteFill != (now ? 1 : 0) { favoriteFill = now ? 1 : 0 }
+        }
+    }
+
+    /// Adding is an event. Removing is an acknowledgement.
+    ///
+    /// Turning it on overshoots to 1.28 and settles on a loose spring,
+    /// which is where the satisfaction lives, while the fill climbs a
+    /// little faster so the star is full before it stops moving. Turning
+    /// it off is quicker, quieter, and does not bounce: nothing about
+    /// un-favouriting deserves a celebration.
+    ///
+    /// The moment runs on its own clock. The write is fired separately
+    /// and does not shorten it, so a fast server cannot cut the
+    /// animation off halfway.
+    private func playFavoriteMoment(turningOn: Bool) {
+        if turningOn {
+            favoriteScale = 1.28
+            withAnimation(.spring(response: 0.40, dampingFraction: 0.42)) {
+                favoriteScale = 1
+            }
+            withAnimation(.easeOut(duration: 0.28)) {
+                favoriteFill = 1
+            }
+        } else {
+            withAnimation(.easeOut(duration: 0.16)) {
+                favoriteFill = 0
+                favoriteScale = 0.94
+            }
+            withAnimation(.easeOut(duration: 0.16).delay(0.16)) {
+                favoriteScale = 1
+            }
+        }
+    }
+
+    private func macLayout(height: CGFloat) -> some View {
+        HStack(alignment: .center, spacing: 48) {
+            cover(maxWidth: 300)
+                .frame(width: 300)
+                .shadow(radius: 24, y: 12)
+
+            VStack(alignment: .leading, spacing: 18) {
+                Text(rom.platformLabel(source: .platformName, platformNames: session.platformNames))
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                HStack(alignment: .firstTextBaseline, spacing: 14) {
+                    Text(rom.displayName)
+                        .font(.largeTitle.bold())
+                        .lineLimit(3)
+                    macFavoriteStar
+                }
+
+                if loading {
+                    ProgressView()
+                } else if isPlatformSupported {
+                    playButton
+                        .frame(maxWidth: 420)
+                    macStatesSection
+                    HStack(spacing: 14) {
+                        macEmulatorCapsule
+                        macDownloadCapsule
+                        macTroubleCapsule
+                    }
+                } else {
+                    // Every platform the Mac can't run lands here, the
+                    // same sentence shape the TV uses. The GL trio is
+                    // pending rather than absent, and saying so saves
+                    // asking.
+                    Text(macPendingHere
+                        ? "This platform's core isn't in the Mac build yet. It arrives with the ANGLE work."
+                        : "This platform isn't supported on the Mac yet.")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let playError {
+                    Text(playError)
+                        .font(.callout)
+                        .foregroundStyle(.red)
+                }
+            }
+            .frame(maxWidth: 640, alignment: .leading)
+        }
+        .padding(.horizontal, 56)
+        .padding(.vertical, 48)
+        // Centered as a composition, the way the television centers it:
+        // capped so an ultrawide window doesn't stretch the two halves
+        // apart, and given the viewport's height so the block sits in
+        // the middle of the window rather than hanging from its top.
+        .frame(maxWidth: 1200)
+        .frame(maxWidth: .infinity, minHeight: height, alignment: .center)
+    }
+
+    /// The Mac's one deliberate divergence from the TV launcher,
+    /// dressed in this screen's own language: downloads as a capsule in
+    /// the action row, not iOS's Storage card. Same binding and rules
+    /// as the keep toggle everywhere else, including offline: a kept
+    /// game offline hides the only (destructive) action, an unkept one
+    /// shows Download disabled.
+    @ViewBuilder
+    private var macDownloadCapsule: some View {
+        if showsKeepCard {
+            let isKept = keptStore.kept(romId: rom.id) != nil
+            if let progress = keptStore.downloading[rom.id] {
+                Button {} label: {
+                    Text(progress.totalBytes > 0
+                        ? "Downloading \(Int(min(progress.fraction, 1) * 100))%"
+                        : "Downloading")
+                        .font(.callout)
+                }
+                .buttonStyle(.bordered)
+                .disabled(true)
+            } else if isKept {
+                if !networkMonitor.isOffline {
+                    Menu {
+                        Button(role: .destructive) {
+                            keepBinding.wrappedValue = false
+                        } label: {
+                            Label("Remove download", systemImage: "trash")
+                        }
+                    } label: {
+                        Label("Downloaded", systemImage: "checkmark.circle")
+                            .font(.callout)
+                    }
+                    .buttonStyle(.bordered)
+                }
+            } else {
+                Button {
+                    keepBinding.wrappedValue = true
+                } label: {
+                    Label("Download", systemImage: "arrow.down.circle")
+                        .font(.callout)
+                }
+                .buttonStyle(.bordered)
+                .disabled(networkMonitor.isOffline)
+            }
+        }
+    }
+
+    private var macPendingHere: Bool {
+        guard let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug) else {
+            return false
+        }
+        return PlatformSupport.macPendingPlatforms.contains(platform)
+    }
+
+    /// The TV's "Continue from" row: newest first, relative labels,
+    /// one press boots into the state. Same `states` the resume card
+    /// lists on iOS; in-game saves are absent on purpose, exactly as on
+    /// the TV, since native play loads the newest one automatically.
+    @ViewBuilder
+    private var macStatesSection: some View {
+        if !states.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Continue from")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+                ScrollView(.horizontal) {
+                    HStack(spacing: 12) {
+                        ForEach(states.sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }) { state in
+                            Button {
+                                selectedState = state
+                                Task { await beginPlay() }
+                            } label: {
+                                Text(RommDate.relativeLabel(state.updatedAt))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 4)
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(preparingPlay)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        }
+    }
+
+    /// The TV's emulator row: a click cycles between the real choices
+    /// (arcade's FinalBurn Neo or MAME 2003-Plus), same store as every
+    /// other launcher so they always agree.
+    @ViewBuilder
+    private var macEmulatorCapsule: some View {
+        if let platform = NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug),
+           platform.cores.count > 1 {
+            Button {
+                let cores = platform.cores
+                let current = selectedNativeCore ?? cores[0]
+                let next = cores[((cores.firstIndex(of: current) ?? 0) + 1) % cores.count]
+                selectedNativeCore = next
+            } label: {
+                Label(
+                    (selectedNativeCore ?? platform.core).displayName,
+                    systemImage: "cpu"
+                )
+                .font(.callout)
+            }
+            .buttonStyle(.bordered)
+        }
+    }
+
+    /// The TV's troubleshoot capsule, per-device like everywhere else:
+    /// marking a game here says nothing about the phone or the TV.
+    private var macTroubleCapsule: some View {
+        let marked = compatibility.isMarked(rom.id)
+        return Menu {
+            Button {
+                compatibility.setMarked(!marked, romId: rom.id)
+            } label: {
+                Label(marked ? "Mark as compatible" : "Mark as incompatible",
+                      systemImage: marked ? "checkmark.circle" : "exclamationmark.triangle")
+            }
+        } label: {
+            Label(marked ? "Marked incompatible" : "Troubleshoot",
+                  systemImage: marked ? "exclamationmark.triangle" : "wrench.and.screwdriver")
+                .font(.callout)
+        }
+        .buttonStyle(.bordered)
+    }
+    #endif
+
     private var playerCard: some View {
         LaunchCard(title: "Player", systemImage: "play.rectangle.on.rectangle") {
             Picker("Player", selection: $selectedBackend) {
@@ -1845,6 +2391,22 @@ struct GameLaunchView: View {
             states.sort { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
         }
 
+        // The VMU row. Prefetch keeps the local card current when a
+        // connection exists (a no-op when the server stamp has not
+        // moved), then detection parses whatever card would actually
+        // boot. The scout only starts when a minigame is aboard, so
+        // this screen browses for televisions exactly as long as the
+        // two-writer rule has something to guard.
+        if NativePlatform.platform(for: rom, canonicalSlug: canonicalSlug) == .dreamcast {
+            if !NetworkMonitor.shared.isOffline {
+                await MemoryCardStore.shared.prefetchFromServer(rom: rom, platform: .dreamcast, session: session)
+            }
+            if let card = VMULauncher.currentCard(romId: rom.id) {
+                vmuMinigame = VMUCard.minigameName(card)
+            }
+            if vmuMinigame != nil { vmuScout.start() }
+        }
+
         // Deliberately no BIOS by default on arcade. Every arcade game
         // shares one platform, so "first verified firmware" meant forcing
         // neogeo.zip onto Cave and Capcom boards that have nothing to do
@@ -1903,5 +2465,28 @@ private struct LaunchCard<Content: View>: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 14))
+    }
+}
+
+extension ToolbarContent {
+    /// Strips the glass pill macOS 26 wraps around toolbar items, on the
+    /// Mac only. Over this screen's blurred cover art the route icon and
+    /// the close glyph each came in a dark rounded shape of their own,
+    /// and the two shapes read as clutter rather than as buttons. Apple's
+    /// sharedBackgroundVisibility page: toolbar items "are given a glass
+    /// background effect that is shared with other items in the same
+    /// logical grouping", and hiding it puts the item in its own group
+    /// with no effect. iOS keeps the system look, which is iOS's own.
+    @ToolbarContentBuilder
+    func macBare() -> some ToolbarContent {
+        #if targetEnvironment(macCatalyst)
+        if #available(iOS 26, *) {
+            sharedBackgroundVisibility(.hidden)
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
     }
 }

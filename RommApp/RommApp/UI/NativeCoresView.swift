@@ -10,8 +10,16 @@ import SwiftUI
 /// binary, and options set for one of them are not meaningful on the
 /// others.
 struct NativeCoresView: View {
+    // Observed so the list redraws when the experimental switch flips
+    // one screen up: options for a core the device is not offering
+    // would be settings for a player that does not exist right now.
+    @AppStorage(ExperimentalCores.key) private var experimentalCores = false
+
     private var platforms: [NativePlatform] {
-        NativePlatform.allCases.filter { !NativeCoreOptions.options(for: $0).isEmpty }
+        NativePlatform.allCases.filter {
+            !NativeCoreOptions.options(for: $0).isEmpty
+                && (!$0.isExperimental || experimentalCores)
+        }
     }
 
     var body: some View {
@@ -28,6 +36,7 @@ struct NativeCoresView: View {
                 Text("Options apply to every game on this platform, not just the one you're currently playing.")
             }
         }
+        .macTransparentList()
         .navigationTitle("Native cores")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -73,6 +82,7 @@ private struct NativeCoreOptionsView: View {
                 }
             }
         }
+        .macTransparentList()
         .navigationTitle(platform.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {

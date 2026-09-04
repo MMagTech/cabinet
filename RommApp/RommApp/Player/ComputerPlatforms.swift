@@ -59,7 +59,95 @@ enum PlatformSupport {
         // RomM's own metadata slug already says it is arcade; believe it.
         if isArcade { return true }
         guard !ComputerPlatforms.contains(canonicalSlug) else { return false }
+        #if targetEnvironment(macCatalyst)
+        // The Mac plays native cores only, the same shape as the TV
+        // app: the webview player is dropped from this target for now
+        // (Marcus's call, 2026-08-30, revisitable), so a platform whose
+        // only cores are EmulatorJS's is not playable here and belongs
+        // in Unsupported rather than behind a broken Play button.
+        // PS2 before the NativePlatform lookup, because it has no case
+        // there and never will: PCSX2 is not a libretro core. It is
+        // still playable on this target, so the lookup failing must not
+        // be read as unsupported.
+        if PS2Launcher.isPS2(canonicalSlug: canonicalSlug) { return true }
+        // GameCube for the same reason, and it is this one source both
+        // the library section and the Play button read: patching only
+        // GameLaunchView's local copy leaves the game filed under
+        // Unsupported with a working Play path nobody can reach. That
+        // exact mistake cost a session on PS2.
+        if GCLauncher.isGameCube(canonicalSlug: canonicalSlug) { return true }
+        guard let platform = NativePlatform.platform(bySlug: canonicalSlug, isArcade: false) else {
+            return false
+        }
+        return !macPendingPlatforms.contains(platform)
+        #else
+        // Dreamcast is Mac only, and this is the same rule PS2 and
+        // GameCube were held to from the start rather than a new one.
+        //
+        // Flycast needs a recompiler. iOS and tvOS cannot have one, so
+        // the version that shipped here ran at half the SH4's clock with
+        // an audio governor built to hold it together. That was an
+        // exception to the JIT boundary, made before there was a
+        // platform that could run the system properly, and the Mac
+        // removes the reason for it. A system that is only playable in a
+        // compromised form does not belong on a platform; PS2 and
+        // GameCube were never offered here for exactly that reason.
+        //
+        // THE CORE IS STILL COMPILED IN, deliberately. This is a gate,
+        // not a removal, because the thing that would bring Dreamcast
+        // back is upstream work rather than ours: iFly's interpreter is
+        // license-clean and is the candidate that could reach full speed
+        // without a recompiler. If that lands, this guard comes out and
+        // nothing else has to be rebuilt.
+        if canonicalSlug == "dc" { return false }
         if !CoreCatalog.cores(for: canonicalSlug).isEmpty { return true }
         return NativeCore.core(bySlug: canonicalSlug, isArcade: false) != nil
+        #endif
     }
+
+    /// Whether this device can actually start this game.
+    ///
+    /// The same question `isSupported` answers, asked about a rom, plus
+    /// the one exception that is not about platforms at all: on the
+    /// iPhone a Dreamcast game whose VMU card carries a minigame IS
+    /// playable, in the VMU core, even though Dreamcast is not.
+    ///
+    /// Lives here rather than in a view because THREE different places
+    /// offer a game to continue and every one of them is a promise:
+    /// Home's hero, the iPhone widget, and the Apple TV top shelf. The
+    /// first version of this filter only fixed Home, which left the
+    /// widget on somebody's Home Screen still offering a GameCube game
+    /// to a phone that cannot run one.
+    ///
+    /// NOT for browsing. A list someone scrolls should still show the
+    /// games this device cannot play, because their launch screen is how
+    /// the rom and its BIOS get out through Keep. Only use this where
+    /// tapping is meant to start something.
+    /// Takes the versions map rather than the session so the widget and
+    /// top shelf writers, which are not main-actor bound, can ask too.
+    static func canPlay(_ rom: Rom, platformsVersions: [String: String]) -> Bool {
+        let slug = rom.canonicalPlatformSlug(platformsVersions: platformsVersions)
+        if isSupported(canonicalSlug: slug, isArcade: rom.isArcade) { return true }
+        #if os(iOS) && !targetEnvironment(macCatalyst)
+        if NativePlatform.platform(for: rom, canonicalSlug: slug) == .dreamcast,
+           let card = VMULauncher.currentCard(romId: rom.id),
+           VMUCard.minigameName(card) != nil {
+            return true
+        }
+        #endif
+        return false
+    }
+
+    #if targetEnvironment(macCatalyst)
+    /// Platforms whose Mac core is still a link placeholder
+    /// (tools/build-mac-core-stub.sh). Listing one here keeps the
+    /// library honest, filing it under Unsupported rather than offering
+    /// a Play button that fails at load.
+    ///
+    /// Empty since 2026-08-30: Dreamcast and N64 left the day
+    /// ANGLE-for-Mac landed, and PSP left once its ffmpeg was built for
+    /// the Catalyst target (tools/build-ppsspp-ffmpeg-mac.sh), which was
+    /// the whole of what kept it a stub.
+    static let macPendingPlatforms: Set<NativePlatform> = []
+    #endif
 }

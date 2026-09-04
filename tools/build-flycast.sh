@@ -16,10 +16,11 @@
 # CMAKE_CXX_FLAGS, no ld PATH-shim trick needed the way the make-based
 # builds require.
 #
-# -DTARGET_NO_REC forces the interpreter (no dynamic recompiler): this
-# app's native cores run in the app process, which carries no JIT
-# entitlement, the same constraint PCSX ReARMed and Beetle Saturn build
-# under. -DUSE_VULKAN=ON is required for the CMake config to succeed
+# -DTARGET_NO_REC forces the interpreter (no dynamic recompiler) on iOS
+# and tvOS: the app process there carries no JIT entitlement, the same
+# constraint PCSX ReARMed and Beetle Saturn build under. The mac build
+# omits it and gets the real SH4 dynarec, because macOS grants that
+# entitlement to a signed app. -DUSE_VULKAN=ON is required for the CMake config to succeed
 # even though this app only drives Flycast's GLES3 path; it costs
 # nothing at runtime since GLES3 is what LibretroFrontend actually
 # requests via RETRO_ENVIRONMENT_SET_HW_RENDER.
@@ -58,8 +59,19 @@ tvos)
     MINVERSION_FLAG=-mappletvos-version-min=18.0
     DEPLOYMENT_TARGET=18.0
     SYSTEM_NAME=tvOS ;;
+mac)
+    # Mac Catalyst. CMake has no Catalyst system name, so this is a
+    # Darwin build whose every compile and link carries the macabi
+    # triple via the FLAGS below, the same rewrite the Makefile cores
+    # get from build-core.sh's shim. GLES headers come from the
+    # vendored ANGLE include tree: the macOS SDK ships none.
+    SDK=$(xcrun -sdk macosx --show-sdk-path)
+    OSX_SYSROOT=macosx
+    MINVERSION_FLAG="-target arm64-apple-ios18.0-macabi"
+    DEPLOYMENT_TARGET=""
+    SYSTEM_NAME=Darwin ;;
 *)
-    echo "unknown platform: $PLATFORM (expected ios or tvos)" >&2; exit 1 ;;
+    echo "unknown platform: $PLATFORM (expected ios, tvos or mac)" >&2; exit 1 ;;
 esac
 
 if [ ! -d "$SRC" ]; then
@@ -120,7 +132,115 @@ grep -q 'first_run = true;' "$SRC/shell/libretro/libretro.cpp" \
     && grep -A 2 'emu.unloadGame();' "$SRC/shell/libretro/libretro.cpp" | grep -q 'first_run = true;' \
     || { echo "first_run patch did not apply; upstream shape changed" >&2; exit 1; }
 
-FLAGS="-fno-common -DTARGET_NO_REC -DIOS"
+# Third upstream patch: hand each raw VMU LCD write to the frontend.
+#
+# Flycast already receives every maple LCD write in push_vmu_screen
+# (core/rend/osd.cpp), where it recolors the 48x32 buffer into its own
+# on-screen overlay. Cabinet's companion display needs the same moment:
+# the Apple TV forwards the frame to the phone-as-controller screen,
+# where it sits in the Dreamcast pad exactly where the real controller's
+# VMU window sat. The callback is installed through an exported setter
+# the app resolves with dlsym at runtime, the cabinetPvrQueueDepth
+# pattern, so an app built against a core without the patch finds
+# nothing and simply streams nothing; the iOS core deliberately stays
+# unrebuilt (only the television sends this stream) and resolves to
+# nothing the same way. Anchored on the vmuLastChanged declaration and
+# push_vmu_screen's bounds check, both unique in the file; no-ops when
+# already applied.
+perl -0pi -e '
+    s/(u64 vmuLastChanged\[8\];\n)/$1\nextern "C" {\nvoid (*cabinetVMUScreenCallback)(int vmu_id, const u8 *buffer);\nvoid cabinetSetVMUScreenCallback(void (*cb)(int vmu_id, const u8 *buffer))\n{\n\tcabinetVMUScreenCallback = cb;\n}\n}\n/
+    unless /cabinetVMUScreenCallback/;
+' "$SRC/core/rend/osd.cpp"
+perl -0pi -e '
+    s/(\tif \(vmu_id < 0 \|\| vmu_id >= \(int\)std::size\(vmu_lcd_data\)\)\n\t\treturn;\n)/$1\tif (cabinetVMUScreenCallback)\n\t\tcabinetVMUScreenCallback(vmu_id, buffer);\n/
+    unless /cabinetVMUScreenCallback\(vmu_id, buffer\);/;
+' "$SRC/core/rend/osd.cpp"
+grep -q 'void cabinetSetVMUScreenCallback' "$SRC/core/rend/osd.cpp" \
+    && grep -q 'cabinetVMUScreenCallback(vmu_id, buffer);' "$SRC/core/rend/osd.cpp" \
+    || { echo "vmu screen callback patch did not apply; upstream shape changed" >&2; exit 1; }
+
+# Fourth upstream patch: let the Mac use macOS's JIT mechanism, not the
+# iPhone's.
+#
+# The Mac build has to claim to be iOS for CMake's sake (see the IOS_FLAG
+# comment below), and that claim also picks Flycast's iOS strategy for
+# executable memory. That was harmless while the Mac was interpreter
+# only. It stopped being harmless the moment the recompilers were turned
+# on, and the symptom is a hard crash inside aica::dsp::recInit the first
+# time a Dreamcast game loads: macOS only hands out executable pages
+# through MAP_JIT, the code that asks for MAP_JIT sits behind TARGET_MAC,
+# and the iOS path never reaches it, so prepare_jit_block returns false
+# and Flycast's verify() traps. The second half of the same problem is
+# write protection: MAP_JIT pages are toggled with
+# pthread_jit_write_protect_np, never with mprotect, and the iOS
+# JITWriteProtect overrides in dsp_arm64.cpp and arm7_rec_arm64.cpp use
+# mprotect through region_unlock, which aborts on failure.
+#
+# Both edits below are conditioned on TARGET_ARM_MAC, which build.h only
+# defines when TARGET_MAC is set and the host is arm64. The mac build is
+# the only one that passes -DTARGET_MAC, so iOS and tvOS compile these
+# files exactly as before even though all three platforms share this one
+# source checkout. No-ops when already applied.
+perl -0pi -e '
+    s/#elif !defined\(TARGET_IPHONE\)/#elif !defined(TARGET_IPHONE) || defined(TARGET_ARM_MAC)/
+    unless /defined\(TARGET_ARM_MAC\)\n#if defined\(TARGET_ARM_MAC\)/;
+' "$SRC/core/types.h"
+# Second half of the types.h edit. Catalyst is the awkward case: the SDK
+# marks pthread_jit_write_protect_np __API_UNAVAILABLE for macCatalyst
+# even though the symbol is live in libsystem on any Apple Silicon Mac,
+# so calling it directly is a hard compile error. Resolve it through
+# dlsym past the annotation, exactly the way the CABINET_IOS_JIT spike
+# path above it already does. Guarded by TARGET_ARM_MAC, so iOS and tvOS
+# never see it.
+perl -0pi -e '
+    s/#include <pthread\.h>\ninline static void JITWriteProtect\(bool enabled\) \{\n\tif \(__builtin_available\(macOS 11\.0, \*\)\)\n\t\tpthread_jit_write_protect_np\(enabled\);\n\}/#include <dlfcn.h>\ninline static void JITWriteProtect(bool enabled) {\n\ttypedef void (*cabinet_jitwp_t)(int);\n\tstatic cabinet_jitwp_t fn = (cabinet_jitwp_t)dlsym(RTLD_DEFAULT, "pthread_jit_write_protect_np");\n\tif (fn) fn(enabled ? 1 : 0);\n}/
+    unless /RTLD_DEFAULT, "pthread_jit_write_protect_np"\);\n\tif \(fn\) fn\(enabled \? 1 : 0\);\n\}\n#else/;
+' "$SRC/core/types.h"
+# There are three copies of this pattern, one per recompiler: the AICA
+# DSP, the ARM7 sound CPU, and the SH4 itself. Missing the SH4 one is
+# what turned the first attempt at this fix into a crash 11 MB into the
+# code cache instead of a working core. Anchored on the region_set_exec
+# call each guard wraps, because the three files space it differently:
+# an include and a blank line, nothing at all, and an if/else inside a
+# function body.
+for JITFILE in "$SRC/core/hw/aica/dsp_arm64.cpp" "$SRC/core/hw/arm7/arm7_rec_arm64.cpp" "$SRC/core/rec-ARM64/rec_arm64.cpp"; do
+    perl -0pi -e '
+        s/#ifdef TARGET_IPHONE(?=\n(?:[^\n]*\n){0,8}[^\n]*virtmem::region_set_exec)/#if defined(TARGET_IPHONE) && !defined(TARGET_ARM_MAC)/
+        unless /defined\(TARGET_IPHONE\) && !defined\(TARGET_ARM_MAC\)/;
+    ' "$JITFILE"
+    grep -q 'defined(TARGET_IPHONE) && !defined(TARGET_ARM_MAC)' "$JITFILE" \
+        || { echo "mac jit patch did not apply to $JITFILE; upstream shape changed" >&2; exit 1; }
+done
+grep -q '#elif !defined(TARGET_IPHONE) || defined(TARGET_ARM_MAC)' "$SRC/core/types.h" \
+    || { echo "mac jit patch did not apply to types.h; upstream shape changed" >&2; exit 1; }
+
+# The Mac is the one platform that gets the recompiler. macOS grants a
+# signed app the JIT entitlement (CabinetMac.entitlements), so Flycast's
+# SH4 dynarec can map executable pages and actually run, which is the
+# whole reason the Mac target exists. iOS and tvOS keep TARGET_NO_REC
+# because the app process there carries no such entitlement, the same
+# constraint PCSX ReARMed and Beetle Saturn build under.
+if [ "$PLATFORM" = mac ]; then
+    # TARGET_MAC is what turns on the MAP_JIT allocation path in
+    # posix_vmem.cpp and, through build.h, TARGET_ARM_MAC, which the two
+    # patches above key off. Without it the recompilers cannot get
+    # executable memory from macOS at all.
+    FLAGS="-fno-common -DIOS -DTARGET_MAC"
+else
+    FLAGS="-fno-common -DTARGET_NO_REC -DIOS"
+fi
+if [ "$PLATFORM" = mac ]; then
+    FLAGS="$FLAGS -target arm64-apple-ios18.0-macabi -I$(pwd)/RommApp/Vendor/ANGLE/include -I$(pwd)/tools/mac-support/gles-compat"
+    LINKER_FLAGS="-target arm64-apple-ios18.0-macabi"
+    # The IOS masquerade makes CMake link OpenGLES.framework, which the
+    # macOS SDK does not have; the vendored ANGLE GLES library stands in
+    # so the intermediate dylib link resolves. Only the objects survive
+    # into the merged archive either way.
+    OPENGLES_OVERRIDE="-DOPENGLES=$(pwd)/RommApp/Vendor/ANGLE/mac/libGLESv2.framework/libGLESv2"
+else
+    LINKER_FLAGS=""
+    OPENGLES_OVERRIDE=""
+fi
 
 # tvOS masquerades as iOS to Flycast's own build, via -DIOS=ON below.
 # Flycast keys every GLES decision off CMake's `IOS` variable, which CMake
@@ -140,16 +260,25 @@ FLAGS="-fno-common -DTARGET_NO_REC -DIOS"
 # (-DTARGET_NO_REC), so nothing ever asks to make JIT pages writable.
 IOS_FLAG=OFF
 [ "$PLATFORM" = tvos ] && IOS_FLAG=ON
+# The mac build masquerades for the same reason tvOS does: CMake only
+# sets its IOS variable for CMAKE_SYSTEM_NAME=iOS, and without it
+# Flycast falls through to the desktop-GL branch and dies in typedef
+# redefinitions. TARGET_IPHONE rides along, but no longer harmlessly:
+# this build has the recompilers on, so the patches above steer the JIT
+# memory and write-protection paths back to the macOS ones.
+[ "$PLATFORM" = mac ] && IOS_FLAG=ON
 cmake -S "$SRC" -B "$BUILD" -G "Unix Makefiles" \
     -DCMAKE_SYSTEM_NAME=$SYSTEM_NAME \
     -DCMAKE_OSX_SYSROOT=$OSX_SYSROOT \
     -DCMAKE_OSX_ARCHITECTURES=arm64 \
-    -DCMAKE_OSX_DEPLOYMENT_TARGET=$DEPLOYMENT_TARGET \
+    ${DEPLOYMENT_TARGET:+-DCMAKE_OSX_DEPLOYMENT_TARGET=$DEPLOYMENT_TARGET} \
+    ${LINKER_FLAGS:+-DCMAKE_SHARED_LINKER_FLAGS="$LINKER_FLAGS"} \
     -DCMAKE_BUILD_TYPE=Release \
     -DLIBRETRO=ON \
     -DUSE_OPENGL=ON \
     -DUSE_VULKAN=ON \
     ${IOS_FLAG:+-DIOS=$IOS_FLAG} \
+    $OPENGLES_OVERRIDE \
     -DCMAKE_C_FLAGS="$FLAGS" \
     -DCMAKE_CXX_FLAGS="$FLAGS"
 
@@ -204,6 +333,9 @@ nm -g "$BUILD/flycast_libretro.dylib" 2>/dev/null \
 # depth gauge the app reads via dlsym. Remove with the instrumentation
 # in Renderer_if.cpp.
 echo "_cabinetPvrQueueDepth" >> "$SPIKE/exports-$PLATFORM.txt"
+# The VMU LCD callback setter, resolved the same dlsym way; see the
+# patch above. Permanent, unlike the gauge.
+echo "_cabinetSetVMUScreenCallback" >> "$SPIKE/exports-$PLATFORM.txt"
 
 # Swept from the whole build tree, not just flycast_libretro.dir:
 # CMake pulls in its own static-lib subtargets (libzip, at last check)
