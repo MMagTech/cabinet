@@ -261,7 +261,7 @@ struct SettingsView: View {
                 NavigationLink {
                     DebugView()
                 } label: {
-                    Label("Debug", systemImage: "ladybug")
+                    Label("Diagnostics", systemImage: "ladybug")
                 }
             } footer: {
                 Text("Diagnostics for reporting a problem.")

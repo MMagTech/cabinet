@@ -26,11 +26,12 @@ design and the reasoning behind it, and most decisions in it are already settled
   reflect the project regardless of what has or hasn't shipped yet. A
   docs-only commit can go straight to both branches. Anything that touches
   code, even a one-line fix, waits for a real release cut.
-- Releases are per platform, tagged independently on `main`: `ios-v0.x.x-alpha`
-  and `tvos-v0.x.x-alpha`, titled "Cabinet for iOS 0.x.x-alpha" and
-  "Cabinet for tvOS 0.x.x-alpha". The two platforms do not have to release
-  together or share version numbers. The two oldest iOS tags (`v0.1.0-alpha`
-  and `v0.2.0-alpha`) predate this convention and keep their names.
+- Releases are per platform, tagged independently on `main`: `ios-v1.x.x`,
+  `tvos-v1.x.x` and `mac-v1.x.x`, titled "Cabinet for iOS 1.x.x", "Cabinet
+  for tvOS 1.x.x" and "Cabinet for Mac 1.x.x". The three platforms do not
+  have to release together or share version numbers. Tags before 1.0.0
+  carried an `-alpha` suffix, and the two oldest iOS tags (`v0.1.0-alpha`
+  and `v0.2.0-alpha`) predate even that convention; all keep their names.
 - To cut a release, in order: first set the target's `MARKETING_VERSION` in
   the project to match the tag being cut, and bump `CURRENT_PROJECT_VERSION`
   if the build will also go to TestFlight (Apple requires a unique build
@@ -41,6 +42,18 @@ design and the reasoning behind it, and most decisions in it are already settled
   the built `.app` into a `Payload/` folder and zip it as an unsigned
   `.ipa`, then `gh release create` with the tag and `gh release upload` the
   IPA.
+- The Mac release is a signed, notarized disk image, since macOS refuses
+  an unsigned app outright. Archive the `RommAppMac` scheme for
+  `generic/platform=macOS,variant=Mac Catalyst`, export it with an
+  ExportOptions plist whose method is `developer-id` (team `ZMUB88RZ5D`,
+  automatic signing; the Developer ID Application certificate lives in
+  the login keychain), submit the exported app to
+  `xcrun notarytool submit --wait` with the App Store Connect API key,
+  `xcrun stapler staple` the app, wrap it with `hdiutil create` into
+  `Cabinet-mac-<version>.dmg`, and upload that to the release. The Mac
+  entitlements already carry `com.apple.security.cs.allow-jit`, which the
+  hardened runtime needs for the recompilers; the app is deliberately
+  unsandboxed, which Developer ID permits.
 - The old squash-merge-only rule is retired. Decided 2026-08-09, at launch: the
   history is public and complete on purpose, including the messy parts. Do not
   squash it away or propose hiding branches.

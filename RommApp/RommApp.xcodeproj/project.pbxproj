@@ -732,7 +732,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
 				CODE_SIGN_ENTITLEMENTS = RommAppTV/RommAppTV.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
 				EXCLUDED_SOURCE_FILE_NAMES = "*_mac.a";
@@ -786,7 +786,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/GW",
 					"$(PROJECT_DIR)/RommApp/Native/VeMUlator",
 				);
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 1.0.0;
 				OTHER_LDFLAGS = "-lz";
 				"OTHER_LDFLAGS[sdk=appletvos*]" = (
 					"-lz",
@@ -867,7 +867,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
 				CODE_SIGN_ENTITLEMENTS = RommApp/RommApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
 				EXCLUDED_SOURCE_FILE_NAMES = "*_mac.a";
@@ -937,7 +937,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/GW",
 					"$(PROJECT_DIR)/RommApp/Native/VeMUlator",
 				);
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 1.0.0;
 				OTHER_LDFLAGS = (
 					"-lz",
 					"-framework",
@@ -962,7 +962,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
 				CODE_SIGN_ENTITLEMENTS = RommApp/RommApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
 				EXCLUDED_SOURCE_FILE_NAMES = "*_mac.a";
@@ -1032,7 +1032,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/GW",
 					"$(PROJECT_DIR)/RommApp/Native/VeMUlator",
 				);
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 1.0.0;
 				OTHER_LDFLAGS = (
 					"-lz",
 					"-framework",
@@ -1113,7 +1113,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = RommAppTopShelf/RommAppTopShelf.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RommAppTopShelf/Info.plist;
@@ -1123,7 +1123,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev.tv.topshelf;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -1140,7 +1140,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = RommAppTopShelf/RommAppTopShelf.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RommAppTopShelf/Info.plist;
@@ -1150,7 +1150,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet.topshelf;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -1168,7 +1168,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = RommAppWidget/RommAppWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RommAppWidget/Info.plist;
@@ -1179,7 +1179,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.CabinetDev.widget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -1195,7 +1195,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = RommAppWidget/RommAppWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RommAppWidget/Info.plist;
@@ -1206,7 +1206,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mmagtech.Cabinet.widget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -1291,7 +1291,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Vecx",
 					"$(PROJECT_DIR)/RommApp/Native/VeMUlator",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 1.0.0;
 				OTHER_LDFLAGS = (
 					"-lz",
 					"-lc++",
@@ -1404,7 +1404,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/Vecx",
 					"$(PROJECT_DIR)/RommApp/Native/VeMUlator",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 1.0.0;
 				OTHER_LDFLAGS = (
 					"-lz",
 					"-lc++",
@@ -1451,7 +1451,7 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
 				CODE_SIGN_ENTITLEMENTS = RommAppTV/RommAppTV.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = ZMUB88RZ5D;
 				ENABLE_PREVIEWS = YES;
 				EXCLUDED_SOURCE_FILE_NAMES = "*_mac.a";
@@ -1505,7 +1505,7 @@
 					"$(PROJECT_DIR)/RommApp/Native/GW",
 					"$(PROJECT_DIR)/RommApp/Native/VeMUlator",
 				);
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 1.0.0;
 				OTHER_LDFLAGS = "-lz";
 				"OTHER_LDFLAGS[sdk=appletvos*]" = (
 					"-lz",

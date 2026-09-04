@@ -118,30 +118,11 @@ worth having in the open.
   against or test it with. It gets built when one arrives, not before.
 - **Settings syncing across your devices via iCloud.** No confirmed real
   need yet, just an idea that comes up alongside the pairing work above.
-- **A widget, and opening at a game from outside the app.** A home
-  screen widget showing what you were playing, and Spotlight results that
-  go straight into a game, both need the same missing piece: Cabinet can
-  open at a fixed destination but not at a particular game. Quick actions
-  prove the launch path works; what does not exist is a way to say which
-  game. Build that once and both become small. Worth doing together for
-  that reason rather than separately.
 - **Light guns on the console systems.** The gun works on the arcade
   cabinets, and the aim it uses lives entirely in the phone and knows
   nothing about which core is running, so the console systems inherit it
   for free. What is missing is games to point it at. Research on which
   cores take a gun and on which port is already done.
-- **Finding a game from the phone's own search.** Cabinet could hand iOS
-  an index of the library, so typing three letters into Spotlight brings
-  up the game with its cover art and takes you straight there without
-  opening the app first. With hundreds of games that is a faster way in
-  than any list, and the pieces are mostly already here: the covers are
-  cached on device and the RomM sync is the natural place to keep the
-  index current. Keeping it honest is the actual work, since a search
-  result that opens a game the server no longer has is worse than no
-  result. iPhone only; the Apple TV top shelf is already this idea in the
-  television's own idiom. The open question is what a result should do
-  when the game is not downloaded yet, because silently starting a
-  gigabyte download from a search result is a poor surprise. Low priority.
 
 A few ideas got explored just as seriously and reached a real answer
 instead of an open question. Those live in

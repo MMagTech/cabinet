@@ -14,8 +14,9 @@ to open the link on, that's an Apple TestFlight requirement, not this app.
 See [Get it](#get-it) below, including the option for Apple-TV-only setups.
 
 **Latest GitHub Releases:**
-[iOS 0.4.0-alpha](https://github.com/MMagTech/cabinet/releases/tag/ios-v0.4.0-alpha) ·
-[tvOS 0.3.0-alpha](https://github.com/MMagTech/cabinet/releases/tag/tvos-v0.3.0-alpha)
+[iOS 1.0.0](https://github.com/MMagTech/cabinet/releases/tag/ios-v1.0.0) ·
+[tvOS 1.0.0](https://github.com/MMagTech/cabinet/releases/tag/tvos-v1.0.0) ·
+[Mac 1.0.0](https://github.com/MMagTech/cabinet/releases/tag/mac-v1.0.0)
 
 | | | |
 |:---:|:---:|:---:|
@@ -43,6 +44,23 @@ the pause menu are built for a remote and a ten foot viewing distance, your
 recent games show up on the top shelf, and it runs entirely on those same
 built-in cores. Your library on the big screen with a controller in your
 hand.
+
+**A real Mac app.** The television's app at arm's length: a sidebar with
+your library, a Settings window, menus, a game screen built for a pointer
+and a keyboard or your iPhone as the controller. And the systems only a
+desk machine can carry: PlayStation 2, GameCube and Dreamcast run there at
+full speed, with the recompilers the phone and the television cannot have.
+
+**A whole platform in one go.** Download All keeps every game on a system
+at once, on the Mac and on iPhone. On the phone it comes down through the
+system's own background downloader, over Wi-Fi only, so a platform started
+at the kitchen table finishes with the phone locked in a pocket, with its
+progress in the Dynamic Island and on the Lock Screen.
+
+**On the home screen and in Spotlight.** A widget in three sizes shows what
+you played last, your recents or your favourites, each cover a tap into its
+game; and typing a game's name into the phone's own search opens it
+straight in.
 
 **Your saves follow you.** Save states and battery saves sync back to your
 RomM server, so they are waiting wherever you play next. PlayStation games get
@@ -90,20 +108,29 @@ save syncs through. Take it on the bus; your creature comes home changed.
 
 ## What you can play
 
-**Natively, on both iPhone and Apple TV**, through twenty-three emulators built
-into the app: Arcade, PlayStation, PSP, Saturn, Dreamcast, Nintendo 64,
-Nintendo DS, 3DO, SNES, NES, Game Boy, Game Boy Color, Game Boy Advance,
-Virtual Boy, Genesis, Sega CD, 32X, Master System, Game Gear, TurboGrafx-16,
-TurboGrafx-CD, Neo Geo Pocket Color, Atari 7800, Atari 2600 and Vectrex. On
-iPhone these work offline once a game is kept on your phone.
+**Natively, on iPhone, Apple TV and Mac**, through emulators built into the
+app: Arcade, PlayStation, PSP, Saturn, Nintendo 64, Nintendo DS, 3DO, SNES,
+NES, Game Boy, Game Boy Color, Game Boy Advance, Virtual Boy, Genesis, Sega
+CD, 32X, Master System, Game Gear, TurboGrafx-16, TurboGrafx-CD, Neo Geo
+Pocket Color, Atari 7800, Atari 2600 and Vectrex. On iPhone these work
+offline once a game is kept on your phone. Nintendo 64 sits behind an
+Experimental Cores switch on iPhone and Apple TV, because its speed varies
+by game there.
 
-**Game & Watch, on iPhone.** The one system that is not on both: the
-television has no way to touch a machine, and touching it is the whole
-point. Dreamcast is the one to set expectations on, see
-[what doesn't work yet](#what-doesnt-work-yet) below.
+**On the Mac alone: PlayStation 2, GameCube and Dreamcast.** Those three
+need the kind of just-in-time compilation Apple's phones and televisions
+do not allow, so they run where it is allowed and nowhere else. Cabinet's
+rule is fully playable or not offered at all.
+
+**Game & Watch, and the Dreamcast VMU, on iPhone.** The television has no
+way to touch a machine, and touching it is the whole point; and the VMU is
+the thing you took away from the console, so the phone is the VMU, showing
+its live screen while a Dreamcast game plays on the Mac, and running its
+minigames on its own.
 
 **Beyond that list, on iPhone:** whatever your RomM server plays through its
-web player, with a connection. On Apple TV, the native list is the list.
+web player, with a connection. On Apple TV and Mac, the native list is the
+list.
 
 ## What doesn't work yet
 
@@ -111,20 +138,20 @@ web player, with a connection. On Apple TV, the native list is the list.
   and both currently only play through the web player on iPhone.
 - Native play only resumes from an explicit save state, not automatically
   on quit or backgrounding, unlike the web player.
-- PlayStation and Saturn multi-disc games aren't supported.
+- Multi-disc games aren't supported yet, on any system.
 - Light gun support covers the arcade cabinets. The console light gun
   systems are on the roadmap.
-- Dreamcast holds 60fps with clean audio in normal play, but heavy 3D
-  titles still drop frames in their busiest moments, because Apple's
-  platforms don't allow the kind of just-in-time compilation that console's
-  CPU needs. See [issue #6](https://github.com/MMagTech/cabinet/issues/6)
-  for the full story.
+- Dreamcast is Mac only. On iPhone and Apple TV it never reached full speed
+  in heavy 3D, because those platforms don't allow the kind of just-in-time
+  compilation that console's CPU needs, so it is not offered there. See
+  [issue #6](https://github.com/MMagTech/cabinet/issues/6) for the story.
 
 ## What you need
 
 - A [RomM](https://github.com/rommapp/romm) server with your games on it
   (built and tested against 5.1.0)
-- An iPhone running iOS 18 or later, or an Apple TV running tvOS 18 or later
+- An iPhone running iOS 18 or later, an Apple TV running tvOS 18 or later,
+  or a Mac with Apple silicon running macOS 15 or later
 
 Cabinet does not come with any games. It plays yours.
 
@@ -158,6 +185,10 @@ rather not go through TestFlight.
 **Apple TV:** download the latest tvOS IPA and install it with Xcode from a
 Mac, or [build it yourself](docs/building.md). Friendlier install paths are
 coming.
+
+**Mac:** download the disk image from the latest Mac release, open it, and
+drag Cabinet to Applications. It is signed and notarized, so it opens like
+any other app.
 
 When you first open it, type in your server address and approve it in RomM.
 That is all. Cabinet never asks for your password, it uses RomM's own device
