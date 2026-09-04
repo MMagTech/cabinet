@@ -54,6 +54,20 @@ worth having in the open.
   only, so a platform started at the table finishes with the phone
   locked in a pocket, and a queue the system quit the app in the middle
   of carries on at the next launch. Both waiting on a release.
+- **Play Together, two screens.** Two or more devices each running the
+  same game, with only the button presses crossing the house Wi-Fi,
+  so each person plays on their own screen: two phones with no
+  television, two rooms, a friend on a hotspot. A maybe, deliberately.
+  Two people on one screen already works, a TV or a Mac running the
+  game with phones as the controllers, and that covers most game
+  nights; this adds the two-screen case at the cost of the largest
+  piece of work on this list and a mechanism that stays delicate after
+  it ships, since a dropped packet pauses everyone and only the cores
+  that compute identically on two machines can take part. The design
+  is settled if the need arrives: seats rather than two players, the
+  existing pairing wire as the transport, lockstep with a short input
+  delay, and a "syncing players" beat when two machines fall out of
+  step. Decided 2026-09-04 not to build ahead of a real need.
 - **Picture tiers per machine.** The picture settings that hold sixty
   frames on the fastest Mac here were tuned there, and a slower machine
   drops frames on the same settings. The idea is three named bundles of
