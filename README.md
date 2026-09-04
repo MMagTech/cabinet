@@ -29,6 +29,11 @@ See [Get it](#get-it) below, including the option for Apple-TV-only setups.
 | ![Apple TV Home](docs/images/tv-home.png) | ![Apple TV Library](docs/images/tv-library.png) |
 | ![Browsing arcade games on Apple TV](docs/images/tv-arcade.png) | ![Launching a game on Apple TV](docs/images/tv-game.png) |
 
+| | |
+|---|---|
+| ![Cabinet for Mac, Home](docs/images/mac-home.png) | ![Cabinet for Mac, Library](docs/images/mac-library.png) |
+| ![Cabinet for Mac, a platform](docs/images/mac-platform.png) | ![Cabinet for Mac, launching a game](docs/images/mac-launch.png) |
+
 ## What you get
 
 **Your RomM library on iPhone.** Cabinet plays your collection through RomM's
