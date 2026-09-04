@@ -96,5 +96,9 @@ time one starts.
 - A hardware pass on a real iPhone: lock the phone mid-queue, leave the
   house on cellular, come back. The simulator proves the queue and the
   relaunch, not the radio.
-- The Downloaded rule for unplayable platforms on the Mac, raised and
-  not decided.
+
+Decided 2026-09-03: the Mac's Downloaded screen keeps listing only the
+platforms Cabinet can play. Games kept from an unsupported platform are
+on the disk and in the Finder mirror for another emulator, which is
+their whole purpose, and listing them on a screen whose action is Play
+would not improve anything.
