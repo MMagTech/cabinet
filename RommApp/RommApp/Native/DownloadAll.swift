@@ -65,6 +65,7 @@ final class DownloadAll: ObservableObject {
     @Published private(set) var runningLabel: String?
 
     private var watcher: AnyCancellable?
+    private var networkWatcher: AnyCancellable?
     private var lastBulk: KeptGameStore.BulkDownload?
 
     private init() {
@@ -105,6 +106,16 @@ final class DownloadAll: ObservableObject {
             let request = UNNotificationRequest(identifier: "downloadall.\(finished.platformId)", content: content, trigger: nil)
             UNUserNotificationCenter.current().add(request)
         }
+        #if os(iOS) && !targetEnvironment(macCatalyst)
+        // Wi-Fi coming or going flips the activity between Downloading
+        // and Waiting for Wi-Fi without waiting for the next game.
+        networkWatcher = NetworkMonitor.shared.$isExpensive
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                guard let bulk = self?.lastBulk else { return }
+                DownloadLiveActivity.shared.update(done: bulk.done, total: bulk.total, failed: bulk.failed)
+            }
+        #endif
     }
 
     /// Starts the queue for a confirmed platform, asking for notification
@@ -167,6 +178,16 @@ final class DownloadAll: ObservableObject {
 
     static func size(_ bytes: Int64) -> String {
         ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+
+    /// Whether the phone's queue is parked on cellular. Only the phone
+    /// refuses cellular; the Mac downloads over whatever it has.
+    static var waitingForWiFi: Bool {
+        #if os(iOS) && !targetEnvironment(macCatalyst)
+        return NetworkMonitor.shared.isExpensive
+        #else
+        return false
+        #endif
     }
 
     /// "this Mac", "this iPhone", "this iPad", for the alerts.
@@ -292,7 +313,9 @@ final class DownloadLiveActivity {
             Task { await stale.end(nil, dismissalPolicy: .immediate) }
         }
         let attributes = DownloadActivityAttributes(platformName: platformName)
-        let state = DownloadActivityAttributes.ContentState(done: 0, total: total, failed: 0, finished: false)
+        let state = DownloadActivityAttributes.ContentState(
+            done: 0, total: total, failed: 0, finished: false, waitingForWiFi: DownloadAll.waitingForWiFi
+        )
         activity = try? Activity.request(attributes: attributes, content: .init(state: state, staleDate: nil))
     }
 
@@ -303,7 +326,7 @@ final class DownloadLiveActivity {
 
     func update(done: Int, total: Int, failed: Int) {
         guard activity != nil else { return }
-        pending = .init(done: done, total: total, failed: failed, finished: false)
+        pending = .init(done: done, total: total, failed: failed, finished: false, waitingForWiFi: DownloadAll.waitingForWiFi)
         guard flush == nil else { return }
         flush = Task { [weak self] in
             try? await Task.sleep(for: .seconds(1))
@@ -321,7 +344,7 @@ final class DownloadLiveActivity {
         pending = nil
         guard let activity else { return }
         self.activity = nil
-        let state = DownloadActivityAttributes.ContentState(done: done, total: total, failed: failed, finished: true)
+        let state = DownloadActivityAttributes.ContentState(done: done, total: total, failed: failed, finished: true, waitingForWiFi: false)
         Task {
             await activity.end(.init(state: state, staleDate: nil), dismissalPolicy: .after(Date(timeIntervalSinceNow: 15 * 60)))
         }
@@ -341,6 +364,7 @@ struct PlatformDownloadMenuItems: View {
     @EnvironmentObject private var session: Session
     @ObservedObject private var store = KeptGameStore.shared
     @ObservedObject private var prompt = DownloadAll.shared
+    @ObservedObject private var network = NetworkMonitor.shared
 
     private var keptCount: Int {
         store.games.filter { $0.rom.platformId == platform.id }.count
@@ -348,7 +372,9 @@ struct PlatformDownloadMenuItems: View {
 
     var body: some View {
         if let bulk = store.bulk, bulk.platformId == platform.id {
-            Button("Downloading \(min(bulk.done + 1, bulk.total)) of \(bulk.total)…") {}
+            Button(DownloadAll.waitingForWiFi
+                ? "Waiting for Wi-Fi, \(min(bulk.done + 1, bulk.total)) of \(bulk.total)"
+                : "Downloading \(min(bulk.done + 1, bulk.total)) of \(bulk.total)…") {}
                 .disabled(true)
             Button("Cancel Download") { store.cancelBulk() }
         } else {
@@ -466,13 +492,17 @@ struct DownloadAllStatusCard: View {
 struct DownloadAllStatusContent: View {
     @ObservedObject private var store = KeptGameStore.shared
     @ObservedObject private var prompt = DownloadAll.shared
+    @ObservedObject private var network = NetworkMonitor.shared
 
     var body: some View {
         if let bulk = store.bulk {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Downloading \(prompt.runningLabel ?? "")")
+                        // On cellular the phone's queue is parked, and a
+                        // card that says Downloading over a bar that does
+                        // not move reads as broken (Marcus, 2026-09-03).
+                        Text(DownloadAll.waitingForWiFi ? "Waiting for Wi-Fi" : "Downloading \(prompt.runningLabel ?? "")")
                             .font(.callout)
                             .lineLimit(1)
                         Text("\(min(bulk.done + 1, bulk.total)) of \(bulk.total)")

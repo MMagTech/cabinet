@@ -12,6 +12,8 @@ struct DownloadActivityAttributes: ActivityAttributes {
         var total: Int
         var failed: Int
         var finished: Bool
+        /// The phone's queue parked on cellular.
+        var waitingForWiFi: Bool
     }
 
     /// The label the menu showed, the same one the notification uses.

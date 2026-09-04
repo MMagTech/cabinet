@@ -21,7 +21,7 @@ struct DownloadActivityWidget: Widget {
             let state = context.state
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Label(context.attributes.platformName, systemImage: state.finished ? "checkmark.circle.fill" : "arrow.down.circle.fill")
+                    Label(context.attributes.platformName, systemImage: DownloadActivityText.symbol(state))
                         .font(.headline)
                         .lineLimit(1)
                         .padding(.leading, 4)
@@ -39,13 +39,13 @@ struct DownloadActivityWidget: Widget {
                         .padding(.top, 4)
                 }
             } compactLeading: {
-                Image(systemName: state.finished ? "checkmark.circle.fill" : "arrow.down.circle.fill")
+                Image(systemName: DownloadActivityText.symbol(state))
                     .foregroundStyle(state.finished ? .green : .accentColor)
             } compactTrailing: {
                 Text(DownloadActivityText.compact(state))
                     .font(.caption2.monospacedDigit())
             } minimal: {
-                Image(systemName: state.finished ? "checkmark.circle.fill" : "arrow.down.circle.fill")
+                Image(systemName: DownloadActivityText.symbol(state))
                     .foregroundStyle(state.finished ? .green : .accentColor)
             }
         }
@@ -59,7 +59,7 @@ struct DownloadActivityLockScreen: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Image(systemName: state.finished ? "checkmark.circle.fill" : "arrow.down.circle.fill")
+                Image(systemName: DownloadActivityText.symbol(state))
                     .foregroundStyle(state.finished ? .green : .accentColor)
                 Text(DownloadActivityText.title(name, state))
                     .font(.headline)
@@ -81,6 +81,11 @@ struct DownloadActivityLockScreen: View {
 }
 
 enum DownloadActivityText {
+    static func symbol(_ state: DownloadActivityAttributes.ContentState) -> String {
+        if state.finished { return "checkmark.circle.fill" }
+        return state.waitingForWiFi ? "wifi.slash" : "arrow.down.circle.fill"
+    }
+
     /// A queue that ended short of its total was cancelled; it says so
     /// rather than claiming the platform downloaded.
     static func stopped(_ state: DownloadActivityAttributes.ContentState) -> Bool {
@@ -88,7 +93,7 @@ enum DownloadActivityText {
     }
 
     static func title(_ name: String, _ state: DownloadActivityAttributes.ContentState) -> String {
-        if !state.finished { return "Downloading \(name)" }
+        if !state.finished { return state.waitingForWiFi ? "Waiting for Wi-Fi" : "Downloading \(name)" }
         return stopped(state) ? "\(name) stopped" : "\(name) downloaded"
     }
 
@@ -100,6 +105,7 @@ enum DownloadActivityText {
     }
 
     static func compact(_ state: DownloadActivityAttributes.ContentState) -> String {
-        state.finished ? "Done" : "\(min(state.done + 1, state.total))/\(state.total)"
+        if state.finished { return "Done" }
+        return state.waitingForWiFi ? "Wi-Fi" : "\(min(state.done + 1, state.total))/\(state.total)"
     }
 }
