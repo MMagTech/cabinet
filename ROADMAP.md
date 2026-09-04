@@ -54,6 +54,19 @@ worth having in the open.
   only, so a platform started at the table finishes with the phone
   locked in a pocket, and a queue the system quit the app in the middle
   of carries on at the next launch. Both waiting on a release.
+- **Picture tiers per machine.** The picture settings that hold sixty
+  frames on the fastest Mac here were tuned there, and a slower machine
+  drops frames on the same settings. The idea is three named bundles of
+  settings, Performance, Balanced and Quality, and a way for each machine
+  to land on its own: measured once in the lab for machines in the room,
+  and for any other machine a half minute of watching its own frame
+  times the first time a heavy core runs, stepping down or up and
+  remembering the answer for that chip. A chip nobody has met yet, next
+  year's, would simply stay at Quality unless it had to step down.
+  Explored 2026-09-03 and deliberately not built: it would sit in the
+  launch path every core shares, and there is no machine here that is
+  either too slow at the defaults or wasting headroom to test it
+  against. It gets built when one exists.
 - **A native touch control restyle.** The current on-screen controls are
   functional but read a little flat next to the rest of the app. A
   restyle direction has been discussed, not built.
