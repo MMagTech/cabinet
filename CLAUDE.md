@@ -44,16 +44,30 @@ design and the reasoning behind it, and most decisions in it are already settled
   IPA.
 - The Mac release is a signed, notarized disk image, since macOS refuses
   an unsigned app outright. Archive the `RommAppMac` scheme for
-  `generic/platform=macOS,variant=Mac Catalyst`, export it with an
-  ExportOptions plist whose method is `developer-id` (team `ZMUB88RZ5D`,
-  automatic signing; the Developer ID Application certificate lives in
-  the login keychain), submit the exported app to
-  `xcrun notarytool submit --wait` with the App Store Connect API key,
-  `xcrun stapler staple` the app, wrap it with `hdiutil create` into
-  `Cabinet-mac-<version>.dmg`, and upload that to the release. The Mac
-  entitlements already carry `com.apple.security.cs.allow-jit`, which the
-  hardened runtime needs for the recompilers; the app is deliberately
-  unsandboxed, which Developer ID permits.
+  `generic/platform=macOS,variant=Mac Catalyst` (the target is Apple
+  silicon only; every core library is arm64). Do not use
+  `xcodebuild -exportArchive` for the Developer ID step: with an API key
+  it fails with "Cloud signing permission error", and with a manually
+  created profile it still reports "No profiles were found" for reasons
+  it never explains (2026-09-04, an hour lost). Sign the archived app
+  directly instead: copy `Products/Applications/Cabinet Mac.app` out of
+  the archive, put the Developer ID profile at
+  `Contents/embedded.provisionprofile`, `codesign --force --options
+  runtime --timestamp --sign "Developer ID Application: …"` each
+  framework under `Contents/Frameworks`, then the app itself with an
+  entitlements plist carrying `com.apple.application-identifier`,
+  `com.apple.developer.team-identifier`, `com.apple.security.cs.allow-jit`
+  and `keychain-access-groups` (no `get-task-allow`). Then
+  `xcrun notarytool submit --wait` with the API key, `xcrun stapler
+  staple`, `hdiutil create` into `Cabinet-mac-<version>.dmg`, notarize
+  and staple the image too, and `spctl --assess --type execute` should
+  say "Notarized Developer ID". The profile is created through the App
+  Store Connect API (`POST /v1/profiles`, type `MAC_CATALYST_APP_DIRECT`,
+  the `DEVELOPER_ID_APPLICATION_G2` certificate) and installed under
+  `~/Library/MobileDevice/Provisioning Profiles/<uuid>.provisionprofile`.
+  A release bundle identifier has to exist in the portal before any of
+  this, with its App Group attached by hand on developer.apple.com, since
+  the API can enable App Groups but cannot assign one.
 - The old squash-merge-only rule is retired. Decided 2026-08-09, at launch: the
   history is public and complete on purpose, including the messy parts. Do not
   squash it away or propose hiding branches.
