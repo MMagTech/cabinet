@@ -65,6 +65,12 @@ struct Rom: Codable, Identifiable, Hashable {
     let md5Hash: String?
 
     var displayName: String {
+        #if DEBUG
+        // Store screenshots: the same debug switch that blurs the covers
+        // also takes the titles off the page, as Delta's store page does
+        // with made-up games. Never on in a release build.
+        if CoverImage.blursCovers { return "• • •" }
+        #endif
         if let name, !name.isEmpty { return name }
         return fsNameNoTags
     }
