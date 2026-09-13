@@ -34,7 +34,9 @@
       "submodules": null,
       "patches": null,
       "diverges_across_platforms": false,
-      "notes": null
+      "notes": null,
+      "pinned_commit": "a50d5ac288a81f2104ddf43195a4efdd15c72227",
+      "pinned_reason": "already identical on every platform that ships it; pinned where it stands"
     },
     "beetle_pce_fast": {
       "repo": "https://github.com/libretro/beetle-pce-fast-libretro.git",
@@ -68,7 +70,9 @@
       "submodules": null,
       "patches": null,
       "diverges_across_platforms": true,
-      "notes": null
+      "notes": null,
+      "pinned_commit": "2f623abd033257b969370b73d9da982dcb0c3fdd",
+      "pinned_reason": "macOS revision: the newer of the two in use, and already play-tested on that platform"
     },
     "beetle_saturn": {
       "repo": "https://github.com/libretro/beetle-saturn-libretro.git",
@@ -101,7 +105,9 @@
       "submodules": null,
       "patches": null,
       "diverges_across_platforms": true,
-      "notes": null
+      "notes": null,
+      "pinned_commit": "ed549bdac0e1a830bb794fa720e45c225a45355c",
+      "pinned_reason": "macOS revision: the newer of the two in use, and already play-tested on that platform"
     },
     "beetle_vb": {
       "repo": "https://github.com/libretro/beetle-vb-libretro.git",
@@ -133,7 +139,9 @@
       "submodules": null,
       "patches": null,
       "diverges_across_platforms": true,
-      "notes": null
+      "notes": null,
+      "pinned_commit": "83ed42608601fb7b01d41e4f8fb2007a37b8c84e",
+      "pinned_reason": "macOS revision: the newer of the two in use, and already play-tested on that platform"
     },
     "dolphin": {
       "repo": "https://github.com/dolphin-emu/dolphin.git",
@@ -193,7 +201,9 @@
       },
       "patches": null,
       "diverges_across_platforms": false,
-      "notes": null
+      "notes": null,
+      "pinned_commit": "a1e636d72c8469acf747ac6542f0b7ace7cea02f",
+      "pinned_reason": "already identical on every platform that ships it; pinned where it stands"
     },
     "fbneo_libretro": {
       "repo": "https://github.com/libretro/FBNeo.git",
@@ -202,11 +212,35 @@
       ],
       "builder": "tools/build-fbneo.sh",
       "one_tree_all_platforms": true,
-      "platforms": {},
+      "platforms": {
+        "ios": {
+          "commit": "2444fbe3ddab193b6c0e6f2d39b6dde041fbee4c",
+          "commit_date": "2026-08-04T10:13:09+02:00",
+          "checkout": "spikes/FBNeoStatic/FBNeo",
+          "build_args": null,
+          "commit_source": "one source tree serves every platform (tools/build-fbneo.sh uses a single SPIKE dir), so all platforms were built from this revision"
+        },
+        "tvos": {
+          "commit": "2444fbe3ddab193b6c0e6f2d39b6dde041fbee4c",
+          "commit_date": "2026-08-04T10:13:09+02:00",
+          "checkout": "spikes/FBNeoStatic/FBNeo",
+          "build_args": null,
+          "commit_source": "one source tree serves every platform (tools/build-fbneo.sh uses a single SPIKE dir), so all platforms were built from this revision"
+        },
+        "mac": {
+          "commit": "2444fbe3ddab193b6c0e6f2d39b6dde041fbee4c",
+          "commit_date": "2026-08-04T10:13:09+02:00",
+          "checkout": "spikes/FBNeoStatic/FBNeo",
+          "build_args": null,
+          "commit_source": "one source tree serves every platform (tools/build-fbneo.sh uses a single SPIKE dir), so all platforms were built from this revision"
+        }
+      },
       "submodules": null,
       "patches": null,
       "diverges_across_platforms": false,
-      "notes": null
+      "notes": null,
+      "pinned_commit": "2444fbe3ddab193b6c0e6f2d39b6dde041fbee4c",
+      "pinned_reason": "already identical on every platform that ships it; pinned where it stands"
     },
     "fceumm": {
       "repo": "https://github.com/libretro/libretro-fceumm.git",
@@ -239,7 +273,9 @@
       "submodules": null,
       "patches": null,
       "diverges_across_platforms": true,
-      "notes": null
+      "notes": null,
+      "pinned_commit": "236ccdfc911e84c60fea6b9d0699c2d440a8de14",
+      "pinned_reason": "macOS revision: the newer of the two in use, and already play-tested on that platform"
     },
     "flycast": {
       "repo": "https://github.com/flyinghead/flycast.git",
@@ -316,7 +352,9 @@
         }
       ],
       "diverges_across_platforms": false,
-      "notes": null
+      "notes": null,
+      "pinned_commit": "a172e0001351dfbc49b86860a13d5390b1c493fe",
+      "pinned_reason": "already identical on every platform that ships it; pinned where it stands"
     },
     "gambatte": {
       "repo": "https://github.com/libretro/gambatte-libretro.git",
@@ -350,7 +388,9 @@
       "submodules": null,
       "patches": null,
       "diverges_across_platforms": true,
-      "notes": null
+      "notes": null,
+      "pinned_commit": "d9d6cd06382d1ced30de34d56d3609452323dab1",
+      "pinned_reason": "macOS revision: the newer of the two in use, and already play-tested on that platform"
     },
     "genesis_plus_gx": {
       "repo": "https://github.com/libretro/Genesis-Plus-GX.git",
@@ -386,7 +426,9 @@
       "submodules": null,
       "patches": null,
       "diverges_across_platforms": true,
-      "notes": null
+      "notes": null,
+      "pinned_commit": "a7985a9c4278ac352f8ca7bb4d3cc6b36e9e3e7d",
+      "pinned_reason": "macOS revision: the newer of the two in use, and already play-tested on that platform"
     },
     "gw": {
       "repo": "https://github.com/libretro/gw-libretro.git",
@@ -413,7 +455,9 @@
       "submodules": null,
       "patches": null,
       "diverges_across_platforms": false,
-      "notes": " iOS-only by decision, recorded in docs/building.md."
+      "notes": " iOS-only by decision, recorded in docs/building.md.",
+      "pinned_commit": "91d599b951e7bfe7e040347f58667cba20074adc",
+      "pinned_reason": "already identical on every platform that ships it; pinned where it stands"
     },
     "mame2003_plus": {
       "repo": "https://github.com/libretro/mame2003-plus-libretro.git",
@@ -445,7 +489,9 @@
       "submodules": null,
       "patches": null,
       "diverges_across_platforms": true,
-      "notes": null
+      "notes": null,
+      "pinned_commit": "21256d24120b04916c5197d95b757635ca880fd9",
+      "pinned_reason": "macOS revision: the newer of the two in use, and already play-tested on that platform"
     },
     "melonds": {
       "repo": "https://github.com/libretro/melonDS.git",
@@ -512,7 +558,9 @@
         }
       ],
       "diverges_across_platforms": false,
-      "notes": null
+      "notes": null,
+      "pinned_commit": "66b5d2634cd0a79030562811e6e05f5532f800ba",
+      "pinned_reason": "already identical on every platform that ships it; pinned where it stands"
     },
     "mgba": {
       "repo": "https://github.com/libretro/mgba.git",
@@ -545,7 +593,9 @@
       "submodules": null,
       "patches": null,
       "diverges_across_platforms": false,
-      "notes": null
+      "notes": null,
+      "pinned_commit": "e31759b24e7a4e3899285ff720d7b573ac328ae7",
+      "pinned_reason": "already identical on every platform that ships it; pinned where it stands"
     },
     "mupen64plus": {
       "repo": "https://github.com/libretro/mupen64plus-libretro-nx",
@@ -577,7 +627,9 @@
       "submodules": null,
       "patches": null,
       "diverges_across_platforms": false,
-      "notes": null
+      "notes": null,
+      "pinned_commit": "f275caf4b2bfa1e6d1c51636746ea793f3d80320",
+      "pinned_reason": "already identical on every platform that ships it; pinned where it stands"
     },
     "opera": {
       "repo": "https://github.com/libretro/opera-libretro.git",
@@ -609,7 +661,9 @@
       "submodules": null,
       "patches": null,
       "diverges_across_platforms": false,
-      "notes": null
+      "notes": null,
+      "pinned_commit": "a501a278d057b952d1ad6165549c59ab178ca497",
+      "pinned_reason": "already identical on every platform that ships it; pinned where it stands"
     },
     "pcsx2": {
       "repo": "https://github.com/isztldav/pcsx2.git",
@@ -630,7 +684,9 @@
       "submodules": null,
       "patches": null,
       "diverges_across_platforms": false,
-      "notes": null
+      "notes": null,
+      "pinned_commit": "c89cb8ae0cdef534de530ebfa346eaebc39aba51",
+      "pinned_reason": "already identical on every platform that ships it; pinned where it stands"
     },
     "pcsx_rearmed": {
       "repo": "https://github.com/libretro/pcsx_rearmed.git",
@@ -679,7 +735,9 @@
         }
       ],
       "diverges_across_platforms": true,
-      "notes": null
+      "notes": null,
+      "pinned_commit": "ba61a4fdee1f789e8012f205f1b63826667644fa",
+      "pinned_reason": "macOS revision: the newer of the two in use, and already play-tested on that platform"
     },
     "picodrive": {
       "repo": "https://github.com/libretro/picodrive.git",
@@ -729,7 +787,9 @@
       },
       "patches": null,
       "diverges_across_platforms": true,
-      "notes": null
+      "notes": null,
+      "pinned_commit": "733c711a477a642fd2006d5a7a581b2790ec36b4",
+      "pinned_reason": "macOS revision: the newer of the two in use, and already play-tested on that platform"
     },
     "ppsspp": {
       "repo": "https://github.com/hrydgard/ppsspp.git",
@@ -796,7 +856,9 @@
       },
       "patches": null,
       "diverges_across_platforms": false,
-      "notes": null
+      "notes": null,
+      "pinned_commit": "c989c2553e1099730736d965c221823fe974fa55",
+      "pinned_reason": "already identical on every platform that ships it; pinned where it stands"
     },
     "prosystem": {
       "repo": "https://github.com/libretro/prosystem-libretro.git",
@@ -829,7 +891,9 @@
       "submodules": null,
       "patches": null,
       "diverges_across_platforms": true,
-      "notes": null
+      "notes": null,
+      "pinned_commit": "8a88014287c7a01cd568067e5a557d0a2b2a051f",
+      "pinned_reason": "macOS revision: the newer of the two in use, and already play-tested on that platform"
     },
     "snes9x": {
       "repo": "https://github.com/libretro/snes9x.git",
@@ -862,7 +926,9 @@
       "submodules": null,
       "patches": null,
       "diverges_across_platforms": true,
-      "notes": null
+      "notes": null,
+      "pinned_commit": "890b5d445538fe790aa3add3d5702c80f551e0ae",
+      "pinned_reason": "macOS revision: the newer of the two in use, and already play-tested on that platform"
     },
     "stella2014": {
       "repo": "https://github.com/libretro/stella2014-libretro.git",
@@ -894,7 +960,9 @@
       "submodules": null,
       "patches": null,
       "diverges_across_platforms": false,
-      "notes": null
+      "notes": null,
+      "pinned_commit": "4a7da82595d27b8df7af1ecb467a64b642a41bc9",
+      "pinned_reason": "already identical on every platform that ships it; pinned where it stands"
     },
     "vecx": {
       "repo": "https://github.com/libretro/libretro-vecx.git",
@@ -926,7 +994,9 @@
       "submodules": null,
       "patches": null,
       "diverges_across_platforms": false,
-      "notes": null
+      "notes": null,
+      "pinned_commit": "8f671cc9d737f2890c3ce19e177e2984dcae121f",
+      "pinned_reason": "already identical on every platform that ships it; pinned where it stands"
     },
     "vemulator": {
       "repo": "https://github.com/libretro/vemulator-libretro.git",
@@ -962,7 +1032,9 @@
         }
       ],
       "diverges_across_platforms": false,
-      "notes": "A third checkout exists at spikes/vmu/vemulator-libretro (the original spike) at the same revision, 27a062f6. iOS-only by decision, recorded in docs/building.md."
+      "notes": "A third checkout exists at spikes/vmu/vemulator-libretro (the original spike) at the same revision, 27a062f6. iOS-only by decision, recorded in docs/building.md.",
+      "pinned_commit": "27a062f6ae532e5028e4fb54f523cc689e78146a",
+      "pinned_reason": "already identical on every platform that ships it; pinned where it stands"
     }
   },
   "global_patches": [
@@ -987,5 +1059,9 @@
       "plutosvg-0.0.7",
       "rapidyaml-0.12.1"
     ]
+  },
+  "pinning": {
+    "what": "pinned_commit is the revision every platform must build from going forward. The per-platform commit fields below it stay as the historical record of what actually shipped before alignment, including the divergence.",
+    "chosen": "2026-09-13"
   }
 }

@@ -122,3 +122,36 @@ Verified rather than assumed: the generated wrapper is byte-identical in
 its code to what the old path produced, checked across four different
 core prefixes, and it compiles against the app's own `libretro.h`
 exporting exactly the 25 libretro entry points.
+
+## Pinning, added the same day
+
+Recording the revisions does not stop them drifting. The build scripts
+now read `pinned_commit` from `docs/core-manifest.json` and fetch that
+exact commit rather than cloning whatever upstream HEAD is that day.
+
+The pinned revision was chosen per core. Where a core was already
+identical everywhere it ships, it is pinned where it stands. Where it
+diverged, the macOS revision was chosen: it is the newer of the two in
+every one of the eleven cases, and it is the one that has actually been
+played on a platform.
+
+The per-platform `commit` fields are left as the historical record of
+what shipped before alignment, including the divergence itself.
+
+A checkout already sitting at a different revision is refused rather
+than silently built, and rather than reset, because some trees carry
+local edits no script reproduces. The script says which tree, which
+revision it found, which it expected, and to check for local edits
+before deleting it.
+
+Note the consequence: until a core's non-macOS trees are deleted and
+rebuilt, building them now stops with that message. That is the point.
+It converts a silent divergence into a loud one.
+
+### What is still outstanding
+
+The pinning is in place and verified. The rebuilds are not done. Eleven
+cores need their iOS and tvOS libraries rebuilt at the pinned revision,
+which is twenty-two builds, followed by playing something on each
+platform. Until that happens the apps still ship what they shipped
+before, which is the divergence this file documents.

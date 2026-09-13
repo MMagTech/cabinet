@@ -200,9 +200,53 @@ fi
 SRC=$SPIKE/src
 OUTDIR=RommApp/RommApp/Native/$OUT
 
+# The revision is pinned, and docs/core-manifest.json is where it lives.
+#
+# This used to be `git clone --depth 1`, which takes whatever upstream
+# HEAD happens to be on the day it runs and records nothing. Because the
+# clone only happens when the directory is absent, each platform froze at
+# a different day's HEAD, and eleven cores ended up shipping different
+# revisions to iOS and macOS. docs/core-manifest.md has the full account.
+MANIFEST=docs/core-manifest.json
+PIN=$(python3 -c "
+import json,sys
+try:
+    d = json.load(open('$MANIFEST'))['cores']
+except Exception as e:
+    sys.exit('cannot read $MANIFEST: %s' % e)
+c = d.get('$NAME')
+if c is None:
+    sys.exit('$NAME is not in $MANIFEST')
+print(c.get('pinned_commit') or '')
+") || exit 1
+
+if [ -z "$PIN" ]; then
+    echo "no pinned_commit for $NAME in $MANIFEST." >&2
+    echo "Record the revision this core must build from before building it." >&2
+    exit 1
+fi
+
 if [ ! -d "$SRC" ]; then
-    mkdir -p "$SPIKE"
-    git clone --depth 1 --recurse-submodules --shallow-submodules "$REPO" "$SRC"
+    # Fetching the pinned commit by SHA rather than cloning and then
+    # checking out: one commit's worth of download, and it cannot drift.
+    mkdir -p "$SRC"
+    git -C "$SRC" init -q
+    git -C "$SRC" remote add origin "$REPO"
+    git -C "$SRC" fetch -q --depth 1 origin "$PIN"
+    git -C "$SRC" checkout -q FETCH_HEAD
+    git -C "$SRC" submodule update -q --init --recursive --depth 1
+fi
+
+# An existing tree at the wrong revision is refused rather than silently
+# built, and rather than reset, since some trees carry local edits no
+# script reproduces. Deleting it and re-running is the deliberate act.
+HAVE=$(git -C "$SRC" rev-parse HEAD 2>/dev/null || echo unknown)
+if [ "$HAVE" != "$PIN" ]; then
+    echo "$NAME: $SRC is at $HAVE but the manifest pins $PIN." >&2
+    echo "This tree predates pinning, or someone moved it. To rebuild at" >&2
+    echo "the pinned revision:  rm -rf $SRC  and run this again." >&2
+    echo "Check for local edits first: git -C $SRC status --short" >&2
+    exit 1
 fi
 
 # Beetle PCE Fast's bundled zlib-1.2.11 lost the "!defined(__APPLE__)" guard
