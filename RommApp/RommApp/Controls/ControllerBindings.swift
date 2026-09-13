@@ -77,6 +77,44 @@ enum ControllerBindings {
         return map
     }()
 
+    /// PlayStation 2 only. The arcade fold above needs the right bumper
+    /// and right trigger for arcade buttons 3 and 6, which pushes L1 and
+    /// L2 onto whatever is left on the other side. On a DualShock2 that
+    /// is not a subtle compromise: all four shoulders end up somewhere
+    /// they are not labelled, so the right bumper pressed L1 and the
+    /// right trigger pressed R1 (reported 2026-09-12). The PS2 is the
+    /// one console whose pad shares its exact shape with a modern one,
+    /// so the row is simply the labels matching the labels.
+    static let ps2: [String: Int] = {
+        var map = defaults
+        map[GCInputLeftShoulder] = RetroPad.l         // L1
+        map[GCInputRightShoulder] = RetroPad.r        // R1
+        map[GCInputLeftTrigger] = RetroPad.l2         // L2
+        map[GCInputRightTrigger] = RetroPad.r2        // R2
+        return map
+    }()
+
+    /// GameCube only, and it had the same shoulder problem as the PS2
+    /// for the same reason. A GameCube pad has two analog triggers and
+    /// one digital Z on the right, with no fourth shoulder at all, so
+    /// there is no shape to match and the arrangement has to be chosen.
+    /// This is the one Dolphin itself ships, in
+    /// `Data/Sys/Profiles/GCPad/SDL Gamepad.ini`: L and R on the two
+    /// triggers, Z on the right bumper. The left bumper is deliberately
+    /// left unbound rather than doubled onto Z, because the real
+    /// hardware has nothing there either.
+    ///
+    /// GCControls reads GC L from RetroPad.l, GC R from RetroPad.r and
+    /// Z from RetroPad.r2, which is why the ids below look shifted.
+    static let ngc: [String: Int] = {
+        var map = defaults
+        map[GCInputLeftTrigger] = RetroPad.l          // GC L
+        map[GCInputRightTrigger] = RetroPad.r         // GC R
+        map[GCInputRightShoulder] = RetroPad.r2       // GC Z
+        map.removeValue(forKey: GCInputLeftShoulder)  // no fourth shoulder
+        return map
+    }()
+
     /// A platform's complete controller personality, resolved from one
     /// table in one place. The engine (GameControllerManager) is shared
     /// by every platform; everything platform-specific about how a pad
@@ -111,7 +149,14 @@ enum ControllerBindings {
             // bits would make every stick movement press a direction too,
             // which in a menu reads as the cursor running away. Additive:
             // no other platform's answer changes.
-            return PlatformProfile(base: defaults, digitizesLeftStick: false)
+            return PlatformProfile(base: ngc, digitizesLeftStick: false)
+        case "ps2":
+            // A DualShock2 carries a d-pad and two analog sticks, and
+            // PCSX2 reads the real stick value through PS2Controls'
+            // sendStick, so this is exactly the pair of conditions the
+            // flag documents: digitizing here would have one thumb
+            // working two physical controls at once.
+            return PlatformProfile(base: ps2, digitizesLeftStick: false)
         default:
             return PlatformProfile(base: defaults, digitizesLeftStick: true)
         }
