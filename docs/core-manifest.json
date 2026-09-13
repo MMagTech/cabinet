@@ -1,0 +1,991 @@
+{
+  "manifest_version": 1,
+  "recovered": "2026-09-13",
+  "what_this_is": "The upstream revision of every emulator core Cabinet ships, recovered from the gitignored spikes/ working trees on the build Mac. Before this file those revisions existed nowhere else. Fields left null could not be determined and are NOT guessed.",
+  "cores": {
+    "beetle_ngp": {
+      "repo": "https://github.com/libretro/beetle-ngp-libretro.git",
+      "systems": [
+        "Neo Geo Pocket Color"
+      ],
+      "builder": "tools/build-core.sh",
+      "one_tree_all_platforms": false,
+      "platforms": {
+        "ios": {
+          "commit": "a50d5ac288a81f2104ddf43195a4efdd15c72227",
+          "commit_date": "2026-06-14T20:21:49+02:00",
+          "checkout": "spikes/cores/beetle_ngp/src",
+          "build_args": null
+        },
+        "tvos": {
+          "commit": null,
+          "commit_date": null,
+          "checkout": null,
+          "build_args": null,
+          "commit_source": "UNRECOVERABLE. The per-platform tvOS checkout no longer exists and the archive embeds no version. Bound only: the built library was committed 2026-08-20."
+        },
+        "mac": {
+          "commit": "a50d5ac288a81f2104ddf43195a4efdd15c72227",
+          "commit_date": "2026-06-14T20:21:49+02:00",
+          "checkout": "spikes/cores/beetle_ngp-mac/src",
+          "build_args": null
+        }
+      },
+      "submodules": null,
+      "patches": null,
+      "diverges_across_platforms": false,
+      "notes": null
+    },
+    "beetle_pce_fast": {
+      "repo": "https://github.com/libretro/beetle-pce-fast-libretro.git",
+      "systems": [
+        "TurboGrafx-16",
+        "TurboGrafx-CD"
+      ],
+      "builder": "tools/build-core.sh",
+      "one_tree_all_platforms": false,
+      "platforms": {
+        "ios": {
+          "commit": "b211204c7026dff6e86e79b00185512e2421fff8",
+          "commit_date": "2026-07-31T11:50:13Z",
+          "checkout": "spikes/cores/beetle_pce_fast/src",
+          "build_args": null
+        },
+        "tvos": {
+          "commit": null,
+          "commit_date": null,
+          "checkout": null,
+          "build_args": null,
+          "commit_source": "UNRECOVERABLE. The per-platform tvOS checkout no longer exists and the archive embeds no version. Bound only: the built library was committed 2026-08-20."
+        },
+        "mac": {
+          "commit": "2f623abd033257b969370b73d9da982dcb0c3fdd",
+          "commit_date": "2026-08-28T15:15:13Z",
+          "checkout": "spikes/cores/beetle_pce_fast-mac/src",
+          "build_args": null
+        }
+      },
+      "submodules": null,
+      "patches": null,
+      "diverges_across_platforms": true,
+      "notes": null
+    },
+    "beetle_saturn": {
+      "repo": "https://github.com/libretro/beetle-saturn-libretro.git",
+      "systems": [
+        "Sega Saturn"
+      ],
+      "builder": "tools/build-beetle-saturn.sh",
+      "one_tree_all_platforms": false,
+      "platforms": {
+        "ios": {
+          "commit": "56d09e6d8ee39634195880bd75e0b7ad4952567d",
+          "commit_date": "2026-08-10T18:06:41+02:00",
+          "checkout": "spikes/BeetleSaturnStatic/beetle-saturn-libretro",
+          "build_args": null
+        },
+        "tvos": {
+          "commit": null,
+          "commit_date": null,
+          "checkout": null,
+          "build_args": null,
+          "commit_source": "UNRECOVERABLE. The per-platform tvOS checkout no longer exists and the archive embeds no version. Bound only: the built library was committed 2026-08-20."
+        },
+        "mac": {
+          "commit": "ed549bdac0e1a830bb794fa720e45c225a45355c",
+          "commit_date": "2026-08-11T04:54:02+02:00",
+          "checkout": "spikes/BeetleSaturnStatic-mac/beetle-saturn-libretro",
+          "build_args": null
+        }
+      },
+      "submodules": null,
+      "patches": null,
+      "diverges_across_platforms": true,
+      "notes": null
+    },
+    "beetle_vb": {
+      "repo": "https://github.com/libretro/beetle-vb-libretro.git",
+      "systems": [
+        "Virtual Boy"
+      ],
+      "builder": "tools/build-core.sh",
+      "one_tree_all_platforms": false,
+      "platforms": {
+        "ios": {
+          "commit": "3f53a40bf8aa18777514fd4b220960427e312a3f",
+          "commit_date": "2026-07-29T16:02:52+02:00",
+          "checkout": "spikes/cores/beetle_vb/src",
+          "build_args": null
+        },
+        "tvos": {
+          "commit": "3f53a40bf8aa18777514fd4b220960427e312a3f",
+          "commit_date": "2026-07-29T16:02:52+02:00",
+          "checkout": "spikes/cores/beetle_vb-tvos/src",
+          "build_args": null
+        },
+        "mac": {
+          "commit": "83ed42608601fb7b01d41e4f8fb2007a37b8c84e",
+          "commit_date": "2026-08-23T13:55:05+02:00",
+          "checkout": "spikes/cores/beetle_vb-mac/src",
+          "build_args": null
+        }
+      },
+      "submodules": null,
+      "patches": null,
+      "diverges_across_platforms": true,
+      "notes": null
+    },
+    "dolphin": {
+      "repo": "https://github.com/dolphin-emu/dolphin.git",
+      "systems": [
+        "Nintendo GameCube"
+      ],
+      "builder": "tools/build-dolphin-mac.sh",
+      "one_tree_all_platforms": false,
+      "platforms": {
+        "mac": {
+          "commit": "a1e636d72c8469acf747ac6542f0b7ace7cea02f",
+          "commit_date": "2026-09-01T16:47:42+12:00",
+          "checkout": "spikes/dolphin/src",
+          "build_args": null
+        }
+      },
+      "submodules": {
+        "mac": {
+          "Externals/FFmpeg-bin": "9bc087fbca36ce5a85eb4fd73f0c73813593e5a2",
+          "Externals/Qt": "306289108d29a4b31a5460f7b55d28fde7b96d1b",
+          "Externals/SDL/SDL": "f87239e71e42da91ca317a12eefb82cfbf3393eb",
+          "Externals/SFML/SFML": "0fa201c969e48ecc253581c5841ce73f44d42f49",
+          "Externals/Vulkan-Headers": "39f924b810e561fd86b2558b6711ca68d4363f68",
+          "Externals/VulkanMemoryAllocator": "3bab6924988e5f19bf36586a496156cf72f70d9f",
+          "Externals/bzip2/bzip2": "6a8690fc8d26c815e798c588f796eabe9d684cf0",
+          "Externals/cpp-ipc/cpp-ipc": "b6cbbc940e25ff898f09a40b107781cef6027b13",
+          "Externals/cpp-optparse/cpp-optparse": "2265d647232249a53a03b411099863ceca35f0d3",
+          "Externals/cubeb/cubeb": "54217bca3f3e0cd53c073690a23dd25d83557909",
+          "Externals/cubeb/cubeb/cmake/sanitizers-cmake": "aab6948fa863bc1cbe5d0850bc46b9ef02ed4c1a",
+          "Externals/cubeb/cubeb/googletest": "40412d85124f7c6f3d88454583c4633e5e10fc8c",
+          "Externals/curl/curl": "cfbfb65047e85e6b08af65fe9cdbcf68e9ad496a",
+          "Externals/enet/enet": "2662c0de09e36f2a2030ccc2c528a3e4c9e8138a",
+          "Externals/fmt/fmt": "e424e3f2e607da02742f73db84873b8084fc714c",
+          "Externals/glslang/glslang": "a57276bf558f5cf94d3a9854ebdf5a2236849a5a",
+          "Externals/gtest": "eb2d85edd0bff7a712b6aff147cd9f789f0d7d0b",
+          "Externals/hidapi/hidapi-src": "d6b2a974608dec3b76fb1e36c189f22b9cf3650c",
+          "Externals/imgui/imgui": "45acd5e0e82f4c954432533ae9985ff0e1aad6d5",
+          "Externals/implot/implot": "3da8bd34299965d3b0ab124df743fe3e076fa222",
+          "Externals/libadrenotools": "8fae8ce254dfc1344527e05301e43f37dea2df80",
+          "Externals/libadrenotools/lib/linkernsbypass": "aa3975893d83ef1bc84c321ec60c65fbf1287887",
+          "Externals/libspng/libspng": "fb768002d4288590083a476af628e51c3f1d47cd",
+          "Externals/libusb/libusb": "15a7ebb4d426c5ce196684347d2b7cafad862626",
+          "Externals/lz4/lz4": "5fc0630a0ed55e9755b0fe3990cd021ae1c3edc1",
+          "Externals/mGBA/mgba": "0b40863f64d0940f333fa1c638e75f86f8a26a33",
+          "Externals/miniupnpc/miniupnp": "bf4215a7574f88aa55859db9db00e3ae58cf42d6",
+          "Externals/minizip-ng/minizip-ng": "55db144e03027b43263e5ebcb599bf0878ba58de",
+          "Externals/pugixml/pugixml": "ee86beb30e4973f5feffe3ce63bfa4fbadf72f38",
+          "Externals/rcheevos/rcheevos": "926e4608f8dca7989267c787bbefb3ab1c835ac5",
+          "Externals/spirv_cross/SPIRV-Cross": "ebe2aa0cd80f5eb5cd8a605da604cacf72205f3b",
+          "Externals/tinygltf/tinygltf": "c5641f2c22d117da7971504591a8f6a41ece488b",
+          "Externals/watcher/watcher": "b03bdcfc11549df595b77239cefe2643943a3e2f",
+          "Externals/wil": "7447d38337abf23a5c2286305b743506455aa9cc",
+          "Externals/xxhash/xxHash": "e626a72bc2321cd320e953a0ccf1584cad60f363",
+          "Externals/zlib-ng/zlib-ng": "ce01b1e41da298334f8214389cc9369540a7560f",
+          "Externals/zstd/zstd": "711e17da98510a3567bf47f85a08a76f64811474"
+        }
+      },
+      "patches": null,
+      "diverges_across_platforms": false,
+      "notes": null
+    },
+    "fbneo_libretro": {
+      "repo": "https://github.com/libretro/FBNeo.git",
+      "systems": [
+        "Arcade (FinalBurn Neo)"
+      ],
+      "builder": "tools/build-fbneo.sh",
+      "one_tree_all_platforms": true,
+      "platforms": {},
+      "submodules": null,
+      "patches": null,
+      "diverges_across_platforms": false,
+      "notes": null
+    },
+    "fceumm": {
+      "repo": "https://github.com/libretro/libretro-fceumm.git",
+      "systems": [
+        "NES"
+      ],
+      "builder": "tools/build-core.sh",
+      "one_tree_all_platforms": false,
+      "platforms": {
+        "ios": {
+          "commit": "b5e3566515c27dc66c9c20572171673126532e06",
+          "commit_date": "2026-07-28T22:01:28+02:00",
+          "checkout": "spikes/cores/fceumm/src",
+          "build_args": null
+        },
+        "tvos": {
+          "commit": null,
+          "commit_date": null,
+          "checkout": null,
+          "build_args": null,
+          "commit_source": "UNRECOVERABLE. The per-platform tvOS checkout no longer exists and the archive embeds no version. Bound only: the built library was committed 2026-08-20."
+        },
+        "mac": {
+          "commit": "236ccdfc911e84c60fea6b9d0699c2d440a8de14",
+          "commit_date": "2026-08-22T15:41:30+02:00",
+          "checkout": "spikes/cores/fceumm-mac/src",
+          "build_args": null
+        }
+      },
+      "submodules": null,
+      "patches": null,
+      "diverges_across_platforms": true,
+      "notes": null
+    },
+    "flycast": {
+      "repo": "https://github.com/flyinghead/flycast.git",
+      "systems": [
+        "Dreamcast"
+      ],
+      "builder": "tools/build-flycast.sh",
+      "one_tree_all_platforms": true,
+      "platforms": {
+        "ios": {
+          "commit": "a172e0001351dfbc49b86860a13d5390b1c493fe",
+          "commit_date": "2026-08-07T22:53:01Z",
+          "checkout": "spikes/cores/flycast/src",
+          "build_args": "-fno-common -DTARGET_NO_REC -DIOS"
+        },
+        "tvos": {
+          "commit": "a172e0001351dfbc49b86860a13d5390b1c493fe",
+          "commit_date": "2026-08-07T22:53:01Z",
+          "checkout": "spikes/cores/flycast/src",
+          "build_args": "-DTARGET_NO_REC",
+          "commit_source": "one source tree serves every platform; this builder uses separate build-<platform> directories, so all platforms were built from this revision"
+        },
+        "mac": {
+          "commit": "a172e0001351dfbc49b86860a13d5390b1c493fe",
+          "commit_date": "2026-08-07T22:53:01Z",
+          "checkout": "spikes/cores/flycast/src",
+          "build_args": "recompilers enabled",
+          "commit_source": "one source tree serves every platform; this builder uses separate build-<platform> directories, so all platforms were built from this revision"
+        }
+      },
+      "submodules": {
+        "ios": {
+          "core/deps/DreamPicoPort-API": "e06d9f6c59833fc7bb7f2a33c960614489811ef8",
+          "core/deps/DreamPicoPort-API/ext/libusb-cmake": "000e06eb241927db0f34e6867637d39b849ab989",
+          "core/deps/SDL": "00d4f1c2c4ad2dc95d26b18743541f57b1dca56d",
+          "core/deps/Spout": "2110a918e720688f3cb2118302fd153db8745ace",
+          "core/deps/Syphon": "53ec412a78b246c84cedcb4a2a5b92852704d61d",
+          "core/deps/Vulkan-Headers": "b5c8f996196ba4aa6d8f97e52b5d3b6e70f7e4e2",
+          "core/deps/VulkanMemoryAllocator": "1d8f600fd424278486eade7ed3e877c99f0846b1",
+          "core/deps/asio": "d3402006e84efb6114ff93e4f2b8508412ed80d5",
+          "core/deps/breakpad": "1ab24bcc817ebe629bf77daa53529d02361cb1e9",
+          "core/deps/discord-rpc": "c62c34d37cd90b75187a1212e13ce4145bafbdd7",
+          "core/deps/discord-rpc/thirdparty/rapidjson": "8261c1ddf43f10de00fd8c9a67811d1486b2c784",
+          "core/deps/discord-rpc/thirdparty/rapidjson/thirdparty/gtest": "ba96d0b1161f540656efdaed035b3c062b60e006",
+          "core/deps/freetype": "0a0221a1347e2f1e07c395263540026e9a0aa7c7",
+          "core/deps/freetype/subprojects/dlg": "395ccad2c1e0daae535c4d20bb0a3f2424648e17",
+          "core/deps/gamesdk": "4ac9952e6a5b3e0846003cb156b4a664178b7549",
+          "core/deps/glslang": "fc9889c889561c5882e83819dcaffef5ed45529b",
+          "core/deps/googletest": "e39786088138f2749d64e9e90e0f9902daa77c40",
+          "core/deps/libadrenotools": "8fae8ce254dfc1344527e05301e43f37dea2df80",
+          "core/deps/libadrenotools/lib/linkernsbypass": "aa3975893d83ef1bc84c321ec60c65fbf1287887",
+          "core/deps/libchdr": "5f82799f2c8cad1e9cd26d39a0f8d36369a5534b",
+          "core/deps/libjuice": "77daa8befd828046169adbb012d8de928bfdcdd4",
+          "core/deps/luabridge": "5d21e35633a1f87ed08af115b07d3386096f792b",
+          "core/deps/luabridge/third_party/gtest": "58f3f1005cffce8a9d005d0361d3471cd9947501",
+          "core/deps/oboe": "a81bb9f87d4105b84b682685d3bfbb5beca371d1",
+          "core/deps/rcheevos": "3106e6d3d274b63c59976cb07dda94a292ab45ca",
+          "core/deps/tinygettext": "41572a67f96013691685a38f0032f3c97aa34f79",
+          "core/deps/tinygettext/external/tinycmmc": "9a51e13802d930feb7261ba8876940659b258cb7",
+          "core/deps/websocketpp": "1b11fd301531e6df35a6107c1e8665b1e77a2d8e",
+          "core/deps/xbyak": "0d67fd1530016b7c56f3cd74b3fca920f4c3e2b4"
+        }
+      },
+      "patches": [
+        {
+          "what": "CPU_RATIO=2, plus recompiler/W^X and SH4 changes",
+          "where": "tools/build-flycast.sh, and UNSCRIPTED edits in the working tree",
+          "platforms": [
+            "ios",
+            "tvos",
+            "mac"
+          ],
+          "why": "see the unscripted-edits warning in docs/core-manifest.md"
+        }
+      ],
+      "diverges_across_platforms": false,
+      "notes": null
+    },
+    "gambatte": {
+      "repo": "https://github.com/libretro/gambatte-libretro.git",
+      "systems": [
+        "Game Boy",
+        "Game Boy Color"
+      ],
+      "builder": "tools/build-core.sh",
+      "one_tree_all_platforms": false,
+      "platforms": {
+        "ios": {
+          "commit": "96174369b3c30d9fc57c926fa3379c273dc6a9a5",
+          "commit_date": "2026-07-31T11:36:05Z",
+          "checkout": "spikes/cores/gambatte/src",
+          "build_args": null
+        },
+        "tvos": {
+          "commit": null,
+          "commit_date": null,
+          "checkout": null,
+          "build_args": null,
+          "commit_source": "UNRECOVERABLE. The per-platform tvOS checkout no longer exists and the archive embeds no version. Bound only: the built library was committed 2026-08-10."
+        },
+        "mac": {
+          "commit": "d9d6cd06382d1ced30de34d56d3609452323dab1",
+          "commit_date": "2026-08-21T10:59:08Z",
+          "checkout": "spikes/cores/gambatte-mac/src",
+          "build_args": null
+        }
+      },
+      "submodules": null,
+      "patches": null,
+      "diverges_across_platforms": true,
+      "notes": null
+    },
+    "genesis_plus_gx": {
+      "repo": "https://github.com/libretro/Genesis-Plus-GX.git",
+      "systems": [
+        "Sega Genesis",
+        "Sega CD",
+        "Master System",
+        "Game Gear"
+      ],
+      "builder": "tools/build-core.sh",
+      "one_tree_all_platforms": false,
+      "platforms": {
+        "ios": {
+          "commit": "84fcf2ec8e6b8d901c2fec55c884f285f93a1679",
+          "commit_date": "2026-08-07T15:27:56Z",
+          "checkout": "spikes/cores/genesis_plus_gx/src",
+          "build_args": null
+        },
+        "tvos": {
+          "commit": null,
+          "commit_date": null,
+          "checkout": null,
+          "build_args": null,
+          "commit_source": "UNRECOVERABLE. The per-platform tvOS checkout no longer exists and the archive embeds no version. Bound only: the built library was committed 2026-08-20."
+        },
+        "mac": {
+          "commit": "a7985a9c4278ac352f8ca7bb4d3cc6b36e9e3e7d",
+          "commit_date": "2026-08-28T19:14:38Z",
+          "checkout": "spikes/cores/genesis_plus_gx-mac/src",
+          "build_args": null
+        }
+      },
+      "submodules": null,
+      "patches": null,
+      "diverges_across_platforms": true,
+      "notes": null
+    },
+    "gw": {
+      "repo": "https://github.com/libretro/gw-libretro.git",
+      "systems": [
+        "Game & Watch"
+      ],
+      "builder": "tools/build-core.sh",
+      "one_tree_all_platforms": false,
+      "platforms": {
+        "ios": {
+          "commit": "91d599b951e7bfe7e040347f58667cba20074adc",
+          "commit_date": "2026-04-20T19:39:32+02:00",
+          "checkout": "spikes/cores/gw/src",
+          "build_args": null,
+          "commit_source": "recovered by content comparison: tree is byte-identical to the mac checkout apart from build output; the checkout itself has no .git"
+        },
+        "mac": {
+          "commit": "91d599b951e7bfe7e040347f58667cba20074adc",
+          "commit_date": "2026-04-20T19:39:32+02:00",
+          "checkout": "spikes/cores/gw-mac/src",
+          "build_args": null
+        }
+      },
+      "submodules": null,
+      "patches": null,
+      "diverges_across_platforms": false,
+      "notes": " iOS-only by decision, recorded in docs/building.md."
+    },
+    "mame2003_plus": {
+      "repo": "https://github.com/libretro/mame2003-plus-libretro.git",
+      "systems": [
+        "Arcade (MAME 2003-Plus)"
+      ],
+      "builder": "tools/build-core.sh",
+      "one_tree_all_platforms": false,
+      "platforms": {
+        "ios": {
+          "commit": "93159c0ce9f862d939a7b32324c9bd4eaaf1be56",
+          "commit_date": "2026-08-19T14:54:40-04:00",
+          "checkout": "spikes/cores/mame2003_plus/src",
+          "build_args": null
+        },
+        "tvos": {
+          "commit": "93159c0ce9f862d939a7b32324c9bd4eaaf1be56",
+          "commit_date": "2026-08-19T14:54:40-04:00",
+          "checkout": "spikes/cores/mame2003_plus-tvos/src",
+          "build_args": null
+        },
+        "mac": {
+          "commit": "21256d24120b04916c5197d95b757635ca880fd9",
+          "commit_date": "2026-08-28T20:44:55-04:00",
+          "checkout": "spikes/cores/mame2003_plus-mac/src",
+          "build_args": null
+        }
+      },
+      "submodules": null,
+      "patches": null,
+      "diverges_across_platforms": true,
+      "notes": null
+    },
+    "melonds": {
+      "repo": "https://github.com/libretro/melonDS.git",
+      "systems": [
+        "Nintendo DS"
+      ],
+      "builder": "tools/build-core.sh",
+      "one_tree_all_platforms": false,
+      "platforms": {
+        "ios": {
+          "commit": "66b5d2634cd0a79030562811e6e05f5532f800ba",
+          "commit_date": "2026-07-19T20:58:38+02:00",
+          "checkout": "spikes/cores/melonds/src",
+          "build_args": "(none)"
+        },
+        "tvos": {
+          "commit": "66b5d2634cd0a79030562811e6e05f5532f800ba",
+          "commit_date": "2026-07-19T20:58:38+02:00",
+          "checkout": "spikes/cores/melonds-tvos/src",
+          "build_args": "(none)"
+        },
+        "mac": {
+          "commit": "66b5d2634cd0a79030562811e6e05f5532f800ba",
+          "commit_date": "2026-07-19T20:58:38+02:00",
+          "checkout": "spikes/cores/melonds-mac/src",
+          "build_args": "JIT_ARCH=aarch64"
+        }
+      },
+      "submodules": null,
+      "patches": [
+        {
+          "what": "final SRAM flush in retro_unload_game",
+          "where": "tools/build-core.sh",
+          "platforms": [
+            "ios",
+            "tvos",
+            "mac"
+          ],
+          "why": "save-then-quit within 2s was silently dropped"
+        },
+        {
+          "what": "pthread_jit_write_protect_np resolved via dlsym",
+          "where": "tools/build-core.sh",
+          "platforms": [
+            "mac"
+          ],
+          "why": "Catalyst marks it __API_UNAVAILABLE though the symbol is live"
+        },
+        {
+          "what": "ARM64 recompiler runtime probe (stderr proof of MAP_JIT buffer)",
+          "where": "tools/build-core.sh",
+          "platforms": [
+            "mac"
+          ],
+          "why": "melonDS never says which CPU engine it chose; do not remove and then claim the Mac has a DS recompiler"
+        },
+        {
+          "what": "fastmem rewrite bracketed with JitEnableWrite/JitEnableExecute",
+          "where": "tools/build-core.sh",
+          "platforms": [
+            "mac"
+          ],
+          "why": "under MAP_JIT the JIT patching its own code takes SIGBUS"
+        }
+      ],
+      "diverges_across_platforms": false,
+      "notes": null
+    },
+    "mgba": {
+      "repo": "https://github.com/libretro/mgba.git",
+      "systems": [
+        "Game Boy Advance"
+      ],
+      "builder": "tools/build-core.sh",
+      "one_tree_all_platforms": false,
+      "platforms": {
+        "ios": {
+          "commit": "e31759b24e7a4e3899285ff720d7b573ac328ae7",
+          "commit_date": "2026-08-05T23:31:07-04:00",
+          "checkout": "spikes/cores/mgba/src",
+          "build_args": "cmake libretro target (upstream dropped Makefile.libretro)"
+        },
+        "tvos": {
+          "commit": null,
+          "commit_date": null,
+          "checkout": null,
+          "build_args": "cmake libretro target (upstream dropped Makefile.libretro)",
+          "commit_source": "UNRECOVERABLE. The per-platform tvOS checkout no longer exists and the archive embeds no version. Bound only: the built library was committed 2026-08-10."
+        },
+        "mac": {
+          "commit": "e31759b24e7a4e3899285ff720d7b573ac328ae7",
+          "commit_date": "2026-08-05T23:31:07-04:00",
+          "checkout": "spikes/cores/mgba-mac/src",
+          "build_args": "cmake libretro target (upstream dropped Makefile.libretro)"
+        }
+      },
+      "submodules": null,
+      "patches": null,
+      "diverges_across_platforms": false,
+      "notes": null
+    },
+    "mupen64plus": {
+      "repo": "https://github.com/libretro/mupen64plus-libretro-nx",
+      "systems": [
+        "Nintendo 64"
+      ],
+      "builder": "tools/build-n64.sh",
+      "one_tree_all_platforms": false,
+      "platforms": {
+        "ios": {
+          "commit": "f275caf4b2bfa1e6d1c51636746ea793f3d80320",
+          "commit_date": "2026-08-06T15:27:31+02:00",
+          "checkout": "spikes/cores/mupen64plus/src-ios",
+          "build_args": null
+        },
+        "tvos": {
+          "commit": "f275caf4b2bfa1e6d1c51636746ea793f3d80320",
+          "commit_date": "2026-08-06T15:27:31+02:00",
+          "checkout": "spikes/cores/mupen64plus/src-tvos",
+          "build_args": null
+        },
+        "mac": {
+          "commit": "f275caf4b2bfa1e6d1c51636746ea793f3d80320",
+          "commit_date": "2026-08-06T15:27:31+02:00",
+          "checkout": "spikes/cores/mupen64plus/src-mac",
+          "build_args": null
+        }
+      },
+      "submodules": null,
+      "patches": null,
+      "diverges_across_platforms": false,
+      "notes": null
+    },
+    "opera": {
+      "repo": "https://github.com/libretro/opera-libretro.git",
+      "systems": [
+        "3DO"
+      ],
+      "builder": "tools/build-core.sh",
+      "one_tree_all_platforms": false,
+      "platforms": {
+        "ios": {
+          "commit": "a501a278d057b952d1ad6165549c59ab178ca497",
+          "commit_date": "2026-08-21T11:56:39+02:00",
+          "checkout": "spikes/cores/opera/src",
+          "build_args": null
+        },
+        "tvos": {
+          "commit": "a501a278d057b952d1ad6165549c59ab178ca497",
+          "commit_date": "2026-08-21T11:56:39+02:00",
+          "checkout": "spikes/cores/opera-tvos/src",
+          "build_args": null
+        },
+        "mac": {
+          "commit": "a501a278d057b952d1ad6165549c59ab178ca497",
+          "commit_date": "2026-08-21T11:56:39+02:00",
+          "checkout": "spikes/cores/opera-mac/src",
+          "build_args": null
+        }
+      },
+      "submodules": null,
+      "patches": null,
+      "diverges_across_platforms": false,
+      "notes": null
+    },
+    "pcsx2": {
+      "repo": "https://github.com/isztldav/pcsx2.git",
+      "systems": [
+        "PlayStation 2"
+      ],
+      "builder": "tools/build-pcsx2-mac.sh",
+      "one_tree_all_platforms": false,
+      "platforms": {
+        "mac": {
+          "commit": "c89cb8ae0cdef534de530ebfa346eaebc39aba51",
+          "commit_date": "2026-07-06T19:49:47+02:00",
+          "checkout": "spikes/cores/pcsx2",
+          "build_args": null,
+          "repo_note": "cloned from a local path (spikes/ps2-jitless/arm64-fork) that no longer exists. Upstream recovered and the commit verified present in isztldav/pcsx2 via the GitHub API 2026-09-13."
+        }
+      },
+      "submodules": null,
+      "patches": null,
+      "diverges_across_platforms": false,
+      "notes": null
+    },
+    "pcsx_rearmed": {
+      "repo": "https://github.com/libretro/pcsx_rearmed.git",
+      "systems": [
+        "PlayStation"
+      ],
+      "builder": "tools/build-core.sh",
+      "one_tree_all_platforms": false,
+      "platforms": {
+        "ios": {
+          "commit": "da2cb8ecd17fd0932ab6d94774c0522beebce6e3",
+          "commit_date": "2026-08-02T02:31:02+03:00",
+          "checkout": "spikes/cores/pcsx_rearmed/src",
+          "build_args": "(none; platform=ios-arm64 forces DYNAREC=0 in the core's own Makefile)"
+        },
+        "tvos": {
+          "commit": null,
+          "commit_date": null,
+          "checkout": null,
+          "build_args": "(none; platform=tvos-arm64 forces DYNAREC=0)",
+          "commit_source": "UNRECOVERABLE. The per-platform tvOS checkout no longer exists and the archive embeds no version. Bound only: the built library was committed 2026-08-20."
+        },
+        "mac": {
+          "commit": "ba61a4fdee1f789e8012f205f1b63826667644fa",
+          "commit_date": "2026-08-27T01:46:56+03:00",
+          "checkout": "spikes/cores/pcsx_rearmed-mac/src",
+          "build_args": "DYNAREC=ari64"
+        }
+      },
+      "submodules": {
+        "mac": {
+          "frontend/libpicofe": "6a4473cc062dddd8a66d488677ac79e278d578c5"
+        },
+        "ios": {
+          "frontend/libpicofe": "dd11f2d723162eb1cf8e6db9f40de7db0d0b6bba"
+        }
+      },
+      "patches": [
+        {
+          "what": "mprotect_w_x rounds to the real page size via sysconf",
+          "where": "tools/build-core.sh",
+          "platforms": [
+            "mac"
+          ],
+          "why": "hardcoded 4096 vs Apple Silicon's 16384 leaves the code cache execute-only, intermittently"
+        }
+      ],
+      "diverges_across_platforms": true,
+      "notes": null
+    },
+    "picodrive": {
+      "repo": "https://github.com/libretro/picodrive.git",
+      "systems": [
+        "Sega 32X"
+      ],
+      "builder": "tools/build-core.sh",
+      "one_tree_all_platforms": false,
+      "platforms": {
+        "ios": {
+          "commit": "6248b51ffbe212ce441de023ccea6b10fa4d7082",
+          "commit_date": "2026-07-29T05:47:15+02:00",
+          "checkout": "spikes/cores/picodrive/src",
+          "build_args": null
+        },
+        "tvos": {
+          "commit": null,
+          "commit_date": null,
+          "checkout": null,
+          "build_args": null,
+          "commit_source": "UNRECOVERABLE. The per-platform tvOS checkout no longer exists and the archive embeds no version. Bound only: the built library was committed 2026-08-20."
+        },
+        "mac": {
+          "commit": "733c711a477a642fd2006d5a7a581b2790ec36b4",
+          "commit_date": "2026-08-20T17:59:19+02:00",
+          "checkout": "spikes/cores/picodrive-mac/src",
+          "build_args": null
+        }
+      },
+      "submodules": {
+        "mac": {
+          "cpu/cyclone": "3ac7cf1bdeecb60e2414980e8dc72ff092f69769",
+          "pico/cd/libchdr": "e62ac5995b1c7ef65ece35293914843b8ee57d49",
+          "pico/sound/emu2413": "a2dfc20ff507e4fd075cd325620bcea655e2c1f7",
+          "platform/common/dr_libs": "dd762b861ecadf5ddd5fb03e9ca1db6707b54fbb",
+          "platform/common/dr_libs/tests/external/miniaudio": "d1a166c83ab445b1c14bc83d37c84e18d172e5f5",
+          "platform/libpicofe": "9ed5822606dd7ff20a782a882e8fd611cb53ba88"
+        },
+        "ios": {
+          "cpu/cyclone": "3ac7cf1bdeecb60e2414980e8dc72ff092f69769",
+          "pico/cd/libchdr": "e62ac5995b1c7ef65ece35293914843b8ee57d49",
+          "pico/sound/emu2413": "a2dfc20ff507e4fd075cd325620bcea655e2c1f7",
+          "platform/common/dr_libs": "dd762b861ecadf5ddd5fb03e9ca1db6707b54fbb",
+          "platform/common/dr_libs/tests/external/miniaudio": "d1a166c83ab445b1c14bc83d37c84e18d172e5f5",
+          "platform/libpicofe": "9ed5822606dd7ff20a782a882e8fd611cb53ba88"
+        }
+      },
+      "patches": null,
+      "diverges_across_platforms": true,
+      "notes": null
+    },
+    "ppsspp": {
+      "repo": "https://github.com/hrydgard/ppsspp.git",
+      "systems": [
+        "PlayStation Portable"
+      ],
+      "builder": "tools/build-ppsspp.sh",
+      "one_tree_all_platforms": true,
+      "platforms": {
+        "ios": {
+          "commit": "c989c2553e1099730736d965c221823fe974fa55",
+          "commit_date": "2026-08-24T13:30:08+02:00",
+          "checkout": "spikes/cores/ppsspp/src",
+          "build_args": null
+        },
+        "tvos": {
+          "commit": "c989c2553e1099730736d965c221823fe974fa55",
+          "commit_date": "2026-08-24T13:30:08+02:00",
+          "checkout": "spikes/cores/ppsspp/src",
+          "build_args": null,
+          "commit_source": "one source tree serves every platform; this builder uses separate build-<platform> directories, so all platforms were built from this revision"
+        },
+        "mac": {
+          "commit": "c989c2553e1099730736d965c221823fe974fa55",
+          "commit_date": "2026-08-24T13:30:08+02:00",
+          "checkout": "spikes/cores/ppsspp/src",
+          "build_args": null,
+          "commit_source": "one source tree serves every platform; this builder uses separate build-<platform> directories, so all platforms were built from this revision"
+        }
+      },
+      "submodules": {
+        "ios": {
+          "SDL/macOS": "c387d93ab5910b5a6be78b4840a5bbbc452f3ac8",
+          "assets/debugger": "9776332f720c854ef26f325a0cf9e32c02115a9c",
+          "ext/OpenXR-SDK": "be392bf6949adeeabad5082aa79d12aacbda781f",
+          "ext/SPIRV-Cross": "4212eef67ed0ca048cb726a6767185504e7695e5",
+          "ext/aemu_postoffice": "9e533637b9a13bb0194c75cf43b0bf6d25d8101a",
+          "ext/armips": "62adab4ef30da765f5cf22a451eb08a59c54dc8b",
+          "ext/armips/ext/filesystem": "3f1c185ab414e764c694b8171d1c4d8c5c437517",
+          "ext/cpu_features": "fd4ffc1632db7b4e763bd28ffa6fc9d761cf3587",
+          "ext/discord-rpc": "963aa9f3e5ce81a4682c6ca3d136cddda614db33",
+          "ext/freetype": "063ed27f481f0bcd3962fd468e1546739d7d285a",
+          "ext/freetype/subprojects/dlg": "395ccad2c1e0daae535c4d20bb0a3f2424648e17",
+          "ext/glslang": "50e0708ec3a5c16020c4f845c654b80b8edb80bd",
+          "ext/libadrenotools": "8fae8ce254dfc1344527e05301e43f37dea2df80",
+          "ext/libadrenotools/lib/linkernsbypass": "aa3975893d83ef1bc84c321ec60c65fbf1287887",
+          "ext/libchdr": "8bba7745d758627258b315997a860039244cedaf",
+          "ext/lua": "7648485f14e8e5ee45e8e39b1eb4d3206dbd405a",
+          "ext/miniupnp": "27d13ca9beeb5541f5fbf11959dced03dac39972",
+          "ext/naett": "5f695cfa9fcbf30668a4d3ac4b4abf1cd89a1302",
+          "ext/nanosvg": "478dbb8f7ed11c3d9b20b3986a8ee2283f483ef7",
+          "ext/rapidjson": "73063f5002612c6bf64fe24f851cd5cc0d83eef9",
+          "ext/rapidjson/thirdparty/gtest": "0a439623f75c029912728d80cb7f1b8b48739ca4",
+          "ext/rcheevos": "2ac45d357bce2906bb0f1438f3eaf8ce6e78e3c4",
+          "ext/zstd": "f8745da6ff1ad1e7bab384bd1f9d742439278e99",
+          "ffmpeg": "b87f7c6d522d1edba77cfc4fac96ce48a236f806",
+          "ffmpeg/gas-preprocessor": "cbe88474ec196370161032a3863ec65050f70ba4",
+          "frametests": "4a0a4e4b27b0a7fbf0e2cf5cd4ed28b87e41ba67",
+          "ios/MoltenVK": "0bf904d2d1d159eb95bdefcd8432eee79ee1da14",
+          "libretro/libretro-common": "76a3d54feb0ee0ce9d59b90aa24694f3782063d3",
+          "pspautotests": "6ba9cf9e1eca2fd911dfa728f5509bb321d36b20",
+          "pspautotests/common/ext/zstd": "e47e674cd09583ff0503f0f6defd6d23d8b718d3"
+        }
+      },
+      "patches": null,
+      "diverges_across_platforms": false,
+      "notes": null
+    },
+    "prosystem": {
+      "repo": "https://github.com/libretro/prosystem-libretro.git",
+      "systems": [
+        "Atari 7800"
+      ],
+      "builder": "tools/build-core.sh",
+      "one_tree_all_platforms": false,
+      "platforms": {
+        "ios": {
+          "commit": "363b6dfbd3e240762e022c2b4897b4fe55722be3",
+          "commit_date": "2026-06-04T09:35:22+02:00",
+          "checkout": "spikes/cores/prosystem/src",
+          "build_args": null
+        },
+        "tvos": {
+          "commit": null,
+          "commit_date": null,
+          "checkout": null,
+          "build_args": null,
+          "commit_source": "UNRECOVERABLE. The per-platform tvOS checkout no longer exists and the archive embeds no version. Bound only: the built library was committed 2026-08-20."
+        },
+        "mac": {
+          "commit": "8a88014287c7a01cd568067e5a557d0a2b2a051f",
+          "commit_date": "2026-08-22T15:45:00+02:00",
+          "checkout": "spikes/cores/prosystem-mac/src",
+          "build_args": null
+        }
+      },
+      "submodules": null,
+      "patches": null,
+      "diverges_across_platforms": true,
+      "notes": null
+    },
+    "snes9x": {
+      "repo": "https://github.com/libretro/snes9x.git",
+      "systems": [
+        "SNES"
+      ],
+      "builder": "tools/build-core.sh",
+      "one_tree_all_platforms": false,
+      "platforms": {
+        "ios": {
+          "commit": "ed750a49d0583a8d8fed40c50239efd13a86dfd3",
+          "commit_date": "2026-08-08T01:55:01+02:00",
+          "checkout": "spikes/cores/snes9x/src",
+          "build_args": null
+        },
+        "tvos": {
+          "commit": null,
+          "commit_date": null,
+          "checkout": null,
+          "build_args": null,
+          "commit_source": "UNRECOVERABLE. The per-platform tvOS checkout no longer exists and the archive embeds no version. Bound only: the built library was committed 2026-08-20."
+        },
+        "mac": {
+          "commit": "890b5d445538fe790aa3add3d5702c80f551e0ae",
+          "commit_date": "2026-08-16T20:17:33+02:00",
+          "checkout": "spikes/cores/snes9x-mac/src",
+          "build_args": null
+        }
+      },
+      "submodules": null,
+      "patches": null,
+      "diverges_across_platforms": true,
+      "notes": null
+    },
+    "stella2014": {
+      "repo": "https://github.com/libretro/stella2014-libretro.git",
+      "systems": [
+        "Atari 2600"
+      ],
+      "builder": "tools/build-core.sh",
+      "one_tree_all_platforms": false,
+      "platforms": {
+        "ios": {
+          "commit": "4a7da82595d27b8df7af1ecb467a64b642a41bc9",
+          "commit_date": "2026-07-06T16:24:30+02:00",
+          "checkout": "spikes/cores/stella2014/src",
+          "build_args": null
+        },
+        "tvos": {
+          "commit": "4a7da82595d27b8df7af1ecb467a64b642a41bc9",
+          "commit_date": "2026-07-06T16:24:30+02:00",
+          "checkout": "spikes/cores/stella2014-tvos/src",
+          "build_args": null
+        },
+        "mac": {
+          "commit": "4a7da82595d27b8df7af1ecb467a64b642a41bc9",
+          "commit_date": "2026-07-06T16:24:30+02:00",
+          "checkout": "spikes/cores/stella2014-mac/src",
+          "build_args": null
+        }
+      },
+      "submodules": null,
+      "patches": null,
+      "diverges_across_platforms": false,
+      "notes": null
+    },
+    "vecx": {
+      "repo": "https://github.com/libretro/libretro-vecx.git",
+      "systems": [
+        "Vectrex"
+      ],
+      "builder": "tools/build-core.sh",
+      "one_tree_all_platforms": false,
+      "platforms": {
+        "ios": {
+          "commit": "8f671cc9d737f2890c3ce19e177e2984dcae121f",
+          "commit_date": "2026-04-11T17:31:35+02:00",
+          "checkout": "spikes/cores/vecx/src",
+          "build_args": "HAS_GPU=0  (Makefile defaults HAS_GPU=1 off macOS, which builds a GLES2 path this frontend cannot drive)"
+        },
+        "tvos": {
+          "commit": "8f671cc9d737f2890c3ce19e177e2984dcae121f",
+          "commit_date": "2026-04-11T17:31:35+02:00",
+          "checkout": "spikes/cores/vecx-tvos/src",
+          "build_args": "HAS_GPU=0  (Makefile defaults HAS_GPU=1 off macOS, which builds a GLES2 path this frontend cannot drive)"
+        },
+        "mac": {
+          "commit": "8f671cc9d737f2890c3ce19e177e2984dcae121f",
+          "commit_date": "2026-04-11T17:31:35+02:00",
+          "checkout": "spikes/cores/vecx-mac/src",
+          "build_args": "HAS_GPU=0  (Makefile defaults HAS_GPU=1 off macOS, which builds a GLES2 path this frontend cannot drive)"
+        }
+      },
+      "submodules": null,
+      "patches": null,
+      "diverges_across_platforms": false,
+      "notes": null
+    },
+    "vemulator": {
+      "repo": "https://github.com/libretro/vemulator-libretro.git",
+      "systems": [
+        "Dreamcast VMU (not a library platform; reached from a DC game's launch screen)"
+      ],
+      "builder": "tools/build-core.sh",
+      "one_tree_all_platforms": false,
+      "platforms": {
+        "ios": {
+          "commit": "27a062f6ae532e5028e4fb54f523cc689e78146a",
+          "commit_date": "2026-08-23T14:00:14+02:00",
+          "checkout": "spikes/cores/vemulator/src",
+          "build_args": null
+        },
+        "mac": {
+          "commit": "27a062f6ae532e5028e4fb54f523cc689e78146a",
+          "commit_date": "2026-08-23T14:00:14+02:00",
+          "checkout": "spikes/cores/vemulator-mac/src",
+          "build_args": null
+        }
+      },
+      "submodules": null,
+      "patches": [
+        {
+          "what": "strchr -> strrchr for the file extension",
+          "where": "tools/build-core.sh",
+          "platforms": [
+            "ios",
+            "mac"
+          ],
+          "why": "first dot in the whole path made every extension check miss, loading a blank VMU with no error"
+        }
+      ],
+      "diverges_across_platforms": false,
+      "notes": "A third checkout exists at spikes/vmu/vemulator-libretro (the original spike) at the same revision, 27a062f6. iOS-only by decision, recorded in docs/building.md."
+    }
+  },
+  "global_patches": [
+    {
+      "what": "zlib zutil.h __APPLE__ guard restored on every bundled copy",
+      "where": "tools/build-core.sh, find -name zutil.h",
+      "why": "TARGET_OS_MAC is defined on every Apple platform, so the classic-Mac fdopen stub fires and corrupts stdio.h under a modern SDK"
+    }
+  ],
+  "pcsx2_dependencies": {
+    "note": "Not a git checkout: pinned release tarballs with SHA256s under spikes/cores/pcsx2-deps/src/SHASUMS. Fully reproducible.",
+    "versions": [
+      "SDL3-3.4.12",
+      "freetype-2.14.3",
+      "harfbuzz-14.2.0",
+      "libjpeg-turbo-3.1.4.1",
+      "libpng-1.6.58",
+      "libwebp-1.6.0",
+      "zstd-1.5.7",
+      "lz4-1.10.0",
+      "plutovg-1.3.2",
+      "plutosvg-0.0.7",
+      "rapidyaml-0.12.1"
+    ]
+  }
+}
