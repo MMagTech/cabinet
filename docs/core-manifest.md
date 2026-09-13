@@ -108,3 +108,17 @@ edits.
 
 The manifest records the revisions. It does not capture those edits.
 Doing that is separate work and has not been done.
+
+## Related: the build no longer needs a file outside version control
+
+`tools/build-core.sh` used to generate each core's prefix wrapper by
+`sed`-copying `spikes/BeetleSaturnStatic/bsat_wrapper.c`, which is
+hand-written and gitignored. That meant the script could not run at all
+on a fresh clone of this repository, by anyone. The wrapper is now
+emitted inline by the script itself, the way `tools/build-flycast.sh`
+already did for Flycast, with the prefix substituted per core.
+
+Verified rather than assumed: the generated wrapper is byte-identical in
+its code to what the old path produced, checked across four different
+core prefixes, and it compiles against the app's own `libretro.h`
+exporting exactly the 25 libretro entry points.
