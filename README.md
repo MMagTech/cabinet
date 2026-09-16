@@ -14,9 +14,9 @@ to open the link on, that's an Apple TestFlight requirement, not this app.
 See [Get it](#get-it) below, including the option for Apple-TV-only setups.
 
 **Latest GitHub Releases:**
-[iOS 1.0.0](https://github.com/MMagTech/cabinet/releases/tag/ios-v1.0.0) ·
-[tvOS 1.0.0](https://github.com/MMagTech/cabinet/releases/tag/tvos-v1.0.0) ·
-[Mac 1.0.0](https://github.com/MMagTech/cabinet/releases/tag/mac-v1.0.0)
+[iOS 1.0.1](https://github.com/MMagTech/cabinet/releases/tag/ios-v1.0.1) ·
+[tvOS 1.0.1](https://github.com/MMagTech/cabinet/releases/tag/tvos-v1.0.1) ·
+[Mac 1.0.1](https://github.com/MMagTech/cabinet/releases/tag/mac-v1.0.1)
 
 | | | |
 |:---:|:---:|:---:|
