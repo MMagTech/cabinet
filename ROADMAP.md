@@ -124,6 +124,23 @@ worth having in the open.
   for free. What is missing is games to point it at. Research on which
   cores take a gun and on which port is already done.
 
+## Known rough edges
+
+Things that work but waste effort, with a known fix rather than an open
+question.
+
+- **The BIOS gets downloaded more often than it needs to be.** A
+  platform's firmware comes down once per game on Apple TV, and on
+  iPhone once per launch for any game you have not kept. Kept games
+  already do the right thing: firmware is shelved in one folder per
+  platform and nothing is downloaded at launch. The fix is to point the
+  other two paths at that same shelf, so the pattern already exists in
+  the code. Nothing is broken, and a BIOS is small next to a CD game,
+  but across a full arcade library it adds up to a few hundred megabytes
+  of redundant downloads and duplicated cache. A second, smaller part of
+  the same fix is only downloading firmware the platform's core actually
+  uses, rather than everything the server lists for it.
+
 A few ideas got explored just as seriously and reached a real answer
 instead of an open question. Those live in
 [docs/settled.md](docs/settled.md) rather than here: a native macOS build,
