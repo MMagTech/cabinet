@@ -339,6 +339,24 @@ final class Session: ObservableObject {
 
         if !text.contains("://") {
             text = (isLocalAddress(text) ? "http://" : "https://") + text
+        } else if let rest = schemeless(text, after: "http://"), !isLocalAddress(rest) {
+            // An explicitly typed http:// on a public host, which is the
+            // same mistake as omitting the scheme and deserves the same
+            // answer. Left alone it reaches ATS, which refuses it and
+            // hands back "The resource could not be loaded because the
+            // App Transport Security policy requires the use of a secure
+            // connection" for the person to interpret. App Review typed
+            // exactly that and rejected the app under 2.1(a), reasonably,
+            // since from the outside it looks like the app is broken
+            // (2026-09-16).
+            //
+            // Nothing that works today changes: a public host over plain
+            // http never connects at all, so the only inputs this touches
+            // are ones that currently fail without exception. Local
+            // addresses keep their http, which they need, since RomM on a
+            // LAN speaks plain http and Info.plist allows it through
+            // NSAllowsLocalNetworking.
+            text = "https://" + rest
         }
         while text.hasSuffix("/") { text.removeLast() }
 
@@ -347,6 +365,15 @@ final class Session: ObservableObject {
         else { return nil }
 
         return url
+    }
+
+    /// The address with `prefix` removed, or nil if it does not start with
+    /// it. Case-insensitive, because a pasted URL may carry any casing, and
+    /// separate from `isLocalAddress` because that one must be handed an
+    /// address with no scheme on it at all.
+    private static func schemeless(_ text: String, after prefix: String) -> String? {
+        guard text.lowercased().hasPrefix(prefix) else { return nil }
+        return String(text.dropFirst(prefix.count))
     }
 
     /// Whether an address, still without a scheme, is one that cannot leave
