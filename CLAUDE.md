@@ -41,7 +41,12 @@ design and the reasoning behind it, and most decisions in it are already settled
   for tvOS) with `xcodebuild archive` and `CODE_SIGNING_ALLOWED=NO`, copy
   the built `.app` into a `Payload/` folder and zip it as an unsigned
   `.ipa`, then `gh release create` with the tag and `gh release upload` the
-  IPA.
+  IPA. Last, update the three release links at the top of `README.md` to
+  the tags just cut. They have the version typed into them, so they point
+  at the previous release until edited by hand. Doing it as part of the
+  cut is the only thing that keeps them honest; GitHub's `/releases/latest`
+  cannot replace them, since it resolves to the newest release across all
+  platforms and would send a Mac visitor to an iOS build.
 - The Mac release is a signed, notarized disk image, since macOS refuses
   an unsigned app outright. Archive the `RommAppMac` scheme for
   `generic/platform=macOS,variant=Mac Catalyst` (the target is Apple
