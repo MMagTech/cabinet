@@ -27,6 +27,20 @@ extern "C" {
 int archive_extract_first_file(const char *archivePath, const char *destDir,
                                 char *outFilename, int outFilenameSize);
 
+/// Extracts EVERY entry of a .zip into destDir, preserving the paths
+/// inside the archive, creating directories as it goes. Returns true if
+/// at least one file was written.
+///
+/// Separate from the function above rather than a mode flag on it,
+/// because that one is the ROM staging path every native core depends
+/// on and there is no reason for it to change. This exists for PSP save
+/// data, which is a folder of folders rather than a single ROM.
+///
+/// Entry names are refused if they would escape destDir (absolute, or
+/// containing ".."): the archive is data from a server, and nothing
+/// legitimate needs to write outside the directory it was handed.
+int archive_extract_all(const char *archivePath, const char *destDir);
+
 #ifdef __cplusplus
 }
 #endif

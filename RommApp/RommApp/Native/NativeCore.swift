@@ -333,7 +333,13 @@ enum NativePlatform: String, CaseIterable {
         // psp: PSP games save to memory-stick SAVEDATA directories,
         // whole folders of files under the save directory, which
         // neither SAVE_RAM nor the single-file capture path models.
-        // Save sync for PSP is its own future feature.
+        // PSP saves DO sync, through a path of their own: the SAVEDATA
+        // subtree is zipped whole by NativeLauncher.archivePSPSaveData
+        // and rides the same store, endpoint and server row as every
+        // other platform. This exclusion is only about SAVE_RAM not
+        // being the mechanism, not about the feature being absent. It
+        // said "its own future feature" until 2026-09-17, years after
+        // it was built, and another project read that and repeated it.
         case .arcade, .atari7800, .atari2600, .dreamcast, .segaCD, .ngpc, .vectrex,
              .threeDO, .virtualBoy, .nds, .psp, .gameAndWatch:
             return false

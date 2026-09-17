@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <sys/stat.h>
 
 #include "zlib.h"
 
@@ -24,6 +25,52 @@ extern "C" {
 // 8 = deflate), read from the central directory's first non-directory,
 // non-zero-size entry. Not a general-purpose zip reader.
 namespace {
+
+// One entry's bytes, from the archive's current read position into an
+// already-open output file. Factored out of zipExtractFirstFile so the
+// all-entries walker below runs the same code rather than a second copy
+// of it; the two methods handled are the only two real zip tools emit
+// (0 = stored, 8 = deflate).
+bool copyEntryBytes(FILE *f, FILE *out, unsigned short method, unsigned int compSize) {
+    bool ok = true;
+    if (method == 0) {
+        unsigned char buf[65536];
+        unsigned int remaining = compSize;
+        while (remaining > 0) {
+            size_t chunk = remaining < sizeof(buf) ? remaining : sizeof(buf);
+            if (fread(buf, 1, chunk, f) != chunk) { ok = false; break; }
+            fwrite(buf, 1, chunk, out);
+            remaining -= (unsigned int)chunk;
+        }
+    } else if (method == 8) {
+        z_stream strm = {};
+        // -15: raw deflate, no zlib header, matching what zip stores.
+        if (inflateInit2(&strm, -15) != Z_OK) { ok = false; }
+        else {
+            unsigned char inBuf[65536], outBuf[65536];
+            unsigned int remaining = compSize;
+            int zret = Z_OK;
+            while (ok && remaining > 0 && zret != Z_STREAM_END) {
+                size_t chunk = remaining < sizeof(inBuf) ? remaining : sizeof(inBuf);
+                if (fread(inBuf, 1, chunk, f) != chunk) { ok = false; break; }
+                remaining -= (unsigned int)chunk;
+                strm.next_in = inBuf;
+                strm.avail_in = (uInt)chunk;
+                do {
+                    strm.next_out = outBuf;
+                    strm.avail_out = sizeof(outBuf);
+                    zret = inflate(&strm, Z_NO_FLUSH);
+                    if (zret != Z_OK && zret != Z_STREAM_END) { ok = false; break; }
+                    fwrite(outBuf, 1, sizeof(outBuf) - strm.avail_out, out);
+                } while (strm.avail_out == 0);
+            }
+            inflateEnd(&strm);
+        }
+    } else {
+        ok = false; // an unsupported method (e.g. bzip2/LZMA-in-zip): rare for ROMs
+    }
+    return ok;
+}
 
 bool zipExtractFirstFile(FILE *f, const char *destDir, char *outFilename, int outFilenameSize) {
     fseek(f, 0, SEEK_END);
@@ -105,47 +152,126 @@ bool zipExtractFirstFile(FILE *f, const char *destDir, char *outFilename, int ou
         if (!out) return false;
         fseek(f, dataOffset, SEEK_SET);
 
-        bool ok = true;
-        if (method == 0) {
-            unsigned char buf[65536];
-            unsigned int remaining = compSize;
-            while (remaining > 0) {
-                size_t chunk = remaining < sizeof(buf) ? remaining : sizeof(buf);
-                if (fread(buf, 1, chunk, f) != chunk) { ok = false; break; }
-                fwrite(buf, 1, chunk, out);
-                remaining -= (unsigned int)chunk;
-            }
-        } else if (method == 8) {
-            z_stream strm = {};
-            // -15: raw deflate, no zlib header, matching what zip stores.
-            if (inflateInit2(&strm, -15) != Z_OK) { ok = false; }
-            else {
-                unsigned char inBuf[65536], outBuf[65536];
-                unsigned int remaining = compSize;
-                int zret = Z_OK;
-                while (ok && remaining > 0 && zret != Z_STREAM_END) {
-                    size_t chunk = remaining < sizeof(inBuf) ? remaining : sizeof(inBuf);
-                    if (fread(inBuf, 1, chunk, f) != chunk) { ok = false; break; }
-                    remaining -= (unsigned int)chunk;
-                    strm.next_in = inBuf;
-                    strm.avail_in = (uInt)chunk;
-                    do {
-                        strm.next_out = outBuf;
-                        strm.avail_out = sizeof(outBuf);
-                        zret = inflate(&strm, Z_NO_FLUSH);
-                        if (zret != Z_OK && zret != Z_STREAM_END) { ok = false; break; }
-                        fwrite(outBuf, 1, sizeof(outBuf) - strm.avail_out, out);
-                    } while (strm.avail_out == 0);
-                }
-                inflateEnd(&strm);
-            }
-        } else {
-            ok = false; // an unsupported method (e.g. bzip2/LZMA-in-zip): rare for ROMs
-        }
+        bool ok = copyEntryBytes(f, out, method, compSize);
         fclose(out);
         return ok;
     }
     return false;
+}
+
+// Every entry, paths preserved, for the one caller that needs a whole
+// tree rather than a single ROM: PSP save data, which is a folder of
+// folders. Deliberately a second function rather than a mode flag on the
+// one above, so the ROM staging path every core depends on keeps running
+// exactly the code it ran before.
+bool makeDirs(const char *path) {
+    char tmp[2048];
+    snprintf(tmp, sizeof(tmp), "%s", path);
+    for (char *p = tmp + 1; *p; p++) {
+        if (*p != '/') continue;
+        *p = '\0';
+        mkdir(tmp, 0755);
+        *p = '/';
+    }
+    mkdir(tmp, 0755);
+    struct stat st;
+    return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
+}
+
+// An entry name is only usable if it stays inside destDir. A zip is data
+// from a server, so an entry called "../../something" is refused rather
+// than trusted: nothing legitimate needs it, and the cost of being wrong
+// is writing outside the save directory.
+bool entryNameIsSafe(const char *name) {
+    if (name[0] == '/' || name[0] == '\0') return false;
+    if (strstr(name, "..") != NULL) return false;
+    return true;
+}
+
+bool zipExtractAll(FILE *f, const char *destDir) {
+    fseek(f, 0, SEEK_END);
+    long fileSize = ftell(f);
+    long searchStart = fileSize > 65557 ? fileSize - 65557 : 0;
+    long searchLen = fileSize - searchStart;
+    if (searchLen < 22) return false;
+    unsigned char *tail = (unsigned char *)malloc(searchLen);
+    if (!tail) return false;
+    fseek(f, searchStart, SEEK_SET);
+    fread(tail, 1, searchLen, f);
+
+    long eocdOffset = -1;
+    for (long i = searchLen - 22; i >= 0; i--) {
+        if (tail[i] == 0x50 && tail[i+1] == 0x4b && tail[i+2] == 0x05 && tail[i+3] == 0x06) {
+            eocdOffset = i;
+            break;
+        }
+    }
+    if (eocdOffset < 0) { free(tail); return false; }
+    unsigned short entryCount = tail[eocdOffset+10] | (tail[eocdOffset+11] << 8);
+    unsigned int cdOffset = tail[eocdOffset+16] | (tail[eocdOffset+17] << 8)
+        | (tail[eocdOffset+18] << 16) | (tail[eocdOffset+19] << 24);
+    free(tail);
+
+    fseek(f, cdOffset, SEEK_SET);
+    int wrote = 0;
+    for (unsigned short i = 0; i < entryCount; i++) {
+        unsigned char hdr[46];
+        if (fread(hdr, 1, 46, f) != 46) return false;
+        if (hdr[0] != 0x50 || hdr[1] != 0x4b || hdr[2] != 0x01 || hdr[3] != 0x02) return false;
+
+        unsigned short method = hdr[10] | (hdr[11] << 8);
+        unsigned int compSize = hdr[20] | (hdr[21] << 8) | (hdr[22] << 16) | (hdr[23] << 24);
+        unsigned int uncompSize = hdr[24] | (hdr[25] << 8) | (hdr[26] << 16) | (hdr[27] << 24);
+        unsigned short nameLen = hdr[28] | (hdr[29] << 8);
+        unsigned short extraLen = hdr[30] | (hdr[31] << 8);
+        unsigned short commentLen = hdr[32] | (hdr[33] << 8);
+        unsigned int localOffset = hdr[42] | (hdr[43] << 8) | (hdr[44] << 16) | (hdr[45] << 24);
+
+        char nameBuf[1024];
+        size_t nameToRead = nameLen < sizeof(nameBuf) - 1 ? nameLen : sizeof(nameBuf) - 1;
+        if (fread(nameBuf, 1, nameToRead, f) != nameToRead) return false;
+        nameBuf[nameToRead] = '\0';
+        if (nameLen > nameToRead) fseek(f, nameLen - nameToRead, SEEK_CUR);
+        long nextEntry = ftell(f) + extraLen + commentLen;
+
+        bool isDir = nameToRead > 0 && nameBuf[nameToRead - 1] == '/';
+        if (!entryNameIsSafe(nameBuf)) { fseek(f, nextEntry, SEEK_SET); continue; }
+
+        char destPath[3072];
+        snprintf(destPath, sizeof(destPath), "%s/%s", destDir, nameBuf);
+
+        if (isDir) {
+            // A zip may or may not carry explicit directory entries; the
+            // file entries below create what they need either way, so an
+            // empty folder is the only thing this line preserves.
+            destPath[strlen(destPath) - 1] = '\0';
+            makeDirs(destPath);
+            fseek(f, nextEntry, SEEK_SET);
+            continue;
+        }
+        if (uncompSize == 0 && compSize == 0) { fseek(f, nextEntry, SEEK_SET); continue; }
+
+        char parent[3072];
+        snprintf(parent, sizeof(parent), "%s", destPath);
+        char *slash = strrchr(parent, '/');
+        if (slash) { *slash = '\0'; if (!makeDirs(parent)) { fseek(f, nextEntry, SEEK_SET); continue; } }
+
+        unsigned char lhdr[30];
+        fseek(f, localOffset, SEEK_SET);
+        if (fread(lhdr, 1, 30, f) != 30) return false;
+        if (lhdr[0] != 0x50 || lhdr[1] != 0x4b || lhdr[2] != 0x03 || lhdr[3] != 0x04) return false;
+        unsigned short localNameLen = lhdr[26] | (lhdr[27] << 8);
+        unsigned short localExtraLen = lhdr[28] | (lhdr[29] << 8);
+        fseek(f, localOffset + 30 + localNameLen + localExtraLen, SEEK_SET);
+
+        FILE *out = fopen(destPath, "wb");
+        if (!out) { fseek(f, nextEntry, SEEK_SET); continue; }
+        bool ok = copyEntryBytes(f, out, method, compSize);
+        fclose(out);
+        if (ok) wrote++; else remove(destPath);
+        fseek(f, nextEntry, SEEK_SET);
+    }
+    return wrote > 0;
 }
 
 // MARK: - .7z
@@ -244,4 +370,12 @@ int archive_extract_first_file(const char *archivePath, const char *destDir,
         return sevenZipExtractFirstFile(archivePath, destDir, outFilename, outFilenameSize) ? 1 : 0;
     }
     return 0;
+}
+
+int archive_extract_all(const char *archivePath, const char *destDir) {
+    FILE *f = fopen(archivePath, "rb");
+    if (!f) return 0;
+    bool ok = zipExtractAll(f, destDir);
+    fclose(f);
+    return ok ? 1 : 0;
 }

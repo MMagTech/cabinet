@@ -217,15 +217,50 @@ enum NativeLauncher {
 
     /// The whole SAVEDATA tree as one blob, so it rides the same upload,
     /// the same store and the same server row as every other platform's
-    /// single save file. FileWrapper turns a directory into Data and back
-    /// without taking on a zip dependency.
+    /// single save file.
+    ///
+    /// A plain zip, laid out as `PSP/SAVEDATA/<GAMEID><TITLE>/...`, so the
+    /// file on the server is one a person can extract straight onto a
+    /// PPSSPP memory stick on any machine. That is the point of the
+    /// format: every other core here uploads the emulator's own bytes, a
+    /// PlayStation card is a PlayStation card and a VMU is a VMU, and
+    /// they all open in RetroArch or a standalone emulator. PSP used to
+    /// be the exception, written with FileWrapper's serialized
+    /// representation, which is Apple's rtfd directory archive and opens
+    /// nowhere but here. Changed 2026-09-17.
+    ///
+    /// NSFileCoordinator's .forUploading zips a directory, so this needs
+    /// no dependency either. It zips a staging copy rather than the live
+    /// directory so the archive carries the `PSP/SAVEDATA` prefix: the
+    /// zip's top-level entry is whatever item it was pointed at, and
+    /// pointing it at SAVEDATA itself would lose the path a person needs
+    /// to extract against.
     static func archivePSPSaveData(saveDir: URL) -> Data? {
         let dir = pspSaveDataDirectory(saveDir: saveDir)
-        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: dir.path),
-              !entries.isEmpty,
-              let wrapper = try? FileWrapper(url: dir, options: .immediate)
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(atPath: dir.path), !entries.isEmpty
         else { return nil }
-        return wrapper.serializedRepresentation
+
+        let staging = fm.temporaryDirectory
+            .appendingPathComponent("psp-zip-\(UUID().uuidString)", isDirectory: true)
+        let stagedPSP = staging.appendingPathComponent("PSP", isDirectory: true)
+        let stagedSaveData = stagedPSP.appendingPathComponent("SAVEDATA", isDirectory: true)
+        defer { try? fm.removeItem(at: staging) }
+        guard (try? fm.createDirectory(at: stagedSaveData, withIntermediateDirectories: true)) != nil
+        else { return nil }
+        for entry in entries {
+            try? fm.copyItem(at: dir.appendingPathComponent(entry),
+                             to: stagedSaveData.appendingPathComponent(entry))
+        }
+
+        var archived: Data?
+        var coordinationError: NSError?
+        NSFileCoordinator().coordinate(
+            readingItemAt: stagedPSP, options: [.forUploading], error: &coordinationError
+        ) { zipURL in
+            archived = try? Data(contentsOf: zipURL)
+        }
+        return archived
     }
 
     /// Unpacks an archive over whatever is already on this device.
@@ -238,6 +273,64 @@ enum NativeLauncher {
     /// somebody's save vanishing. Only folders present in the archive
     /// are replaced.
     static func unpackPSPSaveData(_ data: Data, saveDir: URL) {
+        // Which container this is, decided by its first bytes and never
+        // by the file's extension. The extension on the server is .srm
+        // for both, which is a SNES and Mega Drive save-RAM name and was
+        // always wrong here, so it says nothing about the contents.
+        // Cabinet sniffs magic bytes everywhere else for the same reason.
+        //
+        // Writing is zip only. Reading accepts either, which is what lets
+        // a save uploaded by an older build keep restoring with no
+        // migration and nothing touched on the server, and stops a phone
+        // still on an old build from handing a new one something it
+        // cannot open.
+        if data.starts(with: [0x50, 0x4B, 0x03, 0x04]) {
+            unpackPSPSaveDataZip(data, saveDir: saveDir)
+        } else if data.starts(with: Array("rtfd".utf8)) {
+            unpackPSPSaveDataFileWrapper(data, saveDir: saveDir)
+        }
+    }
+
+    /// The zip written by `archivePSPSaveData`, whose entries carry the
+    /// `PSP/SAVEDATA/` prefix, so extracting into the save directory puts
+    /// every folder exactly where it belongs.
+    ///
+    /// Extracted to a staging directory first and then moved in one save
+    /// folder at a time, rather than straight over the live tree, so a
+    /// slot is replaced whole. Extracting in place would merge a new
+    /// slot's files over an old slot's leftovers.
+    private static func unpackPSPSaveDataZip(_ data: Data, saveDir: URL) {
+        let fm = FileManager.default
+        let staging = fm.temporaryDirectory
+            .appendingPathComponent("psp-unzip-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: staging) }
+        guard (try? fm.createDirectory(at: staging, withIntermediateDirectories: true)) != nil
+        else { return }
+        let zipURL = staging.appendingPathComponent("save.zip")
+        guard (try? data.write(to: zipURL)) != nil else { return }
+
+        let extracted = staging.appendingPathComponent("out", isDirectory: true)
+        try? fm.createDirectory(at: extracted, withIntermediateDirectories: true)
+        guard archive_extract_all(zipURL.path, extracted.path) != 0 else { return }
+
+        let unpackedSaveData = extracted
+            .appendingPathComponent("PSP", isDirectory: true)
+            .appendingPathComponent("SAVEDATA", isDirectory: true)
+        guard let folders = try? fm.contentsOfDirectory(atPath: unpackedSaveData.path)
+        else { return }
+        let dir = pspSaveDataDirectory(saveDir: saveDir)
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        for name in folders {
+            let target = dir.appendingPathComponent(name)
+            try? fm.removeItem(at: target)
+            try? fm.moveItem(at: unpackedSaveData.appendingPathComponent(name), to: target)
+        }
+    }
+
+    /// The pre-2026-09-17 container: Apple's rtfd directory archive, kept
+    /// only so saves already on a server keep restoring. Nothing writes
+    /// this any more.
+    private static func unpackPSPSaveDataFileWrapper(_ data: Data, saveDir: URL) {
         guard let wrapper = FileWrapper(serializedRepresentation: data),
               let children = wrapper.fileWrappers
         else { return }
