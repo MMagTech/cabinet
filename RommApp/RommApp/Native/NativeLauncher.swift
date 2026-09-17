@@ -273,22 +273,18 @@ enum NativeLauncher {
     /// somebody's save vanishing. Only folders present in the archive
     /// are replaced.
     static func unpackPSPSaveData(_ data: Data, saveDir: URL) {
-        // Which container this is, decided by its first bytes and never
-        // by the file's extension. The extension on the server is .srm
-        // for both, which is a SNES and Mega Drive save-RAM name and was
-        // always wrong here, so it says nothing about the contents.
-        // Cabinet sniffs magic bytes everywhere else for the same reason.
+        // Zip only, both directions. The container is checked by its
+        // first bytes rather than the file's extension, which is .srm on
+        // the server regardless and says nothing about the contents.
         //
-        // Writing is zip only. Reading accepts either, which is what lets
-        // a save uploaded by an older build keep restoring with no
-        // migration and nothing touched on the server, and stops a phone
-        // still on an old build from handing a new one something it
-        // cannot open.
-        if data.starts(with: [0x50, 0x4B, 0x03, 0x04]) {
-            unpackPSPSaveDataZip(data, saveDir: saveDir)
-        } else if data.starts(with: Array("rtfd".utf8)) {
-            unpackPSPSaveDataFileWrapper(data, saveDir: saveDir)
-        }
+        // Builds before 2026-09-17 wrote Apple's rtfd directory archive
+        // here, and a reader for it briefly lived alongside this. It was
+        // removed deliberately: those saves are not wanted. Anything that
+        // is not a zip is ignored rather than half-applied, so an rtfd
+        // blob from an older build leaves whatever is already on this
+        // device alone instead of wiping it.
+        guard data.starts(with: [0x50, 0x4B, 0x03, 0x04]) else { return }
+        unpackPSPSaveDataZip(data, saveDir: saveDir)
     }
 
     /// The zip written by `archivePSPSaveData`, whose entries carry the
@@ -324,22 +320,6 @@ enum NativeLauncher {
             let target = dir.appendingPathComponent(name)
             try? fm.removeItem(at: target)
             try? fm.moveItem(at: unpackedSaveData.appendingPathComponent(name), to: target)
-        }
-    }
-
-    /// The pre-2026-09-17 container: Apple's rtfd directory archive, kept
-    /// only so saves already on a server keep restoring. Nothing writes
-    /// this any more.
-    private static func unpackPSPSaveDataFileWrapper(_ data: Data, saveDir: URL) {
-        guard let wrapper = FileWrapper(serializedRepresentation: data),
-              let children = wrapper.fileWrappers
-        else { return }
-        let dir = pspSaveDataDirectory(saveDir: saveDir)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        for (name, child) in children {
-            let target = dir.appendingPathComponent(name)
-            try? FileManager.default.removeItem(at: target)
-            try? child.write(to: target, options: [], originalContentsURL: nil)
         }
     }
 
