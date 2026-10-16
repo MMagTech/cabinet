@@ -1,5 +1,12 @@
 # Cabinet
 
+> [!IMPORTANT]
+> **This repository is retired.** Cabinet continues as **Cabinet Go**, the
+> handheld app for iPhone, at [MMagTech/cabinet-go](https://github.com/MMagTech/cabinet-go),
+> which carries this repository's full history. The console experience now
+> lives in [CabinetOS](https://github.com/MMagTech/cabinetos). The Apple TV and
+> Mac apps are retired. Everything below describes Cabinet as it was.
+
 A RomM frontend for iPhone and Apple TV.
 
 [RomM](https://github.com/rommapp/romm) manages your game collection: the
